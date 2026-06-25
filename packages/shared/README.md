@@ -266,69 +266,6 @@ pnpm build
 pnpm build:types
 ```
 
-### AIMD Grammar Testing
-
-The AIMD (Airalogy Markdown) syntax highlighting is tested using TextMate grammar tests. This ensures that syntax highlighting works correctly across different editors (VS Code, Monaco, Shiki).
-
-#### Grammar Files
-
-| File | Description |
-|------|-------------|
-| `packages/shared/src/constants/aimd/aimdSyntax.ts` | Shiki/TextMate grammar definition |
-| `packages/shared/src/constants/aimd/aimd.ts` | Monaco Editor grammar definition |
-| `packages/shared/src/constants/aimd/tokens.ts` | Token/scope name definitions |
-| `test/grammar/aimd.tmLanguage.json` | Generated TextMate grammar file |
-| `test/grammar/aimd.test.aimd` | Grammar test cases |
-| `scripts/generate-grammar.ts` | Grammar and test generator script |
-
-#### Running Grammar Tests
-
-```bash
-# From the monorepo root:
-
-# Generate grammar files and run tests
-pnpm grammar:test
-
-# Only regenerate grammar files (without testing)
-pnpm grammar:generate
-```
-
-#### Test File Format
-
-The test file uses the standard TextMate grammar test format:
-
-```aimd
-{{var|name: str}}
-//<- punctuation.definition.begin.aimd    ← Tests {{ token
-//^^^ keyword.variable.aimd               ← Tests var token
-//   ^ delimiter.pipe.aimd                ← Tests | token
-//    ^^^^ variable.other.aimd            ← Tests name token
-//        ^ delimiter.colon.aimd          ← Tests : token
-//          ^^^ support.type.aimd         ← Tests str token
-```
-
-- `//<-` tests the token at the start of the previous line
-- `//^^^` each `^` corresponds to a character position on the previous line
-- Spaces are used for alignment and indicate positions not being tested
-
-#### Adding New Test Cases
-
-1. Edit `scripts/generate-grammar.ts` to add new test generation logic
-2. Run `pnpm grammar:generate` to regenerate test files
-3. Run `pnpm grammar:test` to verify all tests pass
-
-#### Supported AIMD Type Syntax
-
-The grammar supports the new type syntax for variables:
-
-```aimd
-{{var|name: str}}                              # Simple type
-{{var|age: int = 18}}                          # Type with default
-{{var|name: str = "张三", title = "姓名"}}      # With kwargs
-{{var|active: bool = true}}                    # Boolean type
-{{var|students: list[Student], subvars=[...]}} # List with subvars
-```
-
 ### Dependencies
 
 This package includes:

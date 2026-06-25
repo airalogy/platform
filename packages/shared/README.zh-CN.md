@@ -266,69 +266,6 @@ pnpm build
 pnpm build:types
 ```
 
-### AIMD 语法测试
-
-AIMD（Airalogy Markdown）语法高亮使用 TextMate 语法测试进行测试。这确保了语法高亮在不同编辑器中正常工作（VS Code、Monaco、Shiki）。
-
-#### 语法文件
-
-| 文件 | 描述 |
-|------|------|
-| `packages/shared/src/constants/aimd/aimdSyntax.ts` | Shiki/TextMate 语法定义 |
-| `packages/shared/src/constants/aimd/aimd.ts` | Monaco 编辑器语法定义 |
-| `packages/shared/src/constants/aimd/tokens.ts` | 令牌/范围名称定义 |
-| `test/grammar/aimd.tmLanguage.json` | 生成的 TextMate 语法文件 |
-| `test/grammar/aimd.test.aimd` | 语法测试用例 |
-| `scripts/generate-grammar.ts` | 语法和测试生成脚本 |
-
-#### 运行语法测试
-
-```bash
-# 从单体仓库根目录：
-
-# 生成语法文件并运行测试
-pnpm grammar:test
-
-# 仅重新生成语法文件（不测试）
-pnpm grammar:generate
-```
-
-#### 测试文件格式
-
-测试文件使用标准 TextMate 语法测试格式：
-
-```aimd
-{{var|name: str}}
-//<- punctuation.definition.begin.aimd    ← 测试 {{ 令牌
-//^^^ keyword.variable.aimd               ← 测试 var 令牌
-//   ^ delimiter.pipe.aimd                ← 测试 | 令牌
-//    ^^^^ variable.other.aimd            ← 测试 name 令牌
-//        ^ delimiter.colon.aimd          ← 测试 : 令牌
-//          ^^^ support.type.aimd         ← 测试 str 令牌
-```
-
-- `//<-` 测试前一行开头的令牌
-- `//^^^` 每个 `^` 对应前一行的一个字符位置
-- 空格用于对齐，表示不被测试的位置
-
-#### 添加新测试用例
-
-1. 编辑 `scripts/generate-grammar.ts` 以添加新的测试生成逻辑
-2. 运行 `pnpm grammar:generate` 以重新生成测试文件
-3. 运行 `pnpm grammar:test` 以验证所有测试通过
-
-#### 支持的 AIMD 类型语法
-
-语法支持新的变量类型语法：
-
-```aimd
-{{var|name: str}}                              # 简单类型
-{{var|age: int = 18}}                          # 带默认值的类型
-{{var|name: str = "张三", title = "姓名"}}      # 带 kwargs
-{{var|active: bool = true}}                    # 布尔类型
-{{var|students: list[Student], subvars=[...]}} # 列表带子变量
-```
-
 ### 依赖
 
 本包包括：

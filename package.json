@@ -25,9 +25,7 @@
     "install:all": "pnpm install",
     "prepare": "husky",
     "lint-staged": "lint-staged",
-    "grammar:generate": "tsx scripts/generate-grammar.ts",
-    "i18n:generate": "node scripts/generate-i18n-types.mjs",
-    "grammar:test": "pnpm grammar:generate && vscode-tmgrammar-test -g test/grammar/aimd.tmLanguage.json test/grammar/aimd.test.aimd"
+    "i18n:generate": "node scripts/generate-i18n-types.mjs"
   },
   "dependencies": {
     "lodash-es": "catalog:",
@@ -52,8 +50,7 @@
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-dts": "^4.5.4",
-    "vscode-tmgrammar-test": "^0.1.3"
+    "vite-plugin-dts": "^4.5.4"
   },
   "pnpm": {
     "patchedDependencies": {
