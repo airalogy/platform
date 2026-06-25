@@ -1,0 +1,13 @@
+@mixin aspect-ratio($ratio: 1)
+  &::before
+    content: ""
+    width: 1px
+    margin-left: -1px
+    float: left
+    height: 0
+    padding-top: calc(100% / $ratio)
+
+    &::after
+      content: ""
+      display: table
+      clear: both

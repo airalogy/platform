@@ -1,0 +1,319 @@
+diff --git a/README.md b/README.md
+index af77236245b189df0623c2715ce42f20f06d68a7..517fbecd60dce0aa346b27c6b26ca091b3fc4d83 100644
+--- a/README.md
++++ b/README.md
+@@ -55,6 +55,38 @@ import TOML from 'smol-toml'
+ TOML.stringify({ ... })
+ ```
+ 
++### Getting Line Ranges
++
++You can also get the line ranges for each key and table by using the `withLineRanges` option:
++
++```js
++import { parse } from 'smol-toml'
++
++const doc = `
++# This is a TOML document
++title = "TOML Example"
++
++[owner]
++name = "Tom"
++`
++
++const result = parse(doc, { withLineRanges: true })
++console.log(result.data) // The parsed TOML object
++console.log(result.lineRanges) // Line ranges for each key/table
++
++// Output:
++// {
++//   data: { title: 'TOML Example', owner: { name: 'Tom' } },
++//   lineRanges: {
++//     'title': { start: 3, end: 3 },
++//     'owner': { start: 5, end: 5 },
++//     'owner.name': { start: 6, end: 6 }
++//   }
++// }
++```
++
++The `lineRanges` object provides the start and end line number (1-indexed) for each key and table in the TOML document, with nested keys properly prefixed with their parent table path.
++
+ A few notes on the `stringify` function:
+ - `undefined` and `null` values on objects are ignored (does not produce a key/value).
+ - `undefined` and `null` values in arrays are **rejected**.
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 31ed3bb386c33178b6e98b575eecbf5f500e93f4..34ad9140effab094248559a291520a3c5e3009c5 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -38,3 +38,8 @@ declare const _default: {
+ };
+ export default _default;
+ export { parse, stringify, TomlDate, TomlError };
++export * from './util.js'
++export * from './parse.js'
++export * from './stringify.js'
++export * from './date.js'
++export * from './error.js'
+diff --git a/dist/index.js b/dist/index.js
+index ad38a3a95de31679562b9b58d078625096be0c7c..d4a2e6951865e55928f474e380a18ddec8769c69 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -25,9 +25,34 @@
+  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+-import { parse } from './parse.js';
++import { parse as parseInternal } from './parse.js';
+ import { stringify } from './stringify.js';
+ import { TomlDate } from './date.js';
+ import { TomlError } from './error.js';
++
++/**
++ * Parse TOML string into a JavaScript object
++ * @param {string} toml - TOML string to parse
++ * @param {object} opts - Options for parsing
++ * @param {boolean} [opts.withLineRanges=false] - Whether to include line ranges in the result
++ * @param {number} [opts.maxDepth=1000] - Maximum depth of nested structures
++ * @returns {object} Parsed TOML data
++ */
++function parse(toml, opts = {}) {
++    const result = parseInternal(toml, opts);
++    
++    // For backward compatibility, return just the data if withLineRanges is not true
++    if (!opts.withLineRanges) {
++        return result.data;
++    }
++    
++    return result;
++}
++
+ export default { parse, stringify, TomlDate, TomlError };
+ export { parse, stringify, TomlDate, TomlError };
++export * from './util.js'
++export * from './parse.js'
++export * from './stringify.js'
++export * from './date.js'
++export * from './error.js'
+diff --git a/dist/parse.d.ts b/dist/parse.d.ts
+index 8da852b73bc88981cdfc23fc822b966db580ec51..7c84e1c092f64dda4ce62273a18cbdccae7e79f4 100644
+--- a/dist/parse.d.ts
++++ b/dist/parse.d.ts
+@@ -28,4 +28,5 @@
+ import { type TomlPrimitive } from './util.js';
+ export declare function parse(toml: string, opts?: {
+     maxDepth: number;
++    withLineRanges?: boolean;
+ }): Record<string, TomlPrimitive>;
+diff --git a/dist/parse.js b/dist/parse.js
+index 32b878ca529a57944eccbaf0dd0fb5f760bee181..a66dbae668d03826653f8073e48b3dcc4bb2b19d 100644
+--- a/dist/parse.js
++++ b/dist/parse.js
+@@ -27,7 +27,7 @@
+  */
+ import { parseKey } from './struct.js';
+ import { extractValue } from './extract.js';
+-import { skipVoid } from './util.js';
++import { skipVoid, getLineNumberAndColumn } from './util.js';
+ import { TomlError } from './error.js';
+ function peekTable(key, table, meta, type) {
+     let t = table;
+@@ -99,7 +99,18 @@ export function parse(toml, opts) {
+     let meta = {};
+     let tbl = res;
+     let m = meta;
++    
++    // Object to store line index ranges
++    let lineRanges = {};
++    
++    // Track the current table path
++    let currentTablePath = [];
++    
+     for (let ptr = skipVoid(toml, 0); ptr < toml.length;) {
++        // Get the current line number at the start of this element
++        let startLineInfo = getLineNumberAndColumn(toml, ptr);
++        let startLine = startLineInfo.line;
++        
+         if (toml[ptr] === '[') {
+             let isTableArray = toml[++ptr] === '[';
+             let k = parseKey(toml, ptr += +isTableArray, ']');
+@@ -119,9 +130,23 @@ export function parse(toml, opts) {
+                     ptr: ptr,
+                 });
+             }
++            
++            // Update current table path
++            currentTablePath = k[0];
++            
++            // Store line range for the table
++            const tablePath = currentTablePath.join('.');
++            
+             m = p[2];
+             tbl = p[1];
+             ptr = k[1];
++            
++            // Calculate the end line
++            let endLineInfo = getLineNumberAndColumn(toml, ptr);
++            let endLine = endLineInfo.line;
++            
++            // Store the line range for this table
++            lineRanges[tablePath] = { start: startLine, end: endLine };
+         }
+         else {
+             let k = parseKey(toml, ptr);
+@@ -132,10 +157,24 @@ export function parse(toml, opts) {
+                     ptr: ptr,
+                 });
+             }
++            
++            // Generate the full path for this key
++            const keyPath = currentTablePath.length > 0 
++                ? currentTablePath.join('.') + '.' + p[0]
++                : p[0];
++            
+             let v = extractValue(toml, k[1], void 0, maxDepth);
+             p[1][p[0]] = v[0];
+             ptr = v[1];
++            
++            // Calculate the end line
++            let endLineInfo = getLineNumberAndColumn(toml, ptr);
++            let endLine = endLineInfo.line;
++            
++            // Store the line range for this key
++            lineRanges[keyPath] = { start: startLine, end: endLine };
+         }
++        
+         ptr = skipVoid(toml, ptr, true);
+         if (toml[ptr] && toml[ptr] !== '\n' && toml[ptr] !== '\r') {
+             throw new TomlError('each key-value declaration must be followed by an end-of-line', {
+@@ -143,7 +182,13 @@ export function parse(toml, opts) {
+                 ptr: ptr
+             });
+         }
++        
+         ptr = skipVoid(toml, ptr);
+     }
+-    return res;
++    
++    // Return both the parsed data and the line ranges
++    return {
++        data: res,
++        lineRanges: lineRanges
++    };
+ }
+diff --git a/dist/stringify.d.ts b/dist/stringify.d.ts
+index 307970b07327a7e12c2f0ab8d2464babbf027e8f..49c038869ebee283ca849d120869b0a6b7377930 100644
+--- a/dist/stringify.d.ts
++++ b/dist/stringify.d.ts
+@@ -28,3 +28,8 @@
+ export declare function stringify(obj: any, opts?: {
+     maxDepth?: number;
+ }): string;
++export declare function stringifyTable(obj: any, prefix: string, depth: number): string;
++export declare function stringifyArrayTable(array: any[], key: string, depth: number): string;
++export declare function stringifyArray(array: any[], depth: number): string;
++export declare function stringifyInlineTable(obj: any, depth: number): string;
++export declare function stringifyValue(val: any, type: string, depth: number): string;
+diff --git a/dist/stringify.js b/dist/stringify.js
+index 8879abebd14a1ec5a5e39434e34388e2af73f599..72058c79a5f7a9eec2460e142241fc2e8c622090 100644
+--- a/dist/stringify.js
++++ b/dist/stringify.js
+@@ -26,7 +26,7 @@
+  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ let BARE_KEY = /^[a-z0-9-_]+$/i;
+-function extendedTypeOf(obj) {
++export function extendedTypeOf(obj) {
+     let type = typeof obj;
+     if (type === 'object') {
+         if (Array.isArray(obj))
+@@ -36,17 +36,17 @@ function extendedTypeOf(obj) {
+     }
+     return type;
+ }
+-function isArrayOfTables(obj) {
++export function isArrayOfTables(obj) {
+     for (let i = 0; i < obj.length; i++) {
+         if (extendedTypeOf(obj[i]) !== 'object')
+             return false;
+     }
+     return obj.length != 0;
+ }
+-function formatString(s) {
++export function formatString(s) {
+     return JSON.stringify(s).replace(/\x7f/g, '\\u007f');
+ }
+-function stringifyValue(val, type, depth) {
++export function stringifyValue(val, type, depth) {
+     if (depth === 0) {
+         throw new Error("Could not stringify the object: maximum object depth exceeded");
+     }
+@@ -78,7 +78,7 @@ function stringifyValue(val, type, depth) {
+         return stringifyArray(val, depth);
+     }
+ }
+-function stringifyInlineTable(obj, depth) {
++export function stringifyInlineTable(obj, depth) {
+     let keys = Object.keys(obj);
+     if (keys.length === 0)
+         return '{}';
+@@ -93,7 +93,7 @@ function stringifyInlineTable(obj, depth) {
+     }
+     return res + ' }';
+ }
+-function stringifyArray(array, depth) {
++export function stringifyArray(array, depth) {
+     if (array.length === 0)
+         return '[]';
+     let res = '[ ';
+@@ -107,7 +107,7 @@ function stringifyArray(array, depth) {
+     }
+     return res + ' ]';
+ }
+-function stringifyArrayTable(array, key, depth) {
++export function stringifyArrayTable(array, key, depth) {
+     if (depth === 0) {
+         throw new Error("Could not stringify the object: maximum object depth exceeded");
+     }
+@@ -119,7 +119,7 @@ function stringifyArrayTable(array, key, depth) {
+     }
+     return res;
+ }
+-function stringifyTable(obj, prefix, depth) {
++export function stringifyTable(obj, prefix, depth) {
+     if (depth === 0) {
+         throw new Error("Could not stringify the object: maximum object depth exceeded");
+     }
+diff --git a/dist/util.js b/dist/util.js
+index 12f8500afadb3b1d74d9e0d6968b546a6d59ff37..417b9c599ef433c7b653d2c6f6ef73f9370ff4d7 100644
+--- a/dist/util.js
++++ b/dist/util.js
+@@ -98,3 +98,29 @@ export function getStringEnd(str, seek) {
+     }
+     return seek;
+ }
++
++/**
++ * Calculate line number and column position from a character index in the string
++ * @param {string} str - The string to analyze
++ * @param {number} pos - The character position (index) in the string
++ * @returns {object} An object with line and column properties
++ */
++export function getLineNumberAndColumn(str, pos) {
++    let line = 1;
++    let column = 1;
++    
++    for (let i = 0; i < pos && i < str.length; i++) {
++        if (str[i] === '\n') {
++            line++;
++            column = 1;
++        } else if (str[i] === '\r' && str[i + 1] === '\n') {
++            line++;
++            column = 1;
++            i++; // Skip the \n part
++        } else {
++            column++;
++        }
++    }
++    
++    return { line, column };
++}

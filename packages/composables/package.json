@@ -1,0 +1,56 @@
+{
+  "name": "@airalogy/composables",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Composables for airalogy",
+  "main": "./src/index.ts",
+  "scripts": {
+    "type-check": "vue-tsc --noEmit --project tsconfig.json",
+    "build": "vite build",
+    "build:prepare": "vite build --mode development --emptyOutDir false"
+  },
+  "peerDependencies": {
+    "@vueuse/core": "catalog:",
+    "naive-ui": "catalog:",
+    "vue": "catalog:"
+  },
+  "dependencies": {
+    "@airalogy/aimd-core": "^2.6.0",
+    "@airalogy/aimd-editor": "^1.9.0",
+    "@airalogy/shared": "workspace:*",
+    "@floating-ui/vue": "catalog:",
+    "@monaco-editor/loader": "catalog:",
+    "@vueuse/router": "catalog:",
+    "diff": "catalog:",
+    "html2pdf.js": "catalog:",
+    "minisearch": "catalog:",
+    "monaco-editor": "catalog:",
+    "monaco-editor-core": "catalog:",
+    "pinia": "catalog:",
+    "shiki": "catalog:",
+    "smol-toml": "catalog:",
+    "sortablejs": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@iconify/json": "catalog:",
+    "@iconify/utils": "catalog:",
+    "@shikijs/types": "catalog:",
+    "@types/diff": "catalog:",
+    "@types/lodash-es": "catalog:",
+    "@types/sortablejs": "catalog:",
+    "@types/web": "catalog:",
+    "@unocss/core": "catalog:",
+    "@unocss/preset-icons": "catalog:",
+    "fflate": "catalog:",
+    "lodash-es": "catalog:",
+    "naive-ui": "catalog:",
+    "unplugin-auto-import": "^19.3.0",
+    "unplugin-icons": "catalog:",
+    "unplugin-vue-components": "catalog:",
+    "vite": "catalog:",
+    "vite-tsconfig-paths": "catalog:",
+    "vue": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

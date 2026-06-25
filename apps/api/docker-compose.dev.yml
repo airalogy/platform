@@ -1,0 +1,3 @@
+services:
+  api-server:
+    command: sh -c "alembic upgrade head && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload --reload-dir app --reload-dir migrations"

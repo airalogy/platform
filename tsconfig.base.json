@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    /* Bundler mode */
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@airalogy/shared": ["./packages/shared/src"],
+      "@airalogy/shared/*": ["./packages/shared/src/*"],
+      "@airalogy/shared/enum": ["./packages/shared/src/enum"],
+      "@airalogy/shared/enum/*": ["./packages/shared/src/enum/*"],
+      "@airalogy/shared/constants": ["./packages/shared/src/constants"],
+      "@airalogy/shared/constants/*": ["./packages/shared/src/constants/*"],
+      "@airalogy/shared/utils": ["./packages/shared/src/utils"],
+      "@airalogy/shared/utils/*": ["./packages/shared/src/utils/*"],
+      "@airalogy/shared/types": ["./packages/shared/src/types"],
+      "@airalogy/shared/types/*": ["./packages/shared/src/types/*"],
+      "@airalogy/composables": ["./packages/composables/src"],
+      "@airalogy/composables/*": ["./packages/composables/src/*"],
+      "@airalogy/components": ["./packages/components/src"],
+      "@airalogy/components/*": ["./packages/components/src/*"],
+      "@airalogy/components/chat": ["./packages/components/src/chat"],
+      "@airalogy/components/chat/*": ["./packages/components/src/chat/*"]
+    },
+    "resolveJsonModule": true,
+    "types": ["vite/client"],
+    "allowJs": true,
+    "strict": true,
+    "declaration": true,
+    "noEmit": true,
+    "stripInternal": true,
+    "allowSyntheticDefaultImports": true,
+    "noErrorTruncation": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.ts", "scripts/*.ts"],
+  "exclude": ["node_modules", "dist", "./**/*.js", "./.history/*"]
+}

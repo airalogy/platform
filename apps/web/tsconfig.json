@@ -1,0 +1,51 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "#/*": ["./src/types/*"],
+      "~/*": ["./*"],
+      "@styles/*": ["./src/styles/*"],
+      "@img/*": ["../../packages/assets/img/*"],
+      "@icons/*": ["../../packages/assets/icons/*"],
+      "@fonts/*": ["../../packages/assets/fonts/*"],
+      "@airalogy/shared": ["../../packages/shared/src"],
+      "@airalogy/shared/*": ["../../packages/shared/src/*"],
+      "@airalogy/shared/enum": ["../../packages/shared/src/enum"],
+      "@airalogy/shared/enum/*": ["../../packages/shared/src/enum/*"],
+      "@airalogy/shared/constants": ["../../packages/shared/src/constants"],
+      "@airalogy/shared/constants/*": ["../../packages/shared/src/constants/*"],
+      "@airalogy/shared/utils": ["../../packages/shared/src/utils"],
+      "@airalogy/shared/utils/*": ["../../packages/shared/src/utils/*"],
+      "@airalogy/shared/types": ["../../packages/shared/src/types"],
+      "@airalogy/shared/types/*": ["../../packages/shared/src/types/*"],
+      "@airalogy/composables": ["../../packages/composables/src"],
+      "@airalogy/composables/*": ["../../packages/composables/src/*"],
+      "@airalogy/components": ["../../packages/components/src"],
+      "@airalogy/components/*": ["../../packages/components/src/*"],
+      "@airalogy/components/chat": ["../../packages/components/src/chat"],
+      "@airalogy/components/chat/*": ["../../packages/components/src/chat/*"]
+    },
+    "types": [
+      "node",
+      "unplugin-icons/types/vue",
+      "vite/client",
+      "../../packages/shared/src/types/models/protocol.d.ts",
+      "../../packages/components/src/types/chat.d.ts",
+      "../../packages/shared/src/types/i18n.d.ts",
+      "../../packages/shared/src/types/common.d.ts",
+      "../../packages/shared/src/types/theme.d.ts"
+    ],
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true
+  },
+  "references": [{ "path": "./tsconfig.node.json" }],
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.tsx",
+    "./src/**/*.vue",
+    "./types/**/*.d.ts",
+    "./src/**/*.d.ts"
+  ]
+}

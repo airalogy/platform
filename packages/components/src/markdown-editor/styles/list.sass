@@ -1,0 +1,15 @@
+@use "@styles/sass/variable" as *
+
+.list__title
+  position: relative
+  font-size: 18px
+  font-weight: 500
+  &::before
+    content: ""
+    position: absolute
+    top: 50%
+    left: -14px
+    transform: translateY(-50%) rotate(45deg)
+    width: 6px
+    height: 6px
+    background: $primary-color

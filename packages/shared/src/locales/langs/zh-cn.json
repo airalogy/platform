@@ -1,0 +1,1894 @@
+{
+  "system": {
+    "title": "Airalogy"
+  },
+  "common": {
+    "tip": "提示",
+    "add": "添加",
+    "addMember": "添加成员",
+    "addMembers": "添加成员",
+    "addSuccess": "添加成功",
+    "edit": "修改",
+    "editSuccess": "修改成功",
+    "delete": "删除",
+    "deleteSuccess": "删除成功",
+    "batchDelete": "批量删除",
+    "confirm": "确认",
+    "cancel": "取消",
+    "undo": "撤销",
+    "pleaseCheckValue": "请检查输入的值是否合法",
+    "action": "操作",
+    "backToHome": "返回首页",
+    "lookForward": "敬请期待",
+    "userCenter": "个人中心",
+    "profile": "个人资料",
+    "projects": "所有项目",
+    "labs": "所有实验室",
+    "logout": "退出登录",
+    "logoutConfirm": "确认退出登录吗？",
+    "login": "登录",
+    "signup": "注册",
+    "adminDashboard": "管理后台",
+    "hub": "协议中心",
+    "chat": "对话",
+    "docs": "文档",
+    "docsFull": "Airalogy 文档",
+    "openDocs": "打开 Airalogy 文档",
+    "menu": "菜单",
+    "index": "Airalogy",
+    "selectCountry": "选择国家",
+    "next": "下一步",
+    "previous": "上一步",
+    "new": "新建",
+    "create": "创建",
+    "save": "保存",
+    "remove": "移除",
+    "or": "或",
+    "emptyList": "空列表",
+    "loadError": "加载错误",
+    "labsLabel": "实验室",
+    "projectsLabel": "项目",
+    "protocolsLabel": "协议",
+    "newRecord": "新建记录",
+    "newProtocol": "新建协议",
+    "newProject": "新建项目",
+    "newGroup": "新建小组",
+    "newLab": "新建实验室",
+    "addRecord": "新增记录",
+    "selectFile": "选择文件",
+    "upload": "上传",
+    "major": "主版本",
+    "minor": "次版本",
+    "patch": "修订号",
+    "stars": "收藏",
+    "reuses": "复用",
+    "downloads": "下载",
+    "records": "记录",
+    "allVersions": "所有版本",
+    "version": "版本",
+    "versionWithNumber": "版本 {version}",
+    "lastUpdated": "最近更新",
+    "license": "许可",
+    "none": "无",
+    "forks": "派生",
+    "views": "浏览",
+    "actions": "操作",
+    "confirmDelete": "确定要删除吗？",
+    "category": "分类",
+    "sortBy": "排序",
+    "memberSearchPlaceholder": "输入邮箱或用户名，用逗号分隔",
+    "searchBy": "搜索方式",
+    "sortedBy": "排序方式",
+    "all": "全部",
+    "created": "创建",
+    "updated": "更新",
+    "createdBy": "创建者",
+    "report": "报告",
+    "from": "来自",
+    "starsCount": "收藏数",
+    "reusesCount": "复用数",
+    "recordsCount": "记录数",
+    "updatedAt": "更新于",
+    "id": "ID",
+    "idInput": {
+      "check": "检查",
+      "placeholder": {
+        "lab": "输入实验室 ID",
+        "group": "输入小组 ID",
+        "project": "输入项目 ID",
+        "protocol": "输入协议 ID",
+        "hub": "输入协议 ID",
+        "default": "输入 ID"
+      },
+      "tooltip": {
+        "lab": "实验室 ID 是实验室的唯一标识，创建后不可修改。",
+        "project": "项目 ID 是项目的唯一标识，创建后不可修改。",
+        "protocol": "协议 ID 是协议的唯一标识，创建后不可修改。",
+        "hub": "协议 ID 是协议在协议中心中的唯一标识，发布后不可修改。",
+        "default": "该 ID 为唯一标识，创建后不可修改。"
+      }
+    },
+    "by": "由",
+    "star": "收藏",
+    "unstar": "取消收藏",
+    "reuse": "复用",
+    "reupload": "重新上传",
+    "more": "更多",
+    "fields": "字段",
+    "history": "历史",
+    "me": "我",
+    "can": "可以",
+    "noDescriptionFor": "暂无 {name} 描述",
+    "field": "字段",
+    "type": "类型",
+    "default": "默认值",
+    "myStarred": "我的收藏",
+    "newFolder": "新建收藏夹",
+    "noFoldersYet": "你还没有收藏夹。",
+    "defaultFolder": "默认收藏夹",
+    "defaultFolderCannotRename": "默认收藏夹名称不可修改",
+    "defaultFolderCannotDelete": "默认收藏夹不可删除",
+    "description": "描述",
+    "enum": "枚举",
+    "arrayItems": "数组项",
+    "examples": "示例",
+    "format": "格式",
+    "assignerMode": "分配器模式",
+    "assignerDependencies": "分配器依赖",
+    "airalogyType": "Airalogy 类型",
+    "uploadAvatar": "上传头像",
+    "removeAvatar": "移除头像",
+    "accept": "接受",
+    "status": "状态",
+    "title": "标题",
+    "name": "名称",
+    "avatar": "头像",
+    "alias": "别名",
+    "user": "用户",
+    "role": "角色",
+    "aliasPlaceholder": "添加别名",
+    "fullscreen": "全屏",
+    "reselect": "重新选择",
+    "redo": "重做",
+    "nodeNotFound": "未找到节点",
+    "var": "变量",
+    "assigner": "赋值器",
+    "rowIndex": "第 {index} 行",
+    "addRow": "添加行",
+    "execute": "执行",
+    "stop": "停止",
+    "unknownError": "未知错误",
+    "file": "文件",
+    "preview": "预览",
+    "download": "下载",
+    "csvPreview": "CSV 预览",
+    "pdfPreview": "PDF 预览",
+    "readOnly": "只读",
+    "info": "信息",
+    "modify": "修改",
+    "submit": "提交",
+    "close": "关闭",
+    "unknown": "未知",
+    "unknownLab": "未知实验室",
+    "unknownProject": "未知项目",
+    "createdAt": "创建于 {time}",
+    "checkPassed": "检查通过",
+    "checkFailed": "检查失败",
+    "toBeChecked": "待检查",
+    "true": "是",
+    "false": "否",
+    "discardTitle": "确定要离开吗？",
+    "discardWarning": "你所做的更改将不会保存。",
+    "discardConfirm": "是，放弃更改",
+    "discardCancel": "否，继续编辑",
+    "actionNotImplemented": "该操作尚未实现",
+    "variables": "变量",
+    "protocol": "协议",
+    "record": "记录",
+    "project": "项目",
+    "lab": "实验室",
+    "uuid": "UUID",
+    "selectTime": "选择时间",
+    "hour": "小时",
+    "minute": "分钟",
+    "second": "秒",
+    "stepIndex": "步骤 {index}",
+    "noContent": "暂无内容",
+    "referenceNotFound": "未找到引用",
+    "value": "值",
+    "noValue": "暂无值",
+    "loadingImage": "图片加载中...",
+    "loadImageFailed": "图片加载失败",
+    "disciplines": "学科",
+    "keywords": "关键词",
+    "authors": "作者",
+    "maintainers": "维护者",
+    "email": "邮箱",
+    "airalogyFileId": "Airalogy 文件 ID",
+    "source": "来源",
+    "noImageSource": "暂无图片来源",
+    "figureIndex": "图 {index}",
+    "figureIndexWithTitle": "图 {index}：{title}",
+    "pdfNotSupported": "当前浏览器不支持 PDF，请下载后查看：",
+    "downloadPdf": "下载 PDF",
+    "deleteEntityTitle": "删除 {entity}",
+    "deleteWarningTitle": "警告：此操作不可撤销",
+    "deleteWarningBody": "这将永久删除该{entity}及其所有数据。",
+    "deleteAboutTo": "你将要删除该{entity}：",
+    "typeToConfirm": "请输入 {keyword} 以确认：",
+    "typeToConfirmPlaceholder": "输入 {keyword} 以确认",
+    "selectNewRole": "选择新角色",
+    "current": "当前",
+    "group": "小组",
+    "memberRemoveFailed": "移除成员失败",
+    "memberRemoveTitle": "移除成员",
+    "memberRemoveTitleWithOrg": "从{name}移除成员",
+    "memberRemoveConfirm": "将移除 {role} {name}",
+    "memberRemoveSuccess": "已移除成员 {name}",
+    "setAlias": "设置实验室备注名",
+    "setUserAlias": "设置备注名",
+    "labAliasLabel": "实验室备注名",
+    "labAliasPlaceholder": "请输入实验室备注名",
+    "labAliasRequired": "请输入实验室备注名",
+    "userAliasLabel": "备注名",
+    "userAliasPlaceholder": "请输入备注名",
+    "userAliasRequired": "请输入备注名",
+    "changeRole": "变更角色",
+    "footer": {
+      "copyright": "杭州渊楠科技有限公司 版权所有",
+      "partners": "合作伙伴"
+    },
+    "my": "我的",
+    "readMore": "展开",
+    "showLess": "收起"
+  },
+  "theme": {
+    "themeSchema": {
+      "title": "主题模式",
+      "light": "亮色模式",
+      "dark": "暗黑模式",
+      "auto": "跟随系统"
+    },
+    "layoutMode": {
+      "title": "布局模式",
+      "vertical": "左侧菜单模式",
+      "vertical-mix": "左侧菜单混合模式",
+      "horizontal": "顶部菜单模式",
+      "horizontal-mix": "顶部菜单混合模式"
+    },
+    "themeColor": {
+      "title": "主题颜色",
+      "primary": "主色",
+      "info": "信息色",
+      "success": "成功色",
+      "warning": "警告色",
+      "error": "错误色",
+      "followPrimary": "跟随主色"
+    },
+    "scrollMode": {
+      "title": "滚动模式",
+      "wrapper": "外层滚动",
+      "content": "主体滚动"
+    },
+    "page": {
+      "animate": "页面切换动画",
+      "mode": {
+        "title": "页面切换动画类型",
+        "fade-slide": "滑动",
+        "fade": "淡入淡出",
+        "fade-bottom": "底部消退",
+        "fade-scale": "缩放消退",
+        "zoom-fade": "渐变",
+        "zoom-out": "闪现",
+        "none": "无"
+      }
+    },
+    "fixedHeaderAndTab": "固定头部和标签栏",
+    "header": {
+      "height": "头部高度",
+      "breadcrumb": {
+        "visible": "显示面包屑",
+        "showIcon": "显示面包屑图标"
+      }
+    },
+    "tab": {
+      "visible": "显示标签栏",
+      "cache": "缓存标签页",
+      "height": "标签栏高度",
+      "mode": {
+        "title": "标签栏风格",
+        "chrome": "谷歌风格",
+        "button": "按钮风格"
+      }
+    },
+    "sider": {
+      "inverted": "深色侧边栏",
+      "width": "侧边栏宽度",
+      "collapsedWidth": "侧边栏折叠宽度",
+      "mixWidth": "混合布局侧边栏宽度",
+      "mixCollapsedWidth": "混合布局侧边栏折叠宽度",
+      "mixChildMenuWidth": "混合布局子菜单宽度"
+    },
+    "footer": {
+      "visible": "显示底部",
+      "fixed": "固定底部",
+      "height": "底部高度",
+      "right": "底部局右"
+    },
+    "themeDrawerTitle": "主题配置",
+    "pageFunTitle": "页面功能",
+    "configOperation": {
+      "copyConfig": "复制配置",
+      "copySuccessMsg": "复制成功，请替换 src/theme/settings.ts 中的变量 themeSettings",
+      "resetConfig": "重置配置",
+      "resetSuccessMsg": "重置成功"
+    }
+  },
+  "route": {
+    "403": "无权限",
+    "404": "页面不存在",
+    "500": "服务器错误",
+    "lab-groups": "实验室小组",
+    "labs-my": "我的实验室",
+    "lab-projects": "实验室项目",
+    "lab-members": "实验室成员",
+    "labs-public": "公开实验室",
+    "login": "登录",
+    "home": "首页",
+    "user-center": "个人中心",
+    "about": "关于",
+    "function": "系统功能",
+    "function_tab": "标签页",
+    "function_multi-tab": "多标签页",
+    "manage": "系统管理",
+    "manage_user": "用户管理",
+    "manage_user-detail": "用户详情",
+    "manage_role": "角色管理",
+    "manage_route": "路由管理",
+    "exception": "异常页",
+    "exception_403": "403",
+    "exception_404": "404",
+    "exception_500": "500",
+    "activity": "活动",
+    "labs": "实验室",
+    "groups": "团队",
+    "log": "记录",
+    "projects": "项目",
+    "protocol": "协议",
+    "user": "用户",
+    "profile": "用户信息"
+  },
+  "page": {
+    "auth": {
+      "heroTitle": "全球首个面向科研数字化、自动化与加速的通用平台。"
+    },
+    "login": {
+      "common": {
+        "loginOrRegister": "登录 / 注册",
+        "usernamePlaceholder": "请输入用户id",
+        "displayNamePlaceholder": "请输入用户昵称",
+        "phonePlaceholder": "请输入手机号",
+        "emailPlaceholder": "请输入邮箱",
+        "codePlaceholder": "请输入验证码",
+        "passwordPlaceholder": "请输入密码",
+        "newPasswordPlaceholder": "请输入新的密码",
+        "confirmPasswordPlaceholder": "请再次输入密码",
+        "codeLogin": "验证码登录",
+        "confirm": "确定",
+        "back": "返回",
+        "continue": "继续",
+        "validateSuccess": "验证成功",
+        "loginSuccess": "登录成功",
+        "signupSuccess": "注册成功",
+        "welcomeBack": "欢迎回来，{username} ！",
+        "welcome": "欢迎使用，{username} ！",
+        "resend": "重新发送",
+        "sendCode": "发送验证码",
+        "resendCooldown": "请等待 {seconds} 秒后重新发送",
+        "sendCodeSuccess": "验证码发送成功",
+        "sendCodeFailure": "验证码发送失败",
+        "didntReceiveCode": "没有收到验证码？",
+        "changePhoneNumber": "更换手机号",
+        "sendingCode": "正在发送验证码",
+        "noAccount": "还没有账号？",
+        "alreadyHaveAccount": "已有账号？",
+        "verify": "验证"
+      },
+      "emailLogin": {
+        "title": "邮箱登录",
+        "heading": "邮箱登录",
+        "helper": "请输入账号信息以继续",
+        "rememberMe": "记住我",
+        "forgetPassword": "忘记密码？",
+        "register": "注册账号",
+        "otherAccountLogin": "其他账号登录",
+        "otherLoginMode": "其他登录方式",
+        "superAdmin": "超级管理员",
+        "admin": "管理员",
+        "user": "普通用户",
+        "confirm": "登录"
+      },
+      "codeLogin": {
+        "title": "验证码登录",
+        "heading": "手机号登录",
+        "helper": "输入手机号获取验证码",
+        "verificationTitle": "验证码",
+        "codeSentTo": "验证码已发送至",
+        "noAccountTitle": "未找到账号",
+        "noAccountContent": "是否使用该号码创建账号？",
+        "sendFailed": "发送验证码失败",
+        "resendFailed": "重发验证码失败",
+        "getCode": "获取验证码",
+        "notAvailable": "无法收到验证码?",
+        "imageCodePlaceholder": "请输入图片验证码",
+        "confirm": "登录"
+      },
+      "register": {
+        "title": "注册账号",
+        "confirm": "注册",
+        "createAccountTitle": "创建账号",
+        "createAccountHelper": "设置登录凭证",
+        "profileTitle": "个人资料",
+        "profileHelper": "设置用户名与显示名",
+        "displayNameHint": "显示名作为昵称，可在之后修改。",
+        "usernameHint": "用户名作为唯一标识，设置后无法修改。",
+        "displayNameHintShort": "显示名（昵称）可稍后修改。",
+        "usernameHintShort": "用户名固定后不可修改。",
+        "agreement": "我已经仔细阅读并接受",
+        "protocol": "《用户协议》",
+        "policy": "《隐私权政策》"
+      },
+      "login": {
+        "title": "登录账号"
+      },
+      "resetPwd": {
+        "title": "重置密码",
+        "helper": "请输入新密码"
+      },
+      "phoneSignUp": {
+        "step1": "第 1 步 / 共 3 步",
+        "step2": "第 2 步 / 共 3 步",
+        "step3": "第 3 步 / 共 3 步",
+        "finalStep": "最后一步",
+        "jumpToStep": "跳转到步骤",
+        "confirmButton": "完成注册",
+        "step1Label": "第 1 步：账号信息",
+        "step2Label": "第 2 步：个人信息",
+        "success": "账号创建成功！",
+        "failure": "创建账号失败"
+      },
+      "verifyPhone": {
+        "title": "验证手机号",
+        "helper": "输入手机号获取验证码",
+        "permanentHint": "手机号将作为永久信息，无法更改。",
+        "verificationTitle": "验证码",
+        "codeSentTo": "验证码已发送至",
+        "enterCodeLabel": "输入验证码",
+        "sendFailed": "发送验证码失败",
+        "verifyFailed": "验证失败",
+        "resendFailed": "重发验证码失败",
+        "codeIncomplete": "请输入完整验证码",
+        "codeInvalid": "验证码错误，请重试。"
+      },
+      "testingNotice": {
+        "title": "欢迎使用 Airalogy！",
+        "successTitle": "账号创建成功！",
+        "message": "当前为公测阶段。我们会持续优化体验，期间可能会遇到一些问题或不便，感谢理解与支持——Airalogy 团队正在努力让一切更好！",
+        "helper": "现在可以开始探索 Airalogy 的全部功能。",
+        "exploreLater": "稍后再看",
+        "getStarted": "开始使用"
+      },
+      "formOverlay": {
+        "title": "敬请期待",
+        "description": "该功能正在内测中，稍后开放。",
+        "button": "返回"
+      },
+      "bindWeChat": {
+        "title": "绑定微信"
+      }
+    },
+    "about": {
+      "title": "关于",
+      "introduction": "Airalogy：全球首个全学科通用的科研电子化、自动化与加速平台",
+      "projectInfo": {
+        "title": "项目信息",
+        "version": "版本",
+        "latestBuildTime": "最新构建时间",
+        "githubLink": "Github 地址",
+        "previewLink": "预览地址"
+      },
+      "prdDep": "生产依赖",
+      "devDep": "开发依赖"
+    },
+    "home": {
+      "dashboardTitle": "仪表盘",
+      "projectCount": "项目数",
+      "todo": "待办",
+      "message": "消息",
+      "schedule": "实验安排",
+      "projectNews": {
+        "title": "项目动态",
+        "moreNews": "更多动态",
+        "desc1": "第一条动态",
+        "desc2": "第二条动态",
+        "desc3": "第三条动态",
+        "desc4": "第四条动态",
+        "desc5": "第五条动态"
+      },
+      "labs": "最近实验室",
+      "projects": "最近项目",
+      "pinned": "置顶",
+      "pinnedManage": "管理",
+      "pinnedManageTitle": "管理置顶",
+      "pinnedSearchLabsPlaceholder": "搜索实验室",
+      "pinnedSearchProjectsPlaceholder": "搜索项目",
+      "pinnedSearchProtocolsPlaceholder": "搜索协议",
+      "pinnedLimitHint": "最多置顶 {count} 个",
+      "pinnedLimitReached": "最多置顶 {count} 个项目。",
+      "pinnedTabLabs": "实验室",
+      "pinnedTabProjects": "项目",
+      "pinnedTabProtocols": "协议",
+      "pinnedEmptyResults": "暂无匹配结果",
+      "pinnedProjects": "个项目",
+      "pinnedLabMeta": "{projectCount} 个项目 · {memberCount} 位成员",
+      "pinnedMembers": "位成员",
+      "pinnedReorderHint": "拖拽调整顺序",
+      "pinnedEmptyTitle": "还没有置顶内容",
+      "pinnedEmptyDesc": "在左侧置顶常用的实验室、项目或协议，方便快速进入。",
+      "activities": "最近活动",
+      "loadMore": "加载更多",
+      "recentProtocols": "最近协议",
+      "placeholder": "暂无数据",
+      "activityAction": {
+        "added": "添加",
+        "created": "创建",
+        "updated": "更新",
+        "deleted": "删除",
+        "joined": "加入",
+        "left": "离开"
+      },
+      "activityText": {
+        "project": "{action}了一个项目",
+        "lab": "{action}了一个实验室",
+        "record": "添加了一条记录",
+        "protocol": "创建了一个协议",
+        "group": "{action}了一个组"
+      }
+    },
+    "recordDiary": {
+      "tab": "记录日记",
+      "empty": "暂无记录",
+      "recordTitle": "记录 #{number}",
+      "recordFallback": "记录",
+      "version": "v{version}",
+      "viewReport": "查看报告",
+      "filterAllAccessible": "全部可访问",
+      "filterMySubmissions": "我提交的",
+      "filterAllLabs": "全部实验室",
+      "labFilterPlaceholder": "筛选实验室",
+      "filterAllProjects": "全部项目",
+      "projectFilterPlaceholder": "筛选项目",
+      "heatmapTitle": "提交热图",
+      "heatmapHint": "按年查看提交热度，点击某一天查看当天提交的记录",
+      "calendarTitle": "记录日历",
+      "calendarHint": "按月浏览记录；点击日期筛选当天记录，点击记录查看报告",
+      "calendarTruncated": "当前日历范围记录较多，仅显示前 {count} 条",
+      "calendarToday": "今天",
+      "calendarMonth": "月",
+      "selectedDate": "正在查看 {date}"
+    },
+    "function": {
+      "tab": {
+        "tabOperate": {
+          "title": "标签页操作",
+          "addTab": "添加标签页",
+          "addTabDesc": "跳转到关于页面",
+          "closeTab": "关闭标签页",
+          "closeCurrentTab": "关闭当前标签页",
+          "closeAboutTab": "关闭\"关于\"标签页",
+          "addMultiTab": "添加多标签页",
+          "addMultiTabDesc1": "跳转到多标签页页面",
+          "addMultiTabDesc2": "跳转到多标签页页面(带有查询参数)"
+        },
+        "tabTitle": {
+          "title": "标签页标题",
+          "changeTitle": "修改标题",
+          "change": "修改",
+          "resetTitle": "重置标题",
+          "reset": "重置"
+        }
+      },
+      "multiTab": {
+        "routeParam": "路由参数",
+        "backTab": "返回 function_tab"
+      }
+    },
+    "project": {
+      "tab": {
+        "my": "我的项目",
+        "star": "收藏项目",
+        "protocols": "协议",
+        "members": "协作者",
+        "membersHint": "项目协作者仅作用于当前项目，设置不会影响该实验室下其他项目的访问权限。",
+        "diary": "项目日志",
+        "settings": "设置"
+      },
+      "members": "协作者",
+      "protocols": "项目协议",
+      "protocolsSearchPlaceholder": "搜索项目内的协议",
+      "protocolsFilter": {
+        "id": "项目ID",
+        "name": "项目名"
+      },
+      "protocolsSort": {
+        "stars": "最多收藏",
+        "popular": "最受欢迎",
+        "updated": "最近更新"
+      },
+      "protocolFolders": {
+        "filterLabel": "文件夹",
+        "filterAll": "全部",
+        "filterUncategorized": "未分类",
+        "manageAction": "管理文件夹",
+        "manageTitle": "管理文件夹",
+        "helperHint": "文件夹只用于整理当前项目内的协议；如果需要独立的成员、权限或设置，请使用子项目。",
+        "manageHint": "删除文件夹不会删除协议，协议仍会保留在当前项目中，并变为未分类。",
+        "manageProtocolsAction": "管理协议",
+        "manageProtocolsTitle": "管理 {name} 中的协议",
+        "manageProtocolsHint": "选择哪些协议属于当前文件夹；从这里移除协议，只会取消它与该文件夹的关联。",
+        "namePlaceholder": "输入新文件夹名称",
+        "loading": "正在加载文件夹...",
+        "empty": "暂无文件夹",
+        "noProtocols": "当前项目下还没有协议",
+        "assignHint": "分配文件夹",
+        "noPermissionHint": "无权限",
+        "renameAction": "重命名",
+        "protocolCount": "{count} 个协议",
+        "createSuccess": "文件夹已创建",
+        "updateSuccess": "文件夹已更新",
+        "saveProtocolsSuccess": "文件夹内协议已更新",
+        "saveProtocolsError": "更新文件夹协议失败",
+        "loadProtocolsError": "加载项目协议失败",
+        "deleteSuccess": "文件夹已删除",
+        "deleteTitle": "删除文件夹",
+        "deleteDescription": "删除文件夹“{name}”后，协议仍会保留在当前项目中，并变为未分类。"
+      },
+      "settingsPage": {
+        "generalTitle": "常规",
+        "generalDescription": "管理项目的基本信息和偏好设置",
+        "subprojectsTitle": "子项目",
+        "subprojectsDescription": "子项目适用于需要独立成员或设置的工作；文件夹用于整理同一项目内的协议。",
+        "parentProjectTitle": "父项目",
+        "topLevelProjectHint": "这是一个顶级项目。",
+        "createSubprojectAction": "创建子项目",
+        "childProjectsTitle": "子项目列表",
+        "childProjectsEmpty": "暂无子项目",
+        "subprojectOf": "属于父项目 {name}",
+        "subprojectCountSingle": "{count} 个子项目",
+        "subprojectCountPlural": "{count} 个子项目",
+        "logoLabel": "项目 Logo",
+        "logoHint": "上传项目 Logo，推荐尺寸：200x200px",
+        "projectIdLabel": "项目 ID",
+        "projectIdHint": "该 ID 用于项目链接地址，创建后不可修改。",
+        "nameLabel": "项目名称",
+        "namePlaceholder": "输入项目名称",
+        "descriptionLabel": "描述",
+        "descriptionPlaceholder": "描述项目及其用途",
+        "dangerTitle": "危险区域",
+        "dangerDescription": "请谨慎操作",
+        "visibilityLabel": "项目可见性",
+        "changeVisibilityAction": "修改可见性",
+        "changeVisibilityTitle": "修改项目可见性",
+        "changeVisibilityHint": "请选择新的项目可见性。",
+        "changeAccessRoleAction": "修改访问角色",
+        "changeAccessRoleTitle": "修改公开访问角色",
+        "changeAccessRoleHint": "请选择该项目新的公开访问角色。",
+        "accessRoleChangeTitle": "确认修改访问角色",
+        "accessRoleChangeDescription": "将公开访问角色从 {from} 切换为 {to} 会影响项目的访问权限，确定继续吗？",
+        "publicAccessRoleLabel": "公开访问角色",
+        "deleteTitle": "删除项目",
+        "deleteDescription": "项目删除后，所有数据将被永久清除且无法恢复，请谨慎操作。",
+        "deleteAction": "删除项目",
+        "saveAction": "保存更改",
+        "deleteEntityName": "项目",
+        "noChangesTitle": "未检测到更改",
+        "noChangesDescription": "项目信息未发生修改。",
+        "visibilityChangeTitle": "确认修改可见性",
+        "visibilityChangeDescription": "将项目可见性从 {from} 切换为 {to} 可能影响访问权限并带来数据暴露风险，确定继续吗？",
+        "defaultProjectVisibilityHint": "这是默认项目，无法修改可见性。",
+        "defaultProjectDeleteHint": "这是默认项目，无法删除。",
+        "updateError": "更新项目信息失败，请重试。",
+        "updateSuccess": "项目信息已更新。",
+        "fetchError": "获取项目信息失败",
+        "fetchUpdatedError": "获取最新项目信息失败",
+        "deleteError": "删除项目失败，请重试。",
+        "deleteSuccess": "项目已删除。",
+        "visibility": {
+          "publicLabel": "公开",
+          "publicDescription": "任何人都可以查看该项目及其内容",
+          "privateLabel": "私有",
+          "privateDescription": "仅项目成员可查看并访问该项目"
+        },
+        "validation": {
+          "nameLength": "项目名称长度需在 1 到 40 个字符之间",
+          "nameEdge": "项目名称不能以特殊字符开头或结尾",
+          "nameRepeat": "特殊字符不能连续出现"
+        }
+      },
+      "info": "项目信息",
+      "diary": "项目日志",
+      "settings": "设置",
+      "createProjectModal": {
+        "title": "创建新项目",
+        "labLabel": "选择实验室",
+        "parentProjectLabel": "父项目",
+        "parentProjectPlaceholder": "可选。选择父项目后将创建为子项目。",
+        "parentProjectHint": "留空则创建为顶级项目。",
+        "parentProjectFixedHint": "该项目将作为当前项目下的子项目创建。",
+        "displayNameLabel": "项目显示名称",
+        "displayNamePlaceholder": "输入项目显示名称",
+        "displayNameTip": "显示名称将作为项目标题，可在后续修改。",
+        "projectIdLabel": "项目 ID",
+        "descriptionPlaceholder": "描述该项目",
+        "withDiaryLabel": "日志协议",
+        "withDiaryOption": "添加日志协议",
+        "withDiaryHint": "将自动为项目添加日志协议，用于笔记与文档记录。",
+        "subprojectVisibilityHint": "子项目将继承父项目的可见性设置。",
+        "accessSetupLabel": "访问设置",
+        "copyMembersOption": "复制父项目的成员和群组访问权限",
+        "copyMembersHint": "创建者始终会被添加为 Owner。不会复制 Protocol 分组。",
+        "labEmptyLabel": "你还没有创建任何实验室。",
+        "labEmptyAction": "创建实验室",
+        "labRequired": "请选择实验室",
+        "projectIdRequired": "请输入项目 ID",
+        "displayNameRequired": "请输入项目显示名称",
+        "snakeCaseWarning": "项目 ID \"{rawUid}\" 将被转换为 snake_case 格式：\"{snakeCaseUid}\"。",
+        "creatingWithDiary": "正在创建项目并添加日志协议...",
+        "diaryCreateFailed": "项目创建成功，但日志协议创建失败",
+        "createSuccess": "成功创建项目 {name}",
+        "createSuccessWithDiary": "成功创建项目 {name} 并添加日志协议",
+        "projectIdAvailable": "项目 ID 可用。",
+        "labCreateSuccess": "成功创建实验室 {name}"
+      }
+    },
+    "protocol": {
+      "info": "协议信息",
+      "protocolName": "协议名",
+      "protocolId": "协议ID",
+      "protocolDetails": "协议详情",
+      "protocolIdCopied": "协议 ID 已复制",
+      "reusedFrom": "复用自",
+      "settings": {
+        "basicInfoTitle": "基础信息",
+        "basicInfoDescription": "管理协议信息与配置",
+        "protocolIdLabel": "协议 ID",
+        "protocolVersionLabel": "协议版本",
+        "protocolNamePlaceholder": "请输入协议名称",
+        "descriptionPlaceholder": "请输入协议描述",
+        "disciplinesPlaceholder": "如：生物学、化学",
+        "keywordsPlaceholder": "如：细胞活性、检测",
+        "licensePlaceholder": "选择或输入许可协议",
+        "dangerTitle": "危险区域",
+        "dangerDescription": "请谨慎操作",
+        "adminViewTitle": "管理员访问提示",
+        "adminViewNotice": "你正在以实验室/项目负责人或管理员身份查看该协议。",
+        "adminViewDetail": "普通成员仅可查看协议内容，不能修改设置或删除协议。",
+        "adminViewActionEditInfo": "编辑基础信息",
+        "adminViewActionEditEnv": "编辑环境变量",
+        "adminViewActionDelete": "删除协议",
+        "envTitle": "环境变量",
+        "envDescription": "管理协议相关的敏感配置变量",
+        "envPlaceholder": "环境变量（KEY=VALUE 格式，每行一个）",
+        "envRestrictedTitle": "访问受限",
+        "envRestrictedDescription": "仅协议创建者或管理员可查看和修改环境变量。",
+        "envHidden": "环境变量已隐藏",
+        "envEmpty": "暂无环境变量",
+        "envDetectedTitle": "检测到环境变量",
+        "envDetectedDescription": "这些变量来自你上传的 .env 文件，并已安全保存。",
+        "envHiddenForSecurity": "为安全起见，变量值已隐藏",
+        "copy": "复制",
+        "copied": "已复制",
+        "showValues": "显示值",
+        "hideValues": "隐藏值",
+        "envEdit": "编辑变量",
+        "envSave": "保存变量",
+        "envSaveSuccess": "环境变量已更新。",
+        "envSaveFailed": "环境变量更新失败。",
+        "envCopied": "环境变量已复制到剪贴板",
+        "saveChanges": "保存更改",
+        "deleteTitle": "删除协议",
+        "deleteDescription": "协议删除后，所有数据将被永久清除且无法恢复。",
+        "adminDeleteNotice": "你正在以实验室/项目负责人或管理员身份删除他人创建的协议。",
+        "validation": {
+          "nameRequired": "协议名称不能为空",
+          "nameLength": "名称长度需在 1 到 50 个字符之间",
+          "descriptionLength": "描述不能超过 500 个字符"
+        }
+      },
+      "tooltips": {
+        "reuseToProject": "可复用本协议到指定项目",
+        "editReadOnly": "在编辑器中查看该协议（只读模式，点击锁图标可创建可编辑副本）",
+        "reupload": "重新上传该协议"
+      },
+      "tab": {
+        "my": "我的协议",
+        "logs": "记录",
+        "protocols": "协议",
+        "fields": "字段",
+        "history": "历史",
+        "settings": "设置",
+        "discussion": "讨论"
+      },
+      "apply": {
+        "modalTitle": "新建协议",
+        "method": {
+          "createTitle": "选择创建方式",
+          "updateTitle": "选择更新方式",
+          "createDescription": "选择你想如何创建该协议",
+          "updateDescription": "选择你想如何更新该协议"
+        },
+        "setup": {
+          "title": "设置协议",
+          "description": "填写协议的基础信息"
+        },
+        "steps": {
+          "allSetTitle": "已完成",
+          "allSetDescription": "协议已准备就绪"
+        },
+        "options": {
+          "existing": {
+            "title": "复用其他项目的协议",
+            "description": "从其他项目中选择协议进行复用"
+          },
+          "uploadZip": {
+            "title": "上传协议 ZIP",
+            "description": "通过上传 ZIP 文件创建协议"
+          },
+          "scratch": {
+            "title": "从头创建协议",
+            "description": "手动添加每个协议文件来创建"
+          },
+          "hub": {
+            "title": "探索 Airalogy Hub",
+            "description": "发现并复用社区共享的协议"
+          }
+        },
+        "setupForm": {
+          "selectAnotherProtocol": "选择其他协议",
+          "applyToProject": "应用到项目",
+          "protocolDetailsFork": "协议详情（Fork）",
+          "protocolDetailsReuse": "协议详情（复用）",
+          "noProtocolSelected": "生成协议 ID 前请先选择一个协议",
+          "newProtocolDetails": "新协议详情",
+          "protocolDisplayNameLabel": "协议显示名称",
+          "protocolDisplayNamePlaceholder": "请输入协议显示名称",
+          "protocolIdLabel": "协议 ID",
+          "protocolIdValid": "协议 ID 与版本可用"
+        },
+        "action": {
+          "applying": "正在应用协议...",
+          "applySuccess": "协议应用成功！",
+          "uploadSuccess": "协议上传成功！",
+          "applyFailed": "协议应用失败",
+          "applyFailedWithDetail": "协议应用失败：{detail}"
+        },
+        "success": {
+          "addRecord": "现在添加记录",
+          "redirecting": "{seconds} 秒后自动跳转...",
+          "titleApplied": "协议应用成功",
+          "titleUploaded": "协议上传成功",
+          "descApplied": "协议已应用到项目",
+          "descUploaded": "协议已上传到项目"
+        }
+      },
+      "workflow": {
+        "ended": "流程已结束",
+        "workspaceTab": "工作流",
+        "workspaceTabDescription": "在这里编辑 Workflow 结构并运行当前流程。",
+        "workspaceHint": "结构编辑和运行态共用同一份 Workflow。修改协议列表、初始协议或连线时，会自动重置运行进度。",
+        "workspaceFieldTitle": "Workflow 工作台",
+        "workspaceFieldHint": "此字段通过右侧工作台维护，不在当前表单中直接编辑。",
+        "openWorkspace": "打开工作台",
+        "structureTitle": "结构编辑",
+        "runtimeTitle": "运行态",
+        "protocolCount": "协议数 {count}",
+        "titlePlaceholder": "输入 Workflow 标题",
+        "defaultGoalLabel": "默认研究目标",
+        "defaultGoalPlaceholder": "输入默认研究目标",
+        "defaultStrategyLabel": "默认研究策略",
+        "defaultStrategyPlaceholder": "输入默认研究策略",
+        "logicLabel": "流程逻辑说明",
+        "logicPlaceholder": "描述协议之间的关系、切换条件和总体策略",
+        "selectProtocolPlaceholder": "选择要加入 Workflow 的协议",
+        "addProtocol": "添加协议",
+        "addCurrentProtocol": "添加当前协议",
+        "protocolAlreadyAdded": "该协议已在 Workflow 中",
+        "emptyProtocols": "尚未添加任何协议",
+        "initialProtocolLabel": "默认起始协议",
+        "edgesLabel": "协议连线",
+        "emptyEdges": "尚未配置任何连线",
+        "resetRuntime": "重置运行态",
+        "runtimeEmpty": "请先添加协议，再运行 Workflow",
+        "selectNext": "选择下一个科研协议",
+        "completePrevious": "请先完成上一条记录",
+        "selectUnit": "选择协议",
+        "protocolIndex": "协议 #{index}",
+        "recordIndex": "记录 #{id}",
+        "waitingForRecord": "等待记录",
+        "waitingForInitialValues": "等待初始值",
+        "waitingForIntermediateConclusion": "等待阶段结论",
+        "waitingForConclusion": "等待结论",
+        "showReport": "查看报告",
+        "showIntermediateConclusion": "查看阶段结论",
+        "redoRecord": "重做记录",
+        "deleteNode": "删除节点",
+        "getInitialValues": "生成初始值",
+        "showInitialValues": "查看初始值",
+        "addRecord": "新增记录",
+        "endWorkflow": "结束流程",
+        "end": "结束",
+        "writeConclusion": "撰写结论",
+        "writeIntermediateConclusion": "撰写阶段结论",
+        "selectedProtocol": "已选协议",
+        "clickToAddRecord": "点击新增记录",
+        "researchProtocol": "科研协议",
+        "aiGenerated": "AI 生成",
+        "aiGenerateConclusion": "让 AI 生成结论",
+        "intermediateConclusion": "阶段结论",
+        "intermediateConclusionBase": "科研协议 {protocolId} 的阶段结论",
+        "intermediateConclusionWithSequence": "科研协议 {protocolId} 的阶段结论（协议 #{sequence}）",
+        "finalConclusionLabel": "最终结论",
+        "intermediateConclusionLabel": "阶段结论",
+        "noResearchNodeSelected": "未选择协议",
+        "status": {
+          "init": "初始化",
+          "generating": "生成中",
+          "generated": "已生成",
+          "pending": "待处理",
+          "conclusion": "结论中",
+          "done": "已完成",
+          "error": "错误"
+        }
+      },
+      "assignerGraph": {
+        "dependentField": "依赖字段",
+        "assigner": "赋值器",
+        "assignedField": "被赋值字段",
+        "fullscreenTitle": "赋值关系图 - 全屏查看"
+      },
+      "assignerProgress": {
+        "completed": "已完成",
+        "assigning": "正在赋值...",
+        "clickForDetails": "点击查看详情",
+        "overallProgress": "整体进度",
+        "dependsOn": "依赖于",
+        "pending": "待处理",
+        "running": "运行中",
+        "error": "错误"
+      },
+      "fieldInput": {
+        "title": "字段输入",
+        "hint": "可直接通过文本或上传附件设置字段值，例如：“set title to hello”",
+        "placeholder": "输入命令或添加附件",
+        "uploadFile": "上传文件",
+        "attachmentsHint": "支持图片、PDF、DOCX 和文本类文件，每个文件不超过 10MB",
+        "attachmentPending": "待上传",
+        "attachmentUploading": "上传中",
+        "attachmentUploaded": "已就绪",
+        "unsupportedFileType": "不支持的文件类型：{name}",
+        "fileTooLarge": "文件超过 10MB：{name}",
+        "attachmentUploadFailed": "附件上传失败：{name}",
+        "voiceInput": "语音输入",
+        "noOperationsRecognized": "未识别到字段操作",
+        "invalidResponse": "响应格式不正确",
+        "operationFailed": "操作失败：{message}",
+        "noExecutableOperations": "未找到可执行的操作",
+        "unknownField": "未知字段",
+        "successUpdated": "成功更新 {count} 个字段",
+        "partialSuccess": "部分成功：已更新 {count}/{total} 个字段",
+        "allFailed": "所有操作均失败",
+        "transcriptionMissing": "未能识别语音内容",
+        "transcriptionFailed": "语音转写失败"
+      },
+      "recordReport": {
+        "title": "协议记录",
+        "protocolDetails": "协议详情",
+        "exportPdf": "导出 PDF",
+        "notFoundTitle": "记录未找到",
+        "notFoundDescription": "未找到请求的记录",
+        "exportTitle": "导出记录为 PDF：",
+        "filenamePlaceholder": "输入文件名",
+        "saveFilename": "保存文件名",
+        "editFilename": "编辑文件名",
+        "generatingPdf": "正在生成 PDF...",
+        "generating": "生成中...",
+        "protocolNotFound": "未找到协议",
+        "loadFailed": "加载记录失败：{message}",
+        "formRefMissing": "表单引用不可用",
+        "noContent": "没有可导出的内容",
+        "previewFailed": "生成 PDF 预览失败：{message}",
+        "noPdf": "暂无可导出的 PDF",
+        "exportSuccess": "PDF 导出成功",
+        "exportFailed": "导出 PDF 失败：{message}"
+      },
+      "draft": {
+        "restoreButton": "恢复草稿",
+        "saveButton": "保存草稿",
+        "title": "恢复草稿？",
+        "delete": "删除草稿",
+        "merge": "与当前数据合并草稿",
+        "restoreAction": "恢复",
+        "prompt": "是否恢复之前的草稿？",
+        "previewTitle": "预览草稿数据",
+        "previewTab": "预览",
+        "lastModified": "最后修改",
+        "noPreview": "暂无预览数据",
+        "noDraft": "未找到草稿。",
+        "jsonTab": "JSON",
+        "noJson": "暂无 JSON 数据",
+        "cleared": "草稿已清理"
+      },
+      "addRecord": {
+        "viewWorkflowRecord": "查看协议流程记录",
+        "addToWorkflow": "向协议流程添加记录",
+        "title": "新增记录",
+        "noProtocol": "暂无协议",
+        "uploadPackage": "上传包",
+        "uploadError": "上传包失败，状态码：{status}，信息：{statusText}",
+        "uploadSuccess": "上传包成功。",
+        "uploadFailed": "上传包失败",
+        "workflowContinueTitle": "继续 Protocol Workflow",
+        "workflowContinueContent": "记录已创建，需要返回原标签页继续流程。",
+        "workflowStay": "留在此处",
+        "createSuccess": "记录创建成功",
+        "closeWindowTitle": "关闭窗口",
+        "closeWindowContent": "确定要关闭此窗口吗？",
+        "noDraftFound": "未找到草稿数据"
+      },
+      "timeline": {
+        "removeFromChat": "从聊天上下文移除",
+        "addToChat": "加入聊天上下文",
+        "exportJsonData": "导出 JSON 数据",
+        "viewReport": "查看报告",
+        "jsonPreviewTitle": "JSON 预览：{name}",
+        "downloadJson": "下载 JSON",
+        "copyToClipboard": "复制到剪贴板",
+        "previewJson": "预览 JSON",
+        "downloadSuccess": "JSON 文件已下载",
+        "copySuccess": "JSON 已复制到剪贴板",
+        "modeTimeline": "时间线",
+        "modePreview": "预览"
+      },
+      "records": {
+        "advancedSearch": "高级搜索",
+        "searchContentPlaceholder": "搜索记录内容，查找是否提及某个词",
+        "searchRecordNumber": "搜索记录编号",
+        "recordNumberPlaceholder": "输入记录编号",
+        "searchRecordVersion": "搜索记录版本",
+        "recordVersionPlaceholder": "输入记录版本号",
+        "protocolVersionLabel": "协议版本：",
+        "applyFilters": "应用筛选",
+        "clearAll": "清空筛选",
+        "bulkImport": "批量上传",
+        "bulkImportTitle": "批量上传记录",
+        "bulkImportDropText": "拖放 CSV 文件，或点击选择",
+        "bulkImportSupportHint": "CSV 列名会按当前 Protocol 字段解析，支持变量名、var.<field>、step.<id>.checked 和 check.<id>.annotation。",
+        "bulkImportSubmit": "上传并导入",
+        "bulkImportNoFile": "请先选择 CSV 文件",
+        "bulkImportCsvOnly": "请选择 CSV 文件",
+        "bulkImportSuccess": "已导入 {count} 条记录",
+        "bulkImportErrorTitle": "导入失败",
+        "bulkImportRowError": "第 {row} 行{column}：{message}",
+        "bulkImportUnknownError": "导入失败，请检查 CSV 内容后重试。",
+        "deleteBlockedLatest": "存在更新的记录，请先删除最新记录。",
+        "deleteBlockedExpired": "记录已超过 {days} 天，无法删除。",
+        "deleteBlockedLoading": "正在获取最新记录信息，请稍后重试。",
+        "deleteAdminWarning": "这条记录已超过 {days} 天安全缓冲期，超过缓冲期的记录通常不应删除。你正在以管理员身份进行删除，即使可以删除也请谨慎操作。"
+      }
+    },
+    "labs": {
+      "tab": {
+        "my": "我的实验室",
+        "public": "公开实验室",
+        "members": "成员",
+        "membersHint": "成员是单个用户，添加成员可授予其访问实验室并管理相应权限。",
+        "project": "项目",
+        "protocol": "协议",
+        "groups": "小组",
+        "groupsHint": "小组用于把多个人归在一起，可一次授权小组访问多个项目，便于通过维护小组成员来管理多个项目的访问权限。",
+        "settings": "设置"
+      },
+      "my": "我的实验室",
+      "public": "公开实验室",
+      "info": "实验室信息",
+      "members": "成员",
+      "projects": "项目",
+      "groups": "小组",
+      "settings": "设置",
+      "searchProjectsPlaceholder": "搜索实验室内的项目",
+      "settingsPage": {
+        "generalTitle": "常规",
+        "generalDescription": "管理实验室的基本信息和偏好设置",
+        "logoLabel": "实验室 Logo",
+        "logoHint": "上传实验室 Logo，推荐尺寸：200x200px",
+        "labIdLabel": "实验室 ID",
+        "labIdHint": "实验室 ID 已创建，不可修改。",
+        "nameLabel": "实验室名称",
+        "namePlaceholder": "输入实验室名称",
+        "descriptionLabel": "描述",
+        "descriptionPlaceholder": "描述实验室及其用途",
+        "dangerTitle": "危险区域",
+        "dangerDescription": "请谨慎操作",
+        "deleteTitle": "删除实验室",
+        "deleteDescription": "实验室删除后，所有数据将被永久清除且无法恢复，请谨慎操作。",
+        "deleteRequirementsTitle": "删除前置条件",
+        "deleteBlockedHint": "只有不包含项目数据的实验室才允许直接删除。请先处理以下内容后再执行删除。",
+        "deleteReadyHint": "当前实验室没有项目。删除后将无法恢复。",
+        "deleteReadyWithDefaultProjectsHint": "当前仅剩 {count} 个默认项目。删除实验室时系统会一并自动清理它们。",
+        "deleteBlockedProjects": "当前还有 {count} 个项目未删除",
+        "deleteBlockedUsers": "当前共有 {count} 位成员。删除实验室时这些成员关系会一并移除。",
+        "deleteBlockedDefaultProjectProtocols": "默认项目中仍有 {count} 条协议数据，删除实验室前需要先清理这些协议",
+        "deleteModalWarning": "此操作会永久删除实验室及其实验室级配置，且无法恢复。",
+        "deleteErrorHasProjects": "该实验室仍包含项目，请先删除或迁移所有项目后再删除实验室。",
+        "deleteErrorHasUsers": "删除实验室时清理成员关系失败，请重试。",
+        "deleteErrorDefaultProjectsHaveProtocols": "默认项目中仍有协议数据，请先清理这些协议后再删除实验室。",
+        "deleteErrorForbidden": "只有实验室拥有者可以删除实验室。",
+        "deleteError": "删除实验室失败，请重试。",
+        "deleteAction": "删除实验室",
+        "forceDeleteTitle": "强制删除实验室",
+        "forceDeleteDescription": "仅限实验室拥有者使用。该操作会级联清理实验室下的项目、协议、记录和文件对象，风险极高。",
+        "forceDeleteOwnerHint": "仅当普通删除被现有数据阻塞时才提供强制删除入口。开始前会先展示影响面，并要求输入准确的实验室 ID 进行强确认。",
+        "forceDeleteAction": "强制删除",
+        "forceDeletePreviewTitle": "确认强制删除实验室",
+        "forceDeletePreviewDescription": "请先确认以下影响范围。提交后会在后台异步删除实验室数据，且无法恢复。",
+        "forceDeleteUidLabel": "输入实验室 ID 以确认",
+        "forceDeleteUidPlaceholder": "请输入当前实验室 ID",
+        "forceDeleteCheckbox": "我确认将永久删除该实验室及其下所有相关数据，且该操作不可恢复。",
+        "forceDeleteFinalWarning": "强制删除会跳过普通删除的保守限制，并尝试直接清理项目、协议、记录、成员关系和文件对象。",
+        "forceDeleteInProgressDescription": "强制删除任务已启动，系统正在后台清理数据。请勿重复提交。",
+        "forceDeleteImpactMembers": "成员数",
+        "forceDeleteImpactGroups": "小组数",
+        "forceDeleteImpactProjectsTotal": "项目总数",
+        "forceDeleteImpactProjectsActive": "活跃项目",
+        "forceDeleteImpactProjectsDefault": "默认项目",
+        "forceDeleteImpactProtocolsTotal": "协议总数",
+        "forceDeleteImpactProtocolsActive": "活跃协议",
+        "forceDeleteImpactRecordsTotal": "记录总数",
+        "forceDeleteImpactRecordsActive": "活跃记录",
+        "forceDeleteImpactFilesTotal": "文件对象总数",
+        "forceDeleteStarted": "强制删除任务已提交，正在后台执行。",
+        "forceDeleteSuccess": "实验室强制删除完成。",
+        "forceDeleteFailed": "实验室强制删除失败。",
+        "forceDeleteFailedWithReason": "实验室强制删除失败",
+        "forceDeletePreviewError": "加载强制删除影响面失败，请重试。",
+        "forceDeleteStatusError": "获取强制删除任务状态失败，请稍后重试。",
+        "forceDeleteErrorForbidden": "只有实验室拥有者可以强制删除实验室。",
+        "forceDeleteErrorUidMismatch": "输入的实验室 ID 不匹配，请重新确认。",
+        "forceDeleteErrorIrreversibleRequired": "请先勾选不可恢复确认后再继续。",
+        "forceDeleteErrorAlreadyInProgress": "该实验室已有强制删除任务正在执行，请勿重复提交。",
+        "forceDeleteErrorJobNotFound": "未找到对应的强制删除任务状态。",
+        "forceDeleteError": "启动实验室强制删除失败，请重试。",
+        "saveAction": "保存更改",
+        "deleteEntityName": "实验室",
+        "infoName": "实验室信息",
+        "noChangesTitle": "未检测到更改",
+        "noChangesDescription": "实验室信息未发生修改。",
+        "updateError": "更新实验室信息失败，请重试。",
+        "updateSuccess": "实验室信息已更新。"
+      },
+      "createLabModal": {
+        "title": "新建实验室",
+        "displayNameLabel": "实验室显示名称",
+        "displayNamePlaceholder": "输入实验室显示名称",
+        "displayNameTip": "显示名称作为实验室标题，后续可以修改。",
+        "labIdLabel": "实验室 ID",
+        "descriptionPlaceholder": "描述这个实验室",
+        "logoLabel": "上传 Logo",
+        "defaultProjectsTitle": "默认项目",
+        "defaultProjectsIntro": "创建新实验室时，系统会自动创建两个默认项目：",
+        "defaultProjectsPublic": "用于向其他实验室分享协议的公开项目",
+        "defaultProjectsPrivate": "用于实验室内部共享协议的私有项目",
+        "snakeCaseWarning": "实验室 ID \"{rawUid}\" 将被转换为 snake_case：\"{snakeCaseUid}\"。",
+        "createSuccessWithDefaults": "成功创建实验室 {name}，并已创建默认项目",
+        "defaultProjectsWarning": "实验室已创建成功，但部分默认项目创建失败：{message}",
+        "labIdAvailable": "实验室 ID 可用。"
+      },
+      "searchMyLabsPlaceholder": "搜索我的实验室",
+      "searchLabIdLabel": "实验室ID",
+      "searchLabNameLabel": "实验室名称",
+      "searchEmptyById": "未找到实验室ID“{query}”",
+      "searchEmptyByName": "未找到实验室名称“{query}”"
+    },
+    "profile": {
+      "info": "个人信息",
+      "summary": "概览",
+      "protocols": "协议",
+      "starred": "收藏",
+      "settings": "设置",
+      "setting": "修改密码",
+      "apiKeySetting": "API Key 设置",
+      "account": "我的账号",
+      "userSettings": "用户设置",
+      "changePhone": "更换手机号",
+      "changePassword": "修改密码",
+      "changePasswordDescription": "修改密码以保护您的账户安全",
+      "changePasswordSuccess": "密码修改成功",
+      "changePasswordFailure": "密码修改失败",
+      "currentPassword": "当前密码",
+      "newPassword": "新密码",
+      "confirmPassword": "确认密码",
+      "passwordMismatch": "密码不匹配",
+      "savePassword": "保存密码",
+      "forgotPassword": "忘记密码",
+      "verifyCurrentPhone": "验证当前手机号",
+      "verifyNewPhone": "验证新手机号",
+      "enterCurrentPhone": "输入当前手机号",
+      "enterCurrentPhoneDescription": "请输入您的当前手机号，包括国家代码。",
+      "sendSmsToCurrentPhone": "向当前手机号发送短信",
+      "sendSmsToCurrentPhoneDescription": "我们将向您的当前手机号发送验证码。",
+      "sendCodeToCurrentPhone": "我们将向您当前绑定的手机号发送验证码以验证身份。",
+      "yourCurrentPhone": "您的当前手机号",
+      "noPhoneNumber": "您的账户中没有找到手机号",
+      "sendCodeTo": "发送验证码至",
+      "enterNewPhone": "输入新手机号",
+      "enterNewPhoneDescription": "请输入您的新手机号，包括国家代码。",
+      "sendSmsToNewPhone": "向新手机号发送短信",
+      "sendSmsToNewPhoneDescription": "我们将向您的新手机号发送验证码。",
+      "phoneOrCountryCodeMissing": "手机号或国家代码缺失",
+      "changePhoneSuccess": "手机号更换成功",
+      "changePhoneFailure": "手机号更换失败",
+      "enterCodeForPhone": "输入当前手机验证码",
+      "enterCodeForNewPhone": "输入新手机验证码",
+      "confirmPhoneChange": "确认更换手机号",
+      "phoneMismatch": "手机号与您当前账户的手机号不匹配",
+      "newPhoneMustBeDifferent": "新手机号必须与当前手机号不同"
+    },
+    "group": {
+      "createGroupTitle": "新建小组",
+      "addProjectToGroup": "添加项目到小组",
+      "addProjectModal": {
+        "targetGroupLabel": "选择目标小组",
+        "targetGroupPlaceholder": "选择小组",
+        "projectLabel": "选择项目"
+      },
+      "projects": "小组项目",
+      "members": "小组成员",
+      "settings": "小组设置",
+      "createGroupModal": {
+        "displayNameLabel": "小组显示名称",
+        "displayNamePlaceholder": "请输入小组显示名称",
+        "displayNameTip": "显示名称是小组的标题，之后可以修改。",
+        "groupIdLabel": "小组 ID",
+        "descriptionPlaceholder": "描述该小组",
+        "selectProjectsLabel": "选择项目",
+        "selectProjectsPlaceholder": "请至少选择一个项目",
+        "labNotFound": "未找到实验室",
+        "snakeCaseWarning": "小组 ID \"{rawName}\" 将被转换为 snake_case 格式：\"{snakeCaseName}\"。",
+        "createSuccess": "成功创建小组 {name}",
+        "groupIdAvailable": "小组 ID 可用。"
+      }
+    },
+    "search": {
+      "protocol": "协议搜索",
+      "record": "记录搜索",
+      "discussion": "讨论搜索",
+      "title": "搜索"
+    },
+    "hub": {
+      "title": "协议中心",
+      "openHub": "打开协议中心",
+      "uploadProtocol": "上传协议",
+      "searchPlaceholder": "搜索科研协议",
+      "recordsEmpty": "暂无记录",
+      "downloadsStatsTitle": "下载与统计",
+      "category": {
+        "biology": "生物",
+        "chemistry": "化学",
+        "physics": "物理"
+      },
+      "sort": {
+        "popularity": "热度",
+        "recentlyUpdated": "最近更新",
+        "bestMatch": "最佳匹配"
+      },
+      "dashboard": {
+        "title": "我的面板",
+        "myProtocols": "我的协议",
+        "analytics": "分析",
+        "settings": "设置",
+        "analyticsPlaceholder": "分析面板将在此展示",
+        "settingsPlaceholder": "用户设置将在此展示",
+        "sampleProtocolName": "PCR DNA 扩增实验协议"
+      },
+      "uploadModal": {
+        "title": "上传协议",
+        "protocolNameLabel": "协议名称",
+        "protocolNamePlaceholder": "请输入协议名称",
+        "protocolFileLabel": "协议文件"
+      },
+      "protocolCard": {
+        "addToBookmarks": "加入收藏"
+      },
+      "protocolUpload": {
+        "stepApplyToProject": "应用到项目",
+        "stepSelectPackage": "选择协议包",
+        "stepConfigureProtocol": "配置协议",
+        "stepEnvConfig": "环境配置",
+        "uploadInstructionZip": "点击或拖拽上传 ZIP 格式的协议包",
+        "uploadInstructionFile": "点击或拖拽上传协议文件",
+        "uploadSupportTypes": "仅支持 {types} 文件",
+        "emptySelectPackage": "请先选择协议包",
+        "addEnvFile": "添加 .env 文件",
+        "uploadEnvTitle": "上传环境配置文件",
+        "uploadEnvHint": "支持 .env、.env.local、.env.development 等（可选）",
+        "labProjectRequired": "labUid 和 projectUid 为必填",
+        "changeVersion": "切换到版本",
+        "updateVersionTooltip": "将协议 ID 和版本更新到最新",
+        "projectRequired": "未选择项目，请先选择项目",
+        "envFilesOnly": "仅支持环境配置文件（.env、.env.local 等）",
+        "fileExistsTitle": "文件 {name} 已存在",
+        "overrideConfirm": "确定要覆盖吗？"
+      },
+      "envEditor": {
+        "handlingTitle": "环境文件处理说明",
+        "handlingItem1": "为确保数据安全，上传的协议包默认移除 .env 文件",
+        "handlingItem2": "将 .env 中的环境变量提取并保存到协议的环境设置",
+        "handlingItem3": "最终协议包仅包含勾选的文件",
+        "handlingItem4": "未勾选的文件将不会分发",
+        "handlingItem5": "可手动上传环境文件到协议环境设置",
+        "handlingItem6": "也可手动编辑协议环境变量",
+        "summaryTitle": "环境配置汇总",
+        "summaryTooltip": "汇总协议包内和手动上传的环境文件",
+        "totalFiles": "环境文件总数",
+        "filesToInclude": "将包含的文件",
+        "filesToExclude": "将排除的文件",
+        "filesTitle": "环境文件",
+        "filesTooltip": "协议包中发现的环境文件",
+        "removeConfirm": "确定要移除此文件吗？",
+        "contentPlaceholder": "环境文件内容...",
+        "includeLabel": "将包含在包中",
+        "excludeLabel": "将从包中排除"
+      }
+    }
+  },
+  "form": {
+    "required": "不能为空",
+    "fieldRequired": "{field}为必填项",
+    "username": {
+      "required": "请输入用户名",
+      "invalid": "用户名格式不正确",
+      "length": "用户名长度需为4-26个字符",
+      "pattern": "仅支持小写字母、数字和下划线",
+      "startLowercase": "必须以小写字母开头",
+      "hyphenEdges": "不能以连字符开头或结尾",
+      "hyphenConsecutive": "不能包含连续连字符"
+    },
+    "phone": {
+      "required": "请输入手机号",
+      "invalid": "手机号格式不正确"
+    },
+    "pwd": {
+      "required": "请输入密码",
+      "invalid": "密码格式不正确"
+    },
+    "confirmPwd": {
+      "required": "请再次输入密码",
+      "invalid": "两次输入的密码不一致"
+    },
+    "code": {
+      "required": "请输入验证码",
+      "invalid": "验证码格式不正确"
+    },
+    "email": {
+      "required": "请输入邮箱",
+      "invalid": "邮箱格式不正确"
+    },
+    "uid": {
+      "length": "{field}长度需为{min}-{max}个字符",
+      "pattern": "仅支持字母、数字和连字符",
+      "hyphenEdges": "不能以连字符开头或结尾",
+      "hyphenConsecutive": "不能包含连续连字符",
+      "startLowercase": "必须以小写字母开头"
+    },
+    "displayName": {
+      "length": "{field}长度需为{min}-{max}个字符",
+      "hyphenEdges": "不能以连字符开头或结尾",
+      "hyphenConsecutive": "不能包含连续连字符"
+    },
+    "password": {
+      "uppercase": "至少包含1个大写字母 (A-Z)",
+      "lowercase": "至少包含1个小写字母 (a-z)",
+      "digit": "至少包含1个数字 (0-9)",
+      "specialMissing": "至少包含1个特殊字符，例如：{chars}",
+      "specialUnsupported": "不支持的字符（{chars}）",
+      "length": "长度需为8-32个字符"
+    },
+    "version": {
+      "invalid": "版本号需符合语义化版本规范（如 1.0.0, 1.0.0-alpha.1）"
+    },
+    "file": {
+      "required": "请选择文件",
+      "nameRequired": "文件名不能为空",
+      "nameInvalid": "文件名格式不正确",
+      "nameStartsDot": "文件名不能以 . 开头",
+      "nameMissing": "文件名不正确",
+      "typeInvalid": "文件类型不正确",
+      "validationFailed": "文件名校验失败",
+      "renameSuccess": "文件重命名成功",
+      "uploadFailed": "{name} 上传失败",
+      "invalidFile": "文件无效",
+      "sizeLimit": "文件大小超过 {size}MB 限制",
+      "maxCount": "最多允许 {count} 个文件"
+    }
+  },
+  "dropdown": {
+    "closeCurrent": "关闭",
+    "closeOther": "关闭其它",
+    "closeLeft": "关闭左侧",
+    "closeRight": "关闭右侧",
+    "closeAll": "关闭所有"
+  },
+  "icon": {
+    "themeConfig": "主题配置",
+    "themeSchema": "主题模式",
+    "lang": "切换语言",
+    "fullscreen": "全屏",
+    "fullscreenExit": "退出全屏",
+    "reload": "刷新页面",
+    "collapse": "折叠菜单",
+    "expand": "展开菜单",
+    "pin": "固定",
+    "unpin": "取消固定"
+  },
+  "role": {
+    "owner": "所有者",
+    "member": "成员",
+    "manager": "管理者",
+    "collaborator": "协作者",
+    "recorder": "记录者",
+    "recorder_self_only": "记录者（仅自己）",
+    "explorer": "探索者",
+    "explorer_self_only": "探索者（仅自己）",
+    "viewer": "仅查看",
+    "viewer_self_only": "仅查看（仅自己）",
+    "description": {
+      "project": {
+        "owner": "指定任意用户为管理员，并管理所有协议和记录。",
+        "manager": "可分配管理员以下角色，并管理所有协议和记录。",
+        "collaborator": "可创建新协议，并查看所有协议和记录。",
+        "recorder": "在私有项目中可创建或 reuse 协议、提交记录并查看所有协议，但只能查看自己的记录。",
+        "recorderPublic": "在公开项目中可打开数据录入界面、提交记录，并查看公开协议和记录。",
+        "recorderSelfOnly": "只能提交并查看自己的记录。",
+        "explorer": "可访问公共协议的数据录入界面。",
+        "explorerSelfOnly": "可运行实验，但只能看到自己的临时数据。",
+        "viewer": "可预览所有公共协议。",
+        "viewerSelfOnly": "仅能阅读公开协议，无法查看记录。"
+      },
+      "lab": {
+        "owner": "指定任意用户为管理员，并管理所有实验室与项目。",
+        "manager": "可分配管理员以下角色，并管理所有实验室与项目。",
+        "member": "可创建新项目并查看所有公开项目与协议。"
+      }
+    },
+    "permission": {
+      "project": {
+        "owner": {
+          "setManager": "将用户设为管理员"
+        },
+        "manager": {
+          "assignRole": "分配管理员以外的角色",
+          "manageProtocols": "管理他人创建的协议",
+          "deleteOwnRecords": "删除自己的记录",
+          "deleteOthersRecords": "删除他人的记录"
+        },
+        "collaborator": {
+          "createProtocol": "创建新协议",
+          "manageOwnProtocol": "管理自己创建的协议",
+          "viewOthersRecords": "查看他人在其他协议中的记录"
+        },
+        "recorder": {
+          "createProtocol": "创建新协议，或将可读取的协议 reuse 到当前项目",
+          "manageOwnProtocol": "管理自己创建或 reuse 的协议",
+          "submitRecords": "向他人协议提交数据并保存为记录",
+          "viewOwnRecords": "查看自己创建的记录"
+        },
+        "explorer": {
+          "openDataEntry": "打开他人公共协议的数据录入界面"
+        },
+        "viewer": {
+          "previewPublicProtocols": "预览他人创建的公共协议"
+        }
+      },
+      "lab": {
+        "owner": {
+          "setManager": "将用户设为管理员"
+        },
+        "manager": {
+          "assignRole": "分配管理员以外的角色",
+          "manageGroups": "管理他人创建的实验室",
+          "deleteOwnRecords": "删除自己的记录",
+          "deleteOthersRecords": "删除他人的记录"
+        },
+        "member": {
+          "createProject": "创建新项目",
+          "manageOwnProject": "管理自己创建的项目",
+          "viewOthersProtocols": "查看他人公开项目中的协议"
+        }
+      }
+    }
+  },
+  "breadcrumb": {
+    "groups": "实验室小组",
+    "allProjects": "所有项目",
+    "addNewProject": "新增项目",
+    "allLabs": "所有实验室",
+    "addNewLab": "新增实验室",
+    "allProtocols": "所有协议",
+    "addNewProtocol": "新增协议",
+    "allMembers": "所有成员",
+    "inviteMember": "邀请成员",
+    "myProjects": "我的项目",
+    "starredProjects": "收藏项目",
+    "myLabs": "我的实验室",
+    "publicLabs": "公开实验室",
+    "myProfile": "我的信息",
+    "allProfile": "所有用户",
+    "hubAll": "所有协议"
+  },
+  "chat": {
+    "newChatButton": "新建聊天",
+    "newChatTitle": "新建聊天",
+    "askAira": "问 Aira",
+    "dragToMove": "（拖拽移动）",
+    "airaIntroTitle": "你好，我是 Aira，你的 AI 研究副驾",
+    "airaIntroSubtitle": "你可以询问任何研究相关问题，或试试下面的示例快速开始：",
+    "airaDisclaimer": "Aira 可能会出错，请谨慎使用。",
+    "inputPlaceholder": "可以提问任何内容",
+    "loadMoreMessages": "再加载 {count} 条消息",
+    "scrollToBottom": "滚动到底部",
+    "dock": "停靠",
+    "fullScreen": "全屏",
+    "collapse": "收起",
+    "expand": "展开",
+    "addToChat": "添加到聊天",
+    "dropzoneHint": "拖拽图片到这里，或点击选择图片",
+    "examples": {
+      "protocol": {
+        "brief": "请简要说明该协议。",
+        "criticalPoints": "该协议有哪些关键要点？",
+        "optimize": "请给出优化该协议的建议。",
+        "safety": "需要注意哪些安全事项？"
+      },
+      "hub": {
+        "tumorInhibition": "查找用于抑制肿瘤细胞的药物处理实验协议。",
+        "drugTreatmentAnalysis": "查找用于分析药物处理实验数据的协议。",
+        "nanotechnology": "推荐纳米技术领域的协议。"
+      }
+    },
+    "history": "聊天记录",
+    "placeholder": "来说点什么吧...（Shift + Enter = 换行，\"/\" 触发提示词）",
+    "placeholderMobile": "来说点什么...",
+    "copy": "复制",
+    "copied": "复制成功",
+    "copyCode": "复制代码",
+    "copyFailed": "复制失败",
+    "clearChat": "清空会话",
+    "clearChatConfirm": "是否清空会话?",
+    "exportImage": "保存会话到图片",
+    "exportImageConfirm": "是否将会话保存为图片?",
+    "exportSuccess": "保存成功",
+    "exportFailed": "保存失败",
+    "usingContext": "上下文模式",
+    "turnOnContext": "当前模式下, 发送消息会携带之前的聊天记录",
+    "turnOffContext": "当前模式下, 发送消息不会携带之前的聊天记录",
+    "deleteMessage": "删除消息",
+    "deleteMessageConfirm": "是否删除此消息?",
+    "deleteHistoryConfirm": "确定删除此记录?",
+    "clearHistoryConfirm": "确定清空记录?",
+    "preview": "预览",
+    "showRawText": "显示原文",
+    "thinking": "思考中...",
+    "enableThinking": "启用思考",
+    "thinkingEnabled": "思考已启用",
+    "enableSearch": "启用搜索",
+    "searchEnabled": "搜索已启用",
+    "enableHubSearch": "启用 Hub 搜索",
+    "hubSearchEnabled": "Hub 搜索已启用",
+    "model": {
+      "select": "选择模型",
+      "basic": "基础",
+      "plus": "增强",
+      "pro": "专业",
+      "gpt": "GPT"
+    },
+    "editorCodeEdit": {
+      "tooltip": "让 Aira 修改当前 Protocol 文件，并在应用前查看 diff。",
+      "emptyPrompt": "请先输入要修改的内容。",
+      "noFiles": "当前编辑器没有可编辑的 Protocol 文件。",
+      "running": "Aira 正在准备代码修改...",
+      "changedSummary": "Aira 已准备 {count} 个文件修改。请在审核窗口中确认后应用。",
+      "noChanges": "Aira 没有返回需要应用的文件修改。",
+      "failed": "代码编辑失败",
+      "reviewTitle": "审核 Protocol 修改",
+      "warnings": "警告",
+      "executionLog": "执行日志",
+      "apply": "应用",
+      "applyAll": "全部应用",
+      "close": "关闭",
+      "diffFallback": "无 diff 可显示。",
+      "applySuccess": "修改已应用",
+      "applyAllSuccess": "全部修改已应用",
+      "unsupportedFile": "无法应用该文件修改。",
+      "emptyResult": "没有可应用的修改。",
+      "status": {
+        "created": "新增",
+        "modified": "修改",
+        "deleted": "删除"
+      }
+    },
+    "common": {
+      "add": "添加",
+      "addSuccess": "添加成功",
+      "edit": "编辑",
+      "editSuccess": "编辑成功",
+      "delete": "删除",
+      "deleteSuccess": "删除成功",
+      "save": "保存",
+      "saveSuccess": "保存成功",
+      "reset": "重置",
+      "action": "操作",
+      "export": "导出",
+      "exportSuccess": "导出成功",
+      "import": "导入",
+      "importSuccess": "导入成功",
+      "clear": "清空",
+      "clearSuccess": "清空成功",
+      "yes": "是",
+      "no": "否",
+      "confirm": "确定",
+      "download": "下载",
+      "noData": "暂无数据",
+      "wrong": "好像出错了，请稍后再试。",
+      "success": "操作成功",
+      "failed": "操作失败",
+      "verify": "验证",
+      "unauthorizedTips": "未经授权，请先进行验证。",
+      "stopResponding": "停止响应"
+    }
+  },
+  "editor": {
+    "extensions": {
+      "Raw": {
+        "markdown": {
+          "title": "Markdown",
+          "tooltip": "Markdown 编辑器（当前）"
+        },
+        "richText": {
+          "title": "所见即所得",
+          "tooltip": "所见即所得编辑器（当前）"
+        }
+      },
+      "Bold": {
+        "tooltip": "粗体"
+      },
+      "Underline": {
+        "tooltip": "下划线"
+      },
+      "Italic": {
+        "tooltip": "斜体"
+      },
+      "Strike": {
+        "tooltip": "中划线"
+      },
+      "Heading": {
+        "tooltip": "标题",
+        "buttons": {
+          "paragraph": "正文",
+          "heading": "标题"
+        }
+      },
+      "Blockquote": {
+        "tooltip": "引用"
+      },
+      "CodeBlock": {
+        "tooltip": "代码块"
+      },
+      "Link": {
+        "add": {
+          "tooltip": "添加链接",
+          "control": {
+            "title": "添加链接",
+            "name": "显示名称",
+            "href": "链接",
+            "open_in_new_tab": "在新标签页中打开",
+            "confirm": "添加",
+            "cancel": "取消"
+          }
+        },
+        "edit": {
+          "tooltip": "编辑链接",
+          "control": {
+            "title": "编辑链接",
+            "name": "显示名称",
+            "href": "链接",
+            "open_in_new_tab": "在新标签页中打开",
+            "confirm": "更新",
+            "cancel": "取消"
+          }
+        },
+        "unlink": {
+          "tooltip": "取消链接"
+        },
+        "open": {
+          "tooltip": "打开链接"
+        }
+      },
+      "Image": {
+        "buttons": {
+          "insert_image": {
+            "tooltip": "插入图片",
+            "external": "插入网络图片",
+            "upload": "上传本地图片"
+          },
+          "remove_image": {
+            "tooltip": "删除"
+          },
+          "image_options": {
+            "tooltip": "图片属性"
+          },
+          "display": {
+            "tooltip": "布局",
+            "inline": "内联",
+            "block": "断行",
+            "left": "左浮动",
+            "right": "右浮动"
+          }
+        },
+        "control": {
+          "insert_by_url": {
+            "title": "插入网络图片",
+            "placeholder": "输入链接",
+            "confirm": "插入",
+            "cancel": "取消",
+            "invalid_url": "请输入正确的图片链接"
+          },
+          "upload_image": {
+            "title": "上传本地图片",
+            "button": "将图片文件拖到此处或者点击上传"
+          },
+          "edit_image": {
+            "title": "编辑图片",
+            "confirm": "更新",
+            "cancel": "取消",
+            "form": {
+              "src": "图片链接",
+              "alt": "备用文本描述",
+              "width": "宽度",
+              "height": "高度"
+            }
+          }
+        }
+      },
+      "Iframe": {
+        "tooltip": "插入视频",
+        "control": {
+          "title": "插入视频",
+          "placeholder": "输入链接",
+          "confirm": "插入",
+          "cancel": "取消"
+        }
+      },
+      "BulletList": {
+        "tooltip": "无序列表"
+      },
+      "OrderedList": {
+        "tooltip": "有序列表"
+      },
+      "TodoList": {
+        "tooltip": "任务列表"
+      },
+      "TextAlign": {
+        "tooltip": "对齐方式",
+        "buttons": {
+          "align_left": {
+            "tooltip": "左对齐",
+            "label": "左对齐"
+          },
+          "align_center": {
+            "tooltip": "居中对齐",
+            "label": "居中对齐"
+          },
+          "align_right": {
+            "tooltip": "右对齐",
+            "label": "右对齐"
+          },
+          "align_justify": {
+            "tooltip": "两端对齐",
+            "label": "两端对齐"
+          }
+        }
+      },
+      "FontFamily": {
+        "tooltip": "字体"
+      },
+      "FontSize": {
+        "tooltip": "字号",
+        "default": "默认"
+      },
+      "TextColor": {
+        "tooltip": "文本颜色"
+      },
+      "TextHighlight": {
+        "tooltip": "文本高亮"
+      },
+      "LineHeight": {
+        "tooltip": "行距"
+      },
+      "Table": {
+        "tooltip": "表格",
+        "buttons": {
+          "insert_table": "插入表格",
+          "add_column_before": "向左插入一列",
+          "add_column_after": "向右插入一列",
+          "delete_column": "删除列",
+          "add_row_before": "向上插入一行",
+          "add_row_after": "向下插入一行",
+          "delete_row": "删除行",
+          "merge_cells": "合并单元格",
+          "split_cell": "拆分单元格",
+          "delete_table": "删除表格"
+        }
+      },
+      "Indent": {
+        "buttons": {
+          "indent": {
+            "tooltip": "增加缩进"
+          },
+          "dedent": {
+            "tooltip": "减少缩进"
+          }
+        }
+      },
+      "FormatClear": {
+        "tooltip": "清除格式"
+      },
+      "HorizontalRule": {
+        "tooltip": "分隔线"
+      },
+      "History": {
+        "tooltip": {
+          "undo": "撤销",
+          "redo": "重做"
+        }
+      },
+      "Fullscreen": {
+        "tooltip": {
+          "fullscreen": "全屏",
+          "exit_fullscreen": "退出全屏"
+        }
+      },
+      "Print": {
+        "tooltip": "打印"
+      },
+      "Preview": {
+        "tooltip": "预览",
+        "dialog": {
+          "title": "预览"
+        }
+      },
+      "SelectAll": {
+        "tooltip": "全选"
+      },
+      "CodeView": {
+        "tooltip": "查看源代码"
+      },
+      "Collapsed": {
+        "tooltip": "收起菜单"
+      },
+      "Uncollapsed": {
+        "tooltip": "展开菜单"
+      }
+    },
+    "characters": "字数"
+  }
+}

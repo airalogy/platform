@@ -1,0 +1,33 @@
+/* eslint-disable no-template-curly-in-string */
+import type { Terms } from "../types"
+
+export const terms: Terms = {
+  stop: "Stop",
+  run: "Run",
+  ask_for_help: "Ask for Help",
+  question_wizard: "Question Wizard",
+  previous: "Previous",
+  next: "Next",
+  table_of_contents: "Table of Contents",
+  skip_step: "Skip step",
+  reverse_step: "Reverse step",
+  sign_out: "Sign out",
+  settings: "Settings",
+  feedback: "Feedback",
+  developer_mode: "Developer mode",
+  developer_mode_description: "Enables the \"Reverse step\" and \"Skip step\" buttons.",
+  loading_wait: "Loading...",
+  login_or_sign_up: "Login / Sign up",
+  error_traceback: "Error traceback:",
+  did_you_mean: "Did you mean...",
+  similar_frames_skipped: "Similar frames skipped:",
+  internal_error_start: "Oops, something went wrong! ${maybeErrorReported} Here's what you can do:",
+  error_has_been_reported: "The error has been reported.",
+  try_running_code_again: "Try running the code again.",
+  refresh_and_try_again: "Reload/refresh the page and try again.",
+  try_using_different_browser: "Try using a different browser.",
+  give_feedback_from_menu: "Give feedback from the top-left menu.",
+  click_for_error_details: "Click for error details",
+  repeated_frames_description: "${name} at line ${lineno} (${count} times)",
+  click_to_expand: "Click to expand",
+}

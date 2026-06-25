@@ -1,0 +1,93 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# History
+.history/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Husky
+.husky/_
+
+# ESLint
+.eslintcache
+
+# IDE / AI assistants
+.cursorrules
+.cursor/
+.gemini/
+.roo/
+.task/
+
+# Certificates
+certs/
+
+# Local service data
+.data/
+apps/api/.data/
+apps/api/protocols/
+apps/api/log/
+
+# Generated API snapshots
+apps/web/openapi.json
+
+# Docs
+docs/.vitepress/dist
+docs/.vitepress/cache
+
+# Pyodide / Python
+apps/web/public/wasm/*
+__pycache__
+*.py[cod]
+*$py.class
+.Python
+*.so
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Misc
+out.txt
+aimd-syntax/
+
+masterbrain

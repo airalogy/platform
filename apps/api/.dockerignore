@@ -1,0 +1,12 @@
+.git
+__pycache__/
+.venv/
+**/.venv/
+
+*.log
+log/
+.data/
+protocols/
+.env
+.env.*
+!.env.example

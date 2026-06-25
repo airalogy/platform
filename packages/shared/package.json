@@ -1,0 +1,89 @@
+{
+  "name": "@airalogy/shared",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Shared utilities for airalogy",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js"
+    },
+    "./unified": {
+      "types": "./dist/unified/index.d.ts",
+      "import": "./dist/unified.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./src/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "vite build && pnpm run build:types"
+  },
+  "peerDependencies": {
+    "@monaco-editor/loader": "catalog:",
+    "@vueuse/core": "catalog:",
+    "dayjs": "catalog:",
+    "lodash-es": "catalog:",
+    "nanoid": "catalog:"
+  },
+  "dependencies": {
+    "@airalogy/aimd-core": "^2.6.0",
+    "@airalogy/aimd-renderer": "^2.5.0",
+    "@types/hast": "^3.0.4",
+    "@types/mdast": "^4.0.4",
+    "@types/unist": "^3.0.3",
+    "big.js": "catalog:",
+    "colord": "catalog:",
+    "dompurify": "catalog:",
+    "fflate": "catalog:",
+    "hast-util-to-html": "^9.0.5",
+    "js-yaml": "catalog:",
+    "localforage": "catalog:",
+    "monaco-editor": "catalog:",
+    "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "shiki": "catalog:",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0",
+    "vfile": "^6.0.3",
+    "vue-i18n": "catalog:"
+  },
+  "devDependencies": {
+    "@iconify/json": "catalog:",
+    "@iconify/utils": "catalog:",
+    "@tiptap/vue-3": "catalog:",
+    "@types/big.js": "catalog:",
+    "@types/js-yaml": "catalog:",
+    "@types/lodash-es": "catalog:",
+    "@types/node": "catalog:",
+    "@types/web": "catalog:",
+    "@unocss/core": "catalog:",
+    "@unocss/preset-icons": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "ajv": "catalog:",
+    "async-validator": "catalog:",
+    "dayjs": "catalog:",
+    "lodash-es": "catalog:",
+    "naive-ui": "catalog:",
+    "nanoid": "catalog:",
+    "pinia": "catalog:",
+    "unplugin-auto-import": "^0.17.5",
+    "unplugin-icons": "catalog:",
+    "unplugin-vue-components": "catalog:",
+    "vite": "catalog:",
+    "vite-tsconfig-paths": "catalog:"
+  }
+}

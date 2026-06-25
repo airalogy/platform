@@ -1,0 +1,77 @@
+{
+  "name": "@airalogy/platform",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "description": "Airalogy Platform Community Edition monorepo",
+  "scripts": {
+    "api:dev": "uv --directory apps/api run fastapi dev app --host 0.0.0.0 --port 4000 --reload",
+    "api:check": "uv --directory apps/api run --no-sync python -m py_compile app/main.py",
+    "api:test": "uv --directory apps/api run --with pytest python -m pytest tests",
+    "dev:prepare": "pnpm --filter @airalogy/components prepare",
+    "dev": "pnpm --filter @airalogy/web dev",
+    "build:prepare": "pnpm --filter @airalogy/components build",
+    "build": "pnpm run build:prepare && pnpm --filter @airalogy/web build",
+    "build:no-check": "pnpm run build:prepare && pnpm --filter @airalogy/web build:no-check",
+    "preview": "pnpm --filter @airalogy/web preview",
+    "lint": "pnpm --recursive --parallel lint",
+    "lint:fix": "pnpm --recursive --parallel lint:fix",
+    "format": "pnpm --recursive --parallel format",
+    "type-check": "pnpm --recursive --parallel type-check",
+    "test": "pnpm --recursive --parallel test",
+    "clean": "pnpm --recursive --parallel clean && rm -rf node_modules",
+    "clean:dist": "pnpm --recursive --parallel clean:dist",
+    "install:all": "pnpm install",
+    "prepare": "husky",
+    "lint-staged": "lint-staged",
+    "grammar:generate": "tsx scripts/generate-grammar.ts",
+    "i18n:generate": "node scripts/generate-i18n-types.mjs",
+    "grammar:test": "pnpm grammar:generate && vscode-tmgrammar-test -g test/grammar/aimd.tmLanguage.json test/grammar/aimd.test.aimd"
+  },
+  "dependencies": {
+    "lodash-es": "catalog:",
+    "nanoid": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:",
+    "@commitlint/cli": "catalog:",
+    "@commitlint/config-conventional": "catalog:",
+    "@unocss/core": "catalog:",
+    "@unocss/eslint-plugin": "catalog:",
+    "@unocss/preset-icons": "catalog:",
+    "@unocss/preset-uno": "catalog:",
+    "@unocss/transformer-directives": "catalog:",
+    "@unocss/transformer-variant-group": "catalog:",
+    "@unocss/vite": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "husky": "catalog:",
+    "lint-staged": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "^4.5.4",
+    "vscode-tmgrammar-test": "^0.1.3"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "prosemirror-tables@1.6.4": "patches/prosemirror-tables@1.6.4.patch",
+      "naive-ui@2.41.0": "patches/naive-ui@2.41.0.patch",
+      "smol-toml@1.3.4": "patches/smol-toml@1.3.4.patch"
+    }
+  },
+  "lint-staged": {
+    "*.{js,ts,vue,jsx,tsx}": [
+      "eslint --fix --cache --quiet"
+    ],
+    "*.{scss,css,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

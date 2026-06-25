@@ -1,0 +1,80 @@
+.chat-markdown-body
+  background-color: transparent
+  font-size: 14px
+
+  p
+    white-space: pre-wrap
+
+  ol
+    list-style-type: decimal
+
+  ul
+    list-style-type: disc
+
+  pre
+    max-width: 100%
+    overflow: auto
+
+  pre code, pre tt 
+    line-height: 1.65
+
+  .shiki pre, pre:not(.chat-message--nested)
+    background-color: #e6e8ebcc
+    padding: 6px 12px
+    border-radius: 8px
+    overflow: auto
+    
+    &.language-text
+      max-width: 100%
+      overflow: auto
+      display: inline-block
+      vertical-align: middle
+      padding: 2px 8px
+      margin: 2px 0
+
+  code
+    padding: 0
+
+  .code-block
+    &:first-of-type
+      margin-top: 4px
+      
+    &-wrapper
+      position: relative
+      padding-top: 30px
+
+    &-header
+      position: absolute
+      top: 5px
+      right: 0
+      width: 100%
+      padding: 0 1rem
+      display: flex
+      justify-content: flex-end
+      align-items: center
+      color: #b3b3b3
+
+      &__copy
+        cursor: pointer
+        margin-left: 0.5rem
+        user-select: none
+
+        &:hover
+          color: #65a665
+
+  .message-reply
+    .whitespace-pre-wrap
+      white-space: pre-wrap
+      color: var(--n-text-color)
+
+  .shiki pre,
+  pre
+    background-color: #1a1e24
+    overflow: auto
+
+@media screen and (max-width: 533px)
+  .markdown-body .code-block-wrapper
+    padding: unset
+
+    code
+      padding: 24px 16px 16px 16px

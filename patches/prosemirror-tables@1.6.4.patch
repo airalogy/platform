@@ -1,0 +1,22 @@
+diff --git a/dist/index.js b/dist/index.js
+index 3730ae9ae3e06c6ea8fabc62ae6e834d1b6991b2..d17b535b2f2b9f4498f894153fdcc97f09d3550c 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2343,5 +2343,16 @@ export {
+   toggleHeaderCell,
+   toggleHeaderColumn,
+   toggleHeaderRow,
+-  updateColumnsOnResize
++  updateColumnsOnResize,
++
++  // addtional exported functions
++  drawCellSelection,
++  handleKeyDown,
++  handleTripleClick,
++  normalizeSelection,
++  domInCell,
++  cellUnderMouse,
++  readFromCache,
++  addToCache,
++  findBadColWidths
+ };

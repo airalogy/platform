@@ -1,0 +1,21 @@
+import { localStg } from "@/utils/storage"
+import { DEFAULT_LOCALE } from "@airalogy/shared/locales"
+import { locale } from "dayjs"
+import "dayjs/locale/zh-cn"
+import "dayjs/locale/en"
+
+/**
+ * Set dayjs locale
+ *
+ * @param lang
+ */
+export function setDayjsLocale(lang: I18n.LangType = DEFAULT_LOCALE) {
+  const localMap = {
+    "zh-CN": "zh-cn",
+    "en-US": "en",
+  } satisfies Record<I18n.LangType, string>
+
+  const l = lang || localStg.get("lang") || DEFAULT_LOCALE
+
+  locale(localMap[l])
+}

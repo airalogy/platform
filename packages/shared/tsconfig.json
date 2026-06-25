@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": false },
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.tsx",
+    "./src/**/*.vue",
+    "./src/types/**/*.d.ts",
+    "./src/**/*.d.ts",
+    "./src/types/env.d.ts"
+  ]
+}

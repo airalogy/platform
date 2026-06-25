@@ -1,0 +1,1894 @@
+{
+  "system": {
+    "title": "Airalogy"
+  },
+  "common": {
+    "tip": "Tip",
+    "add": "Add",
+    "addMember": "Add member",
+    "addMembers": "Add members",
+    "addSuccess": "Add success",
+    "edit": "Edit",
+    "editSuccess": "Edit success",
+    "delete": "Delete",
+    "deleteSuccess": "Delete success",
+    "batchDelete": "Batch delete",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "undo": "Undo",
+    "pleaseCheckValue": "Please check whether the value is valid",
+    "action": "Action",
+    "backToHome": "Back to home",
+    "lookForward": "Coming soon",
+    "userCenter": "User center",
+    "profile": "Your profile",
+    "projects": "All projects",
+    "labs": "All labs",
+    "logout": "Sign out",
+    "logoutConfirm": "Are you sure you want to sign out?",
+    "login": "Log in",
+    "signup": "Sign up",
+    "adminDashboard": "Admin dashboard",
+    "hub": "Hub",
+    "chat": "Chat",
+    "docs": "Docs",
+    "docsFull": "Airalogy docs",
+    "openDocs": "Open Airalogy docs",
+    "menu": "Menu",
+    "index": "Airalogy",
+    "selectCountry": "Select country",
+    "next": "Next",
+    "previous": "Previous",
+    "new": "New",
+    "create": "Create",
+    "save": "Save",
+    "remove": "Remove",
+    "or": "Or",
+    "emptyList": "Empty list",
+    "loadError": "Loading error",
+    "labsLabel": "Labs",
+    "projectsLabel": "Projects",
+    "protocolsLabel": "Protocols",
+    "newRecord": "New record",
+    "newProtocol": "New protocol",
+    "newProject": "New project",
+    "newGroup": "New group",
+    "newLab": "New lab",
+    "addRecord": "Add record",
+    "selectFile": "Select file",
+    "upload": "Upload",
+    "major": "Major",
+    "minor": "Minor",
+    "patch": "Patch",
+    "stars": "Stars",
+    "reuses": "Reuses",
+    "downloads": "Downloads",
+    "records": "Records",
+    "allVersions": "All versions",
+    "version": "Version",
+    "versionWithNumber": "Version {version}",
+    "lastUpdated": "Last updated",
+    "license": "License",
+    "none": "None",
+    "forks": "Forks",
+    "views": "Views",
+    "actions": "Actions",
+    "confirmDelete": "Are you sure?",
+    "category": "Category",
+    "sortBy": "Sort by",
+    "memberSearchPlaceholder": "Enter emails or usernames separated by commas",
+    "searchBy": "Search by",
+    "sortedBy": "Sorted by",
+    "all": "All",
+    "created": "Created",
+    "updated": "Updated",
+    "createdBy": "Created by",
+    "report": "Report",
+    "from": "From",
+    "starsCount": "Stars count",
+    "reusesCount": "Reuses count",
+    "recordsCount": "Records count",
+    "updatedAt": "Updated at",
+    "id": "ID",
+    "idInput": {
+      "check": "Check",
+      "placeholder": {
+        "lab": "Enter lab ID",
+        "group": "Enter group ID",
+        "project": "Enter project ID",
+        "protocol": "Enter protocol ID",
+        "hub": "Enter protocol ID",
+        "default": "Enter ID"
+      },
+      "tooltip": {
+        "lab": "The lab ID is the lab's unique identifier and cannot be changed once set.",
+        "project": "The project ID is the project's unique identifier and cannot be changed once set.",
+        "protocol": "The protocol ID is the protocol's unique identifier and cannot be changed once set.",
+        "hub": "The protocol ID is the unique identifier for your protocol in the hub and cannot be changed once published.",
+        "default": "This ID is the unique identifier and cannot be changed once set."
+      }
+    },
+    "by": "by",
+    "star": "Star",
+    "unstar": "Unstar",
+    "reuse": "Reuse",
+    "reupload": "Reupload",
+    "more": "More",
+    "fields": "Fields",
+    "history": "History",
+    "me": "Me",
+    "can": "can",
+    "noDescriptionFor": "No description for {name}",
+    "field": "Field",
+    "type": "Type",
+    "default": "Default",
+    "myStarred": "My starred",
+    "newFolder": "New folder",
+    "noFoldersYet": "You don't have folders yet.",
+    "defaultFolder": "Default folder",
+    "defaultFolderCannotRename": "Default folder name cannot be changed",
+    "defaultFolderCannotDelete": "Default folder cannot be deleted",
+    "description": "Description",
+    "enum": "Enum",
+    "arrayItems": "Array items",
+    "examples": "Examples",
+    "format": "Format",
+    "assignerMode": "Assigner mode",
+    "assignerDependencies": "Assigner dependencies",
+    "airalogyType": "Airalogy type",
+    "uploadAvatar": "Upload avatar",
+    "removeAvatar": "Remove avatar",
+    "accept": "Accept",
+    "status": "Status",
+    "title": "Title",
+    "name": "Name",
+    "avatar": "Avatar",
+    "alias": "Alias",
+    "user": "User",
+    "role": "Role",
+    "aliasPlaceholder": "Add alias",
+    "fullscreen": "Fullscreen",
+    "reselect": "Reselect",
+    "redo": "Redo",
+    "nodeNotFound": "No node found",
+    "var": "var",
+    "assigner": "Assigner",
+    "rowIndex": "Row {index}",
+    "addRow": "Add row",
+    "execute": "Execute",
+    "stop": "Stop",
+    "unknownError": "Unknown error",
+    "file": "File",
+    "preview": "Preview",
+    "download": "Download",
+    "csvPreview": "CSV preview",
+    "pdfPreview": "PDF preview",
+    "readOnly": "READONLY",
+    "info": "Info",
+    "modify": "Modify",
+    "submit": "Submit",
+    "close": "Close",
+    "unknown": "Unknown",
+    "unknownLab": "Unknown lab",
+    "unknownProject": "Unknown project",
+    "createdAt": "Created at {time}",
+    "checkPassed": "Check passed",
+    "checkFailed": "Check failed",
+    "toBeChecked": "To be checked",
+    "true": "True",
+    "false": "False",
+    "discardTitle": "Are you sure?",
+    "discardWarning": "The changes you made will not be saved.",
+    "discardConfirm": "Yes, discard changes",
+    "discardCancel": "No, continue editing",
+    "actionNotImplemented": "Action not implemented",
+    "variables": "Variables",
+    "protocol": "Protocol",
+    "record": "Record",
+    "project": "Project",
+    "lab": "Lab",
+    "uuid": "UUID",
+    "selectTime": "Select time",
+    "hour": "Hour",
+    "minute": "Minute",
+    "second": "Second",
+    "stepIndex": "Step {index}",
+    "noContent": "No content available",
+    "referenceNotFound": "Reference not found",
+    "value": "Value",
+    "noValue": "No value set",
+    "loadingImage": "Loading image...",
+    "loadImageFailed": "Failed to load image",
+    "disciplines": "Disciplines",
+    "keywords": "Keywords",
+    "authors": "Authors",
+    "maintainers": "Maintainers",
+    "email": "Email",
+    "airalogyFileId": "Airalogy file ID",
+    "source": "Source",
+    "noImageSource": "No image source",
+    "figureIndex": "Figure {index}",
+    "figureIndexWithTitle": "Figure {index}: {title}",
+    "pdfNotSupported": "This browser does not support PDFs. Please download the PDF to view it:",
+    "downloadPdf": "Download PDF",
+    "deleteEntityTitle": "Delete {entity}",
+    "deleteWarningTitle": "Warning: this action cannot be undone",
+    "deleteWarningBody": "This will permanently delete the {entity} and all its data.",
+    "deleteAboutTo": "You are about to delete the {entity}:",
+    "typeToConfirm": "Type {keyword} to confirm:",
+    "typeToConfirmPlaceholder": "Type {keyword} to confirm",
+    "selectNewRole": "Select a new role",
+    "current": "current",
+    "group": "Group",
+    "memberRemoveFailed": "Failed to remove member",
+    "memberRemoveTitle": "Removing member",
+    "memberRemoveTitleWithOrg": "Removing member from {name}",
+    "memberRemoveConfirm": "{role} {name} will be removed",
+    "memberRemoveSuccess": "Successfully removed member {name}",
+    "setAlias": "Set lab alias",
+    "setUserAlias": "Set alias",
+    "labAliasLabel": "Lab alias",
+    "labAliasPlaceholder": "Enter lab alias",
+    "labAliasRequired": "Please enter a lab alias",
+    "userAliasLabel": "Alias",
+    "userAliasPlaceholder": "Enter alias",
+    "userAliasRequired": "Please enter an alias",
+    "changeRole": "Change role",
+    "footer": {
+      "copyright": "Hangzhou Airalogy Technology Co., Ltd. All rights reserved.",
+      "partners": "Partners"
+    },
+    "my": "My",
+    "readMore": "Read more",
+    "showLess": "Show less"
+  },
+  "theme": {
+    "themeSchema": {
+      "title": "Theme schema",
+      "light": "Light",
+      "dark": "Dark",
+      "auto": "Follow system"
+    },
+    "layoutMode": {
+      "title": "Layout mode",
+      "vertical": "Vertical menu mode",
+      "horizontal": "Horizontal menu mode",
+      "vertical-mix": "Vertical mix menu mode",
+      "horizontal-mix": "Horizontal mix menu mode"
+    },
+    "themeColor": {
+      "title": "Theme color",
+      "primary": "Primary",
+      "info": "Info",
+      "success": "Success",
+      "warning": "Warning",
+      "error": "Error",
+      "followPrimary": "Follow primary"
+    },
+    "scrollMode": {
+      "title": "Scroll mode",
+      "wrapper": "Wrapper",
+      "content": "Content"
+    },
+    "page": {
+      "animate": "Page animate",
+      "mode": {
+        "title": "Page animate mode",
+        "fade": "Fade",
+        "fade-slide": "Slide",
+        "fade-bottom": "Fade zoom",
+        "fade-scale": "Fade scale",
+        "zoom-fade": "Zoom fade",
+        "zoom-out": "Zoom out",
+        "none": "None"
+      }
+    },
+    "fixedHeaderAndTab": "Fixed header and tab",
+    "header": {
+      "height": "Header height",
+      "breadcrumb": {
+        "visible": "Breadcrumb visible",
+        "showIcon": "Breadcrumb icon visible"
+      }
+    },
+    "tab": {
+      "visible": "Tab visible",
+      "cache": "Tab cache",
+      "height": "Tab height",
+      "mode": {
+        "title": "Tab mode",
+        "chrome": "Chrome",
+        "button": "Button"
+      }
+    },
+    "sider": {
+      "inverted": "Dark sider",
+      "width": "Sider width",
+      "collapsedWidth": "Sider collapsed width",
+      "mixWidth": "Mix sider width",
+      "mixCollapsedWidth": "Mix sider collapse width",
+      "mixChildMenuWidth": "Mix child menu width"
+    },
+    "footer": {
+      "visible": "Footer visible",
+      "fixed": "Fixed footer",
+      "height": "Footer height",
+      "right": "Right footer"
+    },
+    "themeDrawerTitle": "Theme configuration",
+    "pageFunTitle": "Page function",
+    "configOperation": {
+      "copyConfig": "Copy config",
+      "copySuccessMsg": "Copy Success, Please replace the variable \"themeSettings\" in \"src/theme/settings.ts\"",
+      "resetConfig": "Reset config",
+      "resetSuccessMsg": "Reset success"
+    }
+  },
+  "route": {
+    "403": "No permission",
+    "404": "Page not found",
+    "500": "Server error",
+    "lab-groups": "Groups",
+    "lab-members": "Group members",
+    "lab-projects": "Group Projects",
+    "labs-my": "My Labs",
+    "labs-public": "Public Labs",
+    "login": "Login",
+    "home": "Home",
+    "user-center": "User center",
+    "about": "About",
+    "function": "System function",
+    "function_tab": "Tab",
+    "function_multi-tab": "Multi tab",
+    "manage": "System manage",
+    "manage_user": "User manage",
+    "manage_user-detail": "User detail",
+    "manage_role": "Role manage",
+    "manage_route": "Route manage",
+    "exception": "Exception",
+    "exception_403": "403",
+    "exception_404": "404",
+    "exception_500": "500",
+    "activity": "Activity",
+    "groups": "Groups",
+    "labs": "Lab",
+    "log": "Log",
+    "projects": "Project",
+    "protocol": "Protocol",
+    "user": "User",
+    "profile": "Profile"
+  },
+  "page": {
+    "auth": {
+      "heroTitle": "The world's first universal platform for research digitization, automation, and acceleration."
+    },
+    "login": {
+      "common": {
+        "loginOrRegister": "Login / register",
+        "usernamePlaceholder": "User ID",
+        "displayNamePlaceholder": "Display name",
+        "phonePlaceholder": "Phone number",
+        "emailPlaceholder": "Email address",
+        "codePlaceholder": "Verification code",
+        "passwordPlaceholder": "Password",
+        "newPasswordPlaceholder": "New password",
+        "confirmPasswordPlaceholder": "Confirm password",
+        "codeLogin": "Verification code login",
+        "confirm": "Confirm",
+        "back": "Back",
+        "continue": "Continue",
+        "validateSuccess": "Verified",
+        "loginSuccess": "Logged in successfully",
+        "signupSuccess": "Account created successfully",
+        "welcomeBack": "Welcome back, {username}!",
+        "welcome": "Welcome, {username}!",
+        "resend": "Resend",
+        "sendCode": "Send code",
+        "resendCooldown": "Wait {seconds}s to resend",
+        "sendCodeSuccess": "Code sent successfully",
+        "sendCodeFailure": "Failed to send code",
+        "didntReceiveCode": "Didn't receive the code?",
+        "changePhoneNumber": "Change phone number",
+        "sendingCode": "Sending code",
+        "noAccount": "Don't have an account?",
+        "alreadyHaveAccount": "Already have an account?",
+        "verify": "Verify"
+      },
+      "emailLogin": {
+        "title": "Email",
+        "heading": "Email sign in",
+        "helper": "Enter your credentials to continue",
+        "rememberMe": "Remember me",
+        "forgetPassword": "Forgot password?",
+        "register": "Register",
+        "otherAccountLogin": "Other account login",
+        "otherLoginMode": "Other login mode",
+        "superAdmin": "Super administrator",
+        "admin": "Administrator",
+        "user": "User",
+        "confirm": "Sign in"
+      },
+      "codeLogin": {
+        "title": "Phone number",
+        "heading": "Phone sign in",
+        "helper": "Enter your phone to receive a code",
+        "verificationTitle": "Verification code",
+        "codeSentTo": "Code sent to",
+        "noAccountTitle": "No account found",
+        "noAccountContent": "Create an account with this number?",
+        "sendFailed": "Failed to send code",
+        "resendFailed": "Failed to resend code",
+        "notAvailable": "Can't receive the code?",
+        "getCode": "Get code",
+        "imageCodePlaceholder": "Image verification code",
+        "confirm": "Sign in"
+      },
+      "register": {
+        "title": "Sign up to Airalogy",
+        "createAccountTitle": "Create account",
+        "createAccountHelper": "Set up your login credentials",
+        "profileTitle": "Your profile",
+        "profileHelper": "Choose your username and display name",
+        "displayNameHint": "The display name serves as the user's nickname and can be changed at a later time.",
+        "usernameHint": "The username serves as the user's unique identifier and cannot be modified once set.",
+        "displayNameHintShort": "Your display name (nickname) can be changed later.",
+        "usernameHintShort": "Your username is permanent and cannot be changed.",
+        "agreement": "I have read and agree to",
+        "protocol": "《User agreement》",
+        "policy": "《Privacy policy》",
+        "confirm": "Sign up"
+      },
+      "login": {
+        "title": "Log in to Airalogy"
+      },
+      "resetPwd": {
+        "title": "Reset password",
+        "helper": "Enter your new password"
+      },
+      "phoneSignUp": {
+        "step1": "Step 1 of 3",
+        "step2": "Step 2 of 3",
+        "step3": "Step 3 of 3",
+        "finalStep": "Final step",
+        "jumpToStep": "Jump to step",
+        "confirmButton": "Complete sign up",
+        "step1Label": "Step 1: account details",
+        "step2Label": "Step 2: profile info",
+        "success": "Account created successfully!",
+        "failure": "Failed to create account"
+      },
+      "verifyPhone": {
+        "title": "Verify your phone number",
+        "helper": "Enter your phone to receive a code",
+        "permanentHint": "Your phone number is permanent and cannot be changed.",
+        "verificationTitle": "Verification code",
+        "codeSentTo": "Code sent to",
+        "enterCodeLabel": "Enter verification code",
+        "sendFailed": "Failed to send code",
+        "verifyFailed": "Verification failed",
+        "resendFailed": "Failed to resend code",
+        "codeIncomplete": "Please enter the complete code",
+        "codeInvalid": "Invalid code. Please try again."
+      },
+      "testingNotice": {
+        "title": "Welcome to Airalogy!",
+        "successTitle": "Account Created Successfully!",
+        "message": "This site is in public testing. You may encounter a few bugs or inconveniences while we continue to improve the platform. Thank you for your understanding— the Airalogy team is working hard to make everything better!",
+        "helper": "You can now start exploring all the features Airalogy has to offer.",
+        "exploreLater": "I'll explore later",
+        "getStarted": "Get started"
+      },
+      "formOverlay": {
+        "title": "Coming soon",
+        "description": "This feature is currently undergoing pre-launch testing and will be available soon.",
+        "button": "Go back"
+      },
+      "bindWeChat": {
+        "title": "Bind WeChat"
+      }
+    },
+    "about": {
+      "title": "About",
+      "introduction": "Airalogy: The world's first universal platform for research digitization, automation, and acceleration",
+      "projectInfo": {
+        "title": "Project info",
+        "version": "Version",
+        "latestBuildTime": "Latest build time",
+        "githubLink": "Github link",
+        "previewLink": "Preview link"
+      },
+      "prdDep": "Production dependency",
+      "devDep": "Development dependency"
+    },
+    "home": {
+      "dashboardTitle": "Dashboard",
+      "projectCount": "Project count",
+      "todo": "Todo",
+      "message": "Message",
+      "schedule": "Experiment schedule",
+      "projectNews": {
+        "title": "Project news",
+        "moreNews": "More news",
+        "desc1": "News one",
+        "desc2": "News two",
+        "desc3": "News three",
+        "desc4": "News four",
+        "desc5": "News five"
+      },
+      "labs": "Recent labs",
+      "projects": "Recent projects",
+      "pinned": "Pinned",
+      "pinnedManage": "Manage",
+      "pinnedManageTitle": "Manage pinned items",
+      "pinnedSearchLabsPlaceholder": "Search labs",
+      "pinnedSearchProjectsPlaceholder": "Search projects",
+      "pinnedSearchProtocolsPlaceholder": "Search protocols",
+      "pinnedLimitHint": "Up to {count} items",
+      "pinnedLimitReached": "You can pin up to {count} items.",
+      "pinnedTabLabs": "Labs",
+      "pinnedTabProjects": "Projects",
+      "pinnedTabProtocols": "Protocols",
+      "pinnedEmptyResults": "No items found",
+      "pinnedProjects": "projects",
+      "pinnedLabMeta": "{projectCount} projects · {memberCount} members",
+      "pinnedMembers": "members",
+      "pinnedReorderHint": "Drag to reorder",
+      "pinnedEmptyTitle": "No pinned items yet.",
+      "pinnedEmptyDesc": "Pin labs, projects, or protocols from the sidebar for quick access.",
+      "activities": "Recent activities",
+      "loadMore": "Load more",
+      "recentProtocols": "Recent protocols",
+      "placeholder": "No data available",
+      "activityAction": {
+        "added": "added",
+        "created": "created",
+        "updated": "updated",
+        "deleted": "deleted",
+        "joined": "joined",
+        "left": "left"
+      },
+      "activityText": {
+        "project": "{action} a project",
+        "lab": "{action} a lab",
+        "record": "added a record",
+        "protocol": "created a protocol",
+        "group": "{action} a group"
+      }
+    },
+    "recordDiary": {
+      "tab": "Record diary",
+      "empty": "No records yet",
+      "recordTitle": "Record #{number}",
+      "recordFallback": "Record",
+      "version": "v{version}",
+      "viewReport": "View report",
+      "filterAllAccessible": "All accessible",
+      "filterMySubmissions": "My submissions",
+      "filterAllLabs": "All labs",
+      "labFilterPlaceholder": "Filter lab",
+      "filterAllProjects": "All projects",
+      "projectFilterPlaceholder": "Filter project",
+      "heatmapTitle": "Submission heatmap",
+      "heatmapHint": "View yearly submission activity and click a day to inspect its records",
+      "calendarTitle": "Record calendar",
+      "calendarHint": "Browse records by month; click a day to filter records and click an event to open its report",
+      "calendarTruncated": "This calendar range has many records. Showing the first {count}.",
+      "calendarToday": "Today",
+      "calendarMonth": "Month",
+      "selectedDate": "Viewing {date}"
+    },
+    "function": {
+      "tab": {
+        "tabOperate": {
+          "title": "Tab operation",
+          "addTab": "Add tab",
+          "addTabDesc": "To about page",
+          "closeTab": "Close tab",
+          "closeCurrentTab": "Close current tab",
+          "closeAboutTab": "Close \"about\" tab",
+          "addMultiTab": "Add multi tab",
+          "addMultiTabDesc1": "To multitab page",
+          "addMultiTabDesc2": "To multitab page(with query params)"
+        },
+        "tabTitle": {
+          "title": "Tab title",
+          "changeTitle": "Change title",
+          "change": "Change",
+          "resetTitle": "Reset title",
+          "reset": "Reset"
+        }
+      },
+      "multiTab": {
+        "routeParam": "Route param",
+        "backTab": "Back function_tab"
+      }
+    },
+    "project": {
+      "tab": {
+        "my": "My projects",
+        "star": "Starred projects",
+        "protocols": "Protocols",
+        "members": "Collaborators",
+        "membersHint": "Project collaborators are scoped to this project; changes here won't affect access to other projects in this lab.",
+        "diary": "Diary",
+        "settings": "Settings"
+      },
+      "members": "Collaborators",
+      "protocols": "Protocols",
+      "protocolsSearchPlaceholder": "Search protocols in this project",
+      "protocolsFilter": {
+        "id": "Project ID",
+        "name": "Project name"
+      },
+      "protocolsSort": {
+        "stars": "Most stars",
+        "popular": "Most popular",
+        "updated": "Recently updated"
+      },
+      "protocolFolders": {
+        "filterLabel": "Folder",
+        "filterAll": "All",
+        "filterUncategorized": "Uncategorized",
+        "manageAction": "Manage folders",
+        "manageTitle": "Manage folders",
+        "helperHint": "Folders organize protocols inside this project. Use subprojects when you need separate members, permissions, or settings.",
+        "manageHint": "Deleting a folder does not delete protocols. They stay in this project and become uncategorized.",
+        "manageProtocolsAction": "Manage protocols",
+        "manageProtocolsTitle": "Manage protocols in {name}",
+        "manageProtocolsHint": "Select which protocols belong to this folder. Removing a protocol here only removes it from this folder.",
+        "namePlaceholder": "New folder name",
+        "loading": "Loading folders...",
+        "empty": "No folders yet",
+        "noProtocols": "No protocols in this project yet",
+        "assignHint": "Assign folders",
+        "noPermissionHint": "No permission",
+        "renameAction": "Rename",
+        "protocolCount": "{count} protocols",
+        "createSuccess": "Folder created",
+        "updateSuccess": "Folder updated",
+        "saveProtocolsSuccess": "Folder protocols updated",
+        "saveProtocolsError": "Failed to update folder protocols",
+        "loadProtocolsError": "Failed to load project protocols",
+        "deleteSuccess": "Folder deleted",
+        "deleteTitle": "Delete folder",
+        "deleteDescription": "Delete folder \"{name}\"? Protocols will stay in this project and become uncategorized."
+      },
+      "settingsPage": {
+        "generalTitle": "General",
+        "generalDescription": "Manage your project's basic information and preferences",
+        "subprojectsTitle": "Subprojects",
+        "subprojectsDescription": "Use subprojects for work that needs separate members or settings. Use folders to organize protocols within one project.",
+        "parentProjectTitle": "Parent project",
+        "topLevelProjectHint": "This is a top-level project.",
+        "createSubprojectAction": "Create subproject",
+        "childProjectsTitle": "Child projects",
+        "childProjectsEmpty": "No subprojects yet",
+        "subprojectOf": "Subproject of {name}",
+        "subprojectCountSingle": "{count} subproject",
+        "subprojectCountPlural": "{count} subprojects",
+        "logoLabel": "Project logo",
+        "logoHint": "Upload a logo for your project. Recommended size: 200x200px",
+        "projectIdLabel": "Project ID",
+        "projectIdHint": "This ID is used in the project URL and cannot be changed.",
+        "nameLabel": "Project name",
+        "namePlaceholder": "Enter project name",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Describe your project and its purpose",
+        "dangerTitle": "Danger zone",
+        "dangerDescription": "Please proceed with caution",
+        "visibilityLabel": "Project visibility",
+        "changeVisibilityAction": "Change visibility",
+        "changeVisibilityTitle": "Change project visibility",
+        "changeVisibilityHint": "Select a new visibility for this project.",
+        "changeAccessRoleAction": "Change access role",
+        "changeAccessRoleTitle": "Change public access role",
+        "changeAccessRoleHint": "Select a new public access role for this project.",
+        "accessRoleChangeTitle": "Confirm access role change",
+        "accessRoleChangeDescription": "Changing public access role from {from} to {to} will affect who can access this project. Are you sure you want to continue?",
+        "publicAccessRoleLabel": "Public access role",
+        "deleteTitle": "Delete project",
+        "deleteDescription": "Once the project is deleted, all data will be permanently erased and cannot be recovered. Please proceed with caution.",
+        "deleteAction": "Delete",
+        "saveAction": "Save changes",
+        "deleteEntityName": "Project",
+        "noChangesTitle": "No changes detected",
+        "noChangesDescription": "Project information has not been modified.",
+        "visibilityChangeTitle": "Confirm visibility change",
+        "visibilityChangeDescription": "Changing project visibility from {from} to {to} may affect access and expose data. Are you sure you want to continue?",
+        "defaultProjectVisibilityHint": "This is a default project. Visibility cannot be changed.",
+        "defaultProjectDeleteHint": "This is a default project and cannot be deleted.",
+        "updateError": "Failed to update project information. Please try again.",
+        "updateSuccess": "Project information updated successfully.",
+        "fetchError": "Failed to fetch project info",
+        "fetchUpdatedError": "Failed to fetch updated project info",
+        "deleteError": "Failed to delete project. Please try again.",
+        "deleteSuccess": "Project deleted successfully.",
+        "visibility": {
+          "publicLabel": "Public",
+          "publicDescription": "Anyone can view this project and its contents",
+          "privateLabel": "Private",
+          "privateDescription": "Only project members can view and access this project"
+        },
+        "validation": {
+          "nameLength": "Project name must be between 1 and 40 characters long",
+          "nameEdge": "Project name should not start or end with special characters",
+          "nameRepeat": "Special characters cannot appear consecutively"
+        }
+      },
+      "info": "Project info",
+      "diary": "Project diary",
+      "settings": "Project settings",
+      "createProjectModal": {
+        "title": "Create new project",
+        "labLabel": "Select a lab",
+        "parentProjectLabel": "Parent project",
+        "parentProjectPlaceholder": "Optional. Use a parent project to create a subproject.",
+        "parentProjectHint": "Leave empty to create a top-level project.",
+        "parentProjectFixedHint": "This new project will be created under the current project.",
+        "displayNameLabel": "Project display name",
+        "displayNamePlaceholder": "Enter project display name",
+        "displayNameTip": "The display name is the project's title and can be changed later.",
+        "projectIdLabel": "Project ID",
+        "descriptionPlaceholder": "Describe the project",
+        "withDiaryLabel": "Diary protocol",
+        "withDiaryOption": "Add a diary protocol",
+        "withDiaryHint": "Automatically add a diary protocol to the project for notes and documentation.",
+        "subprojectVisibilityHint": "Subprojects inherit their visibility from the parent project.",
+        "accessSetupLabel": "Access setup",
+        "copyMembersOption": "Copy members and group access from the parent project",
+        "copyMembersHint": "The creator is always added as owner. Protocol groups are not copied.",
+        "labEmptyLabel": "You haven't created any labs yet.",
+        "labEmptyAction": "Create a lab",
+        "labRequired": "Please select a lab",
+        "projectIdRequired": "Please enter a project ID",
+        "displayNameRequired": "Please enter a project display name",
+        "snakeCaseWarning": "Project ID \"{rawUid}\" will be converted to snake_case: \"{snakeCaseUid}\".",
+        "creatingWithDiary": "Creating project and diary protocol...",
+        "diaryCreateFailed": "Project created successfully, but the diary protocol couldn't be created",
+        "createSuccess": "Successfully created project {name}",
+        "createSuccessWithDiary": "Successfully created project {name} with a diary protocol",
+        "projectIdAvailable": "Project ID is available.",
+        "labCreateSuccess": "Successfully created lab {name}"
+      }
+    },
+    "protocol": {
+      "info": "Protocol info",
+      "protocolName": "Protocol name",
+      "protocolId": "Protocol ID",
+      "protocolDetails": "Protocol details",
+      "protocolIdCopied": "Protocol ID copied to clipboard",
+      "reusedFrom": "Reused from",
+      "settings": {
+        "basicInfoTitle": "Basic information",
+        "basicInfoDescription": "Manage your protocol's information and configuration",
+        "protocolIdLabel": "Protocol ID",
+        "protocolVersionLabel": "Protocol version",
+        "protocolNamePlaceholder": "Enter protocol name",
+        "descriptionPlaceholder": "Describe your protocol",
+        "disciplinesPlaceholder": "e.g. biology, chemistry",
+        "keywordsPlaceholder": "e.g. cell viability, assay",
+        "licensePlaceholder": "Select or enter a license",
+        "dangerTitle": "Danger zone",
+        "dangerDescription": "Please proceed with caution",
+        "adminViewTitle": "Admin access",
+        "adminViewNotice": "You are viewing this protocol as a lab/project owner or manager.",
+        "adminViewDetail": "Regular members can only view the protocol and cannot modify settings or delete it.",
+        "adminViewActionEditInfo": "Edit basic info",
+        "adminViewActionEditEnv": "Edit environment variables",
+        "adminViewActionDelete": "Delete protocol",
+        "envTitle": "Environment variables",
+        "envDescription": "Manage sensitive configuration variables for your protocol",
+        "envPlaceholder": "Environment variables (KEY=VALUE format, one per line)",
+        "envRestrictedTitle": "Restricted access",
+        "envRestrictedDescription": "Environment variables can only be viewed and modified by the protocol creator or administrators.",
+        "envHidden": "Environment variables are hidden",
+        "envEmpty": "No environment variables configured",
+        "envDetectedTitle": "Environment variables detected",
+        "envDetectedDescription": "These variables were extracted from your uploaded .env file and are securely stored.",
+        "envHiddenForSecurity": "Values are hidden for security",
+        "copy": "Copy",
+        "copied": "Copied",
+        "showValues": "Show values",
+        "hideValues": "Hide values",
+        "envEdit": "Edit variables",
+        "envSave": "Save variables",
+        "envSaveSuccess": "Environment variables updated.",
+        "envSaveFailed": "Failed to update environment variables.",
+        "envCopied": "Environment variables copied to clipboard",
+        "saveChanges": "Save changes",
+        "deleteTitle": "Delete protocol",
+        "deleteDescription": "Once the protocol is deleted, all data will be permanently erased and cannot be recovered.",
+        "adminDeleteNotice": "You are deleting a protocol created by another user as a lab/project owner or manager.",
+        "validation": {
+          "nameRequired": "Protocol name is required",
+          "nameLength": "Name must be between 1 and 50 characters",
+          "descriptionLength": "Description cannot exceed 500 characters"
+        }
+      },
+      "tooltips": {
+        "reuseToProject": "Reuse this protocol to a target project",
+        "editReadOnly": "View this protocol in the editor (read-only mode, click lock icon to create editable copy)",
+        "reupload": "Reupload this protocol"
+      },
+      "tab": {
+        "my": "My Protocols",
+        "logs": "Records",
+        "protocols": "Protocol",
+        "fields": "Fields",
+        "history": "History",
+        "settings": "Settings",
+        "discussion": "Discussions"
+      },
+      "apply": {
+        "modalTitle": "Create a new protocol",
+        "method": {
+          "createTitle": "Choose a creation method",
+          "updateTitle": "Choose an update method",
+          "createDescription": "Select how you'd like to create this protocol",
+          "updateDescription": "Select how you'd like to update this protocol"
+        },
+        "setup": {
+          "title": "Set up your Protocol",
+          "description": "Fill in the basic protocol details"
+        },
+        "steps": {
+          "allSetTitle": "All set",
+          "allSetDescription": "Your protocol is ready"
+        },
+        "options": {
+          "existing": {
+            "title": "Reuse a protocol from another project",
+            "description": "Pick a protocol from another project to reuse"
+          },
+          "uploadZip": {
+            "title": "Upload a protocol ZIP",
+            "description": "Create a protocol by uploading a ZIP file"
+          },
+          "scratch": {
+            "title": "Create a protocol from scratch",
+            "description": "Manually create a protocol by adding each protocol file"
+          },
+          "hub": {
+            "title": "Explore the Airalogy Hub",
+            "description": "Discover and reuse protocols shared by the community"
+          }
+        },
+        "setupForm": {
+          "selectAnotherProtocol": "Select another Protocol",
+          "applyToProject": "Apply to Project",
+          "protocolDetailsFork": "Protocol details (fork)",
+          "protocolDetailsReuse": "Protocol details (reuse)",
+          "noProtocolSelected": "Please select a protocol before generating a protocol ID",
+          "newProtocolDetails": "New Protocol details",
+          "protocolDisplayNameLabel": "Protocol display name",
+          "protocolDisplayNamePlaceholder": "Enter protocol display name",
+          "protocolIdLabel": "Protocol ID",
+          "protocolIdValid": "Protocol ID and version are valid"
+        },
+        "action": {
+          "applying": "Applying protocol...",
+          "applySuccess": "Protocol applied successfully!",
+          "uploadSuccess": "Protocol uploaded successfully!",
+          "applyFailed": "Failed to apply protocol",
+          "applyFailedWithDetail": "Failed to apply protocol: {detail}"
+        },
+        "success": {
+          "addRecord": "Add record now",
+          "redirecting": "Redirecting in {seconds} seconds...",
+          "titleApplied": "Protocol applied successfully",
+          "titleUploaded": "Protocol uploaded successfully",
+          "descApplied": "Your protocol has been applied to the project",
+          "descUploaded": "Your protocol has been uploaded to the project"
+        }
+      },
+      "workflow": {
+        "ended": "Workflow ended",
+        "workspaceTab": "Workflow",
+        "workspaceTabDescription": "Edit the workflow structure and run it here.",
+        "workspaceHint": "The structure editor and runtime share the same workflow. Updating protocols, the initial protocol, or edges resets runtime progress.",
+        "workspaceFieldTitle": "Workflow workspace",
+        "workspaceFieldHint": "This field is maintained from the workspace on the right, not directly in the form.",
+        "openWorkspace": "Open workspace",
+        "structureTitle": "Structure editor",
+        "runtimeTitle": "Runtime",
+        "protocolCount": "{count} protocols",
+        "titlePlaceholder": "Enter workflow title",
+        "defaultGoalLabel": "Default research goal",
+        "defaultGoalPlaceholder": "Enter a default research goal",
+        "defaultStrategyLabel": "Default research strategy",
+        "defaultStrategyPlaceholder": "Enter a default research strategy",
+        "logicLabel": "Workflow logic",
+        "logicPlaceholder": "Describe protocol relationships, switching conditions, and the overall strategy",
+        "selectProtocolPlaceholder": "Select a protocol to add to the workflow",
+        "addProtocol": "Add protocol",
+        "addCurrentProtocol": "Add current protocol",
+        "protocolAlreadyAdded": "This protocol is already in the workflow",
+        "emptyProtocols": "No protocols added yet",
+        "initialProtocolLabel": "Default initial protocol",
+        "edgesLabel": "Protocol edges",
+        "emptyEdges": "No edges configured yet",
+        "resetRuntime": "Reset runtime",
+        "runtimeEmpty": "Add protocols before running the workflow",
+        "selectNext": "Select next protocol",
+        "completePrevious": "Complete previous record first",
+        "selectUnit": "Select protocol",
+        "protocolIndex": "Protocol #{index}",
+        "recordIndex": "Record #{id}",
+        "waitingForRecord": "Waiting for recording",
+        "waitingForInitialValues": "Waiting for initial values",
+        "waitingForIntermediateConclusion": "Waiting for phased conclusion",
+        "waitingForConclusion": "Waiting for conclusion",
+        "showReport": "Show report",
+        "showIntermediateConclusion": "Show phased conclusion",
+        "redoRecord": "Redo record",
+        "deleteNode": "Delete node",
+        "getInitialValues": "Get initial values",
+        "showInitialValues": "Show initial values",
+        "addRecord": "Add record",
+        "endWorkflow": "End workflow",
+        "end": "End",
+        "writeConclusion": "Write conclusion",
+        "writeIntermediateConclusion": "Write phased conclusion",
+        "selectedProtocol": "Selected protocol",
+        "clickToAddRecord": "Click to add new record",
+        "researchProtocol": "Protocol",
+        "aiGenerated": "AI generated",
+        "aiGenerateConclusion": "Let AI generate the research conclusion",
+        "intermediateConclusion": "Phased conclusion",
+        "intermediateConclusionBase": "Phased conclusion for protocol {protocolId}",
+        "intermediateConclusionWithSequence": "Phased conclusion for protocol {protocolId} (Protocol #{sequence})",
+        "finalConclusionLabel": "Final research conclusion",
+        "intermediateConclusionLabel": "Phased research conclusion",
+        "noResearchNodeSelected": "No protocol selected",
+        "status": {
+          "init": "Init",
+          "generating": "Generating",
+          "generated": "Generated",
+          "pending": "Pending",
+          "conclusion": "Conclusion",
+          "done": "Done",
+          "error": "Error"
+        }
+      },
+      "assignerGraph": {
+        "dependentField": "Dependent field",
+        "assigner": "Assigner",
+        "assignedField": "Assigned field",
+        "fullscreenTitle": "Assigner graph - fullscreen view"
+      },
+      "assignerProgress": {
+        "completed": "Completed",
+        "assigning": "Assigning...",
+        "clickForDetails": "Click for details",
+        "overallProgress": "Overall progress",
+        "dependsOn": "Depends on",
+        "pending": "Pending",
+        "running": "Running",
+        "error": "Error"
+      },
+      "fieldInput": {
+        "title": "Field input",
+        "hint": "Directly set field values from text or uploaded files, e.g., \"set title to hello\"",
+        "placeholder": "Enter command or add attachments",
+        "uploadFile": "Upload file",
+        "attachmentsHint": "Supports images, PDF, DOCX, and text-like files up to 10MB each",
+        "attachmentPending": "Pending",
+        "attachmentUploading": "Uploading",
+        "attachmentUploaded": "Ready",
+        "unsupportedFileType": "Unsupported file type: {name}",
+        "fileTooLarge": "File exceeds 10MB: {name}",
+        "attachmentUploadFailed": "Failed to upload attachment: {name}",
+        "voiceInput": "Voice input",
+        "noOperationsRecognized": "No field operations recognized",
+        "invalidResponse": "Invalid response format",
+        "operationFailed": "Operation failed: {message}",
+        "noExecutableOperations": "No executable operations found",
+        "unknownField": "Unknown field",
+        "successUpdated": "Successfully updated {count} field(s)",
+        "partialSuccess": "Partially successful: {count}/{total} field(s) updated",
+        "allFailed": "All operations failed",
+        "transcriptionMissing": "Could not transcribe audio",
+        "transcriptionFailed": "Failed to transcribe audio"
+      },
+      "recordReport": {
+        "title": "Protocol record",
+        "protocolDetails": "Protocol details",
+        "exportPdf": "Export PDF",
+        "notFoundTitle": "Record not found",
+        "notFoundDescription": "The requested record could not be found",
+        "exportTitle": "Export record to PDF:",
+        "filenamePlaceholder": "Enter filename",
+        "saveFilename": "Save filename",
+        "editFilename": "Edit filename",
+        "generatingPdf": "Generating PDF...",
+        "generating": "Generating...",
+        "protocolNotFound": "Protocol not found",
+        "loadFailed": "Failed to load record: {message}",
+        "formRefMissing": "Form reference not available",
+        "noContent": "No content available for export",
+        "previewFailed": "Failed to generate PDF preview: {message}",
+        "noPdf": "No PDF available for export",
+        "exportSuccess": "PDF exported successfully",
+        "exportFailed": "Failed to export PDF: {message}"
+      },
+      "draft": {
+        "restoreButton": "Restore draft",
+        "saveButton": "Save draft",
+        "title": "Restore Draft?",
+        "delete": "Delete draft",
+        "merge": "Merge draft with current data",
+        "restoreAction": "Restore",
+        "prompt": "Do you want to restore the previous draft?",
+        "previewTitle": "Preview draft data",
+        "previewTab": "Preview",
+        "lastModified": "Last modified",
+        "noPreview": "No preview data available",
+        "noDraft": "No draft found.",
+        "jsonTab": "JSON",
+        "noJson": "No JSON data available",
+        "cleared": "Draft cleared."
+      },
+      "addRecord": {
+        "viewWorkflowRecord": "View Protocol Workflow record",
+        "addToWorkflow": "Add record to Protocol Workflow",
+        "title": "Add a new record",
+        "noProtocol": "No Protocol",
+        "uploadPackage": "Upload package",
+        "uploadError": "Error uploading package, code: {status}, message: {statusText}",
+        "uploadSuccess": "Package upload succeeded.",
+        "uploadFailed": "Error uploading package",
+        "workflowContinueTitle": "Continue Protocol Workflow",
+        "workflowContinueContent": "Record has been created. You need to go to the original tab to continue workflow.",
+        "workflowStay": "Stay",
+        "createSuccess": "Successfully created record",
+        "closeWindowTitle": "Close window",
+        "closeWindowContent": "Are you sure you want to close this window?",
+        "noDraftFound": "No draft data found"
+      },
+      "timeline": {
+        "removeFromChat": "Remove from chat context",
+        "addToChat": "Add to chat context",
+        "exportJsonData": "Export JSON data",
+        "viewReport": "View report",
+        "jsonPreviewTitle": "JSON preview: {name}",
+        "downloadJson": "Download JSON",
+        "copyToClipboard": "Copy to clipboard",
+        "previewJson": "Preview JSON",
+        "downloadSuccess": "JSON file downloaded successfully",
+        "copySuccess": "JSON data copied to clipboard",
+        "modeTimeline": "Timeline",
+        "modePreview": "Preview"
+      },
+      "records": {
+        "advancedSearch": "Advanced search",
+        "searchContentPlaceholder": "Search record content to see whether a term was mentioned",
+        "searchRecordNumber": "Search record number",
+        "recordNumberPlaceholder": "Enter record number",
+        "searchRecordVersion": "Search record version",
+        "recordVersionPlaceholder": "Enter record version number",
+        "protocolVersionLabel": "Protocol version:",
+        "applyFilters": "Apply filters",
+        "clearAll": "Clear all",
+        "bulkImport": "Bulk upload",
+        "bulkImportTitle": "Bulk upload records",
+        "bulkImportDropText": "Drop a CSV file, or click to choose",
+        "bulkImportSupportHint": "CSV columns are parsed against the current Protocol fields. Use field names, var.<field>, step.<id>.checked, or check.<id>.annotation.",
+        "bulkImportSubmit": "Upload and import",
+        "bulkImportNoFile": "Select a CSV file first",
+        "bulkImportCsvOnly": "Please select a CSV file",
+        "bulkImportSuccess": "Imported {count} record(s)",
+        "bulkImportErrorTitle": "Import failed",
+        "bulkImportRowError": "Row {row}{column}: {message}",
+        "bulkImportUnknownError": "Import failed. Check the CSV content and try again.",
+        "deleteBlockedLatest": "There is a newer record. Please delete the latest record first.",
+        "deleteBlockedExpired": "This record is older than {days} days and cannot be deleted.",
+        "deleteBlockedLoading": "Fetching latest record info. Please try again later.",
+        "deleteAdminWarning": "This record is beyond the {days}-day safety window. Records past this window should generally not be deleted. You are deleting as an owner/manager, so even if you can delete, please proceed with caution."
+      }
+    },
+    "labs": {
+      "tab": {
+        "my": "My labs",
+        "public": "Public labs",
+        "members": "Members",
+        "membersHint": "Members are individual users who can access this lab. Add members to grant access and manage their roles.",
+        "project": "Projects",
+        "protocol": "Protocols",
+        "groups": "Groups",
+        "groupsHint": "Groups let you bundle multiple people and grant a whole group access to multiple projects, making access management easier.",
+        "settings": "Settings"
+      },
+      "my": "My labs",
+      "public": "Public labs",
+      "info": "Lab info",
+      "members": "Members",
+      "projects": "Projects",
+      "groups": "Groups",
+      "settings": "Settings",
+      "searchProjectsPlaceholder": "Search projects in this lab",
+      "settingsPage": {
+        "generalTitle": "General",
+        "generalDescription": "Manage your lab's basic information and preferences",
+        "logoLabel": "Lab logo",
+        "logoHint": "Upload a logo for your lab. Recommended size: 200x200px",
+        "labIdLabel": "Lab ID",
+        "labIdHint": "Lab ID is created and cannot be changed.",
+        "nameLabel": "Lab name",
+        "namePlaceholder": "Enter lab name",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Describe your lab and its purpose",
+        "dangerTitle": "Danger zone",
+        "dangerDescription": "Please proceed with caution",
+        "deleteTitle": "Delete lab",
+        "deleteDescription": "Once the lab is deleted, all data will be permanently erased and cannot be recovered. Please proceed with caution.",
+        "deleteRequirementsTitle": "Deletion requirements",
+        "deleteBlockedHint": "Only labs without project data can be deleted directly. Resolve the following items before deleting this lab.",
+        "deleteReadyHint": "This lab has no projects. Deletion cannot be undone.",
+        "deleteReadyWithDefaultProjectsHint": "Only {count} default projects remain. They will be cleaned up automatically when the lab is deleted.",
+        "deleteBlockedProjects": "{count} projects still need to be removed",
+        "deleteBlockedUsers": "{count} members are still in this lab. Their lab memberships will be removed together with the lab.",
+        "deleteBlockedDefaultProjectProtocols": "{count} protocol records still exist in the default projects and must be cleared first",
+        "deleteModalWarning": "This permanently removes the lab and its lab-level configuration.",
+        "deleteErrorHasProjects": "This lab still contains projects. Remove or migrate every project before deleting the lab.",
+        "deleteErrorHasUsers": "Failed to clean up lab memberships while deleting the lab. Please try again.",
+        "deleteErrorDefaultProjectsHaveProtocols": "The default projects still contain protocol data. Clear those protocols before deleting the lab.",
+        "deleteErrorForbidden": "Only the lab owner can delete this lab.",
+        "deleteError": "Failed to delete lab. Please try again.",
+        "deleteAction": "Delete",
+        "forceDeleteTitle": "Force delete lab",
+        "forceDeleteDescription": "Owner only. This removes projects, protocols, records, and file objects under the lab in a cascading flow and carries a high risk.",
+        "forceDeleteOwnerHint": "This option is only shown when normal deletion is blocked by existing data. You will see the impact summary first and must enter the exact lab ID to continue.",
+        "forceDeleteAction": "Force delete",
+        "forceDeletePreviewTitle": "Confirm force delete lab",
+        "forceDeletePreviewDescription": "Review the impact below before continuing. The deletion runs asynchronously in the background and cannot be undone.",
+        "forceDeleteUidLabel": "Enter the lab ID to confirm",
+        "forceDeleteUidPlaceholder": "Enter the current lab ID",
+        "forceDeleteCheckbox": "I understand this will permanently delete the lab and all related data under it, and that the action cannot be undone.",
+        "forceDeleteFinalWarning": "Force delete bypasses the normal conservative deletion guardrails and attempts to remove projects, protocols, records, memberships, and file objects directly.",
+        "forceDeleteInProgressDescription": "A force delete job is already running in the background. Do not submit another one.",
+        "forceDeleteImpactMembers": "Members",
+        "forceDeleteImpactGroups": "Groups",
+        "forceDeleteImpactProjectsTotal": "Projects total",
+        "forceDeleteImpactProjectsActive": "Active projects",
+        "forceDeleteImpactProjectsDefault": "Default projects",
+        "forceDeleteImpactProtocolsTotal": "Protocols total",
+        "forceDeleteImpactProtocolsActive": "Active protocols",
+        "forceDeleteImpactRecordsTotal": "Records total",
+        "forceDeleteImpactRecordsActive": "Active records",
+        "forceDeleteImpactFilesTotal": "File objects total",
+        "forceDeleteStarted": "The force delete job has been submitted and is now running in the background.",
+        "forceDeleteSuccess": "The lab force delete has completed.",
+        "forceDeleteFailed": "The lab force delete failed.",
+        "forceDeleteFailedWithReason": "The lab force delete failed",
+        "forceDeletePreviewError": "Failed to load the force delete impact summary. Please try again.",
+        "forceDeleteStatusError": "Failed to load the force delete job status. Please try again later.",
+        "forceDeleteErrorForbidden": "Only the lab owner can force delete this lab.",
+        "forceDeleteErrorUidMismatch": "The entered lab ID does not match. Please confirm and try again.",
+        "forceDeleteErrorIrreversibleRequired": "You must confirm that the action is irreversible before continuing.",
+        "forceDeleteErrorAlreadyInProgress": "A force delete job is already running for this lab. Do not submit another one.",
+        "forceDeleteErrorJobNotFound": "The requested force delete job could not be found.",
+        "forceDeleteError": "Failed to start the lab force delete. Please try again.",
+        "saveAction": "Save changes",
+        "deleteEntityName": "Lab",
+        "infoName": "Lab information",
+        "noChangesTitle": "No changes detected",
+        "noChangesDescription": "Lab information has not been modified.",
+        "updateError": "Failed to update lab information. Please try again.",
+        "updateSuccess": "Lab information updated successfully."
+      },
+      "createLabModal": {
+        "title": "Create new lab",
+        "displayNameLabel": "Lab display name",
+        "displayNamePlaceholder": "Enter lab display name",
+        "displayNameTip": "The display name serves as the lab's title and can be changed later.",
+        "labIdLabel": "Lab ID",
+        "descriptionPlaceholder": "Describe the lab",
+        "logoLabel": "Upload logo",
+        "defaultProjectsTitle": "Default projects",
+        "defaultProjectsIntro": "When creating a new lab, two default projects will be automatically created:",
+        "defaultProjectsPublic": "A public project for sharing protocols with other labs",
+        "defaultProjectsPrivate": "A private project for internal protocol sharing within the lab",
+        "snakeCaseWarning": "Lab ID \"{rawUid}\" will be converted to snake_case: \"{snakeCaseUid}\".",
+        "createSuccessWithDefaults": "Successfully created lab {name} with default projects",
+        "defaultProjectsWarning": "Lab created successfully, but some default projects couldn't be created: {message}",
+        "labIdAvailable": "Lab ID is available."
+      },
+      "searchMyLabsPlaceholder": "Search my labs",
+      "searchLabIdLabel": "Lab ID",
+      "searchLabNameLabel": "Lab name",
+      "searchEmptyById": "No lab ID \"{query}\" found",
+      "searchEmptyByName": "No lab name \"{query}\" found"
+    },
+    "profile": {
+      "info": "Personal info",
+      "summary": "Summary",
+      "protocols": "Protocols",
+      "starred": "Starred",
+      "settings": "Settings",
+      "setting": "Password setting",
+      "apiKeySetting": "API key setting",
+      "account": "My account",
+      "userSettings": "User settings",
+      "changePhone": "Change phone",
+      "changePassword": "Change password",
+      "changePasswordDescription": "Change your password to secure your account",
+      "changePasswordSuccess": "Password changed successfully",
+      "changePasswordFailure": "Failed to change password",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm password",
+      "passwordMismatch": "Passwords do not match",
+      "savePassword": "Save password",
+      "forgotPassword": "Forgot password",
+      "verifyCurrentPhone": "Verify current phone",
+      "verifyNewPhone": "Verify new phone",
+      "enterCurrentPhone": "Enter current phone",
+      "enterCurrentPhoneDescription": "Please enter your current phone number, including the country code.",
+      "sendSmsToCurrentPhone": "Send SMS to current phone",
+      "sendSmsToCurrentPhoneDescription": "We will send a verification code to your current phone number.",
+      "sendCodeToCurrentPhone": "We will send a verification code to your current phone number to verify your identity.",
+      "yourCurrentPhone": "Your current phone",
+      "noPhoneNumber": "No phone number found on your account",
+      "sendCodeTo": "Send verification code to",
+      "enterNewPhone": "Enter new phone",
+      "enterNewPhoneDescription": "Please enter your new phone number, including the country code.",
+      "sendSmsToNewPhone": "Send SMS to new phone",
+      "sendSmsToNewPhoneDescription": "We will send a verification code to your new phone number.",
+      "phoneOrCountryCodeMissing": "Phone number or country code is missing",
+      "changePhoneSuccess": "Phone number changed successfully",
+      "changePhoneFailure": "Failed to change phone number",
+      "enterCodeForPhone": "Enter verification code for current phone",
+      "enterCodeForNewPhone": "Enter verification code for new phone",
+      "confirmPhoneChange": "Confirm phone change",
+      "phoneMismatch": "The phone number does not match your current account phone number",
+      "newPhoneMustBeDifferent": "New phone number must be different from current phone number"
+    },
+    "group": {
+      "createGroupTitle": "Create new group",
+      "addProjectToGroup": "Add project to group",
+      "addProjectModal": {
+        "targetGroupLabel": "Select a target group",
+        "targetGroupPlaceholder": "Select a group",
+        "projectLabel": "Select projects"
+      },
+      "projects": "Group projects",
+      "members": "Group members",
+      "settings": "Group settings",
+      "createGroupModal": {
+        "displayNameLabel": "Group display name",
+        "displayNamePlaceholder": "Enter group display name",
+        "displayNameTip": "The display name serves as the group's title and can be changed at a later time.",
+        "groupIdLabel": "Group ID",
+        "descriptionPlaceholder": "Describe the group",
+        "selectProjectsLabel": "Select projects",
+        "selectProjectsPlaceholder": "Select at least one project",
+        "labNotFound": "Lab not found",
+        "snakeCaseWarning": "Group name \"{rawName}\" will be converted into snake_case format: \"{snakeCaseName}\".",
+        "createSuccess": "Successfully created group {name}",
+        "groupIdAvailable": "Group ID is available."
+      }
+    },
+    "search": {
+      "protocol": "Protocol search",
+      "record": "Record search",
+      "discussion": "Discussion search",
+      "title": "Search"
+    },
+    "hub": {
+      "title": "Protocol hub",
+      "openHub": "Open protocol hub",
+      "uploadProtocol": "Upload Protocol",
+      "searchPlaceholder": "Search research Protocols",
+      "recordsEmpty": "No records available yet",
+      "downloadsStatsTitle": "Downloads & stats",
+      "category": {
+        "biology": "Biology",
+        "chemistry": "Chemistry",
+        "physics": "Physics"
+      },
+      "sort": {
+        "popularity": "Popularity",
+        "recentlyUpdated": "Recently updated",
+        "bestMatch": "Best match"
+      },
+      "dashboard": {
+        "title": "My dashboard",
+        "myProtocols": "My Protocols",
+        "analytics": "Analytics",
+        "settings": "Settings",
+        "analyticsPlaceholder": "Analytics dashboard will be displayed here",
+        "settingsPlaceholder": "User settings will be displayed here",
+        "sampleProtocolName": "PCR protocol for DNA amplification"
+      },
+      "uploadModal": {
+        "title": "Upload Protocol",
+        "protocolNameLabel": "Protocol name",
+        "protocolNamePlaceholder": "Enter protocol name",
+        "protocolFileLabel": "Protocol file"
+      },
+      "protocolCard": {
+        "addToBookmarks": "Add this protocol to bookmarker"
+      },
+      "protocolUpload": {
+        "stepApplyToProject": "Apply to Project",
+        "stepSelectPackage": "Select Protocol package",
+        "stepConfigureProtocol": "Configure Protocol",
+        "stepEnvConfig": "Environment configuration",
+        "uploadInstructionZip": "Click or drag a Protocol package in ZIP format",
+        "uploadInstructionFile": "Click or drag a Protocol file",
+        "uploadSupportTypes": "Support for {types} files only",
+        "emptySelectPackage": "Please select a protocol package first",
+        "addEnvFile": "Add .env file",
+        "uploadEnvTitle": "Upload environment configuration files",
+        "uploadEnvHint": "Support for .env, .env.local, .env.development, etc. (Optional)",
+        "labProjectRequired": "Labuid and projectuid are required",
+        "changeVersion": "Change to version",
+        "updateVersionTooltip": "Update the protocol id and version to the latest version",
+        "projectRequired": "Project is not selected, please select a project first",
+        "envFilesOnly": "Only environment configuration files are allowed (.env, .env.local, etc.)",
+        "fileExistsTitle": "File {name} already exists",
+        "overrideConfirm": "Are you sure you want to override it?"
+      },
+      "envEditor": {
+        "handlingTitle": "Environment file handling",
+        "handlingItem1": "To ensure data security, the .env file has been removed from the uploaded Protocol package by default",
+        "handlingItem2": "The environment variables which are in the .env file will be extracted and saved under the Protocol's Env settings",
+        "handlingItem3": "Only selected files will be included in the final protocol package",
+        "handlingItem4": "Unchecked files will be excluded from protocol distribution",
+        "handlingItem5": "You can manually upload environment files to the Protocol's Env settings",
+        "handlingItem6": "You can also manually edit the environment variables in the Protocol's Env settings",
+        "summaryTitle": "Environment configuration summary",
+        "summaryTooltip": "Overview of all environment files found in the package and uploaded manually",
+        "totalFiles": "Total environment files",
+        "filesToInclude": "Files to include",
+        "filesToExclude": "Files to exclude",
+        "filesTitle": "Environment files",
+        "filesTooltip": "Environment files found in the uploaded protocol package",
+        "removeConfirm": "Are you sure you want to remove this file?",
+        "contentPlaceholder": "Environment file content...",
+        "includeLabel": "Will be included in package",
+        "excludeLabel": "Will be excluded from package"
+      }
+    }
+  },
+  "form": {
+    "required": "Cannot be empty",
+    "fieldRequired": "{field} is required",
+    "username": {
+      "required": "Please enter user name",
+      "invalid": "User name format is incorrect",
+      "length": "Username must be 4-26 characters",
+      "pattern": "Only lowercase letters, numbers, and underscores",
+      "startLowercase": "Must start with a lowercase letter",
+      "hyphenEdges": "Cannot start or end with a hyphen",
+      "hyphenConsecutive": "No consecutive hyphens"
+    },
+    "phone": {
+      "required": "Please enter phone number",
+      "invalid": "Phone number format is incorrect"
+    },
+    "pwd": {
+      "required": "Please enter password",
+      "invalid": "Password format is incorrect"
+    },
+    "confirmPwd": {
+      "required": "Please enter the password again",
+      "invalid": "The two entered passwords do not match"
+    },
+    "code": {
+      "required": "Please enter verification code",
+      "invalid": "Verification code format is incorrect"
+    },
+    "email": {
+      "required": "Please enter email",
+      "invalid": "Email format is incorrect"
+    },
+    "uid": {
+      "length": "{field} must be {min}-{max} characters",
+      "pattern": "Only letters, numbers, and hyphens",
+      "hyphenEdges": "Cannot start or end with a hyphen",
+      "hyphenConsecutive": "No consecutive hyphens",
+      "startLowercase": "Must start with a lowercase letter"
+    },
+    "displayName": {
+      "length": "{field} must be {min}-{max} characters",
+      "hyphenEdges": "Cannot start or end with a hyphen",
+      "hyphenConsecutive": "No consecutive hyphens"
+    },
+    "password": {
+      "uppercase": "At least 1 uppercase letter (A-Z)",
+      "lowercase": "At least 1 lowercase letter (a-z)",
+      "digit": "At least 1 digit (0-9)",
+      "specialMissing": "At least 1 special character, for example: {chars}",
+      "specialUnsupported": "Unsupported characters not allowed ({chars})",
+      "length": "Must be 8-32 characters"
+    },
+    "version": {
+      "invalid": "Version must follow semantic versioning (e.g. 1.0.0, 1.0.0-alpha.1)"
+    },
+    "file": {
+      "required": "Please select a file",
+      "nameRequired": "File name cannot be empty",
+      "nameInvalid": "File name format is invalid",
+      "nameStartsDot": "File name cannot start with .",
+      "nameMissing": "File name is invalid",
+      "typeInvalid": "File type is invalid",
+      "validationFailed": "File name validation failed",
+      "renameSuccess": "File renamed successfully",
+      "uploadFailed": "Upload failed for {name}",
+      "invalidFile": "Invalid file",
+      "sizeLimit": "File size exceeds {size}MB limit",
+      "maxCount": "Maximum {count} file(s) allowed"
+    }
+  },
+  "dropdown": {
+    "closeCurrent": "Close current",
+    "closeOther": "Close other",
+    "closeLeft": "Close left",
+    "closeRight": "Close right",
+    "closeAll": "Close all"
+  },
+  "icon": {
+    "themeConfig": "Theme configuration",
+    "themeSchema": "Theme schema",
+    "lang": "Switch language",
+    "fullscreen": "Fullscreen",
+    "fullscreenExit": "Exit fullscreen",
+    "reload": "Reload page",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu",
+    "pin": "Pin",
+    "unpin": "Unpin"
+  },
+  "role": {
+    "owner": "Owner",
+    "member": "Member",
+    "manager": "Manager",
+    "collaborator": "Collaborator",
+    "recorder": "Recorder",
+    "recorder_self_only": "Recorder (self-only)",
+    "explorer": "Explorer",
+    "explorer_self_only": "Explorer (self-only)",
+    "viewer": "Viewer",
+    "viewer_self_only": "Viewer (self-only)",
+    "description": {
+      "project": {
+        "owner": "Designate any user as a Manager, and manage all Protocols and Records.",
+        "manager": "Assign any role below Manager, and manage all Protocols and Records.",
+        "collaborator": "Create new Protocols and view all Protocols and Records.",
+        "recorder": "In private projects, can create or reuse Protocols, submit Records, and view all Protocols, but can only view their own Records.",
+        "recorderPublic": "In public projects, can open the data-entry interface, submit Records, and view public Protocols and Records.",
+        "recorderSelfOnly": "Can only submit & view their own records.",
+        "explorer": "Access the data-entry interface for public Protocol.",
+        "explorerSelfOnly": "Can run and experiment, but can only see their own temporary data.",
+        "viewer": "Preview all public Protocols.",
+        "viewerSelfOnly": "Pure static reader: can only view the public Protocol, but cannot see any records."
+      },
+      "lab": {
+        "owner": "Designate any user as a Manager, and manage all Groups and Projects.",
+        "manager": "Assign any role below Manager, and manage all Groups and Projects.",
+        "member": "Create new Projects and view all Public Projects and Protocols."
+      }
+    },
+    "permission": {
+      "project": {
+        "owner": {
+          "setManager": "Set a user as manager"
+        },
+        "manager": {
+          "assignRole": "Assign any role other than manager",
+          "manageProtocols": "Manage Protocols created by others",
+          "deleteOwnRecords": "Delete their own records",
+          "deleteOthersRecords": "Delete records created by others"
+        },
+        "collaborator": {
+          "createProtocol": "Create a new Protocol",
+          "manageOwnProtocol": "Manage a Protocol they created",
+          "viewOthersRecords": "View Records created by others in others’ Protocols"
+        },
+        "recorder": {
+          "createProtocol": "Create a new Protocol or reuse a readable Protocol into the current project",
+          "manageOwnProtocol": "Manage a Protocol they created or reused",
+          "submitRecords": "Submit data and save it as a Record in others’ Protocols",
+          "viewOwnRecords": "View all records they have created"
+        },
+        "explorer": {
+          "openDataEntry": "Open the data-entry interface for others’ public Protocols"
+        },
+        "viewer": {
+          "previewPublicProtocols": "Preview public Protocols created by others"
+        }
+      },
+      "lab": {
+        "owner": {
+          "setManager": "Set a user as manager"
+        },
+        "manager": {
+          "assignRole": "Assign any role other than manager",
+          "manageGroups": "Manage groups created by others",
+          "deleteOwnRecords": "Delete their own records",
+          "deleteOthersRecords": "Delete records created by others"
+        },
+        "member": {
+          "createProject": "Create a new project",
+          "manageOwnProject": "Manage a project they created",
+          "viewOthersProtocols": "View protocols created by others in others' public projects"
+        }
+      }
+    }
+  },
+  "breadcrumb": {
+    "groups": "Groups",
+    "myProjects": "My projects",
+    "starredProjects": "Starred projects",
+    "allProjects": "Projects",
+    "addNewProject": "Add new project",
+    "allLabs": "Labs",
+    "addNewLab": "Add new lab",
+    "allProtocols": "All Protocols",
+    "addNewProtocol": "Add new unit",
+    "allMembers": "All members",
+    "inviteMember": "Invite member",
+    "myLabs": "My labs",
+    "publicLabs": "Public labs",
+    "myProfile": "My profile",
+    "allProfile": "Profile",
+    "hubAll": "All protocols"
+  },
+  "chat": {
+    "newChatButton": "New chat",
+    "newChatTitle": "New chat",
+    "askAira": "Ask Aira",
+    "dragToMove": "(Drag to move)",
+    "airaIntroTitle": "Hi, I'm Aira, your AI research copilot",
+    "airaIntroSubtitle": "Ask me anything about research, or try one of these examples for a quick start:",
+    "airaDisclaimer": "Aira may make mistakes. Please use with discretion.",
+    "inputPlaceholder": "Ask anything",
+    "loadMoreMessages": "Load {count} more messages",
+    "scrollToBottom": "Scroll to bottom",
+    "dock": "Dock",
+    "fullScreen": "Full screen",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "addToChat": "Add to chat",
+    "dropzoneHint": "Drag and drop an image here, or click to select an image",
+    "examples": {
+      "protocol": {
+        "brief": "Explain this protocol briefly.",
+        "criticalPoints": "What are the critical points in this protocol?",
+        "optimize": "Give me some suggestions for optimizing this protocol.",
+        "safety": "What safety precautions should I take?"
+      },
+      "hub": {
+        "tumorInhibition": "Find protocols for drug treatment experiments that inhibit tumor cells.",
+        "drugTreatmentAnalysis": "Find protocols for analyzing data from drug treatment experiments.",
+        "nanotechnology": "Recommend protocols in the field of nanotechnology."
+      }
+    },
+    "history": "Chat history",
+    "placeholder": "Ask me anything...",
+    "placeholderMobile": "Ask me anything...",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyCode": "Copy code",
+    "copyFailed": "Copy failed",
+    "clearChat": "Clear chat",
+    "clearChatConfirm": "Are you sure to clear this chat?",
+    "exportImage": "Export image",
+    "exportImageConfirm": "Are you sure to export this chat to png?",
+    "exportSuccess": "Export success",
+    "exportFailed": "Export failed",
+    "usingContext": "Context mode",
+    "turnOnContext": "In the current mode, sending messages will carry previous chat records.",
+    "turnOffContext": "In the current mode, sending messages will not carry previous chat records.",
+    "deleteMessage": "Delete message",
+    "deleteMessageConfirm": "Are you sure to delete this message?",
+    "deleteHistoryConfirm": "Are you sure to clear this history?",
+    "clearHistoryConfirm": "Are you sure to clear chat history?",
+    "preview": "Preview",
+    "showRawText": "Show as raw text",
+    "thinking": "Thinking...",
+    "enableThinking": "Enable Thinking",
+    "thinkingEnabled": "Thinking Enabled",
+    "enableSearch": "Enable Search",
+    "searchEnabled": "Search Enabled",
+    "enableHubSearch": "Enable Hub Search",
+    "hubSearchEnabled": "Hub Search Enabled",
+    "model": {
+      "select": "Select model",
+      "basic": "Basic",
+      "plus": "Plus",
+      "pro": "Pro",
+      "gpt": "GPT"
+    },
+    "editorCodeEdit": {
+      "tooltip": "Ask Aira to edit the current Protocol files and review the diff before applying.",
+      "emptyPrompt": "Enter the change you want first.",
+      "noFiles": "No editable Protocol files are available in the current editor.",
+      "running": "Aira is preparing code edits...",
+      "changedSummary": "Aira prepared changes for {count} file(s). Review them before applying.",
+      "noChanges": "Aira did not return any file changes to apply.",
+      "failed": "Code edit failed",
+      "reviewTitle": "Review Protocol Changes",
+      "warnings": "Warnings",
+      "executionLog": "Execution Log",
+      "apply": "Apply",
+      "applyAll": "Apply All",
+      "close": "Close",
+      "diffFallback": "No diff is available.",
+      "applySuccess": "Change applied",
+      "applyAllSuccess": "All changes applied",
+      "unsupportedFile": "This file change cannot be applied.",
+      "emptyResult": "There are no changes to apply.",
+      "status": {
+        "created": "Created",
+        "modified": "Modified",
+        "deleted": "Deleted"
+      }
+    },
+    "common": {
+      "add": "Add",
+      "addSuccess": "Add success",
+      "edit": "Edit",
+      "editSuccess": "Edit success",
+      "delete": "Delete",
+      "deleteSuccess": "Delete success",
+      "save": "Save",
+      "saveSuccess": "Save success",
+      "reset": "Reset",
+      "action": "Action",
+      "export": "Export",
+      "exportSuccess": "Export success",
+      "import": "Import",
+      "importSuccess": "Import success",
+      "clear": "Clear",
+      "clearSuccess": "Clear success",
+      "yes": "Yes",
+      "no": "No",
+      "confirm": "Confirm",
+      "download": "Download",
+      "noData": "No data",
+      "wrong": "Something went wrong, please try again later.",
+      "success": "Success",
+      "failed": "Failed",
+      "verify": "Verify",
+      "unauthorizedTips": "Unauthorized, please verify first.",
+      "stopResponding": "Stop responding"
+    }
+  },
+  "editor": {
+    "extensions": {
+      "Raw": {
+        "markdown": {
+          "title": "Markdown",
+          "tooltip": "Markdown editor (current)"
+        },
+        "richText": {
+          "title": "WYSIWYG",
+          "tooltip": "WYSIWYG editor (current)"
+        }
+      },
+      "Bold": {
+        "tooltip": "Bold"
+      },
+      "Underline": {
+        "tooltip": "Underline"
+      },
+      "Italic": {
+        "tooltip": "Italic"
+      },
+      "Strike": {
+        "tooltip": "Strike through"
+      },
+      "Heading": {
+        "tooltip": "Heading",
+        "buttons": {
+          "paragraph": "Paragraph",
+          "heading": "Heading"
+        }
+      },
+      "Blockquote": {
+        "tooltip": "Block quote"
+      },
+      "CodeBlock": {
+        "tooltip": "Code block"
+      },
+      "Link": {
+        "add": {
+          "tooltip": "Apply link",
+          "control": {
+            "title": "Apply link",
+            "name": "Display name",
+            "href": "Href",
+            "open_in_new_tab": "Open in new tab",
+            "confirm": "Apply",
+            "cancel": "Cancel"
+          }
+        },
+        "edit": {
+          "tooltip": "Edit link",
+          "control": {
+            "title": "Edit link",
+            "name": "Display name",
+            "href": "Href",
+            "open_in_new_tab": "Open in new tab",
+            "confirm": "Update",
+            "cancel": "Cancel"
+          }
+        },
+        "unlink": {
+          "tooltip": "Unlink"
+        },
+        "open": {
+          "tooltip": "Open link"
+        }
+      },
+      "Image": {
+        "buttons": {
+          "insert_image": {
+            "tooltip": "Insert image",
+            "external": "Insert image by Url",
+            "upload": "Upload image"
+          },
+          "remove_image": {
+            "tooltip": "Remove"
+          },
+          "image_options": {
+            "tooltip": "Image options"
+          },
+          "display": {
+            "tooltip": "Display",
+            "inline": "Inline",
+            "block": "Break text",
+            "left": "Float left",
+            "right": "Float right"
+          }
+        },
+        "control": {
+          "insert_by_url": {
+            "title": "Insert image",
+            "placeholder": "Url of image",
+            "confirm": "Insert",
+            "cancel": "Cancel",
+            "invalid_url": "Please enter the correct url"
+          },
+          "upload_image": {
+            "title": "Upload image",
+            "button": "Choose an image file or drag it here"
+          },
+          "edit_image": {
+            "title": "Edit image",
+            "confirm": "Update",
+            "cancel": "Cancel",
+            "form": {
+              "src": "Image Url",
+              "alt": "Alternative text",
+              "width": "Width",
+              "height": "Height"
+            }
+          }
+        }
+      },
+      "Iframe": {
+        "tooltip": "Insert video",
+        "control": {
+          "title": "Insert video",
+          "placeholder": "Href",
+          "confirm": "Insert",
+          "cancel": "Cancel"
+        }
+      },
+      "BulletList": {
+        "tooltip": "Bullet list"
+      },
+      "OrderedList": {
+        "tooltip": "Ordered list"
+      },
+      "TodoList": {
+        "tooltip": "Todo list"
+      },
+      "TextAlign": {
+        "tooltip": "Text align",
+        "buttons": {
+          "align_left": {
+            "tooltip": "Align left",
+            "label": "Align left"
+          },
+          "align_center": {
+            "tooltip": "Align center",
+            "label": "Align center"
+          },
+          "align_right": {
+            "tooltip": "Align right",
+            "label": "Align right"
+          },
+          "align_justify": {
+            "tooltip": "Align justify",
+            "label": "Align justify"
+          }
+        }
+      },
+      "FontFamily": {
+        "tooltip": "Font family"
+      },
+      "FontSize": {
+        "tooltip": "Font size",
+        "default": "default"
+      },
+      "TextColor": {
+        "tooltip": "Text color"
+      },
+      "TextHighlight": {
+        "tooltip": "Text highlight"
+      },
+      "LineHeight": {
+        "tooltip": "Line height"
+      },
+      "Table": {
+        "tooltip": "Table",
+        "buttons": {
+          "insert_table": "Insert table",
+          "add_column_before": "Add column before",
+          "add_column_after": "Add column after",
+          "delete_column": "Delete column",
+          "add_row_before": "Add row before",
+          "add_row_after": "Add row after",
+          "delete_row": "Delete row",
+          "merge_cells": "Merge cells",
+          "split_cell": "Split cell",
+          "delete_table": "Delete table"
+        }
+      },
+      "Indent": {
+        "buttons": {
+          "indent": {
+            "tooltip": "Indent"
+          },
+          "dedent": {
+            "tooltip": "Outdent"
+          }
+        }
+      },
+      "FormatClear": {
+        "tooltip": "Clear format"
+      },
+      "HorizontalRule": {
+        "tooltip": "Horizontal rule"
+      },
+      "History": {
+        "tooltip": {
+          "undo": "Undo",
+          "redo": "Redo"
+        }
+      },
+      "Fullscreen": {
+        "tooltip": {
+          "fullscreen": "Full screen",
+          "exit_fullscreen": "Exit full screen"
+        }
+      },
+      "Print": {
+        "tooltip": "Print"
+      },
+      "Preview": {
+        "tooltip": "Preview",
+        "dialog": {
+          "title": "Preview"
+        }
+      },
+      "SelectAll": {
+        "tooltip": "Select all"
+      },
+      "CodeView": {
+        "tooltip": "Code view"
+      },
+      "Collapsed": {
+        "tooltip": "Collapse menu"
+      },
+      "Uncollapsed": {
+        "tooltip": "Expand menu"
+      }
+    },
+    "characters": "Characters"
+  }
+}

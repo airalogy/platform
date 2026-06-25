@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "node",
+      "unplugin-icons/types/vue",
+      "vite/client",
+      "../shared/src/types/models/protocol.d.ts",
+      "../shared/src/types/i18n.d.ts",
+      "../composables/src/types/html2pdf.js.d.ts"
+    ],
+    "skipLibCheck": true
+  },
+  "references": [{ "path": "./tsconfig.node.json" }],
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.tsx",
+    "./src/**/*.vue",
+    "./types/**/*.d.ts",
+    "./src/**/*.d.ts",
+    "./src/types/**/*.d.ts"
+  ]
+}

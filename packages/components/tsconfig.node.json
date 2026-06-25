@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "esModuleInterop": true
+  },
+  "include": [
+    "./build/**/*.ts",
+    "./src/types/**/*.d.ts",
+    "./src/types/**/*.d.ts",
+    "./vite.config.ts",
+    "../../packages/shared/**/*.d.ts"
+  ]
+}

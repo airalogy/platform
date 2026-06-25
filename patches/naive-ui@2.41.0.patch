@@ -1,0 +1,740 @@
+diff --git a/es/collapse/src/CollapseItem.mjs b/es/collapse/src/CollapseItem.mjs
+index 0f9ecf8bf485cfbc7754ba499a22b9e920cda89c..ec759fe03b02cc927638151cc8ffa5e671b488f1 100644
+--- a/es/collapse/src/CollapseItem.mjs
++++ b/es/collapse/src/CollapseItem.mjs
+@@ -12,7 +12,11 @@ export const collapseItemProps = {
+   title: String,
+   name: [String, Number],
+   disabled: Boolean,
+-  displayDirective: String
++  displayDirective: String,
++  onEnter: Function,
++  onLeave: Function,
++  onAfterEnter: Function,
++  onAfterLeave: Function,
+ };
+ export default defineComponent({
+   name: 'CollapseItem',
+@@ -96,7 +100,11 @@ export default defineComponent({
+       mergedDisplayDirective,
+       mergedClsPrefix,
+       disabled,
+-      triggerAreas
++      triggerAreas,
++      onEnter,
++      onLeave,
++      onAfterEnter,
++      onAfterLeave
+     } = this;
+     const headerNode = resolveSlotWithTypedProps($slots.header, {
+       collapsed
+@@ -131,7 +139,11 @@ export default defineComponent({
+     }, children))), h(NCollapseItemContent, {
+       clsPrefix: mergedClsPrefix,
+       displayDirective: mergedDisplayDirective,
+-      show: !collapsed
++      show: !collapsed,
++      onEnter: this.onEnter,
++      onLeave: this.onLeave,
++      onAfterEnter: this.onAfterEnter,
++      onAfterLeave: this.onAfterLeave
+     }, $slots));
+   }
+ });
+diff --git a/es/collapse/src/CollapseItemContent.mjs b/es/collapse/src/CollapseItemContent.mjs
+index ca700257654528edc75eb95b6904be9efc295784..8efca0592e2c5d99f1b058990c6c2e10adf59939 100644
+--- a/es/collapse/src/CollapseItemContent.mjs
++++ b/es/collapse/src/CollapseItemContent.mjs
+@@ -12,7 +12,11 @@ export default defineComponent({
+     clsPrefix: {
+       type: String,
+       required: true
+-    }
++    },
++    onEnter: Function,
++    onLeave: Function,
++    onAfterEnter: Function,
++    onAfterLeave: Function,
+   },
+   setup(props) {
+     const onceTrueRef = useFalseUntilTruthy(toRef(props, 'show'));
+@@ -21,7 +25,12 @@ export default defineComponent({
+     };
+   },
+   render() {
+-    return h(NFadeInExpandTransition, null, {
++    return h(NFadeInExpandTransition, {
++      onEnter: this.onEnter,
++      onLeave: this.onLeave,
++      onAfterEnter: this.onAfterEnter,
++      onAfterLeave: this.onAfterLeave
++    }, {
+       default: () => {
+         const {
+           show,
+diff --git a/es/collapse-transition/src/CollapseTransition.d.ts b/es/collapse-transition/src/CollapseTransition.d.ts
+index d81863867cf7a56e33ec79d5fc791407df29f556..48cfd9b422f3bee62b6b90c6c201150d1f62eef5 100644
+--- a/es/collapse-transition/src/CollapseTransition.d.ts
++++ b/es/collapse-transition/src/CollapseTransition.d.ts
+@@ -20,6 +20,10 @@ export declare const collapseTransitionProps: {
+     readonly builtinThemeOverrides: PropType<import("../../_mixins/use-theme").ExtractThemeOverrides<import("../../_mixins").Theme<"CollapseTransition", {
+         bezier: string;
+     }, any>>>;
++    readonly onEnter: PropType<() => void>;
++    readonly onLeave: PropType<() => void>;
++    readonly onAfterEnter: PropType<() => void>;
++    readonly onAfterLeave: PropType<() => void>;
+ };
+ export type CollapseTransitionProps = ExtractPublicPropTypes<typeof collapseTransitionProps>;
+ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+diff --git a/es/collapse-transition/src/CollapseTransition.mjs b/es/collapse-transition/src/CollapseTransition.mjs
+index b4bce1d97ff6e164467dcd8962e13d6c867451de..f891975938ff5b351b8ce01657013446d71cac3e 100644
+--- a/es/collapse-transition/src/CollapseTransition.mjs
++++ b/es/collapse-transition/src/CollapseTransition.mjs
+@@ -11,6 +11,10 @@ export const collapseTransitionProps = Object.assign(Object.assign({}, useTheme.
+     default: true
+   },
+   appear: Boolean,
++  onEnter: Function,
++  onLeave: Function,
++  onAfterEnter: Function,
++  onAfterLeave: Function,
+   // The collapsed is implemented with mistake, collapsed=true would make it show
+   // However there's no possibility to change so I just let it deprecated and use
+   // `show` prop instead.
+@@ -68,7 +72,11 @@ export default defineComponent({
+   },
+   render() {
+     return h(NFadeInExpandTransition, {
+-      appear: this.appear
++      appear: this.appear,
++      onEnter: this.onEnter,
++      onLeave: this.onLeave,
++      onAfterEnter: this.onAfterEnter,
++      onAfterLeave: this.onAfterLeave
+     }, {
+       default: () => {
+         var _a;
+diff --git a/es/form/src/Form.mjs b/es/form/src/Form.mjs
+index 20c484eb19548df95a847e9962f187f90a523683..b8335830945613f15a684ce400f7d39089c46a06 100644
+--- a/es/form/src/Form.mjs
++++ b/es/form/src/Form.mjs
+@@ -86,14 +86,14 @@ export default defineComponent({
+       }
+     };
+     function validate(validateCallback_1) {
+-      return __awaiter(this, arguments, void 0, function* (validateCallback, shouldRuleBeApplied = () => true) {
++      return __awaiter(this, arguments, void 0, function* (validateCallback, shouldRuleBeApplied = () => true, options) {
+         return yield new Promise((resolve, reject) => {
+           const formItemValidationPromises = [];
+           for (const key of keysOf(formItems)) {
+             const formItemInstances = formItems[key];
+             for (const formItemInstance of formItemInstances) {
+               if (formItemInstance.path) {
+-                formItemValidationPromises.push(formItemInstance.internalValidate(null, shouldRuleBeApplied));
++                formItemValidationPromises.push(formItemInstance.internalValidate(null, shouldRuleBeApplied, options));
+               }
+             }
+           }
+@@ -144,7 +144,8 @@ export default defineComponent({
+     });
+     const formExposedMethod = {
+       validate,
+-      restoreValidation
++      restoreValidation,
++      formItems
+     };
+     return Object.assign(formExposedMethod, {
+       mergedClsPrefix: mergedClsPrefixRef
+diff --git a/es/form/src/FormItem.d.ts b/es/form/src/FormItem.d.ts
+index f9cc68510ac5bf1d0d1071dbea05c2f915cd8fbb..dd8a23b18dffd26257cfb92b839e5b52f9f60b3a 100644
+--- a/es/form/src/FormItem.d.ts
++++ b/es/form/src/FormItem.d.ts
+@@ -27,6 +27,8 @@ export declare const formItemProps: {
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: PropType<string | CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: PropType<string | CSSProperties>;
+     readonly showLabel: {
+         readonly type: PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -131,7 +133,7 @@ export declare const formItemProps: {
+ };
+ export type FormItemSetupProps = ExtractPropTypes<typeof formItemProps>;
+ export type FormItemProps = ExtractPublicPropTypes<typeof formItemProps>;
+-export declare const formItemPropKeys: ("label" | "size" | "first" | "required" | "path" | "theme" | "themeOverrides" | "builtinThemeOverrides" | "labelWidth" | "labelAlign" | "labelPlacement" | "showRequireMark" | "requireMarkPlacement" | "showFeedback" | "showLabel" | "labelStyle" | "rulePath" | "rule" | "ignorePathChange" | "validationStatus" | "feedback" | "feedbackClass" | "feedbackStyle" | "labelProps")[];
++export declare const formItemPropKeys: ("label" | "size" | "first" | "required" | "path" | "theme" | "themeOverrides" | "builtinThemeOverrides" | "labelWidth" | "labelAlign" | "labelPlacement" | "showRequireMark" | "requireMarkPlacement" | "showFeedback" | "showLabel" | "labelStyle" | "rulePath" | "rule" | "ignorePathChange" | "validationStatus" | "feedback" | "feedbackClass" | "feedbackStyle" | "contentClass" | "contentStyle" | "labelProps")[];
+ declare const _default: import("vue").DefineComponent<ExtractPropTypes<{
+     readonly label: StringConstructor;
+     readonly labelWidth: PropType<string | number>;
+@@ -158,6 +160,8 @@ declare const _default: import("vue").DefineComponent<ExtractPropTypes<{
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: PropType<string | CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: PropType<string | CSSProperties>;
+     readonly showLabel: {
+         readonly type: PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -337,6 +341,8 @@ declare const _default: import("vue").DefineComponent<ExtractPropTypes<{
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: PropType<string | CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: PropType<string | CSSProperties>;
+     readonly showLabel: {
+         readonly type: PropType<boolean | undefined>;
+         readonly default: undefined;
+diff --git a/es/form/src/FormItem.mjs b/es/form/src/FormItem.mjs
+index c599791e2a9fde32c3a1620cae51fbb6a674ea79..4c1cafb10a2b9493ee928fd2305472aa2d5226bd 100644
+--- a/es/form/src/FormItem.mjs
++++ b/es/form/src/FormItem.mjs
+@@ -31,7 +31,7 @@ import { createId } from 'seemly';
+ import { computed, defineComponent, h, inject, onMounted, provide, ref, toRef, Transition, watch } from 'vue';
+ import { useConfig, useTheme, useThemeClass } from "../../_mixins/index.mjs";
+ import { formItemInjectionKey } from "../../_mixins/use-form-item.mjs";
+-import { createKey, keysOf, resolveWrappedSlot, useInjectionInstanceCollection, warn } from "../../_utils/index.mjs";
++import { createKey, keysOf, resolveWrappedSlotWithProps, useInjectionInstanceCollection, warn } from "../../_utils/index.mjs";
+ import { formLight } from "../styles/index.mjs";
+ import { formInjectionKey, formItemInstsInjectionKey } from "./context.mjs";
+ import style from "./styles/form-item.cssr.mjs";
+@@ -62,6 +62,8 @@ export const formItemProps = Object.assign(Object.assign({}, useTheme.props), {
+   feedback: String,
+   feedbackClass: String,
+   feedbackStyle: [String, Object],
++  contentClass: String,
++  contentStyle: [String, Object],
+   showLabel: {
+     type: Boolean,
+     default: undefined
+@@ -170,7 +172,7 @@ export default defineComponent({
+         if (shallowClonedRule.renderMessage) {
+           const rendererKey = `__renderMessage__${i}`;
+           originalMessageRendersMessage[rendererKey] = shallowClonedRule.message;
+-          shallowClonedRule.message = rendererKey;
++          shallowClonedRule.renderMessageKey = rendererKey;
+           messageRenderers[rendererKey] = shallowClonedRule.renderMessage;
+         }
+         return shallowClonedRule;
+@@ -200,11 +202,12 @@ export default defineComponent({
+       const renderMessages = errors => {
+         renderExplainsRef.value = errors.map(error => {
+           const transformedMessage = (error === null || error === void 0 ? void 0 : error.message) || '';
++          const renderMessageKey = error.renderMessageKey || transformedMessage;
+           return {
+-            key: transformedMessage,
++            key: renderMessageKey,
+             render: () => {
+-              if (transformedMessage.startsWith('__renderMessage__')) {
+-                return messageRenderers[transformedMessage]();
++              if (renderMessageKey.startsWith('__renderMessage__')) {
++                return messageRenderers[renderMessageKey](error);
+               }
+               return transformedMessage;
+             }
+@@ -213,20 +216,51 @@ export default defineComponent({
+         errors.forEach(error => {
+           var _a;
+           if ((_a = error.message) === null || _a === void 0 ? void 0 : _a.startsWith('__renderMessage__')) {
+-            error.message = originalMessageRendersMessage[error.message];
++            error.message = originalMessageRendersMessage[error.renderMessageKey];
+           }
+         });
+       };
+       if (activeErrorRules.length) {
+-        const errors = yield new Promise(resolve => {
+-          void validator.validate({
+-            [mergedPath]: value
+-          }, options, resolve);
++        const standardRules = activeErrorRules.filter(r => !r.skipIfOtherErrors);
++        const conditionalRules = activeErrorRules.filter(r => r.skipIfOtherErrors);
++        
++        // Helper function to validate rules and process results
++        const validateRules = (rules) => __awaiter(this, void 0, void 0, function* () {
++          if (!rules.length) return null;
++          
++          const ruleValidator = new Schema({
++            [mergedPath]: rules
++          });
++          
++          if (validateMessages) {
++            ruleValidator.messages(validateMessages);
++          }
++          
++          return yield new Promise(resolve => {
++            void ruleValidator.validate({
++              [mergedPath]: value
++            }, options, resolve);
++          });
+         });
+-        if (errors === null || errors === void 0 ? void 0 : errors.length) {
++        
++        // First run standard rules
++        const standardErrors = yield validateRules(standardRules);
++        
++        if (standardErrors === null || standardErrors === void 0 ? void 0 : standardErrors.length) {
+           validationResult.valid = false;
+-          validationResult.errors = errors;
+-          renderMessages(errors);
++          validationResult.errors = standardErrors;
++          renderMessages(standardErrors);
++        }
++        
++        // If no errors from standard rules and there are conditional rules, validate those too
++        else if (conditionalRules.length) {
++          const conditionalErrors = yield validateRules(conditionalRules);
++          
++          if (conditionalErrors === null || conditionalErrors === void 0 ? void 0 : conditionalErrors.length) {
++            validationResult.valid = false;
++            validationResult.errors = conditionalErrors;
++            renderMessages(conditionalErrors);
++          }
+         }
+       }
+       // if there are already errors, warning check can be skipped
+@@ -450,7 +484,8 @@ export default defineComponent({
+       class: [`${mergedClsPrefix}-form-item`, this.themeClass, `${mergedClsPrefix}-form-item--${this.mergedSize}-size`, `${mergedClsPrefix}-form-item--${this.mergedLabelPlacement}-labelled`, this.isAutoLabelWidth && `${mergedClsPrefix}-form-item--auto-label-width`, !mergedShowLabel && `${mergedClsPrefix}-form-item--no-label`],
+       style: this.cssVars
+     }, mergedShowLabel && renderLabel(), h("div", {
+-      class: [`${mergedClsPrefix}-form-item-blank`, this.mergedValidationStatus && `${mergedClsPrefix}-form-item-blank--${this.mergedValidationStatus}`]
++      class: [`${mergedClsPrefix}-form-item-blank`, this.mergedValidationStatus && `${mergedClsPrefix}-form-item-blank--${this.mergedValidationStatus}`, this.contentClass],
++      style: this.contentStyle
+     }, $slots), this.mergedShowFeedback ? h("div", {
+       key: this.feedbackId,
+       style: this.feedbackStyle,
+@@ -463,11 +498,20 @@ export default defineComponent({
+         const {
+           mergedValidationStatus
+         } = this;
+-        return resolveWrappedSlot($slots.feedback, children => {
++        
++        // Prepare the feedback data that will be passed to the slot
++        const feedbackData = {
++          feedback: this.feedback,
++          validationStatus: mergedValidationStatus,
++          explains: this.renderExplains,
++        };
++        
++        return resolveWrappedSlotWithProps($slots.feedback, feedbackData, children => {
+           var _a;
+           const {
+             feedback
+           } = this;
++          
+           const feedbackNodes = children || feedback ? h("div", {
+             key: "__feedback__",
+             class: `${mergedClsPrefix}-form-item-feedback__line`
+@@ -478,6 +522,7 @@ export default defineComponent({
+             key: key,
+             class: `${mergedClsPrefix}-form-item-feedback__line`
+           }, render())) : null;
++          
+           return feedbackNodes ? mergedValidationStatus === 'warning' ? h("div", {
+             key: "controlled-warning",
+             class: `${mergedClsPrefix}-form-item-feedback ${mergedClsPrefix}-form-item-feedback--warning`
+diff --git a/es/form/src/FormItemCol.d.ts b/es/form/src/FormItemCol.d.ts
+index 8c64340425e04af8605630609b99fc7c3c815505..9e12a6f0e79fe8be05de5d1ddf98faeec0632c53 100644
+--- a/es/form/src/FormItemCol.d.ts
++++ b/es/form/src/FormItemCol.d.ts
+@@ -26,6 +26,8 @@ export declare const formItemColProps: {
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     readonly showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -144,7 +146,7 @@ export declare const formItemColProps: {
+         readonly default: 0;
+     };
+ };
+-export declare const formItemColPropKeys: ("label" | "size" | "push" | "span" | "first" | "offset" | "required" | "path" | "theme" | "themeOverrides" | "builtinThemeOverrides" | "labelWidth" | "labelAlign" | "labelPlacement" | "showRequireMark" | "requireMarkPlacement" | "showFeedback" | "showLabel" | "labelStyle" | "rulePath" | "rule" | "ignorePathChange" | "validationStatus" | "feedback" | "feedbackClass" | "feedbackStyle" | "labelProps" | "pull")[];
++export declare const formItemColPropKeys: ("label" | "size" | "push" | "span" | "first" | "offset" | "required" | "path" | "theme" | "themeOverrides" | "builtinThemeOverrides" | "labelWidth" | "labelAlign" | "labelPlacement" | "showRequireMark" | "requireMarkPlacement" | "showFeedback" | "showLabel" | "labelStyle" | "rulePath" | "rule" | "ignorePathChange" | "validationStatus" | "feedback" | "feedbackClass" | "feedbackStyle" | "contentClass" | "contentStyle" | "labelProps" | "pull")[];
+ export type FormItemColProps = ExtractPublicPropTypes<typeof formItemColProps>;
+ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+     readonly label: StringConstructor;
+@@ -172,6 +174,8 @@ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropT
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     readonly showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -329,6 +333,8 @@ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropT
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     readonly showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+diff --git a/es/form/src/FormItemGridItem.d.ts b/es/form/src/FormItemGridItem.d.ts
+index dcd667b55ebd6a6f121dfce9eb9d67c9c630881b..7ef4fc50b890be52f3c3df9064848481133fd727 100644
+--- a/es/form/src/FormItemGridItem.d.ts
++++ b/es/form/src/FormItemGridItem.d.ts
+@@ -26,6 +26,8 @@ export declare const formItemGiProps: {
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     readonly showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -144,7 +146,7 @@ export declare const formItemGiProps: {
+         readonly default: true;
+     };
+ };
+-export declare const formItemGiPropKeys: ("label" | "size" | "span" | "first" | "offset" | "required" | "path" | "theme" | "themeOverrides" | "builtinThemeOverrides" | "suffix" | "labelWidth" | "labelAlign" | "labelPlacement" | "showRequireMark" | "requireMarkPlacement" | "showFeedback" | "showLabel" | "labelStyle" | "rulePath" | "rule" | "ignorePathChange" | "validationStatus" | "feedback" | "feedbackClass" | "feedbackStyle" | "labelProps" | "privateSpan" | "privateColStart" | "privateShow" | "privateOffset")[];
++export declare const formItemGiPropKeys: ("label" | "size" | "span" | "first" | "offset" | "required" | "path" | "theme" | "themeOverrides" | "builtinThemeOverrides" | "suffix" | "labelWidth" | "labelAlign" | "labelPlacement" | "showRequireMark" | "requireMarkPlacement" | "showFeedback" | "showLabel" | "labelStyle" | "rulePath" | "rule" | "ignorePathChange" | "validationStatus" | "feedback" | "feedbackClass" | "feedbackStyle" | "contentClass" | "contentStyle" | "labelProps" | "privateSpan" | "privateColStart" | "privateShow" | "privateOffset")[];
+ export type FormItemGiProps = ExtractPublicPropTypes<typeof formItemGiProps>;
+ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropTypes<{
+     readonly label: StringConstructor;
+@@ -172,6 +174,8 @@ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropT
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     readonly showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -329,6 +333,8 @@ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropT
+     readonly feedback: StringConstructor;
+     readonly feedbackClass: StringConstructor;
+     readonly feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    readonly contentClass: StringConstructor;
++    readonly contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     readonly showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+diff --git a/es/form/src/FormItemRow.d.ts b/es/form/src/FormItemRow.d.ts
+index 85124739ff9a2cfc222585ac4a1c1cc31324ec7f..2a56ecfa62fce2f8e748be0d410070ba4381724f 100644
+--- a/es/form/src/FormItemRow.d.ts
++++ b/es/form/src/FormItemRow.d.ts
+@@ -25,6 +25,8 @@ export declare const formItemRowProps: {
+     feedback: StringConstructor;
+     feedbackClass: StringConstructor;
+     feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    contentClass: StringConstructor;
++    contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -176,6 +178,8 @@ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropT
+     feedback: StringConstructor;
+     feedbackClass: StringConstructor;
+     feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    contentClass: StringConstructor;
++    contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+@@ -339,6 +343,8 @@ declare const _default: import("vue").DefineComponent<import("vue").ExtractPropT
+     feedback: StringConstructor;
+     feedbackClass: StringConstructor;
+     feedbackStyle: import("vue").PropType<string | import("vue").CSSProperties>;
++    contentClass: StringConstructor;
++    contentStyle: import("vue").PropType<string | import("vue").CSSProperties>;
+     showLabel: {
+         readonly type: import("vue").PropType<boolean | undefined>;
+         readonly default: undefined;
+diff --git a/es/form/src/interface.d.ts b/es/form/src/interface.d.ts
+index 24c2b8e0fcf9a4e840445a55f5b6a860134fa5ee..a3bad63346f161b65d654f2396b93658192d3e34 100644
+--- a/es/form/src/interface.d.ts
++++ b/es/form/src/interface.d.ts
+@@ -13,8 +13,10 @@ export type FormItemRule = Omit<RuleItem, 'validator' | 'asyncValidator'> & {
+     trigger?: ValidationTrigger | string | Array<ValidationTrigger | string>;
+     validator?: FormItemRuleValidator;
+     asyncValidator?: FormItemRuleAsyncValidator;
+-    renderMessage?: () => VNodeChild;
++    renderMessage?: (error: ValidateError) => VNodeChild;
+     level?: 'warning' | 'error';
++    renderMessageKey?: string;
++    skipIfOtherErrors?: boolean;
+ };
+ export interface FormItemValidateOptions {
+     trigger?: ValidationTrigger | string;
+@@ -57,13 +59,14 @@ export type ValidateCallback = (errors: ValidateError[] | undefined, extra: {
+ export type FormValidateCallback = (errors: ValidateError[][] | undefined, extra: {
+     warnings: ValidateError[][] | undefined;
+ }) => void;
+-export type FormValidate = (callback?: FormValidateCallback, shouldRuleBeApplied?: ShouldRuleBeApplied) => Promise<{
++export type FormValidate = (callback?: FormValidateCallback, shouldRuleBeApplied?: ShouldRuleBeApplied, options?: ValidateOption) => Promise<{
+     warnings: ValidateError[][] | undefined;
+ }>;
+ export type FormValidationError = ValidateError[];
+ export interface FormInst {
+     validate: FormValidate;
+     restoreValidation: () => void;
++    formItems: Record<string, FormItemInst[]>;
+ }
+ export type FormValidationStatus = 'success' | 'error' | 'warning';
+ export interface FormValidateMessages extends ValidateMessages {
+diff --git a/es/select/src/Select.d.ts b/es/select/src/Select.d.ts
+index 9a534f29cfd9ba9211b2c97a95de112aebeb1d05..9cccdd844f008c648307413295905a9028a89284 100644
+--- a/es/select/src/Select.d.ts
++++ b/es/select/src/Select.d.ts
+@@ -3,7 +3,7 @@ import type { RenderTag } from '../../_internal/selection/src/interface';
+ import type { ExtractPublicPropTypes, MaybeArray } from '../../_utils';
+ import type { FormValidationStatus } from '../../form/src/interface';
+ import type { PopoverProps } from '../../popover';
+-import type { OnUpdateValue, SelectBaseOption, SelectFallbackOption, SelectFilter, SelectGroupOption, SelectIgnoredOption, SelectMixedOption, SelectOption, Size, Value, ValueAtom } from './interface';
++import type { OnUpdateValue, SelectBaseOption, SelectFallbackOption, SelectFilter, SelectSort, SelectGroupOption, SelectIgnoredOption, SelectMixedOption, SelectOption, Size, Value, ValueAtom } from './interface';
+ import { type TreeNode } from 'treemate';
+ import { type HTMLAttributes, type InputHTMLAttributes, type PropType, type SlotsType, type VNode } from 'vue';
+ import { type FollowerInst, type FollowerPlacement } from 'vueuc';
+@@ -50,6 +50,7 @@ export declare const selectProps: {
+     readonly remote: BooleanConstructor;
+     readonly loading: BooleanConstructor;
+     readonly filter: PropType<SelectFilter>;
++    readonly sort: PropType<SelectSort>;
+     readonly placement: {
+         readonly type: PropType<FollowerPlacement>;
+         readonly default: "bottom-start";
+diff --git a/es/select/src/Select.mjs b/es/select/src/Select.mjs
+index 5826147ca4bbff2f533506ee320d22d28fc06a34..24baf2705a49083370bbf3d97dddbe6f66f9a1fd 100644
+--- a/es/select/src/Select.mjs
++++ b/es/select/src/Select.mjs
+@@ -49,6 +49,7 @@ export const selectProps = Object.assign(Object.assign({}, useTheme.props), {
+   remote: Boolean,
+   loading: Boolean,
+   filter: Function,
++  sort: Function,
+   placement: {
+     type: String,
+     default: 'bottom-start'
+@@ -201,7 +202,12 @@ export default defineComponent({
+         if (!pattern.length || !props.filterable) {
+           return localOptions;
+         } else {
+-          return filterOptions(localOptions, resolvedFilterRef.value, pattern, props.childrenField);
++          const filtered = filterOptions(localOptions, resolvedFilterRef.value, pattern, props.childrenField);
++          if(props.sort) {
++            return props.sort(filtered);
++          }
++
++          return filtered;
+         }
+       }
+     });
+diff --git a/es/select/src/interface.d.ts b/es/select/src/interface.d.ts
+index edf6f93cad8bdab5ff268bee0e31f2a28d73b1e8..c62f069910c9291de3a8e751e345678bee3bd44f 100644
+--- a/es/select/src/interface.d.ts
++++ b/es/select/src/interface.d.ts
+@@ -51,3 +51,4 @@ export interface SelectInst {
+ export type SelectFallbackOption = (value: string & number) => SelectOption;
+ export type SelectFallbackOptionImpl = (value: string | number) => SelectOption;
+ export type SelectFilter = (pattern: string, option: SelectOption) => boolean;
++export type SelectSort = (options: SelectOption[]) => SelectOption[];
+diff --git a/es/tree/src/Tree.d.ts b/es/tree/src/Tree.d.ts
+index cfb03bf0791257fd446334f0296cea6ee85349aa..fcf3567595ea684a1ef891547e70849621284cc0 100644
+--- a/es/tree/src/Tree.d.ts
++++ b/es/tree/src/Tree.d.ts
+@@ -1,7 +1,7 @@
+ import type { ScrollbarInst } from '../../_internal';
+ import type { ExtractPublicPropTypes, MaybeArray } from '../../_utils';
+ import type { ScrollbarProps } from '../../scrollbar/src/Scrollbar';
+-import type { AllowDrop, CheckOnClick, GetChildren, Key, OnLoad, RenderLabel, RenderPrefix, RenderSuffix, RenderSwitcherIcon, TreeDragInfo, TreeDropInfo, TreeNodeProps, TreeOption, TreeOptions, TreeOverrideNodeClickBehavior } from './interface';
++import type { AllowDrop, CheckOnClick, CheckableFilter, GetChildren, Key, OnLoad, RenderLabel, RenderPrefix, RenderSuffix, RenderSwitcherIcon, TreeDragInfo, TreeDropInfo, TreeNodeProps, TreeOption, TreeOptions, TreeOverrideNodeClickBehavior } from './interface';
+ import { type CheckStrategy, type TreeMateOptions } from 'treemate';
+ import { type PropType, type SlotsType, type VNode, type VNodeChild } from 'vue';
+ import { type VirtualListInst } from 'vueuc';
+@@ -149,6 +149,7 @@ export declare const treeProps: {
+         readonly default: true;
+     };
+     readonly checkable: BooleanConstructor;
++    readonly checkableFilter: PropType<CheckableFilter>;
+     readonly draggable: BooleanConstructor;
+     readonly blockNode: BooleanConstructor;
+     readonly blockLine: BooleanConstructor;
+diff --git a/es/tree/src/Tree.mjs b/es/tree/src/Tree.mjs
+index 17985eed045c097d109b7bba80c9b7ebd48ae4d2..2630fb7c77efb5278754ec3ff665e7041e38c447 100644
+--- a/es/tree/src/Tree.mjs
++++ b/es/tree/src/Tree.mjs
+@@ -117,6 +117,7 @@ export const treeProps = Object.assign(Object.assign(Object.assign(Object.assign
+     default: true
+   },
+   checkable: Boolean,
++  checkableFilter: Function,
+   draggable: Boolean,
+   blockNode: Boolean,
+   blockLine: Boolean,
+@@ -1243,6 +1244,7 @@ export default defineComponent({
+       nodePropsRef: toRef(props, 'nodeProps'),
+       disabledRef: toRef(props, 'disabled'),
+       checkableRef: toRef(props, 'checkable'),
++      checkableFilterRef: toRef(props, 'checkableFilter'),
+       selectableRef: toRef(props, 'selectable'),
+       expandOnClickRef: toRef(props, 'expandOnClick'),
+       onLoadRef: toRef(props, 'onLoad'),
+diff --git a/es/tree/src/TreeNode.mjs b/es/tree/src/TreeNode.mjs
+index da7fed96d3928f55fa50c3a27fd47eda785761ce..27d9c00143f032844b817bb109592cda7bf049ff 100644
+--- a/es/tree/src/TreeNode.mjs
++++ b/es/tree/src/TreeNode.mjs
+@@ -100,7 +100,13 @@ const TreeNode = defineComponent({
+       }
+     }
+     const selectableRef = useMemo(() => !nodeIsDisabledRef.value && NTree.selectableRef.value && (NTree.internalTreeSelect ? NTree.mergedCheckStrategyRef.value !== 'child' || NTree.multipleRef.value && NTree.cascadeRef.value || props.tmNode.isLeaf : true));
+-    const checkableRef = useMemo(() => NTree.checkableRef.value && (NTree.cascadeRef.value || NTree.mergedCheckStrategyRef.value !== 'child' || props.tmNode.isLeaf));
++    const checkableRef = useMemo(() => {
++      const { checkableFilterRef } = NTree;
++      if (checkableFilterRef && checkableFilterRef.value) {
++        return checkableFilterRef.value(props.tmNode);
++      }
++      return NTree.checkableRef.value && (NTree.cascadeRef.value || NTree.mergedCheckStrategyRef.value !== 'child' || props.tmNode.isLeaf);
++    });
+     const checkedRef = useMemo(() => NTree.displayedCheckedKeysRef.value.includes(props.tmNode.key));
+     const mergedCheckOnClickRef = useMemo(() => {
+       const {
+diff --git a/es/tree/src/interface.d.ts b/es/tree/src/interface.d.ts
+index 90f2cd4c37e60b9841ef4f80a0c33fea1b9eb01c..5dfb1f27592dbabf0e1f2e39c11fa6320934524b 100644
+--- a/es/tree/src/interface.d.ts
++++ b/es/tree/src/interface.d.ts
+@@ -64,6 +64,7 @@ export type RenderSwitcherIcon = (props: {
+     option: TreeOption;
+ }) => VNodeChild;
+ export type CheckOnClick = (option: TreeOption) => boolean;
++export type CheckableFilter = (node: TmNode) => boolean;
+ export interface TreeInjection {
+     loadingKeysRef: Ref<Set<Key>>;
+     highlightKeySetRef: Ref<Set<Key> | null>;
+@@ -84,6 +85,7 @@ export interface TreeInjection {
+     droppingOffsetLevelRef: Ref<number>;
+     disabledRef: Ref<boolean>;
+     checkableRef: Ref<boolean>;
++    checkableFilterRef: Ref<CheckableFilter | undefined>;
+     cascadeRef: Ref<boolean>;
+     mergedCheckStrategyRef: Ref<CheckStrategy>;
+     selectableRef: Ref<boolean>;
+diff --git a/es/upload/src/UploadFile.mjs b/es/upload/src/UploadFile.mjs
+index 6dd4d8e17f44edb894c889862941bbb545f344c8..5e59d559cb562bf424dbce4480872952bee7a652 100644
+--- a/es/upload/src/UploadFile.mjs
++++ b/es/upload/src/UploadFile.mjs
+@@ -275,11 +275,11 @@ export default defineComponent({
+       }, renderIcon ? renderIcon(file) : isImageFile(file) ? h(NBaseIcon, {
+         clsPrefix: clsPrefix
+       }, {
+-        default: renderImageIcon
++        default: () => renderImageIcon
+       }) : h(NBaseIcon, {
+         clsPrefix: clsPrefix
+       }, {
+-        default: renderDocumentIcon
++        default: () => renderDocumentIcon
+       })) : h("a", {
+         rel: "noopener noreferer",
+         target: "_blank",
+diff --git a/es/upload/src/utils.mjs b/es/upload/src/utils.mjs
+index f0dde65851c6810308f0d21f801510c797c25f8b..45596335907a3b69525415d1f224059a9cd45f3f 100644
+--- a/es/upload/src/utils.mjs
++++ b/es/upload/src/utils.mjs
+@@ -125,9 +125,11 @@ export function createSettledFileInfo(fileInfo) {
+     thumbnailUrl,
+     type,
+     fullPath,
+-    batchId
++    batchId,
++    ...rest
+   } = fileInfo;
+   return {
++    ...rest,
+     id,
+     name,
+     percentage: percentage !== null && percentage !== void 0 ? percentage : null,
+diff --git a/lib/collapse/src/CollapseItem.js b/lib/collapse/src/CollapseItem.js
+index 148656de3cf1700c2480ac86cefe5e5bb8708dcf..4a4afdd45ca3fdf2a81bed3ff134f15557744c41 100644
+--- a/lib/collapse/src/CollapseItem.js
++++ b/lib/collapse/src/CollapseItem.js
+@@ -18,7 +18,11 @@ exports.collapseItemProps = {
+     title: String,
+     name: [String, Number],
+     disabled: Boolean,
+-    displayDirective: String
++    displayDirective: String,
++    onEnter: Function,
++    onLeave: Function,
++    onAfterEnter: Function,
++    onAfterLeave: Function,
+ };
+ exports.default = (0, vue_1.defineComponent)({
+     name: 'CollapseItem',
+@@ -109,6 +113,6 @@ exports.default = (0, vue_1.defineComponent)({
+                     ])),
+                     arrowPlacement === 'left' && headerNode),
+                 (0, _utils_1.resolveWrappedSlotWithProps)(headerExtraSlot, { collapsed }, children => ((0, vue_1.h)("div", { class: `${mergedClsPrefix}-collapse-item__header-extra`, onClick: this.handleClick, "data-extra": true }, children)))),
+-            (0, vue_1.h)(CollapseItemContent_1.default, { clsPrefix: mergedClsPrefix, displayDirective: mergedDisplayDirective, show: !collapsed }, $slots)));
++            (0, vue_1.h)(CollapseItemContent_1.default, { clsPrefix: mergedClsPrefix, displayDirective: mergedDisplayDirective, show: !collapsed, onEnter: this.onEnter, onLeave: this.onLeave, onAfterEnter: this.onAfterEnter, onAfterLeave: this.onAfterLeave }, $slots)));
+     }
+ });
+diff --git a/lib/tree/src/Tree.js b/lib/tree/src/Tree.js
+index 97d59c0143522c38bf8c7d4a6b3f76030f8a743e..896fdaa67f3d3fc075d699f6725ae5237f424c43 100644
+--- a/lib/tree/src/Tree.js
++++ b/lib/tree/src/Tree.js
+@@ -95,7 +95,7 @@ exports.treeProps = Object.assign(Object.assign(Object.assign(Object.assign({},
+     }, cancelable: {
+         type: Boolean,
+         default: true
+-    }, checkable: Boolean, draggable: Boolean, blockNode: Boolean, blockLine: Boolean, showLine: Boolean, disabled: Boolean, checkedKeys: Array, defaultCheckedKeys: {
++    }, checkable: Boolean, checkableFilter: Function, draggable: Boolean, blockNode: Boolean, blockLine: Boolean, showLine: Boolean, disabled: Boolean, checkedKeys: Array, defaultCheckedKeys: {
+         type: Array,
+         default: () => []
+     }, selectedKeys: Array, defaultSelectedKeys: {
+@@ -1129,6 +1129,7 @@ exports.default = (0, vue_1.defineComponent)({
+             nodePropsRef: (0, vue_1.toRef)(props, 'nodeProps'),
+             disabledRef: (0, vue_1.toRef)(props, 'disabled'),
+             checkableRef: (0, vue_1.toRef)(props, 'checkable'),
++            checkableFilterRef: (0, vue_1.toRef)(props, 'checkableFilter'),
+             selectableRef: (0, vue_1.toRef)(props, 'selectable'),
+             expandOnClickRef: (0, vue_1.toRef)(props, 'expandOnClick'),
+             onLoadRef: (0, vue_1.toRef)(props, 'onLoad'),
+diff --git a/lib/tree/src/TreeNode.js b/lib/tree/src/TreeNode.js
+index 4a28ffc4001fd8068a09907e4e4158f79e8602fa..76ef96355cfb543d7ad3f1135d83ff107a1163c9 100644
+--- a/lib/tree/src/TreeNode.js
++++ b/lib/tree/src/TreeNode.js
+@@ -92,10 +92,16 @@ const TreeNode = (0, vue_1.defineComponent)({
+                     || (NTree.multipleRef.value && NTree.cascadeRef.value)
+                     || props.tmNode.isLeaf
+                 : true));
+-        const checkableRef = (0, vooks_1.useMemo)(() => NTree.checkableRef.value
+-            && (NTree.cascadeRef.value
+-                || NTree.mergedCheckStrategyRef.value !== 'child'
+-                || props.tmNode.isLeaf));
++        const checkableRef = (0, vooks_1.useMemo)(() => {
++            const { checkableFilterRef } = NTree;
++            if (checkableFilterRef && checkableFilterRef.value) {
++                return checkableFilterRef.value(props.tmNode);
++            }
++            return NTree.checkableRef.value
++                && (NTree.cascadeRef.value
++                    || NTree.mergedCheckStrategyRef.value !== 'child'
++                    || props.tmNode.isLeaf);
++        });
+         const checkedRef = (0, vooks_1.useMemo)(() => NTree.displayedCheckedKeysRef.value.includes(props.tmNode.key));
+         const mergedCheckOnClickRef = (0, vooks_1.useMemo)(() => {
+             const { value: checkable } = checkableRef;
+diff --git a/lib/tree/src/interface.d.ts b/lib/tree/src/interface.d.ts
+index 90f2cd4c37e60b9841ef4f80a0c33fea1b9eb01c..5dfb1f27592dbabf0e1f2e39c11fa6320934524b 100644
+--- a/lib/tree/src/interface.d.ts
++++ b/lib/tree/src/interface.d.ts
+@@ -64,6 +64,7 @@ export type RenderSwitcherIcon = (props: {
+     option: TreeOption;
+ }) => VNodeChild;
+ export type CheckOnClick = (option: TreeOption) => boolean;
++export type CheckableFilter = (node: TmNode) => boolean;
+ export interface TreeInjection {
+     loadingKeysRef: Ref<Set<Key>>;
+     highlightKeySetRef: Ref<Set<Key> | null>;
+@@ -84,6 +85,7 @@ export interface TreeInjection {
+     droppingOffsetLevelRef: Ref<number>;
+     disabledRef: Ref<boolean>;
+     checkableRef: Ref<boolean>;
++    checkableFilterRef: Ref<CheckableFilter | undefined>;
+     cascadeRef: Ref<boolean>;
+     mergedCheckStrategyRef: Ref<CheckStrategy>;
+     selectableRef: Ref<boolean>;

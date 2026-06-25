@@ -1,0 +1,54 @@
+name: Backend Smoke
+
+on:
+  push:
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/backend-smoke.yml"
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/backend-smoke.yml"
+
+concurrency:
+  group: backend-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://user:pass@localhost:5432/airalogy
+      SECRET_KEY: test-secret
+      AES_KEY: "1234567890123456"
+      AIRALOGY_ENDPOINT: http://localhost:4000
+      REDIS_URL: redis://localhost:6379/0
+      MINIO_ENDPOINT: minio:9200
+      MINIO_BUCKET: airalogy
+      MINIO_ACCESS_KEY: airalogy
+      MINIO_SECRET_KEY: airalogy-minio-password
+      MINIO_PROXY_PATH: /minio
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Sync dependencies
+        run: uv sync --locked --dev
+
+      - name: Compile entrypoint
+        run: uv run --no-sync python -m compileall -q app tests
+
+      - name: Run unit tests
+        run: uv run --with pytest python -m pytest tests

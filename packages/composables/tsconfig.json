@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["./src/types/html2pdf.js.d.ts"]
+  },
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.tsx",
+    "./src/**/*.vue",
+    "./types/**/*.d.ts",
+    "./src/**/*.d.ts"
+  ],
+  "exclude": ["./node_modules", "./dist", "./**/*.js", "./.history/*"]
+}
