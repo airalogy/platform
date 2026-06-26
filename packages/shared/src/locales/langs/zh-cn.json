@@ -408,6 +408,16 @@
         "user": "普通用户",
         "confirm": "登录"
       },
+      "devQuick": {
+        "title": "开发环境快速开始",
+        "description": "创建或刷新本地测试账号和示例协议，然后一键登录。",
+        "owner": "负责人",
+        "collaborator": "协作者",
+        "viewer": "查看者",
+        "hint": "仅在本地 dev 构建显示，生产构建会隐藏。",
+        "missingAccount": "未返回开发环境测试账号。",
+        "protocolExamplesUnavailable": "已登录，但未导入 Airalogy 协议示例。设置 AIRALOGY_PROTOCOL_EXAMPLES_DIR 后可启用。"
+      },
       "codeLogin": {
         "title": "验证码登录",
         "heading": "手机号登录",
@@ -535,6 +545,33 @@
       "pinnedReorderHint": "拖拽调整顺序",
       "pinnedEmptyTitle": "还没有置顶内容",
       "pinnedEmptyDesc": "在左侧置顶常用的实验室、项目或协议，方便快速进入。",
+      "start": {
+        "eyebrow": "从这里开始",
+        "title": "完成第一条研究工作流",
+        "description": "先创建或选择项目，再添加可复用的协议，最后录入第一条记录。",
+        "primaryAction": "创建项目",
+        "hubAction": "浏览协议中心",
+        "steps": {
+          "workspace": {
+            "title": "1. 选择工作空间",
+            "description": "用实验室和项目组织成员、权限和研究上下文。"
+          },
+          "protocol": {
+            "title": "2. 添加协议",
+            "description": "从模板开始、从协议中心复用，或上传已有协议包。"
+          },
+          "record": {
+            "title": "3. 添加记录",
+            "description": "按协议填写一次，生成结构化记录和报告。"
+          }
+        }
+      },
+      "empty": {
+        "title": "欢迎，{name}",
+        "description": "可以先创建实验室，也可以先浏览协议中心了解可复用流程。",
+        "createLabAction": "创建实验室",
+        "hubAction": "浏览协议中心"
+      },
       "activities": "最近活动",
       "loadMore": "加载更多",
       "recentProtocols": "最近协议",
@@ -624,6 +661,26 @@
         "stars": "最多收藏",
         "popular": "最受欢迎",
         "updated": "最近更新"
+      },
+      "protocolsEmpty": {
+        "title": "为当前项目添加第一个协议",
+        "description": "协议是可复用的表单或工作流；有了协议，项目才可以持续录入结构化记录。",
+        "noResult": "未找到协议",
+        "searchNoResult": "未找到 {field} 为“{query}”的协议",
+        "terms": {
+          "project": {
+            "title": "项目",
+            "description": "集中管理研究主题、成员和权限。"
+          },
+          "protocol": {
+            "title": "协议",
+            "description": "定义需要采集、检查和复用的内容。"
+          },
+          "record": {
+            "title": "记录",
+            "description": "保存一次实际执行后的结构化数据和文件。"
+          }
+        }
       },
       "protocolFolders": {
         "filterLabel": "文件夹",
@@ -1657,6 +1714,44 @@
     }
   },
   "editor": {
+    "landing": {
+      "eyebrow": "协议编辑器",
+      "title": "选择一个适合的协议起点",
+      "description": "先选择创建方式；协议创建或导入后，再进入文件编辑。",
+      "startLabel": "开始",
+      "actions": {
+        "template": {
+          "title": "使用入门模板",
+          "description": "生成包含必要文件的简单协议包。"
+        },
+        "hub": {
+          "title": "从协议中心复用",
+          "description": "查找共享协议并应用到当前项目。"
+        },
+        "clone": {
+          "title": "从项目克隆",
+          "description": "复制你可访问的其他项目协议。"
+        },
+        "upload": {
+          "title": "导入 ZIP 包",
+          "description": "上传本地已准备好的协议包。"
+        }
+      },
+      "uploadTitle": "导入协议 ZIP",
+      "uploadApply": "导入",
+      "cloneTitle": "从其他项目克隆",
+      "cloneDescription": "选择你可访问的项目协议，并复制到当前项目。",
+      "cloneAction": "克隆",
+      "selectProtocolWarning": "请先选择一个协议",
+      "missingProjectError": "缺少实验室或项目信息",
+      "cloneFailed": "协议克隆失败",
+      "cloneSuccess": "协议“{name}”已克隆",
+      "createSuccess": "协议 {name} 已创建",
+      "createFailed": "协议创建失败",
+      "uploadSelectWarning": "请选择要上传的 ZIP 文件",
+      "uploadSuccess": "协议 ZIP 已导入",
+      "uploadFailed": "处理 ZIP 文件失败"
+    },
     "extensions": {
       "Raw": {
         "markdown": {

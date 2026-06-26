@@ -2,6 +2,43 @@ import { nanoid } from "nanoid"
 import { REG_PHONE } from "../../constants/reg"
 import { request } from "../request"
 
+export interface DevQuickstartAccount {
+  key: "owner" | "collaborator" | "viewer"
+  role: string
+  name: string
+  email: string
+  password: string
+}
+
+export interface DevQuickstartFixtures {
+  accounts: DevQuickstartAccount[]
+  lab: {
+    id: string
+    uid: string
+    name: string
+  }
+  project: {
+    id: string
+    uid: string
+    name: string
+    lab_uid: string
+  }
+  protocols: {
+    id: string
+    uid: string
+    name: string
+    latest_version: string
+  }[]
+  warnings: string[]
+}
+
+export function postDevQuickstartFixtures() {
+  return request<DevQuickstartFixtures>({
+    url: "/dev/fixtures/quickstart",
+    method: "POST",
+  })
+}
+
 /**
  * Login
  *

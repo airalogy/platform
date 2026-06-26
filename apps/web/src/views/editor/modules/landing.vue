@@ -2,22 +2,30 @@
   <div class="overflow-auto bg-white text-black">
     <div class="mx-auto max-w-6xl p-6">
       <!-- Welcome Section -->
-      <div class="mb-8 flex items-center space-x-3">
-        <n-icon size="32" class="text-primary">
-          <code-icon />
-        </n-icon>
-        <h1 class="text-3xl font-light">
-          Welcome to Airalogy Protocol Editor
-        </h1>
+      <div class="mb-8">
+        <div class="mb-2 text-sm font-medium uppercase text-gray-500">
+          {{ $t("editor.landing.eyebrow") }}
+        </div>
+        <div class="flex items-center space-x-3">
+          <n-icon size="32" class="text-primary">
+            <code-icon />
+          </n-icon>
+          <h1 class="text-3xl font-light">
+            {{ $t("editor.landing.title") }}
+          </h1>
+        </div>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-gray-500">
+          {{ $t("editor.landing.description") }}
+        </p>
       </div>
 
       <!-- Action Cards -->
       <div class="lg:col-span-2 space-y-6">
         <section class="space-y-4">
           <h2 class="text-sm text-gray-500 font-medium tracking-wide uppercase">
-            Start
+            {{ $t("editor.landing.startLabel") }}
           </h2>
-          <div class="grid grid-cols-1 gap-3">
+          <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <!-- Define a reusable template for action cards -->
             <define-action-card>
               <template #default="{ icon, title, description, onClick }">
@@ -46,23 +54,30 @@
 
             <reuse-action-card
               icon="file-plus"
-              title="New Protocol from Template"
-              description="Create a new protocol from a template"
+              :title="$t('editor.landing.actions.template.title')"
+              :description="$t('editor.landing.actions.template.description')"
               :on-click="handleNewProtocol"
             />
 
             <reuse-action-card
-              icon="folder-plus"
-              title="Upload Protocol Zip"
-              description="Upload a protocol zip file"
-              :on-click="handleOpenFolder"
+              icon="hub"
+              :title="$t('editor.landing.actions.hub.title')"
+              :description="$t('editor.landing.actions.hub.description')"
+              :on-click="handleOpenHub"
             />
 
             <reuse-action-card
               icon="git-fork"
-              title="Clone from Existing Protocol"
-              description="Clone a protocol from existing protocols"
+              :title="$t('editor.landing.actions.clone.title')"
+              :description="$t('editor.landing.actions.clone.description')"
               :on-click="handleCloneRepo"
+            />
+
+            <reuse-action-card
+              icon="folder-plus"
+              :title="$t('editor.landing.actions.upload.title')"
+              :description="$t('editor.landing.actions.upload.description')"
+              :on-click="handleOpenFolder"
             />
           </div>
         </section>
@@ -80,7 +95,7 @@
     <n-modal
       v-model:show="uploadModalVisible"
       preset="dialog"
-      title="Upload Protocol Zip"
+      :title="$t('editor.landing.uploadTitle')"
       class="min-w-80vw"
       content-class="max-h-70vh overflow-y-auto"
     >
@@ -95,15 +110,15 @@
       />
       <template #action>
         <n-button type="primary" :loading="isUploading" @click="processUploadForm">
-          Apply
+          {{ $t("editor.landing.uploadApply") }}
         </n-button>
       </template>
     </n-modal>
 
     <!-- Protocol Reuse Modal -->
-    <n-modal v-model:show="reuseModalVisible" preset="card" title="Clone from Existing Protocol" class="w-180">
-      <n-alert title="Clone from Existing Protocol" type="info" class="mb-4">
-        Select a protocol from another project to clone.
+    <n-modal v-model:show="reuseModalVisible" preset="card" :title="$t('editor.landing.cloneTitle')" class="w-180">
+      <n-alert :title="$t('editor.landing.cloneTitle')" type="info" class="mb-4">
+        {{ $t("editor.landing.cloneDescription") }}
       </n-alert>
       <project-selector
         class="p-3"
@@ -114,10 +129,10 @@
       <template #footer>
         <div class="flex justify-end gap-2">
           <n-button @click="reuseModalVisible = false">
-            Cancel
+            {{ $t("common.cancel") }}
           </n-button>
           <n-button type="primary" :disabled="!selectedSourceNode" :loading="isCloning" @click="handleCloneProtocol">
-            Clone
+            {{ $t("editor.landing.cloneAction") }}
           </n-button>
         </div>
       </template>
@@ -139,6 +154,7 @@ import { postReuseProtocol } from "@/service/api/project-protocols"
 import { useFileUpload } from "@airalogy/components/monaco-editor/composables/useFileUpload"
 import { handleContentLoaded as handleProtocolContentLoaded, processProtocolZipWorkflow } from "@airalogy/components/monaco-editor/utils/protocolContentLoader"
 import { useThemeStore } from "@airalogy/composables/theme"
+import { $t } from "@airalogy/shared/locales"
 
 // Composables
 import { createReusableTemplate } from "@vueuse/core"
@@ -161,6 +177,7 @@ import { useRoute } from "vue-router"
 import ProtocolTemplateDialog from "./protocol-template-dialog.vue"
 
 // Icons
+import HubIcon from "~icons/local/hub"
 import CodeIcon from "~icons/tabler/code"
 import FilePlusIcon from "~icons/tabler/file-plus"
 import FolderPlusIcon from "~icons/tabler/folder-plus"
@@ -175,7 +192,7 @@ interface IProps {
 }
 // Create reusable ActionCard template
 const [DefineActionCard, ReuseActionCard] = createReusableTemplate<{
-  icon: "file-plus" | "folder-plus" | "git-fork"
+  icon: "file-plus" | "folder-plus" | "git-fork" | "hub"
   title: string
   description: string
   onClick: () => void
@@ -186,6 +203,7 @@ const iconMap = {
   "file-plus": FilePlusIcon,
   "folder-plus": FolderPlusIcon,
   "git-fork": GitForkIcon,
+  "hub": HubIcon,
 }
 
 // Theme
@@ -256,6 +274,10 @@ function handleCloneRepo() {
   reuseModalVisible.value = true
 }
 
+function handleOpenHub() {
+  void routerPushByKey("hub")
+}
+
 function handleSourceLabUpdate(lab: Lab | null) {
   selectedSourceLab.value = lab
 }
@@ -270,7 +292,7 @@ function handleSourceNodeUpdate(node: ProtocolModels.ProjectProtocolInfo | null)
 
 async function handleCloneProtocol() {
   if (!selectedSourceNode.value) {
-    message.warning("Please select a protocol first")
+    message.warning($t("editor.landing.selectProtocolWarning"))
     return
   }
 
@@ -280,7 +302,7 @@ async function handleCloneProtocol() {
     const { labUid, projectUid } = route.params as { labUid?: string, projectUid?: string }
 
     if (!labUid || !projectUid) {
-      message.error("Missing lab or project information")
+      message.error($t("editor.landing.missingProjectError"))
       return
     }
 
@@ -298,11 +320,11 @@ async function handleCloneProtocol() {
     })
 
     if (!result) {
-      message.error("Failed to clone protocol")
+      message.error($t("editor.landing.cloneFailed"))
       return
     }
 
-    message.success(`Protocol "${protocolName}" cloned successfully`)
+    message.success($t("editor.landing.cloneSuccess", { name: protocolName }))
     reuseModalVisible.value = false
 
     // Navigate to the new protocol
@@ -316,7 +338,7 @@ async function handleCloneProtocol() {
   }
   catch (error) {
     console.error("Error cloning protocol:", error)
-    message.error(`Failed to clone protocol: ${(error as Error).message}`)
+    message.error($t("editor.landing.cloneFailed"))
   }
   finally {
     isCloning.value = false
@@ -351,11 +373,11 @@ async function handleCreateTemplate(template: { type: string, name: string, vers
     // Navigate to the editor
     await navigateToEditor()
 
-    message.success(`Protocol ${template.name} created successfully`)
+    message.success($t("editor.landing.createSuccess", { name: template.name }))
   }
   catch (error) {
     console.error("Error creating protocol:", error)
-    message.error("Failed to create protocol")
+    message.error($t("editor.landing.createFailed"))
   }
 }
 
@@ -369,7 +391,7 @@ async function processUploadForm() {
     // Get file from model
     const file = uploadModel.value.fileList[0]?.file
     if (!file) {
-      message.warning("Please select a ZIP file to upload")
+      message.warning($t("editor.landing.uploadSelectWarning"))
       return
     }
 
@@ -408,12 +430,12 @@ async function processUploadForm() {
     // Navigate to editor
     await navigateToEditor()
 
-    message.success("Protocol ZIP file uploaded and processed successfully")
+    message.success($t("editor.landing.uploadSuccess"))
     uploadModalVisible.value = false
   }
   catch (error) {
     console.error("Error processing upload:", error)
-    message.error("Failed to process ZIP file")
+    message.error($t("editor.landing.uploadFailed"))
   }
 }
 

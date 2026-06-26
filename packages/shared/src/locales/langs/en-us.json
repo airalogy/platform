@@ -408,6 +408,16 @@
         "user": "User",
         "confirm": "Sign in"
       },
+      "devQuick": {
+        "title": "Development quick start",
+        "description": "Create or refresh local fixture accounts and sample protocols, then sign in with one click.",
+        "owner": "Owner",
+        "collaborator": "Collaborator",
+        "viewer": "Viewer",
+        "hint": "Only shown in local dev builds. Hidden from production builds.",
+        "missingAccount": "Development fixture account was not returned.",
+        "protocolExamplesUnavailable": "Signed in, but Airalogy protocol examples were not imported. Set AIRALOGY_PROTOCOL_EXAMPLES_DIR to enable them."
+      },
       "codeLogin": {
         "title": "Phone number",
         "heading": "Phone sign in",
@@ -535,6 +545,33 @@
       "pinnedReorderHint": "Drag to reorder",
       "pinnedEmptyTitle": "No pinned items yet.",
       "pinnedEmptyDesc": "Pin labs, projects, or protocols from the sidebar for quick access.",
+      "start": {
+        "eyebrow": "Start here",
+        "title": "Get your first research workflow running",
+        "description": "Create or choose a project, add a reusable protocol, then record the first run.",
+        "primaryAction": "Create project",
+        "hubAction": "Explore Hub",
+        "steps": {
+          "workspace": {
+            "title": "1. Choose a workspace",
+            "description": "Use a lab and project to keep people, permissions, and research context together."
+          },
+          "protocol": {
+            "title": "2. Add a protocol",
+            "description": "Start from a template, reuse one from Hub, or upload an existing protocol package."
+          },
+          "record": {
+            "title": "3. Add a record",
+            "description": "Fill the protocol once to produce a structured record and report."
+          }
+        }
+      },
+      "empty": {
+        "title": "Welcome, {name}",
+        "description": "Start with a lab or explore shared protocols before creating your own workflow.",
+        "createLabAction": "Create lab",
+        "hubAction": "Explore Hub"
+      },
       "activities": "Recent activities",
       "loadMore": "Load more",
       "recentProtocols": "Recent protocols",
@@ -624,6 +661,26 @@
         "stars": "Most stars",
         "popular": "Most popular",
         "updated": "Recently updated"
+      },
+      "protocolsEmpty": {
+        "title": "Add the first protocol to this project",
+        "description": "A protocol is the reusable form or workflow that turns a project into recordable research work.",
+        "noResult": "No protocols found",
+        "searchNoResult": "No protocols found for {field} \"{query}\"",
+        "terms": {
+          "project": {
+            "title": "Project",
+            "description": "Keeps the research topic, members, and permissions together."
+          },
+          "protocol": {
+            "title": "Protocol",
+            "description": "Defines what should be collected, checked, and reused."
+          },
+          "record": {
+            "title": "Record",
+            "description": "Stores one completed run with structured values and files."
+          }
+        }
       },
       "protocolFolders": {
         "filterLabel": "Folder",
@@ -1657,6 +1714,44 @@
     }
   },
   "editor": {
+    "landing": {
+      "eyebrow": "Protocol Editor",
+      "title": "Start with the protocol you need",
+      "description": "Choose a guided starting point. You can edit files after the protocol is created or imported.",
+      "startLabel": "Start",
+      "actions": {
+        "template": {
+          "title": "Use a starter template",
+          "description": "Create a simple protocol package with the required files."
+        },
+        "hub": {
+          "title": "Reuse from Hub",
+          "description": "Find a shared protocol and apply it to your project."
+        },
+        "clone": {
+          "title": "Clone from a project",
+          "description": "Copy an existing protocol from another project you can access."
+        },
+        "upload": {
+          "title": "Import a ZIP package",
+          "description": "Upload a prepared protocol package from your computer."
+        }
+      },
+      "uploadTitle": "Import protocol ZIP",
+      "uploadApply": "Import",
+      "cloneTitle": "Clone from another project",
+      "cloneDescription": "Select a project protocol you can access and copy it into this project.",
+      "cloneAction": "Clone",
+      "selectProtocolWarning": "Please select a protocol first",
+      "missingProjectError": "Missing lab or project information",
+      "cloneFailed": "Failed to clone protocol",
+      "cloneSuccess": "Protocol \"{name}\" cloned successfully",
+      "createSuccess": "Protocol {name} created successfully",
+      "createFailed": "Failed to create protocol",
+      "uploadSelectWarning": "Please select a ZIP file to upload",
+      "uploadSuccess": "Protocol ZIP imported successfully",
+      "uploadFailed": "Failed to process ZIP file"
+    },
     "extensions": {
       "Raw": {
         "markdown": {

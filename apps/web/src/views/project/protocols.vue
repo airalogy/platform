@@ -57,12 +57,26 @@
         class="size-full"
       />
       <div v-else-if="canCreateProtocol" class="flex flex-col px-10">
-        <div class="mb-8">
+        <div class="mb-8 max-w-4xl">
           <div class="text-2xl font-bold">
-            Create Airalogy Protocol
+            {{ $t("page.project.protocolsEmpty.title") }}
           </div>
           <div class="mt-2 text-gray-500">
-            Every project requires an Airalogy Protocol to function. Please follow the steps below to create one.
+            {{ $t("page.project.protocolsEmpty.description") }}
+          </div>
+          <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div
+              v-for="item in onboardingTerms"
+              :key="item.key"
+              class="rounded border border-gray-200 bg-gray-50 px-4 py-3"
+            >
+              <div class="text-sm font-semibold">
+                {{ item.title }}
+              </div>
+              <div class="mt-1 text-sm leading-6 text-gray-500">
+                {{ item.description }}
+              </div>
+            </div>
           </div>
         </div>
         <protocol-steps :protocol-info="protocolInfo" :project-info="projectInfo" :route-query="false" @cancel="handleCancel" />
@@ -249,6 +263,23 @@ const selectedProtocolIds = ref<string[]>([])
 const projectProtocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 
 const canManageFolders = computed(() => canShowSettings.value)
+const onboardingTerms = computed(() => [
+  {
+    key: "project",
+    title: $t("page.project.protocolsEmpty.terms.project.title"),
+    description: $t("page.project.protocolsEmpty.terms.project.description"),
+  },
+  {
+    key: "protocol",
+    title: $t("page.project.protocolsEmpty.terms.protocol.title"),
+    description: $t("page.project.protocolsEmpty.terms.protocol.description"),
+  },
+  {
+    key: "record",
+    title: $t("page.project.protocolsEmpty.terms.record.title"),
+    description: $t("page.project.protocolsEmpty.terms.record.description"),
+  },
+])
 const folderFilter = ref<string | number>("all")
 const folderFilterOptions = computed<SelectOption[]>(() => {
   const base = [
@@ -308,9 +339,13 @@ watch(
 
 const emptyDescription = computed(() => {
   if (searchQuery.value) {
-    return `No protocols found for ${filterOption.value === "name" ? "name" : "id"} "${searchQuery.value}"`
+    const queryText = Array.isArray(searchQuery.value) ? searchQuery.value.join(", ") : searchQuery.value
+    return $t("page.project.protocolsEmpty.searchNoResult", {
+      field: filterOption.value === "name" ? $t("page.project.protocolsFilter.name") : $t("page.project.protocolsFilter.id"),
+      query: queryText,
+    })
   }
-  return "No protocols found"
+  return $t("page.project.protocolsEmpty.noResult")
 })
 
 async function fetcher(params: FetchPayload): Promise<FetchData> {

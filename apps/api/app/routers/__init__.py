@@ -40,6 +40,9 @@ from .user_aliases import router as user_aliases_router
 from .users import router as users_router
 from .workflow import router as workflow_router
 
+if config.APP_ENV != "production":
+    from .dev_fixtures import router as dev_fixtures_router
+
 Path("log").mkdir(exist_ok=True)
 
 app = FastAPI(default_response_class=ORJSONResponse, root_path=config.API_ROOT_PATH)
@@ -182,3 +185,6 @@ app.include_router(protocol_users_router)
 app.include_router(pinned_items_router)
 app.include_router(protocol_folders_router)
 app.include_router(workflow_router)
+
+if config.APP_ENV != "production":
+    app.include_router(dev_fixtures_router)

@@ -254,9 +254,9 @@ declare namespace I18n {
         auto: string
       }
       layoutMode: {
-        "title": string
-        "vertical": string
-        "horizontal": string
+        title: string
+        vertical: string
+        horizontal: string
         "vertical-mix": string
         "horizontal-mix": string
       }
@@ -277,14 +277,14 @@ declare namespace I18n {
       page: {
         animate: string
         mode: {
-          "title": string
-          "fade": string
+          title: string
+          fade: string
           "fade-slide": string
           "fade-bottom": string
           "fade-scale": string
           "zoom-fade": string
           "zoom-out": string
-          "none": string
+          none: string
         }
       }
       fixedHeaderAndTab: string
@@ -337,30 +337,30 @@ declare namespace I18n {
       "lab-projects": string
       "labs-my": string
       "labs-public": string
-      "login": string
-      "home": string
+      login: string
+      home: string
       "user-center": string
-      "about": string
-      "function": string
-      "function_tab": string
+      about: string
+      function: string
+      function_tab: string
       "function_multi-tab": string
-      "manage": string
-      "manage_user": string
+      manage: string
+      manage_user: string
       "manage_user-detail": string
-      "manage_role": string
-      "manage_route": string
-      "exception": string
-      "exception_403": string
-      "exception_404": string
-      "exception_500": string
-      "activity": string
-      "groups": string
-      "labs": string
-      "log": string
-      "projects": string
-      "protocol": string
-      "user": string
-      "profile": string
+      manage_role: string
+      manage_route: string
+      exception: string
+      exception_403: string
+      exception_404: string
+      exception_500: string
+      activity: string
+      groups: string
+      labs: string
+      log: string
+      projects: string
+      protocol: string
+      user: string
+      profile: string
     }
     page: {
       auth: {
@@ -411,6 +411,16 @@ declare namespace I18n {
           admin: string
           user: string
           confirm: string
+        }
+        devQuick: {
+          title: string
+          description: string
+          owner: string
+          collaborator: string
+          viewer: string
+          hint: string
+          missingAccount: string
+          protocolExamplesUnavailable: string
         }
         codeLogin: {
           title: string
@@ -539,6 +549,33 @@ declare namespace I18n {
         pinnedReorderHint: string
         pinnedEmptyTitle: string
         pinnedEmptyDesc: string
+        start: {
+          eyebrow: string
+          title: string
+          description: string
+          primaryAction: string
+          hubAction: string
+          steps: {
+            workspace: {
+              title: string
+              description: string
+            }
+            protocol: {
+              title: string
+              description: string
+            }
+            record: {
+              title: string
+              description: string
+            }
+          }
+        }
+        empty: {
+          title: string
+          description: string
+          createLabAction: string
+          hubAction: string
+        }
         activities: string
         loadMore: string
         recentProtocols: string
@@ -628,6 +665,26 @@ declare namespace I18n {
           stars: string
           popular: string
           updated: string
+        }
+        protocolsEmpty: {
+          title: string
+          description: string
+          noResult: string
+          searchNoResult: string
+          terms: {
+            project: {
+              title: string
+              description: string
+            }
+            protocol: {
+              title: string
+              description: string
+            }
+            record: {
+              title: string
+              description: string
+            }
+          }
         }
         protocolFolders: {
           filterLabel: string
@@ -1661,6 +1718,44 @@ declare namespace I18n {
       }
     }
     editor: {
+      landing: {
+        eyebrow: string
+        title: string
+        description: string
+        startLabel: string
+        actions: {
+          template: {
+            title: string
+            description: string
+          }
+          hub: {
+            title: string
+            description: string
+          }
+          clone: {
+            title: string
+            description: string
+          }
+          upload: {
+            title: string
+            description: string
+          }
+        }
+        uploadTitle: string
+        uploadApply: string
+        cloneTitle: string
+        cloneDescription: string
+        cloneAction: string
+        selectProtocolWarning: string
+        missingProjectError: string
+        cloneFailed: string
+        cloneSuccess: string
+        createSuccess: string
+        createFailed: string
+        uploadSelectWarning: string
+        uploadSuccess: string
+        uploadFailed: string
+      }
       extensions: {
         Raw: {
           markdown: {

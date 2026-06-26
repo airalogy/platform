@@ -43,17 +43,46 @@
         {{ $t("page.login.register.confirm") }}
       </n-button>
     </div>
+    <div
+      v-if="showDevQuickLogin"
+      class="mt-6 rounded border border-dashed border-blue-200 bg-blue-50 px-4 py-3 text-left"
+    >
+      <div class="text-sm font-semibold text-blue-900">
+        {{ $t("page.login.devQuick.title") }}
+      </div>
+      <p class="mb-3 mt-1 text-xs leading-5 text-blue-700">
+        {{ $t("page.login.devQuick.description") }}
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <n-button
+          v-for="account in devAccountOptions"
+          :key="account.key"
+          size="small"
+          secondary
+          type="primary"
+          :disabled="devFixtureLoading && activeDevAccountKey !== account.key"
+          :loading="devFixtureLoading && activeDevAccountKey === account.key"
+          @click="handleDevQuickLogin(account.key)"
+        >
+          {{ account.label }}
+        </n-button>
+      </div>
+      <p class="mb-0 mt-3 text-xs leading-5 text-blue-700">
+        {{ $t("page.login.devQuick.hint") }}
+      </p>
+    </div>
   </n-form>
 </template>
 
 <script setup lang="ts">
 import { createLoginPwdValidator, useFormRules, useNaiveForm } from "@/composables/useForm"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { type DevQuickstartAccount, postDevQuickstartFixtures } from "@/service/api/auth"
 import { useAuthStore } from "@/store/modules/auth"
 import { $t } from "@airalogy/shared/locales"
 import EyeOffOutline from "~icons/ion/eye-off-outline"
 import EyeOutline from "~icons/ion/eye-outline"
-import { reactive } from "vue"
+import { computed, reactive, ref } from "vue"
 
 defineOptions({
   name: "PwdLogIn",
@@ -77,6 +106,14 @@ const model: FormModel = reactive({
 const { routerPushByKey } = useRouterPush()
 const authStore = useAuthStore()
 const loginPwdValidator = createLoginPwdValidator()
+const showDevQuickLogin = import.meta.env.DEV && import.meta.env.VITE_SERVICE_ENV !== "prod"
+const devFixtureLoading = ref(false)
+const activeDevAccountKey = ref<DevQuickstartAccount["key"] | null>(null)
+const devAccountOptions = computed<{ key: DevQuickstartAccount["key"], label: string }[]>(() => [
+  { key: "owner", label: $t("page.login.devQuick.owner") },
+  { key: "collaborator", label: $t("page.login.devQuick.collaborator") },
+  { key: "viewer", label: $t("page.login.devQuick.viewer") },
+])
 
 const rules: Record<keyof FormModel, App.Global.FormRule[]> = {
   email: userFormRules.email,
@@ -93,6 +130,40 @@ async function handleSubmit() {
   }
   catch (e) {
     loginStatus.value = "error"
+  }
+}
+
+async function handleDevQuickLogin(accountKey: DevQuickstartAccount["key"]) {
+  try {
+    devFixtureLoading.value = true
+    activeDevAccountKey.value = accountKey
+
+    const { data } = await postDevQuickstartFixtures()
+    if (!data) {
+      window.$message?.error($t("page.login.devQuick.missingAccount"))
+      return
+    }
+
+    const account = data?.accounts.find(item => item.key === accountKey)
+    if (!account) {
+      window.$message?.error($t("page.login.devQuick.missingAccount"))
+      return
+    }
+
+    model.email = account.email
+    model.password = account.password
+    if (data.warnings.length > 0) {
+      window.$message?.warning($t("page.login.devQuick.protocolExamplesUnavailable"))
+    }
+    await authStore.login("email", {
+      email: account.email,
+      password: account.password,
+    })
+    await authStore.getUserAvatar()
+  }
+  finally {
+    devFixtureLoading.value = false
+    activeDevAccountKey.value = null
   }
 }
 </script>
