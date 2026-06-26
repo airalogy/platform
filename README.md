@@ -88,6 +88,8 @@ docker compose --env-file .env restart api-server
 
 The API listens on `http://127.0.0.1:4000`.
 
+Development quick-start fixtures use protocol examples packaged in the published `airalogy` Python package by default. To test local protocol examples before they are packaged in Airalogy, set `AIRALOGY_PROTOCOL_EXAMPLES_DIR` in `apps/api/.env` to an API-visible local `examples/protocols` directory with an `index.json`; when set, the fixture loads that local directory instead of the packaged examples.
+
 If Debian or PostgreSQL apt sources are unstable while building the PostgreSQL extension image, update these variables in `apps/api/.env` to point to reachable mirrors or internal package sources:
 
 ```env

@@ -68,6 +68,8 @@ This starts:
 
 The Compose stack creates the default MinIO bucket from `MINIO_BUCKET`.
 
+Development quick-start fixtures use protocol examples packaged in the published `airalogy` Python package by default. To test local protocol examples before they are packaged in Airalogy, set `AIRALOGY_PROTOCOL_EXAMPLES_DIR` in `.env` to an API-visible local `examples/protocols` directory with an `index.json`; when set, the fixture loads that local directory instead of the packaged examples.
+
 ## Manual Development
 
 If you run dependencies through Docker but the API directly on the host, adjust `.env` hostnames from Docker service names to localhost:

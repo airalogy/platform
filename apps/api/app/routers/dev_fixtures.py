@@ -1,6 +1,8 @@
+import json
 import os
 import tomllib
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import TypedDict
 
 from fastapi import APIRouter, HTTPException
@@ -141,6 +143,31 @@ def load_protocol_example(example_root: Path, relative_dir: str) -> dict:
     }
 
 
+def load_protocol_examples_from_index(example_root: Path) -> tuple[list[dict], list[str]]:
+    index_path = example_root / "index.json"
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [], [f"Invalid Airalogy protocol example index: {index_path}: {exc}"]
+
+    examples = []
+    warnings = []
+    for entry in index.get("examples", []):
+        for locale, aimd_path in entry.get("entry", {}).items():
+            relative_dir = entry.get("protocol_dir", {}).get(locale)
+            if relative_dir is None:
+                relative_dir = str(PurePosixPath(aimd_path).parent)
+            try:
+                examples.append(load_protocol_example(example_root, relative_dir))
+            except ValueError as exc:
+                warnings.append(str(exc))
+
+    if not examples:
+        warnings.append(f"No protocol examples were loaded from {index_path}")
+
+    return examples, warnings
+
+
 def load_packaged_protocol_examples() -> tuple[list[dict], list[str]]:
     if get_protocol_example is None:
         return [], []
@@ -167,6 +194,13 @@ def load_packaged_protocol_examples() -> tuple[list[dict], list[str]]:
 
 
 def load_default_protocol_examples() -> tuple[list[dict], list[str]]:
+    if os.getenv("AIRALOGY_PROTOCOL_EXAMPLES_DIR"):
+        example_root, warnings = find_airalogy_protocol_examples_dir()
+        if example_root is None:
+            return [], warnings
+        examples, load_warnings = load_protocol_examples_from_index(example_root)
+        return examples, [*warnings, *load_warnings]
+
     packaged_examples, packaged_warnings = load_packaged_protocol_examples()
     if packaged_examples:
         return packaged_examples, packaged_warnings

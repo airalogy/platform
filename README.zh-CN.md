@@ -88,6 +88,8 @@ docker compose --env-file .env restart api-server
 
 API 默认监听 `http://127.0.0.1:4000`。
 
+开发环境快速开始 fixture 默认使用已发布 `airalogy` Python 包内的协议示例。如果需要在示例正式打包进 Airalogy 前测试本地 Protocol，可以在 `apps/api/.env` 中把 `AIRALOGY_PROTOCOL_EXAMPLES_DIR` 指向 API 进程可访问、且带有 `index.json` 的本地 `examples/protocols` 目录；设置后 fixture 会使用这个本地目录，而不是包内示例。
+
 如果构建 PostgreSQL 扩展镜像时 Debian 或 PostgreSQL apt 源不稳定，可以在 `apps/api/.env` 中把以下变量切换到可访问的镜像源或内网源：
 
 ```env
