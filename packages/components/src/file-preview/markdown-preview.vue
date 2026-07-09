@@ -6,6 +6,7 @@
       <n-form
         v-if="props.record && useVNodes"
         class="markdown-body"
+        :class="markdownBodyClasses"
         :rules="props.record.rules"
         :model="props.value"
       >
@@ -13,7 +14,7 @@
       </n-form>
 
       <!-- VNode rendering mode (without form) -->
-      <div v-else-if="useVNodes && vnodes.length > 0" class="markdown-body">
+      <div v-else-if="useVNodes && vnodes.length > 0" class="markdown-body" :class="markdownBodyClasses">
         <component :is="node" v-for="(node, idx) in vnodes" :key="idx" />
       </div>
 
@@ -21,7 +22,7 @@
       <div
         v-else-if="!asRawText"
         class="markdown-body"
-        :class="{ 'markdown-body-generate': loading }"
+        :class="markdownBodyClasses"
         v-html="htmlContent"
       />
 
@@ -37,7 +38,7 @@
 <script lang="ts" setup>
 import type { ExtractedAimdFields, RenderContext } from "@airalogy/aimd-core/types"
 import { getSubvarNames } from "@airalogy/aimd-core"
-import { createMermaidRenderer, renderToHtml, renderToVue, type VueRendererOptions } from "@airalogy/aimd-renderer"
+import { createMermaidRenderer, renderReadonlyRecordToVue, renderToHtml, renderToVue, type VueRendererOptions } from "@airalogy/aimd-renderer"
 import { useBoolean, useClosableMessage } from "@airalogy/composables"
 import DOMPurify from "dompurify"
 import MermaidBlock from "../markdown-editor/modules/mermaid/mermaid-block.vue"
@@ -75,6 +76,7 @@ export interface IProps {
   readonly?: boolean
   immediate?: boolean
   record?: { rules?: any } | null
+  readonlyRecordData?: unknown
   /**
    * Custom AIMD component renderers
    * Used to render Vue components instead of simple HTML elements
@@ -141,10 +143,21 @@ const elementRenderers = computed(() => ({
   pre: mermaidRenderer,
 }))
 
+const isReadonlyRecordRender = computed(() =>
+  props.mode === "report" && Boolean(props.readonlyRecordData),
+)
+
+const markdownBodyClasses = computed(() => ({
+  "aimd-renderer": props.mode === "preview" || isReadonlyRecordRender.value,
+  "rendered-aimd-document": isReadonlyRecordRender.value,
+  "markdown-body-generate": props.loading,
+}))
+
 const useVNodes = computed(() =>
   props.mode !== "preview"
   || Boolean(props.record)
   || Boolean(props.aimdRenderers)
+  || isReadonlyRecordRender.value
   || hasMermaidBlock.value,
 )
 
@@ -340,6 +353,29 @@ async function reload(reset = true) {
     return
   }
 
+  if (isReadonlyRecordRender.value) {
+    try {
+      const textToRender = await preResolveFilePaths(props.text)
+      const result = await renderReadonlyRecordToVue(textToRender, props.readonlyRecordData, {
+        gfm: true,
+        math: true,
+        elementRenderers: elementRenderers.value,
+      })
+
+      vnodes.value = result.nodes
+      extractedFields.value = result.fields
+      htmlContent.value = ""
+
+      emit("render:result", result)
+      processExtractedFields()
+    }
+    catch (e) {
+      message.error((e as Error).message)
+      console.error("Readonly record render error:", e)
+    }
+    return
+  }
+
   if (props.mode === "report") {
     htmlContent.value = props.text
     emit("render:result", props.text)
@@ -467,6 +503,16 @@ watch(
   { deep: true },
 )
 
+watch(
+  () => props.readonlyRecordData,
+  () => {
+    if (isReadonlyRecordRender.value && isFieldMounted.value && props.text) {
+      reload(false)
+    }
+  },
+  { deep: true },
+)
+
 // Watch field mounting
 watch(isFieldMounted, (isMounted) => {
   if (!isMounted)
@@ -546,6 +592,178 @@ defineExpose({
     margin-bottom: 12px !important
 
 // AIMD field styles are imported from @airalogy/aimd-recorder/styles
+
+.rendered-aimd-document
+  .aimd-record-field
+    margin: 0 1px
+    vertical-align: middle
+
+  .aimd-record-field--scalar
+    display: inline
+    padding: 0 2px
+    border-bottom: 1px solid rgba(31, 143, 99, 0.28)
+    background: transparent
+    color: #162f35
+    font-weight: 600
+    overflow-wrap: anywhere
+
+  .aimd-record-field--empty
+    display: inline-flex
+    align-items: center
+    gap: 6px
+    padding: 1px 7px
+    border: 1px dashed #c5d2d6
+    border-radius: 4px
+    background: #fbfdfd
+    color: #6d7c82
+    font-size: 13px
+
+  .aimd-record-field__missing-label
+    color: #8a6b2b
+    font-size: 11px
+    font-weight: 700
+    text-transform: uppercase
+
+  .aimd-record-field__missing-name,
+  .aimd-record-field__filename
+    overflow-wrap: anywhere
+
+  .aimd-record-field--boolean,
+  .aimd-record-check
+    display: inline-flex
+    align-items: center
+    gap: 8px
+    color: #253f38
+
+  .aimd-checkbox
+    width: 16px
+    height: 16px
+    accent-color: #1f8f63
+
+  .aimd-record-field--asset
+    max-width: 100%
+    margin: 10px 0 16px
+
+  a.aimd-record-field--asset,
+  span.aimd-record-field--asset
+    min-height: 42px
+    display: inline-flex
+    align-items: center
+    gap: 10px
+    padding: 8px 10px
+    border: 1px solid #d5e1e4
+    border-radius: 6px
+    background: #fff
+    color: #21373d
+    text-decoration: none
+
+  a.aimd-record-field--asset:hover
+    border-color: #216dff
+    color: #164eb8
+
+  .aimd-record-field__badge
+    flex: 0 0 auto
+    min-width: 34px
+    padding: 2px 6px
+    border-radius: 4px
+    background: #e5f0f2
+    color: #275059
+    font-size: 11px
+    font-weight: 700
+    text-align: center
+
+  .aimd-record-field--image,
+  .aimd-record-field--video
+    display: block
+
+  .aimd-record-field__image,
+  .aimd-record-field__video
+    max-width: 100%
+    max-height: 520px
+    border: 1px solid #e0e8ea
+    border-radius: 8px
+    background: #fff
+    object-fit: contain
+
+  .aimd-record-field__audio
+    width: min(100%, 520px)
+
+  .aimd-record-field__caption
+    margin-top: 6px
+    color: #65777d
+    font-size: 13px
+    line-height: 1.4
+
+  .aimd-record-field--code,
+  .aimd-record-field--dna
+    display: block
+    overflow: auto
+    padding: 12px
+    border: 1px solid #d8e5e8
+    border-radius: 8px
+    background: #f8fbfc
+
+  .aimd-record-field--markdown
+    display: block
+    margin: 8px 0 14px
+    padding: 10px 12px
+    border-left: 3px solid #7bb7bd
+    background: #f7fbfb
+    overflow-wrap: anywhere
+
+    > :first-child
+      margin-top: 0
+
+    > :last-child
+      margin-bottom: 0
+
+    img
+      max-width: 100%
+      height: auto
+
+  .aimd-record-field__markdown-fallback,
+  .aimd-record-field__sequence
+    margin: 0
+    padding: 0
+    border: 0
+    background: transparent
+    white-space: pre-wrap
+
+  .aimd-record-table
+    margin: 12px 0 16px
+    overflow: auto
+
+    table
+      min-width: 420px
+
+    th
+      background: #f7fafb
+      color: #53686f
+
+  .aimd-record-table--empty
+    display: inline-flex
+    align-items: center
+    gap: 6px
+    padding: 6px 8px
+    border: 1px dashed #c5d2d6
+    border-radius: 6px
+    background: #fbfdfd
+    color: #6d7c82
+
+  .aimd-record-quiz
+    margin: 12px 0 16px
+    padding: 12px
+    border: 1px solid #d8e0ea
+    border-radius: 8px
+    background: #fbfcff
+
+  .aimd-record-quiz__stem
+    margin-bottom: 6px
+    font-weight: 700
+
+  .aimd-record-quiz__answer--empty
+    color: #748489
+    font-style: italic
 </style>
 
 <style scoped lang="sass">

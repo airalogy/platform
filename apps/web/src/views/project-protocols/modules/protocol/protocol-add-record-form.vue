@@ -131,9 +131,10 @@
       />
       <markdown-preview
         v-else-if="fieldRecordDefault"
-        ref="previewRef" mode="edit" :text="templateRef" :record="fieldRecordDefault"
-        :value="fieldModel as any" class="px-6" :is-editor-bubble-active="isEditorBubbleActive"
-        :aimd-renderers="aimdRenderers"
+        ref="previewRef" :mode="previewMode" :text="templateRef" :record="previewFormRecord"
+        :value="previewValue" class="px-6" :is-editor-bubble-active="isEditorBubbleActive"
+        :aimd-renderers="previewAimdRenderers"
+        :readonly-record-data="readonlyRecordData"
         :resolve-file="resolvePreviewFile"
         @mounted:field="handleFieldMounted" @update:field="handleUpdateFields"
       />
@@ -407,6 +408,20 @@ const {
   // Restore Field Record
   restoreFieldRecord,
 } = useFieldState(props, templateRef)
+
+const previewMode = computed(() => props.readonly ? "report" : "edit")
+const previewFormRecord = computed(() => props.readonly ? null : fieldRecordDefault.value)
+const previewValue = computed(() => props.readonly ? undefined : fieldModel as any)
+const readonlyRecordData = computed(() => {
+  const data = (props.recordData || {}) as Record<string, unknown>
+  return {
+    var: data.var ?? data.research_variable ?? {},
+    step: data.step ?? data.research_step ?? {},
+    check: data.check ?? data.research_check ?? {},
+    quiz: data.quiz ?? {},
+    var_table: data.var_table ?? {},
+  }
+})
 
 const RECORDER_CONTEXT_FIELD_LIMIT = 200
 const RECORDER_CONTEXT_ARRAY_LIMIT = 50
@@ -1048,6 +1063,7 @@ const aimdRenderers = useAimdRenderers({
   mode: "edit",
   resolveFile: resolveProtocolFile,
 })
+const previewAimdRenderers = computed(() => props.readonly ? undefined : aimdRenderers)
 
 const authStore = useAuthStore()
 
