@@ -50,7 +50,7 @@ export enum ApplyStep {
   Success = 4,
 }
 
-export type ApplyOption = "existing" | "scratch" | "upload-zip" | "hub" | null
+export type ApplyOption = "existing" | "scratch" | "upload-zip" | "upload-aira" | "hub" | null
 
 export interface ApplyProtocolState {
   activeModel: ComputedRef<FormModel | UploadModel>

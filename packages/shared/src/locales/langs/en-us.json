@@ -901,6 +901,10 @@
             "title": "Upload a protocol ZIP",
             "description": "Create a protocol by uploading a ZIP file"
           },
+          "uploadAira": {
+            "title": "Upload .aira archive",
+            "description": "Import protocols, records, and files from an Airalogy archive"
+          },
           "scratch": {
             "title": "Create a protocol from scratch",
             "description": "Manually create a protocol by adding each protocol file"
@@ -937,6 +941,20 @@
           "descApplied": "Your protocol has been applied to the project",
           "descUploaded": "Your protocol has been uploaded to the project"
         }
+      },
+      "airaImport": {
+        "trigger": "Import .aira",
+        "title": "Import .aira archive",
+        "projectPlaceholder": "Choose target project",
+        "dropText": "Drop a .aira file, or click to choose",
+        "supportHint": "Imports protocols, records, and file payloads from an Airalogy archive.",
+        "submit": "Upload and import",
+        "airaOnly": "Please select a .aira file",
+        "projectRequired": "Choose a target project first",
+        "fileRequired": "Select a .aira file first",
+        "success": "Imported {protocols} protocol(s), {records} record(s), and {files} file(s)",
+        "errorTitle": "Import failed",
+        "unknownError": "Import failed. Check the archive and try again."
       },
       "workflow": {
         "ended": "Workflow ended",
@@ -1128,15 +1146,16 @@
         "clearAll": "Clear all",
         "bulkImport": "Bulk upload",
         "bulkImportTitle": "Bulk upload records",
-        "bulkImportDropText": "Drop a CSV file, or click to choose",
-        "bulkImportSupportHint": "CSV columns are parsed against the current Protocol fields. Use field names, var.<field>, step.<id>.checked, or check.<id>.annotation.",
+        "bulkImportDropText": "Drop a records file, or click to choose",
+        "bulkImportSupportHint": "Supports CSV, TSV, JSON, JSONL, and records .aira archives. The file is imported into the current Protocol.",
         "bulkImportSubmit": "Upload and import",
-        "bulkImportNoFile": "Select a CSV file first",
-        "bulkImportCsvOnly": "Please select a CSV file",
+        "bulkImportNoFile": "Select a records file first",
+        "bulkImportCsvOnly": "Please select a CSV, TSV, JSON, JSONL, or .aira file",
+        "bulkImportSupportedOnly": "Please select a CSV, TSV, JSON, JSONL, or .aira file",
         "bulkImportSuccess": "Imported {count} record(s)",
         "bulkImportErrorTitle": "Import failed",
         "bulkImportRowError": "Row {row}{column}: {message}",
-        "bulkImportUnknownError": "Import failed. Check the CSV content and try again.",
+        "bulkImportUnknownError": "Import failed. Check the file content and try again.",
         "deleteBlockedLatest": "There is a newer record. Please delete the latest record first.",
         "deleteBlockedExpired": "This record is older than {days} days and cannot be deleted.",
         "deleteBlockedLoading": "Fetching latest record info. Please try again later.",

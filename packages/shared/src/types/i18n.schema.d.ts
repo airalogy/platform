@@ -254,9 +254,9 @@ declare namespace I18n {
         auto: string
       }
       layoutMode: {
-        title: string
-        vertical: string
-        horizontal: string
+        "title": string
+        "vertical": string
+        "horizontal": string
         "vertical-mix": string
         "horizontal-mix": string
       }
@@ -277,14 +277,14 @@ declare namespace I18n {
       page: {
         animate: string
         mode: {
-          title: string
-          fade: string
+          "title": string
+          "fade": string
           "fade-slide": string
           "fade-bottom": string
           "fade-scale": string
           "zoom-fade": string
           "zoom-out": string
-          none: string
+          "none": string
         }
       }
       fixedHeaderAndTab: string
@@ -337,30 +337,30 @@ declare namespace I18n {
       "lab-projects": string
       "labs-my": string
       "labs-public": string
-      login: string
-      home: string
+      "login": string
+      "home": string
       "user-center": string
-      about: string
-      function: string
-      function_tab: string
+      "about": string
+      "function": string
+      "function_tab": string
       "function_multi-tab": string
-      manage: string
-      manage_user: string
+      "manage": string
+      "manage_user": string
       "manage_user-detail": string
-      manage_role: string
-      manage_route: string
-      exception: string
-      exception_403: string
-      exception_404: string
-      exception_500: string
-      activity: string
-      groups: string
-      labs: string
-      log: string
-      projects: string
-      protocol: string
-      user: string
-      profile: string
+      "manage_role": string
+      "manage_route": string
+      "exception": string
+      "exception_403": string
+      "exception_404": string
+      "exception_500": string
+      "activity": string
+      "groups": string
+      "labs": string
+      "log": string
+      "projects": string
+      "protocol": string
+      "user": string
+      "profile": string
     }
     page: {
       auth: {
@@ -905,6 +905,10 @@ declare namespace I18n {
               title: string
               description: string
             }
+            uploadAira: {
+              title: string
+              description: string
+            }
             scratch: {
               title: string
               description: string
@@ -941,6 +945,20 @@ declare namespace I18n {
             descApplied: string
             descUploaded: string
           }
+        }
+        airaImport: {
+          trigger: string
+          title: string
+          projectPlaceholder: string
+          dropText: string
+          supportHint: string
+          submit: string
+          airaOnly: string
+          projectRequired: string
+          fileRequired: string
+          success: string
+          errorTitle: string
+          unknownError: string
         }
         workflow: {
           ended: string
@@ -1137,6 +1155,7 @@ declare namespace I18n {
           bulkImportSubmit: string
           bulkImportNoFile: string
           bulkImportCsvOnly: string
+          bulkImportSupportedOnly: string
           bulkImportSuccess: string
           bulkImportErrorTitle: string
           bulkImportRowError: string

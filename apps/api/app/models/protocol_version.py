@@ -29,7 +29,6 @@ class ProtocolMetadata(BaseModel):
         StringConstraints(
             pattern=r"^[a-z][a-z0-9_]*$",
             min_length=4,
-            max_length=32,
             strip_whitespace=True,
         ),
     ]

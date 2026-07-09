@@ -546,17 +546,17 @@ importers:
   apps/web:
     dependencies:
       '@airalogy/aimd-core':
-        specifier: ^2.6.0
-        version: 2.6.0
+        specifier: ^2.12.0
+        version: 2.12.0
       '@airalogy/aimd-editor':
-        specifier: ^1.9.0
-        version: 1.9.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+        specifier: ^1.10.0
+        version: 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-recorder':
-        specifier: ^1.16.0
-        version: 1.16.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+        specifier: ^1.21.0
+        version: 1.21.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer':
-        specifier: ^2.5.0
-        version: 2.5.0(vue@3.5.17(typescript@5.8.3))
+        specifier: ^2.9.1
+        version: 2.9.1(vue@3.5.17(typescript@5.8.3))
       '@airalogy/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -973,14 +973,14 @@ importers:
   packages/components:
     dependencies:
       '@airalogy/aimd-core':
-        specifier: ^2.6.0
-        version: 2.6.0
+        specifier: ^2.12.0
+        version: 2.12.0
       '@airalogy/aimd-recorder':
-        specifier: ^1.16.0
-        version: 1.16.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+        specifier: ^1.21.0
+        version: 1.21.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer':
-        specifier: ^2.5.0
-        version: 2.5.0(vue@3.5.17(typescript@5.8.3))
+        specifier: ^2.9.1
+        version: 2.9.1(vue@3.5.17(typescript@5.8.3))
       '@airalogy/composables':
         specifier: workspace:*
         version: link:../composables
@@ -1250,11 +1250,11 @@ importers:
   packages/composables:
     dependencies:
       '@airalogy/aimd-core':
-        specifier: ^2.6.0
-        version: 2.6.0
+        specifier: ^2.12.0
+        version: 2.12.0
       '@airalogy/aimd-editor':
-        specifier: ^1.9.0
-        version: 1.9.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+        specifier: ^1.10.0
+        version: 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1362,11 +1362,11 @@ importers:
   packages/shared:
     dependencies:
       '@airalogy/aimd-core':
-        specifier: ^2.6.0
-        version: 2.6.0
+        specifier: ^2.12.0
+        version: 2.12.0
       '@airalogy/aimd-renderer':
-        specifier: ^2.5.0
-        version: 2.5.0(vue@3.5.17(typescript@5.9.2))
+        specifier: ^2.9.1
+        version: 2.9.1(vue@3.5.17(typescript@5.9.2))
       '@monaco-editor/loader':
         specifier: 'catalog:'
         version: 1.4.0(monaco-editor@0.52.2)
@@ -1519,11 +1519,11 @@ packages:
     resolution: {integrity: sha512-1Yjs2SvM8TflER/OD3cOjhWWOZb58A2t7wpE2S9XfBYTiIl+XFhQG2bjy4Pu1I+EAlCNUzRDYDdFwFYUKvXcIA==}
     engines: {node: '>=0.10.0'}
 
-  '@airalogy/aimd-core@2.6.0':
-    resolution: {integrity: sha512-EYlYi5CztgODPD6Mx98l6DQf3w4czD5GaOmwxMYxZYtIsJ5+X73+I/u+THF7/yDmPflXsUe3Np64myKgNKMUaA==}
+  '@airalogy/aimd-core@2.12.0':
+    resolution: {integrity: sha512-YWAbxXahivc2IAExY6QQ3/tcCa6b2+HZ0DPsFbSi6QAh6bB/TqnbfL5zvodxS2YFc3dbBPiN+MKySQB9xTVEkQ==}
 
-  '@airalogy/aimd-editor@1.9.0':
-    resolution: {integrity: sha512-bdORRgPIgqMGFMfN+8EhP/eQX6rxBrfHRZzbiw9WW3zyUMBJ2B+DfDugm9xOlBSNSffs1BOELtu4ewzXZqoXaA==}
+  '@airalogy/aimd-editor@1.10.0':
+    resolution: {integrity: sha512-yvGN43bNlNYRbDBx9igfxG6Ph0/kMyPo/Rm2T8Zyc2M2cDBQJaH9+344zFvuZxGK2nFCle8L1KzzOevcmqX/aw==}
     peerDependencies:
       monaco-editor: '>=0.50.0'
       vue: '>=3.3.0'
@@ -1531,15 +1531,15 @@ packages:
       monaco-editor:
         optional: true
 
-  '@airalogy/aimd-recorder@1.16.0':
-    resolution: {integrity: sha512-A0LdDOYNMHMbN8VjBsZnYv5NvGp5oAw7W+COkTtvHy3yS6V+oW3Ny7wXlMxz+BgfpGbUCWHvWq101LsOCy4Yjw==}
+  '@airalogy/aimd-recorder@1.21.0':
+    resolution: {integrity: sha512-3cK/IuRyeS9W6ptj/EooYbh8cGHScWiLqEf093UvUp//J1z+947cnaT9XwbvsT8iNHETis8Y5K424ImHGNunVQ==}
     peerDependencies:
       '@vueuse/core': ^13.5.0
       naive-ui: 2.41.0
       vue: ^3.5.17
 
-  '@airalogy/aimd-renderer@2.5.0':
-    resolution: {integrity: sha512-Fk0scpJioHuuzzGsEiIQY2xrnS63QX7+xwSi6xwwTlvnTp7Ga1muRwNhKDOi1D3i1MYwznoM1j3W1qsThpUDkg==}
+  '@airalogy/aimd-renderer@2.9.1':
+    resolution: {integrity: sha512-V3gqGRo8+5wRpp6kzAiPIyx5bpvd/Us8+iH9+TQ4wkaGdrzuvPwGxLXXqcc9n5GfIcSMFHYKr3kQhlpGTDjMGw==}
     peerDependencies:
       vue: ^3.5.17
 
@@ -2261,6 +2261,9 @@ packages:
   '@braintree/sanitize-url@7.1.1':
     resolution: {integrity: sha512-i1L7noDNxtFyL5DmZafWy1wRVhGehQmzZaz1HiN5e7iylJMSZR7ekOV7NsIqa5qBldlLrsKv4HbgFUVlQrz8Mw==}
 
+  '@braintree/sanitize-url@7.1.2':
+    resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
+
   '@chevrotain/cst-dts-gen@11.0.3':
     resolution: {integrity: sha512-BvIKpRLeS/8UbfxXxgC33xOumsacaeCKAjAeLyOn7Pcp95HiRbrpl14S+9vaZLolnbssPIUuiUd8IvgkRyt6NQ==}
 
@@ -2272,6 +2275,9 @@ packages:
 
   '@chevrotain/types@11.0.3':
     resolution: {integrity: sha512-gsiM3G8b58kZC2HaWR50gu6Y1440cHiJ+i3JUvcp/35JchYejb2+5MVeJK0iKThYpAa/P2PYFV4hoi44HD+aHQ==}
+
+  '@chevrotain/types@11.1.2':
+    resolution: {integrity: sha512-U+HFai5+zmJCkK86QsaJtoITlboZHBqrVketcO2ROv865xfCMSFpELQoz1GkX5GzME8pTa+3kbKrZHQtI0gdbw==}
 
   '@chevrotain/utils@11.0.3':
     resolution: {integrity: sha512-YslZMgtJUyuMbZ+aKvfF3x1f5liK4mWNxghFRv7jqRR9C3R3fAOGTTKvxXDa2Y1s9zSbcpuO0cAxDYsc9SrXoQ==}
@@ -3065,6 +3071,9 @@ packages:
   '@iconify/utils@3.0.1':
     resolution: {integrity: sha512-A78CUEnFGX8I/WlILxJCuIJXloL0j/OJ9PSchPAfCargEIKmUBWvvEMmKWB5oONwiUqlNt+5eRufdkLxeHIWYw==}
 
+  '@iconify/utils@3.1.4':
+    resolution: {integrity: sha512-b1S7B1k9ohZ+iNTi2ATxbRYG9fTrJmUT0rc46bvVnNxqNRGW7dyo/vRREwyniI5IRN2RSJHDcm+s3BjWrSAjHw==}
+
   '@iconify/vue@4.1.1':
     resolution: {integrity: sha512-RL85Bm/DAe8y6rT6pux7D2FJSiUEM/TPfyK7GrbAOfTSwrhvwJW+S5yijdGcmtXouA8MtuH9C7l4hiSE4mLMjg==}
     peerDependencies:
@@ -3201,6 +3210,9 @@ packages:
 
   '@mermaid-js/parser@0.6.2':
     resolution: {integrity: sha512-+PO02uGF6L6Cs0Bw8RpGhikVvMWEysfAyl27qTlroUB8jSWr1lL0Sf6zi78ZxlSnmgSY2AMMKVgghnN9jTtwkQ==}
+
+  '@mermaid-js/parser@1.2.0':
+    resolution: {integrity: sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==}
 
   '@microsoft/api-extractor-model@7.32.2':
     resolution: {integrity: sha512-Ussc25rAalc+4JJs9HNQE7TuO9y6jpYQX9nWD1DhqUzYPBr3Lr7O9intf+ZY8kD5HnIqeIRJX7ccCT0QyBy2Ww==}
@@ -4449,6 +4461,9 @@ packages:
     peerDependencies:
       vite: ^2.9.0 || ^3.0.0-0 || ^4.0.0 || ^5.0.0-0 || ^6.0.0-0 || ^7.0.0-0
 
+  '@upsetjs/venn.js@2.0.0':
+    resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
+
   '@vitejs/plugin-react@4.3.4':
     resolution: {integrity: sha512-SCCPBJtYLdE8PX/7ZQAs1QAZ8Jqwih+0VBLum1EGqmCCQal+MIUqLCzj3ZUy8ufbC0cAM4LRlSTm7IQJwWT4ug==}
     engines: {node: ^14.18.0 || >=16.0.0}
@@ -5457,6 +5472,10 @@ packages:
     resolution: {integrity: sha512-iJc4TwyANnOGR1OmWhsS9ayRS3s+XQ185FmuHObThD+5AeJCakAAbWv8KimMTt08xCCLNgneQwFp+JRJOr9qGQ==}
     engines: {node: '>=0.10'}
 
+  cytoscape@3.34.0:
+    resolution: {integrity: sha512-62rNSrioXw93uliKFBwjukeQyeWwH2PqDrTac31r2P6464u3AUvTk0xS4LVvT251g7IgkFunrI48ZEZGjywSOg==}
+    engines: {node: '>=0.10'}
+
   d3-array@2.12.1:
     resolution: {integrity: sha512-B0ErZK/66mHtEsR1TkPEEkwdy+WDesimkM5gpZr5Dsg54BiTA5RXtYW5qTLIAcekaS9xfZrzBLF/OAkB3Qn1YQ==}
 
@@ -5599,6 +5618,9 @@ packages:
   dagre-d3-es@7.0.11:
     resolution: {integrity: sha512-tvlJLyQf834SylNKax8Wkzco/1ias1OPw8DcUMDE7oUIoSEW25riQVuiu/0OWEFqT0cxHT3Pa9/D82Jr47IONw==}
 
+  dagre-d3-es@7.0.14:
+    resolution: {integrity: sha512-P4rFMVq9ESWqmOgK+dlXvOtLwYg0i7u0HBGJER0LZDJT2VHIPAMZ/riPxqJceWMStH5+E61QxFra9kIS3AqdMg==}
+
   dargs@8.1.0:
     resolution: {integrity: sha512-wAV9QHOsNbwnWdNW2FYvE1P56wtgSbM+3SZcdGiWQILwVjACCXDCI3Ai8QlCjMDB8YK5zySiXZYBiwGmNY3lnw==}
     engines: {node: '>=12'}
@@ -5621,6 +5643,9 @@ packages:
 
   dayjs@1.11.13:
     resolution: {integrity: sha512-oaMBel6gjolK862uaPQOVTA7q3TZhuSvuMQAAglQDOWYO9A91IrAOUJEyKVlqJlHE0vq5p5UXxzdPfMH/x6xNg==}
+
+  dayjs@1.11.21:
+    resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
 
   de-indent@1.0.2:
     resolution: {integrity: sha512-e/1zu3xH5MQryN2zdVaF0OrdNLUbvWxzMbi+iNA6Bky7l1RoP8a2fIbRocyHclXt/arDrrR6lL3TqFD9pMQTsg==}
@@ -5797,6 +5822,9 @@ packages:
 
   dompurify@3.2.6:
     resolution: {integrity: sha512-/2GogDQlohXPZe6D6NOgQvXLPSYBqIWMnZ8zzOhn09REE4eyAzb+Hed3jhoM9OkuaJ8P6ZGTTVWQKAi8ieIzfQ==}
+
+  dompurify@3.4.11:
+    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -6718,6 +6746,9 @@ packages:
   import-meta-resolve@4.1.0:
     resolution: {integrity: sha512-I6fiaX09Xivtk+THaMfAwnA3MVA5Big1WHF1Dfx9hFuvNIWpXnorlkzhcQf6ehrqQiiZECRt1poOAkPmer3ruw==}
 
+  import-meta-resolve@4.2.0:
+    resolution: {integrity: sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg==}
+
   imurmurhash@0.1.4:
     resolution: {integrity: sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==}
     engines: {node: '>=0.8.19'}
@@ -7223,6 +7254,11 @@ packages:
     engines: {node: '>= 20'}
     hasBin: true
 
+  marked@16.4.2:
+    resolution: {integrity: sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==}
+    engines: {node: '>= 20'}
+    hasBin: true
+
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
@@ -7311,6 +7347,9 @@ packages:
 
   mermaid@11.10.1:
     resolution: {integrity: sha512-0PdeADVWURz7VMAX0+MiMcgfxFKY4aweSGsjgFihe3XlMKNqmai/cugMrqTd3WNHM93V+K+AZL6Wu6tB5HmxRw==}
+
+  mermaid@11.16.0:
+    resolution: {integrity: sha512-Zvm3kbstgdpvIJPPItlL7fppIZ3kibvc1oZIGxdvk9t6UFz6flv+Jw7FtRGKwfcI8OckmH04LqG6LlS6X4B1pA==}
 
   methods@1.1.2:
     resolution: {integrity: sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w==}
@@ -9819,7 +9858,7 @@ snapshots:
 
   '@aashutoshrathi/word-wrap@1.2.6': {}
 
-  '@airalogy/aimd-core@2.6.0':
+  '@airalogy/aimd-core@2.12.0':
     dependencies:
       '@types/hast': 3.0.4
       '@types/mdast': 4.0.4
@@ -9838,10 +9877,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@airalogy/aimd-editor@1.9.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.6.0
-      '@airalogy/aimd-renderer': 2.5.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.12.0
+      '@airalogy/aimd-renderer': 2.9.1(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9860,10 +9899,10 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-editor@1.9.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.6.0
-      '@airalogy/aimd-renderer': 2.5.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.12.0
+      '@airalogy/aimd-renderer': 2.9.1(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9882,13 +9921,14 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-recorder@1.16.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-recorder@1.21.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.6.0
-      '@airalogy/aimd-editor': 1.9.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
-      '@airalogy/aimd-renderer': 2.5.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.12.0
+      '@airalogy/aimd-editor': 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.9.1(vue@3.5.17(typescript@5.8.3))
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@vueuse/core': 13.5.0(vue@3.5.17(typescript@5.8.3))
+      mermaid: 11.16.0
       monaco-editor: 0.52.2
       naive-ui: 2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3))
       react: 19.2.6
@@ -9906,13 +9946,14 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-recorder@1.16.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-recorder@1.21.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.6.0
-      '@airalogy/aimd-editor': 1.9.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
-      '@airalogy/aimd-renderer': 2.5.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.12.0
+      '@airalogy/aimd-editor': 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.9.1(vue@3.5.17(typescript@5.8.3))
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@vueuse/core': 13.5.0(vue@3.5.17(typescript@5.8.3))
+      mermaid: 11.16.0
       monaco-editor: 0.52.2
       naive-ui: 2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3))
       react: 19.2.6
@@ -9930,9 +9971,9 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-renderer@2.5.0(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-renderer@2.9.1(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.6.0
+      '@airalogy/aimd-core': 2.12.0
       '@types/hast': 3.0.4
       hast-util-to-html: 9.0.5
       katex: 0.16.45
@@ -9950,9 +9991,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@airalogy/aimd-renderer@2.5.0(vue@3.5.17(typescript@5.9.2))':
+  '@airalogy/aimd-renderer@2.9.1(vue@3.5.17(typescript@5.9.2))':
     dependencies:
-      '@airalogy/aimd-core': 2.6.0
+      '@airalogy/aimd-core': 2.12.0
       '@types/hast': 3.0.4
       hast-util-to-html: 9.0.5
       katex: 0.16.45
@@ -10875,6 +10916,8 @@ snapshots:
 
   '@braintree/sanitize-url@7.1.1': {}
 
+  '@braintree/sanitize-url@7.1.2': {}
+
   '@chevrotain/cst-dts-gen@11.0.3':
     dependencies:
       '@chevrotain/gast': 11.0.3
@@ -10889,6 +10932,8 @@ snapshots:
   '@chevrotain/regexp-to-ast@11.0.3': {}
 
   '@chevrotain/types@11.0.3': {}
+
+  '@chevrotain/types@11.1.2': {}
 
   '@chevrotain/utils@11.0.3': {}
 
@@ -11940,6 +11985,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@iconify/utils@3.1.4':
+    dependencies:
+      '@antfu/install-pkg': 1.1.0
+      '@iconify/types': 2.0.0
+      import-meta-resolve: 4.2.0
+
   '@iconify/vue@4.1.1(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@iconify/types': 2.0.0
@@ -12125,6 +12176,10 @@ snapshots:
   '@mermaid-js/parser@0.6.2':
     dependencies:
       langium: 3.3.1
+
+  '@mermaid-js/parser@1.2.0':
+    dependencies:
+      '@chevrotain/types': 11.1.2
 
   '@microsoft/api-extractor-model@7.32.2(@types/node@24.3.0)':
     dependencies:
@@ -13884,6 +13939,11 @@ snapshots:
       unplugin-utils: 0.2.4
       vite: 7.1.3(@types/node@24.3.0)(jiti@2.5.1)(sass@1.90.0)(terser@5.43.1)(tsx@4.19.1)(yaml@2.5.0)
 
+  '@upsetjs/venn.js@2.0.0':
+    optionalDependencies:
+      d3-selection: 3.0.0
+      d3-transition: 3.0.1(d3-selection@3.0.0)
+
   '@vitejs/plugin-react@4.3.4(vite@7.1.3(@types/node@24.3.0)(jiti@2.5.1)(sass@1.90.0)(terser@5.43.1)(tsx@4.19.1)(yaml@2.5.0))':
     dependencies:
       '@babel/core': 7.28.0
@@ -15140,12 +15200,24 @@ snapshots:
       cose-base: 1.0.3
       cytoscape: 3.33.1
 
+  cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.0):
+    dependencies:
+      cose-base: 1.0.3
+      cytoscape: 3.34.0
+
   cytoscape-fcose@2.2.0(cytoscape@3.33.1):
     dependencies:
       cose-base: 2.2.0
       cytoscape: 3.33.1
 
+  cytoscape-fcose@2.2.0(cytoscape@3.34.0):
+    dependencies:
+      cose-base: 2.2.0
+      cytoscape: 3.34.0
+
   cytoscape@3.33.1: {}
+
+  cytoscape@3.34.0: {}
 
   d3-array@2.12.1:
     dependencies:
@@ -15319,6 +15391,11 @@ snapshots:
       d3: 7.9.0
       lodash-es: 4.17.21
 
+  dagre-d3-es@7.0.14:
+    dependencies:
+      d3: 7.9.0
+      lodash-es: 4.17.21
+
   dargs@8.1.0: {}
 
   dashdash@1.14.1:
@@ -15334,6 +15411,8 @@ snapshots:
   date-fns@3.6.0: {}
 
   dayjs@1.11.13: {}
+
+  dayjs@1.11.21: {}
 
   de-indent@1.0.2: {}
 
@@ -15474,6 +15553,10 @@ snapshots:
       domelementtype: 2.3.0
 
   dompurify@3.2.6:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
+
+  dompurify@3.4.11:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -16666,6 +16749,8 @@ snapshots:
 
   import-meta-resolve@4.1.0: {}
 
+  import-meta-resolve@4.2.0: {}
+
   imurmurhash@0.1.4: {}
 
   indent-string@4.0.0: {}
@@ -17131,6 +17216,8 @@ snapshots:
 
   marked@16.2.1: {}
 
+  marked@16.4.2: {}
+
   math-intrinsics@1.1.0: {}
 
   md5.js@1.3.5:
@@ -17325,6 +17412,30 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mermaid@11.16.0:
+    dependencies:
+      '@braintree/sanitize-url': 7.1.2
+      '@iconify/utils': 3.1.4
+      '@mermaid-js/parser': 1.2.0
+      '@types/d3': 7.4.3
+      '@upsetjs/venn.js': 2.0.0
+      cytoscape: 3.34.0
+      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.34.0)
+      cytoscape-fcose: 2.2.0(cytoscape@3.34.0)
+      d3: 7.9.0
+      d3-sankey: 0.12.3
+      dagre-d3-es: 7.0.14
+      dayjs: 1.11.21
+      dompurify: 3.4.11
+      es-toolkit: 1.46.1
+      katex: 0.16.45
+      khroma: 2.1.0
+      marked: 16.4.2
+      roughjs: 4.6.6
+      stylis: 4.3.6
+      ts-dedent: 2.2.0
+      uuid: 11.1.0
+
   methods@1.1.2: {}
 
   micromark-core-commonmark@2.0.1:
@@ -17408,7 +17519,7 @@ snapshots:
     dependencies:
       '@types/katex': 0.16.7
       devlop: 1.1.0
-      katex: 0.16.22
+      katex: 0.16.45
       micromark-factory-space: 2.0.0
       micromark-util-character: 2.1.0
       micromark-util-symbol: 2.0.0

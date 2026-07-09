@@ -500,13 +500,59 @@ export async function postNewResearchRecord(
 export interface ImportProtocolRecordsResponse {
   imported_count: number
   record_ids: string[]
+  files?: Array<{
+    id: string
+    airalogy_file_id: string
+    filename: string
+    record_id: string
+    record_version: number
+  }>
+}
+
+export interface ImportAiraArchiveProtocolResult {
+  archive_root: string
+  id: string
+  uid: string
+  name: string
+  project_id: string
+  project_uid: string
+  lab_id: string
+  lab_uid: string
+  protocol_version_id: string
+  version: string
+  created_protocol: boolean
+  created_version: boolean
+  reused_version: boolean
+}
+
+export interface ImportAiraArchiveResponse {
+  kind: "protocol" | "protocols" | "records"
+  protocols: ImportAiraArchiveProtocolResult[]
+  records: Array<{
+    id: string
+    version: number
+    protocol_id: string
+    protocol_uid: string
+    protocol_version: string
+    number: number
+  }>
+  files: Array<{
+    id: string
+    airalogy_file_id: string
+    filename: string
+    record_id: string
+    record_version: number
+  }>
+  imported_protocol_count: number
+  imported_record_count: number
+  imported_file_count: number
 }
 
 export async function postImportProtocolRecords(
   protocolId: string,
   payload: {
     file: File
-    inputFormat?: "auto" | "csv" | "tsv" | "json" | "jsonl"
+    inputFormat?: "auto" | "csv" | "tsv" | "json" | "jsonl" | "aira"
   },
 ) {
   if (!protocolId) {
@@ -522,6 +568,39 @@ export async function postImportProtocolRecords(
 
   const { data, error } = await request<ImportProtocolRecordsResponse>({
     url: `/protocols/${protocolId}/records/import`,
+    method: "POST",
+    data: formData,
+    timeout: 60 * 1000 * 5,
+    metadata: {
+      showError: false,
+      errorClosable: false,
+    },
+  })
+
+  if (error) {
+    throw error
+  }
+
+  if (!data) {
+    throw new Error("No import result returned")
+  }
+
+  return data
+}
+
+export async function postImportAiraArchive(projectId: string, payload: { file: File }) {
+  if (!projectId) {
+    throw new Error("projectId is required")
+  }
+  if (!payload.file) {
+    throw new Error("file is required")
+  }
+
+  const formData = new FormData()
+  formData.append("file", payload.file)
+
+  const { data, error } = await request<ImportAiraArchiveResponse>({
+    url: `/projects/${projectId}/aira/import`,
     method: "POST",
     data: formData,
     timeout: 60 * 1000 * 5,

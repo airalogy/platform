@@ -901,6 +901,10 @@
             "title": "上传协议 ZIP",
             "description": "通过上传 ZIP 文件创建协议"
           },
+          "uploadAira": {
+            "title": "上传 .aira 归档",
+            "description": "从 Airalogy 归档导入协议、记录和文件"
+          },
           "scratch": {
             "title": "从头创建协议",
             "description": "手动添加每个协议文件来创建"
@@ -937,6 +941,20 @@
           "descApplied": "协议已应用到项目",
           "descUploaded": "协议已上传到项目"
         }
+      },
+      "airaImport": {
+        "trigger": "导入 .aira",
+        "title": "导入 .aira 归档",
+        "projectPlaceholder": "选择目标项目",
+        "dropText": "拖放 .aira 文件，或点击选择",
+        "supportHint": "从 Airalogy 归档导入协议、记录和文件载荷。",
+        "submit": "上传并导入",
+        "airaOnly": "请选择 .aira 文件",
+        "projectRequired": "请先选择目标项目",
+        "fileRequired": "请先选择 .aira 文件",
+        "success": "已导入 {protocols} 个协议、{records} 条记录和 {files} 个文件",
+        "errorTitle": "导入失败",
+        "unknownError": "导入失败，请检查归档后重试。"
       },
       "workflow": {
         "ended": "流程已结束",
@@ -1128,15 +1146,16 @@
         "clearAll": "清空筛选",
         "bulkImport": "批量上传",
         "bulkImportTitle": "批量上传记录",
-        "bulkImportDropText": "拖放 CSV 文件，或点击选择",
-        "bulkImportSupportHint": "CSV 列名会按当前 Protocol 字段解析，支持变量名、var.<field>、step.<id>.checked 和 check.<id>.annotation。",
+        "bulkImportDropText": "拖放 Records 文件，或点击选择",
+        "bulkImportSupportHint": "支持 CSV、TSV、JSON、JSONL 和 records .aira 归档，文件会导入到当前 Protocol。",
         "bulkImportSubmit": "上传并导入",
-        "bulkImportNoFile": "请先选择 CSV 文件",
-        "bulkImportCsvOnly": "请选择 CSV 文件",
+        "bulkImportNoFile": "请先选择 Records 文件",
+        "bulkImportCsvOnly": "请选择 CSV、TSV、JSON、JSONL 或 .aira 文件",
+        "bulkImportSupportedOnly": "请选择 CSV、TSV、JSON、JSONL 或 .aira 文件",
         "bulkImportSuccess": "已导入 {count} 条记录",
         "bulkImportErrorTitle": "导入失败",
         "bulkImportRowError": "第 {row} 行{column}：{message}",
-        "bulkImportUnknownError": "导入失败，请检查 CSV 内容后重试。",
+        "bulkImportUnknownError": "导入失败，请检查文件内容后重试。",
         "deleteBlockedLatest": "存在更新的记录，请先删除最新记录。",
         "deleteBlockedExpired": "记录已超过 {days} 天，无法删除。",
         "deleteBlockedLoading": "正在获取最新记录信息，请稍后重试。",

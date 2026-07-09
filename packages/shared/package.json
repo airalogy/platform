@@ -35,8 +35,8 @@
     "nanoid": "catalog:"
   },
   "dependencies": {
-    "@airalogy/aimd-core": "^2.6.0",
-    "@airalogy/aimd-renderer": "^2.5.0",
+    "@airalogy/aimd-core": "^2.12.0",
+    "@airalogy/aimd-renderer": "^2.9.1",
     "@types/hast": "^3.0.4",
     "@types/mdast": "^4.0.4",
     "@types/unist": "^3.0.3",

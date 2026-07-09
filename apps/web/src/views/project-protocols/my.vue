@@ -9,7 +9,8 @@
       />
     </template>
     <template #empty>
-      <div class="absolute-center">
+      <div class="absolute-center flex items-center gap-2">
+        <import-aira-archive-modal @imported="handleImportArchive" />
         <add-protocol-modal @modal:new-protocol="handleCreateResearch" />
       </div>
     </template>
@@ -18,6 +19,7 @@
 
 <script setup lang="ts">
 import type { FetchData, FetchPayload } from "@/components/common/loading-list-wrapper.vue"
+import type { ImportAiraArchiveResponse } from "@/service/api/project-protocols"
 import type { ProtocolModels } from "@airalogy/shared/types"
 import LoadingListWrapper from "@/components/common/loading-list-wrapper.vue"
 import { useRouterPush } from "@/composables/useRouterPush"
@@ -27,6 +29,7 @@ import { fetchUserProtocols } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import ProjectProtocolList from "@/views/project/modules/project-protocol-list.vue"
 import AddProtocolModal from "./modules/add-protocol-modal.vue"
+import ImportAiraArchiveModal from "./modules/import-aira-archive-modal.vue"
 
 defineOptions({
   name: "ProtocolsMyDashboard",
@@ -143,6 +146,22 @@ async function handleCreateResearch(item: {
 
   await routerPushByKey("protocol-info", {
     params: { labUid, projectUid, protocolUid: uid },
+  })
+}
+
+async function handleImportArchive(result: ImportAiraArchiveResponse) {
+  await wrapperRef.value?.reload()
+  const importedProtocol = result.protocols[0]
+  if (!importedProtocol) {
+    return
+  }
+
+  await routerPushByKey("protocol-info", {
+    params: {
+      labUid: importedProtocol.lab_uid,
+      projectUid: importedProtocol.project_uid,
+      protocolUid: importedProtocol.uid,
+    },
   })
 }
 </script>

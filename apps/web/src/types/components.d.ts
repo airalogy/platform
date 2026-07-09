@@ -195,6 +195,7 @@ declare module 'vue' {
     IconTablerEye: typeof import('~icons/tabler/eye')['default']
     IconTablerEyeOff: typeof import('~icons/tabler/eye-off')['default']
     IconTablerFile: typeof import('~icons/tabler/file')['default']
+    IconTablerFileImport: typeof import('~icons/tabler/file-import')['default']
     IconTablerFilePlus: typeof import('~icons/tabler/file-plus')['default']
     IconTablerFolderPlus: typeof import('~icons/tabler/folder-plus')['default']
     IconTablerGitBranch: typeof import('~icons/tabler/git-branch')['default']

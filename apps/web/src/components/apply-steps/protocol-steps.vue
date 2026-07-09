@@ -23,7 +23,11 @@
     </n-step>
   </n-steps>
 
-  <select-method v-if="currentStep === 1" :protocol-info="props.protocolInfo" />
+  <select-method
+    v-if="currentStep === 1"
+    :protocol-info="props.protocolInfo"
+    :project-info="props.projectInfo"
+  />
   <protocol-setup v-else-if="currentStep === 2" :protocol-info="props.protocolInfo" :project-info="props.projectInfo" mode="reuse" />
   <step-success v-else />
 

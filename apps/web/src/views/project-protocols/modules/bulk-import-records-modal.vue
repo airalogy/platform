@@ -18,7 +18,7 @@
       :file-list="fileList"
       :default-upload="false"
       :max="1"
-      accept=".csv"
+      accept=".csv,.tsv,.json,.jsonl,.aira"
       @before-upload="handleBeforeUpload"
       @update:file-list="handleFileListUpdate"
     >
@@ -105,8 +105,8 @@ function resetState() {
 
 function handleBeforeUpload(options: { file: UploadFileInfo }) {
   const filename = options.file.name || ""
-  if (!filename.toLowerCase().endsWith(".csv")) {
-    message.error(t("page.protocol.records.bulkImportCsvOnly"))
+  if (!getInputFormat(filename)) {
+    message.error(t("page.protocol.records.bulkImportSupportedOnly"))
     return false
   }
 
@@ -177,6 +177,14 @@ function formatImportError(error: ImportErrorItem) {
   })
 }
 
+function getInputFormat(filename: string) {
+  const extension = filename.toLowerCase().split(".").pop()
+  if (extension === "csv" || extension === "tsv" || extension === "json" || extension === "jsonl" || extension === "aira") {
+    return extension
+  }
+  return null
+}
+
 async function handleImport() {
   const protocolId = props.protocolId
   const file = getSelectedFile()
@@ -191,7 +199,11 @@ async function handleImport() {
   errorMessage.value = ""
 
   try {
-    const result = await postImportProtocolRecords(String(protocolId), { file })
+    const inputFormat = getInputFormat(file.name || "")
+    const result = await postImportProtocolRecords(String(protocolId), {
+      file,
+      inputFormat: inputFormat || "auto",
+    })
     message.success(t("page.protocol.records.bulkImportSuccess", { count: result.imported_count }))
     emit("imported", result)
     showModal.value = false

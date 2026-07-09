@@ -6,9 +6,10 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, Literal
 
+from airalogy.archive import ArchiveError, unpack_archive, validate_archive
 from airalogy.record.hash import get_data_sha1
 from dotenv import dotenv_values
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import cast, distinct, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import JSONB
@@ -23,6 +24,7 @@ from app.models.protocol import Protocol
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
 from app.models.user import User
+from app.routers.aira_imports import AiraArchiveImporter
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
 
@@ -344,8 +346,9 @@ async def import_protocol_records(
     protocol_id: UUID,
     db_session: DBSession,
     current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    input_format: Literal["auto", "csv", "tsv", "json", "jsonl"] = Form("auto"),
+    input_format: Literal["auto", "csv", "tsv", "json", "jsonl", "aira"] = Form("auto"),
     allow_extra_var_fields: bool = Form(False),
     require_complete_quiz: bool = Form(False),
     include_template_defaults: bool = Form(True),
@@ -373,6 +376,56 @@ async def import_protocol_records(
     if protocol_version is None:
         raise HTTPException(status_code=400, detail="Protocol package not found")
 
+    suffix = Path(file.filename or "").suffix.lower()
+    if input_format == "aira" or suffix == ".aira":
+        lab = await Lab.find(db_session, id=project.lab_id)
+        with tempfile.TemporaryDirectory(prefix="aira_record_import_") as tmp_dir_name:
+            tmp_dir = Path(tmp_dir_name)
+            archive_path = tmp_dir / "upload.aira"
+            try:
+                with archive_path.open("wb") as target:
+                    while chunk := await file.read(1024 * 1024):
+                        target.write(chunk)
+            finally:
+                await file.close()
+
+            is_valid, issues = validate_archive(archive_path)
+            if not is_valid:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"message": "Invalid .aira archive", "errors": issues},
+                )
+
+            try:
+                unpack_dir, manifest = unpack_archive(
+                    archive_path,
+                    tmp_dir / "unpacked",
+                    force=True,
+                )
+            except ArchiveError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+            importer = AiraArchiveImporter(
+                db_session=db_session,
+                project=project,
+                lab=lab,
+                user=current_user,
+                background_tasks=background_tasks,
+            )
+            result = await importer.import_record_archive_to_protocol(
+                unpack_dir=unpack_dir,
+                manifest=manifest,
+                protocol=protocol,
+                protocol_version=protocol_version,
+            )
+
+        await db_session.commit()
+        return {
+            "imported_count": result["imported_record_count"],
+            "record_ids": [record["id"] for record in result["records"]],
+            "files": result["files"],
+        }
+
     await prepare_protocol_package(protocol_version)
 
     package_dir = Path(config.PROTOCOL_DIR) / protocol_version.package_name
@@ -390,7 +443,6 @@ async def import_protocol_records(
         }
     )
 
-    suffix = Path(file.filename or "").suffix.lower()
     tmp_path: str | None = None
     try:
         with tempfile.NamedTemporaryFile(

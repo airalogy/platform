@@ -15,6 +15,7 @@ from app.libs.protocol_agent import close_protocol_engine_pool
 
 from .airalogy_api import router as airalogy_router
 from .airalogy_files import router as airalogy_files_router
+from .aira_imports import router as aira_imports_router
 from .answers import router as answers_router
 from .attachments import router as attachments_router
 from .chats import router as chats_router
@@ -171,6 +172,7 @@ app.include_router(protocol_versions_router)
 app.include_router(records_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)
+app.include_router(aira_imports_router)
 app.include_router(questions_router)
 app.include_router(answers_router)
 app.include_router(search_router)
