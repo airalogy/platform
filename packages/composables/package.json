@@ -15,7 +15,7 @@
     "vue": "catalog:"
   },
   "dependencies": {
-    "@airalogy/aimd-core": "^2.12.0",
+    "@airalogy/aimd-core": "^2.13.0",
     "@airalogy/aimd-editor": "^1.10.0",
     "@airalogy/shared": "workspace:*",
     "@floating-ui/vue": "catalog:",

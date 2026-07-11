@@ -26,9 +26,9 @@
     "vue-tsc": "catalog:"
   },
   "dependencies": {
-    "@airalogy/aimd-core": "^2.12.0",
+    "@airalogy/aimd-core": "^2.13.0",
     "@airalogy/aimd-recorder": "^1.21.0",
-    "@airalogy/aimd-renderer": "^2.9.1",
+    "@airalogy/aimd-renderer": "^2.10.0",
     "@airalogy/composables": "workspace:*",
     "@airalogy/shared": "workspace:*",
     "@tiptap/core": "catalog:",

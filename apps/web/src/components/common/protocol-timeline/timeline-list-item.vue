@@ -157,11 +157,25 @@
 
         <n-spin v-if="props.mode === 'preview'" :show="!(protocolInfo && parsedFieldStructure && mounted)" class="b-1 rounded-xl" content-class="p-5">
           <!-- <edit-protocol v-if="isEdit" :protocol="protocol" :protocol-id="props.item?.id" /> -->
-          <markdown-preview
-            ref="markdownPreviewRef" mode="edit" :readonly="true" :text="protocolInfo?.aimd" :record="parsedFieldStructure"
-            :value="fieldModel" class="p-0" :is-editor-bubble-active="false"
-            :aimd-renderers="aimdRenderers" :resolve-file="resolveProtocolFile" @render:result="setMounted"
-          />
+          <n-form
+            v-if="parsedFieldStructure"
+            class="platform-aimd-form-preview"
+            :rules="parsedFieldStructure.rules"
+            :model="fieldModel"
+          >
+            <aimd-markdown-preview
+              :content="protocolInfo?.aimd"
+              :value="fieldModel"
+              :render-options="aimdRenderOptions"
+              :mermaid-component="MermaidBlock"
+              :resolve-url="resolveProtocolFile"
+              body-class="markdown-body"
+              class="p-0"
+              mode="edit"
+              readonly
+              @render:result="setMounted"
+            />
+          </n-form>
           <template v-if="!mounted">
             <n-skeleton v-for="item in 3" :key="item" class="mb-1" :style="{ width: `${Math.min(Math.random(), 0.3) * 100 + 30}%` }" />
           </template>
@@ -192,19 +206,20 @@ import type { HTMLAttributes } from "vue"
 import type { useAIMDInject } from "../../custom/aimd/composables/useAIMDHelpers"
 import FieldInfoDisplay from "@/components/common/field-info-display.vue"
 import TimelineFieldItem from "@/components/common/protocol-timeline/timeline-field-item.vue"
+import { createPlatformAimdFormRenderers, getPropsFromNode } from "@/components/custom/aimd/composables/createPlatformAimdFormRenderers"
 import ProtocolInfoCard from "@/components/protocol/protocol-info-card.vue"
 import RecordInfoCard from "@/components/protocol/record-info-card.vue"
 import { useAuthStore } from "@/store/modules/auth"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import { useOrProvideProtocolInfoStore } from "@/views/project-protocols/hooks/useProtocolInfoStore"
 import { getFieldStructure } from "@/views/project-protocols/modules/protocol/helpers/parseFieldStructure"
-import markdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 import TooltipButton from "@airalogy/components/tooltip-button.vue"
 import { useBoolean, useClosableMessage } from "@airalogy/composables"
 import { copyToClip } from "@airalogy/shared"
 import { $t } from "@airalogy/shared/locales"
 import { get as _get } from "lodash-es"
-import { getPropsFromNode, useAimdRenderers } from "../../custom/aimd/composables/useAimdRenderers"
 
 interface Props {
   item: ITimelineItem
@@ -347,7 +362,6 @@ watch([() => props.protocolId, () => props.item.protocolVersion], ([newVal, prot
   }
 }, { immediate: true })
 
-const markdownPreviewRef = ref<{ previewContainerRef: HTMLDivElement } | null>(null)
 const providerContext = ref<{ context: ReturnType<typeof useAIMDInject> }>()
 
 // Create AIMD renderers for unified system
@@ -357,7 +371,7 @@ const aimdRenderers = computed(() => {
     return {}
   }
 
-  return useAimdRenderers({
+  return createPlatformAimdFormRenderers({
     getTokenProps: (node) => {
       const variableList = toValue(context.variableList)
       if (!variableList) {
@@ -365,10 +379,9 @@ const aimdRenderers = computed(() => {
       }
       return getPropsFromNode(node, variableList)
     },
-    mode: "edit",
-    resolveFile: resolveProtocolFile,
   })
 })
+const aimdRenderOptions = computed(() => ({ aimdRenderers: aimdRenderers.value }))
 </script>
 
 <style scoped lang="sass">

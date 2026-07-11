@@ -133,7 +133,7 @@
         @fetch-records="handleFetchRecords"
         @record-deleted="handleRecordDeleted"
       />
-      <show-report-modal :record="currentRecordData" @update:show="handleUpdateShow" />
+      <show-report-modal :record="currentRecordData" :aimd="protocolInfo?.aimd" @update:show="handleUpdateShow" />
     </section>
   </split-layout>
 </template>

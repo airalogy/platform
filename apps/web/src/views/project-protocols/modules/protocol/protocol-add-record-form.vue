@@ -129,15 +129,30 @@
         :workflow-id="workflowId"
         :readonly="props.readonly"
       />
-      <markdown-preview
+      <n-form
         v-else-if="fieldRecordDefault"
-        ref="previewRef" :mode="previewMode" :text="templateRef" :record="previewFormRecord"
-        :value="previewValue" class="px-6" :is-editor-bubble-active="isEditorBubbleActive"
-        :aimd-renderers="previewAimdRenderers"
-        :readonly-record-data="readonlyRecordData"
-        :resolve-file="resolvePreviewFile"
-        @mounted:field="handleFieldMounted" @update:field="handleUpdateFields"
-      />
+        class="platform-aimd-form-preview"
+        :rules="previewFormRecord?.rules"
+        :model="previewValue"
+      >
+        <aimd-markdown-preview
+          ref="previewRef"
+          :content="templateRef"
+          :mode="previewMode"
+          :value="previewValue"
+          class="px-6"
+          :render-options="previewAimdRenderOptions"
+          :readonly-record-data="readonlyRecordData"
+          :mermaid-component="MermaidBlock"
+          :resolve-url="resolvePreviewFile"
+          body-class="markdown-body"
+          @render:result="handlePreviewRendered"
+        />
+        <protocol-bubble-menu
+          v-if="previewRef?.rootElement"
+          :container-ref="previewRef.rootElement"
+        />
+      </n-form>
     </template>
   </add-record-layout>
   <!-- <asset-aimd v-if="domMounted && props.protocol" :uuid="props.protocol.id" /> -->
@@ -152,7 +167,7 @@
 
 <script setup lang="ts">
 import type { IEmits as AIMDEmits, IAIMDWrapperProps } from "@/components/custom/aimd/types/aimd-types"
-import type { AimdTemplateEnv, IDynamicTableNode, IRecordData, IRecordDataKey, ScopeFieldKey } from "@airalogy/aimd-core/types"
+import type { AimdTemplateEnv, IRecordData, IRecordDataKey, ScopeFieldKey } from "@airalogy/aimd-core/types"
 import type { ContextItemWithId } from "@airalogy/components/chat/providers/types"
 import type { CurrentRecorderRecordFieldSummary } from "@airalogy/components/chat/providers/useChatProvider"
 
@@ -166,8 +181,8 @@ import type { TagColor } from "naive-ui/es/tag/src/common-props"
 import type { IFieldChangePayload } from "./types/types"
 import ChatComponent from "@/components/chat/index.vue"
 import AddRecordLayout from "@/components/custom/add-record-layout.vue"
+import { createPlatformAimdFormRenderers } from "@/components/custom/aimd/composables/createPlatformAimdFormRenderers"
 import { useAIMDProvide } from "@/components/custom/aimd/composables/useAIMDHelpers"
-import { useAimdRenderers } from "@/components/custom/aimd/composables/useAimdRenderers"
 import { useNaiveForm } from "@/composables"
 
 import { getCachedAttachment } from "@/service/api/attachments"
@@ -176,14 +191,16 @@ import { useAuthStore } from "@/store/modules/auth"
 import { themeSettings } from "@/theme/settings"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import { bubbleMenuEventKey, fieldEventKey } from "@/utils/template/eventKey"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
 import { useChatProvider } from "@airalogy/components/chat/providers/useChatProvider"
-import MarkdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
+import ProtocolBubbleMenu from "@airalogy/components/protocol-bubble-menu.vue"
 import { useClosableMessage } from "@airalogy/composables"
 import { $t } from "@airalogy/shared/locales"
 import { scopeKeyRecord } from "@airalogy/shared/utils/schema"
 import { useEventBus } from "@vueuse/core"
 import Big from "big.js"
-import { cloneDeepWith as _cloneDeepWith, get as _get, merge as _merge } from "lodash-es"
+import { cloneDeepWith as _cloneDeepWith, get as _get } from "lodash-es"
 import { nanoid } from "nanoid"
 import { useProtocolInfoStore } from "../../hooks/useProtocolInfoStore"
 import AssignerProgressModal from "./components/AssignerProgressModal.vue"
@@ -334,7 +351,14 @@ function handleCollapse(e: MouseEvent) {
   }
 }
 
-const previewRef = ref<{ env: AimdTemplateEnv, reload: () => void }>()
+interface AimdMarkdownPreviewExpose {
+  env: AimdTemplateEnv
+  reload: () => Promise<void>
+  rootElement: HTMLElement | null
+}
+
+const previewRef = ref<AimdMarkdownPreviewExpose>()
+const lastParsedAimd = ref("")
 const templateRef = ref<string>(props.protocol?.aimd || "")
 const { formRef, validate } = useNaiveForm()
 
@@ -413,6 +437,10 @@ const previewMode = computed(() => props.readonly ? "report" : "edit")
 const previewFormRecord = computed(() => props.readonly ? null : fieldRecordDefault.value)
 const previewValue = computed(() => props.readonly ? undefined : fieldModel as any)
 const readonlyRecordData = computed(() => {
+  if (!props.readonly) {
+    return undefined
+  }
+
   const data = (props.recordData || {}) as Record<string, unknown>
   return {
     var: data.var ?? data.research_variable ?? {},
@@ -773,7 +801,7 @@ const { setupFieldEventHandlers } = useFieldEventBus(
 
 const { handleTableRowUpdate } = useTableManagement()
 
-const { handleParseField, parseVarTable } = useFieldParser(
+const { handleParseField } = useFieldParser(
   fieldModel,
   props.protocol,
   scopeList,
@@ -812,18 +840,6 @@ const { handleParseField, parseVarTable } = useFieldParser(
 //   })
 // }
 
-function handleUpdateFields(payload: Record<string, any>) {
-  _merge(fieldModel, payload)
-  if (!payload.research_variable) {
-    return
-  }
-
-  const tables = Object.entries(payload.research_variable).filter(
-    ([_, v]) => (v as any)?.type === "table",
-  ) as [string, IDynamicTableNode][]
-
-  parseVarTable(tables, payload.research_variable)
-}
 // Initialize event handlers
 setupFieldEventHandlers()
 
@@ -1019,7 +1035,13 @@ const { variableList, fieldEventBus, fieldModel: componentFieldModel, restoreTab
 // Assign to the store so it can be used by functions defined earlier
 aimdFormItemRefStore = aimdFormItemRef
 
-async function handleFieldMounted() {
+async function handlePreviewRendered() {
+  const content = templateRef.value
+  if (domMounted.value && lastParsedAimd.value === content) {
+    return
+  }
+
+  lastParsedAimd.value = content
   setDomMounted()
 
   // Access template environment data directly
@@ -1057,13 +1079,11 @@ function getNodeProps(node: { id: string, scope: string, type?: string }) {
   return variableList.value.find(it => it.scope === fullScope && it.prop === id && (!type || it.type === type)) || null
 }
 
-// Create AIMD renderers (not reactive since it depends on variableList which is already reactive)
-const aimdRenderers = useAimdRenderers({
+const aimdRenderers = createPlatformAimdFormRenderers({
   getTokenProps: getNodeProps,
-  mode: "edit",
-  resolveFile: resolveProtocolFile,
 })
-const previewAimdRenderers = computed(() => props.readonly ? undefined : aimdRenderers)
+const aimdEditRenderOptions = { aimdRenderers }
+const previewAimdRenderOptions = computed(() => props.readonly ? undefined : aimdEditRenderOptions)
 
 const authStore = useAuthStore()
 
@@ -1261,7 +1281,7 @@ defineExpose({
       restoreFieldRecord(recordData)
     }
 
-    // Note: restoreTableVariableRecord will be called automatically in handleFieldMounted
+    // restoreTableVariableRecord runs after the shared preview reports a completed render.
     // after the markdown preview is mounted and fields are parsed
   },
   restoreTableVariableRecord: restoreTableVariableRecordFn,

@@ -24,20 +24,17 @@
         class="h-full w-full"
         :content-class="`h-full w-full${props.record ? '' : ' flex-center flex-col'}`"
       >
-        <template v-if="props.record">
-          <markdown-preview
-            text=""
-            :field="props.record.data"
+        <template v-if="props.record && props.aimd">
+          <aimd-markdown-preview
+            :content="props.aimd"
+            :mermaid-component="MermaidBlock"
+            :readonly-record-data="props.record"
+            :resolve-url="resolveRecordFile"
+            body-class="markdown-body"
             mode="report"
-            @mounted:field="handleMountedField"
           />
-          <!-- <report-teleport v-if="isFieldMounted" :data="props.record.data" /> -->
-          <!-- <asset-teleport
-            v-if="isFieldMounted && props.record?.metadata?.airalogy_protocol_id"
-            :uuid="props.record?.metadata?.airalogy_protocol_id"
-          /> -->
         </template>
-        <template v-else-if="!loading && isFieldMounted">
+        <template v-else-if="!loading">
           Error
         </template>
       </n-spin>
@@ -47,14 +44,15 @@
 
 <script setup lang="ts">
 import type { ProtocolModels } from "@airalogy/shared/types"
-import { useBoolean, useLoading, useShowModal } from "@/composables/"
-import { getStaticResearchAssets } from "@/service/api/project-protocols"
-import MarkdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
-import { useClosableMessage } from "@airalogy/composables"
+import { useLoading, useShowModal } from "@/composables/"
+import { resolveProtocolFile } from "@/utils/resolveProtocolFile"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 
 defineOptions({ name: "ShowReportModal" })
 
 const props = withDefaults(defineProps<IProps>(), {
+  aimd: "",
   record: null,
   title: "Record report",
 })
@@ -62,52 +60,31 @@ const props = withDefaults(defineProps<IProps>(), {
 const emits = defineEmits<IEmits>()
 
 interface IProps {
+  aimd?: string
   record: ProtocolModels.RecordInfo | null
   title?: string
 }
 
 const { loading } = useLoading()
-const message = useClosableMessage()
 
 interface IEmits {
   (e: "update:show", show: boolean): void
 }
-const { isShown, hideModal, showModal, setModalStatus } = useShowModal()
-const { bool: isFieldMounted, setTrue: setFieldMounted, setFalse: setFieldUnMounted } = useBoolean()
+const { isShown, showModal, setModalStatus } = useShowModal()
 
 const handleUpdateShow = (show: boolean) => setModalStatus(show)
 
 function handleTransitionEnd() {
-  setFieldUnMounted()
   emits("update:show", isShown.value)
 }
 
-function handleImages(imageList: HTMLImageElement[]) {
-  if (!props.record?.metadata?.airalogy_protocol_id) {
-    return
+async function resolveRecordFile(src: string) {
+  const protocolId = props.record?.metadata?.airalogy_protocol_id
+  if (!protocolId) {
+    return null
   }
 
-  imageList.forEach(async (image) => {
-    const src = image.getAttribute("src")
-    if (!src) {
-      return
-    }
-
-    try {
-      const filename = src.split("/").slice(1).join("/")
-      if (!filename) {
-        return
-      }
-
-      const res = await getStaticResearchAssets(props.record!.metadata.airalogy_protocol_id, filename)
-      if (res && res.data) {
-        image.src = res.data.url
-      }
-    }
-    catch (e) {
-      message.error((e as Error).message)
-    }
-  })
+  return resolveProtocolFile(src, protocolId)
 }
 
 watch(
@@ -118,53 +95,6 @@ watch(
     }
   },
 )
-
-// function handleMedia(sourceList: HTMLSourceElement[]) {
-//   if (!props.record || !props.record.metadata?.airalogy_protocol_id) {
-//     return
-//   }
-
-//   sourceList.forEach(async (source) => {
-//     const src = source.getAttribute("src")
-//     if (!src) {
-//       return
-//     }
-
-//     try {
-//       const res = await getStaticResearchAssets(props.record!.metadata.airalogy_protocol_id, src)
-//       if (res && res.data) {
-//         const parent = source.parentElement
-
-//         if (parent) {
-//           source.src = res.data.url
-//           // eslint-disable-next-line no-self-assign
-//           parent.outerHTML = parent.outerHTML
-//         }
-//       }
-//     }
-//     catch (e) {
-//       message.error((e as Error).message)
-//     }
-//   })
-// }
-
-function handleMountedField() {
-  setFieldMounted()
-
-  // const images = Array.from(document.querySelectorAll<HTMLImageElement>(".markdown-body img") || [])
-
-  // if (images.length > 0) {
-  //   void handleImages(images)
-  // }
-
-  // const sourceList = Array.from(
-  //   document.querySelectorAll<HTMLSourceElement>(".markdown-body source") || [],
-  // )
-
-  // if (sourceList.length > 0) {
-  //   void handleMedia(sourceList)
-  // }
-}
 </script>
 
 <style scoped></style>

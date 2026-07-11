@@ -7,7 +7,7 @@
   >
     <template #editor>
       <div class="relative size-full">
-        <AimdEditor
+        <aimd-editor
           v-show="showAimdEditor"
           v-model="liveProtocolContent"
           :readonly="isReadOnly"
@@ -50,16 +50,45 @@
     </template>
     <template #raw>
       <n-spin :show="false" class="size-full" content-class="size-full !p-0">
-        <markdown-preview ref="rawRef" :text="liveProtocolContent" mode="preview" immediate :aimd-renderers="aimdRenderersPreview" />
+        <div class="relative">
+          <aimd-markdown-preview
+            ref="rawRef"
+            :content="liveProtocolContent"
+            :mermaid-component="MermaidBlock"
+            :resolve-url="resolveProtocolFile"
+            body-class="markdown-body"
+            mode="preview"
+          />
+          <protocol-bubble-menu
+            v-if="rawRef?.rootElement"
+            :container-ref="rawRef.rootElement"
+          />
+        </div>
       </n-spin>
     </template>
     <template #preview>
       <n-spin v-if="fieldRecordDefault" :show="false" class="size-full" content-class="size-full !p-0">
-        <markdown-preview
-          ref="previewRef" mode="edit" :text="liveProtocolContent" :record="fieldRecordDefault"
-          :value="previewFieldModel" immediate
-          :aimd-renderers="aimdRenderersEdit" :resolve-file="resolveProtocolFile" @mounted:field="handleFieldMounted" @update:field="handleUpdateFields"
-        />
+        <n-form
+          class="platform-aimd-form-preview"
+          :rules="fieldRecordDefault.rules"
+          :model="previewFieldModel"
+        >
+          <aimd-markdown-preview
+            ref="previewRef"
+            :content="liveProtocolContent"
+            :value="previewFieldModel"
+            :render-options="aimdEditRenderOptions"
+            :mermaid-component="MermaidBlock"
+            :resolve-url="resolveProtocolFile"
+            body-class="markdown-body"
+            mode="edit"
+            @render:result="handleFieldRendered"
+          />
+          <protocol-bubble-menu
+            v-if="previewRef?.rootElement"
+            :container-ref="previewRef.rootElement"
+          />
+        </n-form>
       </n-spin>
     </template>
   </editor-layout>
@@ -103,7 +132,7 @@
 import type { IEmits as AIMDEmits, IAIMDWrapperProps } from "@/components/custom/aimd/types/aimd-types"
 import type { BreadcrumbSection } from "@/components/Layout/protocol-title-section.vue"
 import type { ProtocolData } from "@/constants/protocol"
-import type { AimdTemplateEnv, BaseNode, IDynamicTableNode, RenderMode } from "@airalogy/aimd-core/types"
+import type { AimdTemplateEnv, BaseNode, RenderMode } from "@airalogy/aimd-core/types"
 import type { ExposeState } from "@airalogy/components/monaco-editor/layout.vue"
 import type { DiffModelInfo, ModelInfo } from "@airalogy/components/monaco-editor/store/editorStore"
 import type { ISideMenuItem } from "@airalogy/components/src/monaco-editor/utils/sideMenus"
@@ -113,6 +142,7 @@ import type { FormInst } from "naive-ui"
 import type { FormValidate } from "naive-ui/es/form/src/interface"
 import { useProvideApplyProtocol } from "@/components/apply-steps/composables/useApplyProtocolState"
 import ProtocolSetup from "@/components/apply-steps/protocol-setup.vue"
+import { createPlatformAimdFormRenderers } from "@/components/custom/aimd/composables/createPlatformAimdFormRenderers"
 import ProtocolTitleSection from "@/components/Layout/protocol-title-section.vue"
 import ProtocolInfoCard from "@/components/protocol/protocol-info-card.vue"
 import { useBoolean, useClosableMessage, useLoading, useNaiveForm, useRouterPush, useShowModal } from "@/composables"
@@ -124,13 +154,15 @@ import { extractProtocolInstructionFile, generateProtocolAimd, generateProtocolA
 import { useAuthStore } from "@/store/modules/auth"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import { AimdEditor } from "@airalogy/aimd-editor/vue"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
 import { useChatProvider } from "@airalogy/components/chat/providers/useChatProvider"
-import MarkdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 import { useFileUpload } from "@airalogy/components/monaco-editor/composables/useFileUpload"
 import EditorLayout from "@airalogy/components/monaco-editor/layout.vue"
 import SplitEditor from "@airalogy/components/monaco-editor/split-editor.vue"
 import { isNormalModelInfo, useActiveEditorStore, useModelsStore, useSplitStore } from "@airalogy/components/monaco-editor/store/editorStore"
 import { useUploadFileDataStore } from "@airalogy/components/monaco-editor/store/uploadFileDataStore"
+import ProtocolBubbleMenu from "@airalogy/components/protocol-bubble-menu.vue"
 import { isDirectory, isFile, saveProjectData } from "@airalogy/components/src/monaco-editor/utils"
 import { processUpdatedTomlContent } from "@airalogy/components/src/monaco-editor/utils/protocolContentLoader"
 import { defaultSideMenus } from "@airalogy/components/src/monaco-editor/utils/sideMenus"
@@ -140,12 +172,11 @@ import { useRouteQuery } from "@vueuse/router"
 
 import IconLock from "~icons/tabler/lock"
 import Big from "big.js"
-import { cloneDeepWith as _cloneDeepWith, merge as _merge } from "lodash-es"
+import { cloneDeepWith as _cloneDeepWith } from "lodash-es"
 import { NButton, NEllipsis, NIcon, NTag, useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { storeToRefs } from "pinia"
 import { useAIMDProvide } from "../../components/custom/aimd/composables/useAIMDHelpers"
-import { useAimdRenderers } from "../../components/custom/aimd/composables/useAimdRenderers"
 import { useProvideProtocolInfoStore } from "../project-protocols/hooks/useProtocolInfoStore"
 import AssignerProgressModal from "../project-protocols/modules/protocol/components/AssignerProgressModal.vue"
 import { useAssignerManagement } from "../project-protocols/modules/protocol/composables/useAssignerManagement"
@@ -973,8 +1004,15 @@ const draftProtocolInfo = ref<ProtocolModels.ProtocolInfo | null | undefined>(nu
 
 // AIMD preview
 
-const previewRef = ref<{ env: AimdTemplateEnv, reload: () => void }>()
-const rawRef = ref<{ env: AimdTemplateEnv, reload: () => void }>()
+interface AimdMarkdownPreviewExpose {
+  env: AimdTemplateEnv
+  reload: () => Promise<void>
+  rootElement: HTMLElement | null
+}
+
+const previewRef = ref<AimdMarkdownPreviewExpose>()
+const rawRef = ref<AimdMarkdownPreviewExpose>()
+const lastParsedAimd = ref("")
 
 const { formRef, validate } = useNaiveForm()
 const aimdRef = ref<{ formRef: FormInst | null, restoreTableVariableRecord: () => void } | null>(null)
@@ -1018,7 +1056,7 @@ const previewFieldModel = computed(() => fieldModel as unknown as Record<string,
 
 const { handleTableRowUpdate } = useTableManagement()
 
-const { handleParseField, parseVarTable } = useFieldParser(
+const { handleParseField } = useFieldParser(
   fieldModel,
   draftProtocolInfo,
   scopeList,
@@ -1028,7 +1066,14 @@ const { handleParseField, parseVarTable } = useFieldParser(
   tableEmitterRecord,
 )
 
-function handleFieldMounted() {
+async function handleFieldRendered() {
+  const content = liveProtocolContent.value
+  if (domMounted.value && lastParsedAimd.value === content) {
+    return
+  }
+
+  lastParsedAimd.value = content
+  await nextTick()
   setDomMounted()
 
   // const sourceList = Array.from(
@@ -1046,19 +1091,6 @@ function handleFieldMounted() {
     // Call the field parser with the analysis data
     handleParseField(env)
   }
-}
-
-function handleUpdateFields(payload: Record<string, any>) {
-  _merge(fieldModel, payload)
-  if (!payload.research_variable) {
-    return
-  }
-
-  const tables = Object.entries(payload.research_variable).filter(
-    ([_, v]) => (v as any)?.type === "table",
-  ) as [string, IDynamicTableNode][]
-
-  parseVarTable(tables, payload.research_variable)
 }
 
 // Update template refs for table row updates
@@ -1145,7 +1177,7 @@ const scopeMap: Record<string, string> = {
   rt: "research_variable",
 }
 
-// Create unified AIMD renderers for preview
+// Platform adapters only replace fields that need interactive form controls.
 function getNodeProps(node: { id: string, scope: string, type?: string }) {
   const { id, scope, type } = node
   const fullScope = scopeMap[scope] || scope
@@ -1156,19 +1188,10 @@ function getNodeProps(node: { id: string, scope: string, type?: string }) {
   return variableList.value.find(it => it.scope === fullScope && it.prop === id && (!type || it.type === type)) || null
 }
 
-// AIMD renderers for Raw mode (pure preview)
-const aimdRenderersPreview = useAimdRenderers({
+const aimdRenderersEdit = createPlatformAimdFormRenderers({
   getTokenProps: getNodeProps,
-  mode: "preview",
-  resolveFile: resolveProtocolFile,
 })
-
-// AIMD renderers for Preview mode (edit mode with input fields)
-const aimdRenderersEdit = useAimdRenderers({
-  getTokenProps: getNodeProps,
-  mode: "edit",
-  resolveFile: resolveProtocolFile,
-})
+const aimdEditRenderOptions = { aimdRenderers: aimdRenderersEdit }
 
 const authStore = useAuthStore()
 

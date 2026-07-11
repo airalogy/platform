@@ -93,7 +93,11 @@
               </template>
               <div v-if="typeof result === 'string'" class="overflow-hidden text-ellipsis whitespace-pre-wrap break-all rounded-md bg-white p-3" v-html="result" />
               <div v-else-if="result.markdown" class="overflow-hidden text-ellipsis whitespace-pre-wrap break-all bg-white p-3">
-                <markdown-preview :text="result.markdown" mode="preview" />
+                <aimd-markdown-preview
+                  :content="result.markdown"
+                  :mermaid-component="MermaidBlock"
+                  body-class="markdown-body"
+                />
               </div>
             </n-collapse-item>
           </n-collapse>
@@ -139,7 +143,8 @@
 
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import MarkdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 import TooltipButton from "@airalogy/components/tooltip-button.vue"
 import { AnswerType, useClosableMessage, useLoading, useOpenNewTab, useTypewriterEffect } from "@airalogy/composables"
 import { copyToClip } from "@airalogy/shared"

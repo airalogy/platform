@@ -1,0 +1,64 @@
+.platform-aimd-form-preview
+  position: relative
+
+  .aimd-renderer
+    table
+      overflow: visible
+
+    .aimd-field-wrapper--inline
+      .n-form-item
+        align-self: flex-end
+
+      .n-form-item--no-label
+        margin-bottom: -2px
+
+    [data-has-variable="true"]:has(+ [data-has-variable="true"]),
+    [data-has-variable="true"] + [data-has-variable="true"],
+    :not([data-has-variable="true"]):has(+ [data-has-variable="true"])
+      margin-bottom: 0 !important
+      margin-top: 2px !important
+
+    [data-has-variable="true"]
+      line-height: max(1.25em + 12px, 1.5em)
+
+      br
+        content: " "
+        display: block
+        margin-top: 2px
+
+    [data-has-checkbox="true"]
+      margin-bottom: 0 !important
+      margin-top: 16px !important
+
+  .n-input__placeholder
+    word-break: break-all !important
+
+  .n-form-item-blank
+    --n-blank-height: fit-content
+
+  .n-input__textarea-el
+    padding: 0 !important
+
+  .n-input-wrapper
+    padding: 6px 10px
+
+  .n-form-item-label__asterisk
+    position: absolute
+    left: -10px
+
+  .n-checkbox__label
+    flex: 1
+    display: inline-flex
+    align-items: center
+
+  .n-base-selection-label
+    min-height: 34px
+
+  .n-upload-file-info .n-image
+    min-height: 51px
+
+  .n-upload-trigger.n-upload-trigger--image-card
+    width: 100%
+
+  .n-upload-file-list.n-upload-file-list--grid
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr))

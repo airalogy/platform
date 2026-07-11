@@ -13,9 +13,11 @@
     <!-- Protocol Content -->
     <n-collapse class="mt-4">
       <n-collapse-item title="Protocol Content" name="content">
-        <markdown-preview
+        <aimd-markdown-preview
           v-if="protocolInfo.aimd"
-          :text="protocolInfo.aimd"
+          :content="protocolInfo.aimd"
+          :mermaid-component="MermaidBlock"
+          body-class="markdown-body"
           mode="preview"
         />
       </n-collapse-item>
@@ -26,11 +28,10 @@
 <script setup lang="ts">
 import { useProtocolInfoStore } from "@/views/project-protocols/hooks/useProtocolInfoStore"
 import ProtocolFields from "@/views/project-protocols/modules/protocol/protocol-fields.vue"
-import MarkdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 import { NCollapse, NCollapseItem } from "naive-ui"
 
-// Use unified system - in preview mode, no custom renderers needed
-// The markdown-preview component will use default rendering
 const { protocolInfo } = useProtocolInfoStore()! || {}
 </script>
 

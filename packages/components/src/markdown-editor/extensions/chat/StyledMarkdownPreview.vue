@@ -1,20 +1,26 @@
 <template>
   <div class="chat-markdown-body">
-    <template v-if="vnodes.length > 0">
-      <component :is="node" v-for="(node, idx) in vnodes" :key="idx" />
+    <template v-if="sourceItems.length > 0">
+      <aimd-markdown-preview
+        v-for="(sourceItem, index) in sourceItems"
+        :key="index"
+        :content="sourceItem"
+        :loading="props.loading"
+        :render-options="renderOptions"
+        :resolve-url="props.resolveFile"
+        body-class="chat-markdown-body__content"
+      />
     </template>
-    <n-icon v-else-if="isLoading" :component="LoadingIcon" size="18" class="top-1" />
-    <div v-else-if="htmlContent" v-html="htmlContent" />
+    <n-icon v-else-if="props.loading" :component="LoadingIcon" size="18" class="top-1" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { renderToVue, type VueRendererOptions } from "@airalogy/aimd-renderer"
+import { AimdMarkdownPreview, type AimdMarkdownPreviewRenderOptions } from "@airalogy/aimd-renderer/vue"
 import { useOrProvideShiki } from "@airalogy/composables"
-import { watchOnce } from "@vueuse/core"
 import LoadingIcon from "~icons/svg-spinners/3-dots-fade"
 import { NIcon } from "naive-ui"
-import { h, ref, watch } from "vue"
+import { computed, defineComponent, h } from "vue"
 import StepContainerPreToolbar from "./StepContainerPreToolbar/index.vue"
 
 interface HastTextNode {
@@ -53,17 +59,21 @@ const props = withDefaults(defineProps<Props>(), {
   resolveFile: undefined,
 })
 
-const emit = defineEmits<{
+defineEmits<{
   (e: "update:modelValue", value: string): void
 }>()
 
-const vnodes = ref<any[]>([])
-const htmlContent = ref("")
-const isLoading = ref(false)
+const sourceItems = computed(() => {
+  const source = props.source
+  if (Array.isArray(source)) {
+    return source.filter((item): item is string => typeof item === "string" && Boolean(item))
+  }
+  return source ? [source] : []
+})
 
 const LANGUAGE_CLASS_NAME_PREFIX = "language-"
 
-const { highlighter, isLoading: shikiLoading } = useOrProvideShiki()
+const { highlighter } = useOrProvideShiki()
 
 /**
  * 从 className 获取语言
@@ -81,12 +91,62 @@ function getLanguageFromClassName(className: any): string | null {
   return language ?? null
 }
 
+const ChatCodeBlock = defineComponent({
+  name: "ChatCodeBlock",
+  props: {
+    code: { type: String, required: true },
+    language: { type: String, default: "text" },
+  },
+  setup(codeBlockProps) {
+    return () => {
+      let codeContent: ReturnType<typeof h>
+      const highlighterInstance = highlighter.value
+
+      if (highlighterInstance && codeBlockProps.language !== "text") {
+        try {
+          const tokens = highlighterInstance.codeToTokensWithThemes(codeBlockProps.code, {
+            lang: codeBlockProps.language,
+            themes: {
+              light: "github-light",
+              dark: "github-light",
+            },
+          })
+          codeContent = h("code", { class: `${LANGUAGE_CLASS_NAME_PREFIX}${codeBlockProps.language}` }, tokens.map(line =>
+            h("div", { class: "line" }, line.map(token =>
+              h("span", { style: `color: ${token.variants.light.color}` }, token.content),
+            )),
+          ))
+        }
+        catch (error) {
+          console.error("Failed to highlight code:", error)
+          codeContent = h("code", { class: `${LANGUAGE_CLASS_NAME_PREFIX}${codeBlockProps.language}` }, codeBlockProps.code)
+        }
+      }
+      else {
+        codeContent = h("code", { class: `${LANGUAGE_CLASS_NAME_PREFIX}${codeBlockProps.language}` }, codeBlockProps.code)
+      }
+
+      return h(StepContainerPreToolbar as any, {
+        language: codeBlockProps.language,
+        class: "my-2",
+        codeBlockContent: codeBlockProps.code,
+      } as any, {
+        default: () => [
+          h("pre", {
+            class: ["chat-message--nested", `${LANGUAGE_CLASS_NAME_PREFIX}${codeBlockProps.language}`],
+          }, codeContent),
+        ],
+      })
+    }
+  },
+})
+
 /**
  * 自定义元素渲染器
  */
 const elementRenderers = {
   // 代码块渲染
-  pre: async (node: HastElementNode, children: any[]) => {
+  pre: (node: HastElementNode, children: any[]) => {
     const codeNode = node.children.find(
       (child): child is HastElementNode => child.type === "element" && child.tagName === "code",
     )
@@ -105,46 +165,10 @@ const elementRenderers = {
       .map((child: HastNode) => (child.type === "text" ? child.value : ""))
       .join("")
 
-    // 等待 Shiki 加载
-    let highlighterInst = highlighter.value
-    if (!highlighterInst && shikiLoading.value) {
-      highlighterInst = await new Promise((res) => {
-        watchOnce(highlighter, val => res(val))
-      })
-    }
-
-    // 使用 Shiki 高亮
-    if (highlighterInst && lang) {
-      try {
-        const tokens = highlighterInst.codeToTokensWithThemes(codeContent, {
-          lang: lang || "text",
-          themes: {
-            light: "github-light",
-            dark: "github-light",
-          },
-        })
-
-        return h(StepContainerPreToolbar as any, {
-          language: lang,
-          class: "my-2",
-          codeBlockContent: codeContent,
-        } as any, {
-          default: () => [
-            h("pre", { class: ["chat-message--nested", `${LANGUAGE_CLASS_NAME_PREFIX}${lang}`] }, h("code", { class: `${LANGUAGE_CLASS_NAME_PREFIX}${lang}` }, tokens.map(line =>
-              h("div", { class: "line" }, line.map(token =>
-                h("span", { style: `color: ${token.variants.light.color}` }, token.content),
-              )),
-            ))),
-          ],
-        }) as any
-      }
-      catch (error) {
-        console.error("Failed to highlight code:", error)
-      }
-    }
-
-    // 后备：无高亮
-    return h("pre", {}, h("code", { class: `${LANGUAGE_CLASS_NAME_PREFIX}${lang || "text"}` }, codeContent)) as any
+    return h(ChatCodeBlock, {
+      code: codeContent,
+      language: lang || "text",
+    }) as any
   },
 
   // 链接渲染
@@ -158,77 +182,11 @@ const elementRenderers = {
     }, children as any) as any
   },
 
-  // 图片渲染
-  img: async (node: HastElementNode) => {
-    const attrs = { ...node.properties } as Record<string, any>
+} as unknown as NonNullable<AimdMarkdownPreviewRenderOptions["elementRenderers"]>
 
-    // 解析文件 ID
-    if (props.resolveFile && attrs.src) {
-      try {
-        const res = await props.resolveFile(attrs.src)
-        if (res?.url) {
-          attrs.src = res.url
-        }
-      }
-      catch (e) {
-        console.error("Failed to resolve image:", e)
-      }
-    }
-
-    return h("img", attrs as any) as any
-  },
-} as unknown as NonNullable<VueRendererOptions["elementRenderers"]>
-
-/**
- * 渲染源内容
- */
-async function renderSource() {
-  const source = props.source
-  if (!source) {
-    vnodes.value = []
-    htmlContent.value = ""
-    return
-  }
-
-  isLoading.value = true
-
-  try {
-    if (Array.isArray(source)) {
-      // 数组源：合并渲染结果
-      const results = await Promise.all(
-        source.filter((item): item is string => typeof item === "string")
-          .map(item => renderToVue(item, {
-            gfm: true,
-            math: true,
-            elementRenderers,
-          })),
-      )
-
-      vnodes.value = results.flatMap(r => r.nodes) as any[]
-    }
-    else if (typeof source === "string") {
-      // 字符串源
-      const result = await renderToVue(source, {
-        gfm: true,
-        math: true,
-        elementRenderers,
-      })
-
-      vnodes.value = result.nodes as any[]
-    }
-  }
-  catch (error) {
-    console.error("Markdown render error:", error)
-    // 后备：显示原始文本
-    htmlContent.value = `<pre>${source}</pre>`
-  }
-  finally {
-    isLoading.value = false
-  }
+const renderOptions: AimdMarkdownPreviewRenderOptions = {
+  elementRenderers,
 }
-
-// 监听源变化
-watch(() => props.source, renderSource, { immediate: true })
 </script>
 
 <style lang="sass">
@@ -287,51 +245,4 @@ watch(() => props.source, renderSource, { immediate: true })
   // 代码行
   .line
     min-height: 1.5em
-
-  // AIMD field styles
-  .aimd-var,
-  .aimd-var_table,
-  .aimd-step,
-  .aimd-check,
-  .aimd-ref_step,
-  .aimd-ref_var
-    display: inline-flex
-    align-items: center
-    gap: 4px
-    padding: 2px 8px
-    border-radius: 4px
-    font-size: 13px
-    line-height: 1.4
-    vertical-align: middle
-    font-weight: 500
-
-  .aimd-var
-    background-color: var(--aimd-var-bg, #e3f2fd)
-    border: 1px solid var(--aimd-border-color, #90caf9)
-    color: var(--aimd-var-text, #1565c0)
-
-  .aimd-var_table
-    background-color: #e8f5e9
-    border: 1px solid #a5d6a7
-    color: #2e7d32
-
-  .aimd-step
-    background-color: #fff3e0
-    border: 1px solid #ffcc80
-    color: #e65100
-
-  .aimd-check
-    background-color: #fce4ec
-    border: 1px solid #f48fb1
-    color: #c2185b
-
-  .aimd-ref_step
-    background-color: #fff8e1
-    border: 1px solid #ffcc80
-    color: #ff8f00
-
-  .aimd-ref_var
-    background-color: #e8eaf6
-    border: 1px solid #c5cae9
-    color: #3949ab
 </style>

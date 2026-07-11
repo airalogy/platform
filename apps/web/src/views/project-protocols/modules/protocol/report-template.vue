@@ -38,15 +38,13 @@
     <main class="relative min-h-40 pt-5">
       <n-spin :show="!Boolean(props.item)">
         <!-- <edit-protocol v-if="isEdit" :protocol="protocol" :protocol-id="props.item?.id" /> -->
-        <markdown-preview
+        <aimd-markdown-preview
           v-if="props.item?.aimd"
-          ref="markdownPreviewRef"
-          :text="props.item.aimd"
+          :content="props.item.aimd"
+          :mermaid-component="MermaidBlock"
+          :resolve-url="resolveProtocolFile"
+          body-class="markdown-body"
           mode="preview"
-          :aimd-renderers="aimdRenderers"
-          :resolve-file="resolveProtocolFile"
-          immediate
-          @mounted:field="handleFieldMounted"
         />
         <!-- <asset-teleport
           v-if="domMounted && props.item"
@@ -61,7 +59,6 @@
 <script setup lang="ts">
 import type { ProtocolModels } from "@airalogy/shared/types"
 import type { RenderOption } from "naive-ui/es/dropdown/src/interface"
-import { useAimdRenderers } from "@/components/custom/aimd/composables/useAimdRenderers"
 import ProtocolPathTooltip from "@/components/protocol/protocol-path-tooltip.vue"
 
 import { useBoolean, useLoading, useProjectPermissions } from "@/composables"
@@ -74,7 +71,8 @@ import { request } from "@/service/request"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import ApplyProtocolModal from "@/views/hub/components/apply-protocol-modal.vue"
 import AddLogModal from "@/views/project-protocols/modules/add-log-modal.vue"
-import MarkdownPreview from "@airalogy/components/file-preview/markdown-preview.vue"
+import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
+import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 import { useClosableMessage } from "@airalogy/composables"
 import { $t } from "@airalogy/shared/locales"
 import EditIcon from "~icons/ion/build-outline"
@@ -101,20 +99,7 @@ const { canOpenDataEntryForOthers, canManageOwnProtocols, canManageOthersProtoco
 const { bool: isFetchingInfo, setFalse: endFetchingInfo, setTrue: startFetchingInfo } = useBoolean()
 
 const message = useClosableMessage()
-const markdownPreviewRef = ref<{ previewContainerRef: HTMLDivElement } | null>(null)
-
 const applyProtocolModalRef = ref<{ showModal: () => void }>()
-
-const { bool: domMounted, setTrue: setDomMounted } = useBoolean()
-function handleFieldMounted(record: Record<string, Record<string, HTMLElement | null>>) {
-  setDomMounted()
-}
-// Use new unified AIMD renderers
-const aimdRenderers = useAimdRenderers({
-  getTokenProps: () => null, // Preview mode doesn't need token props
-  mode: "preview",
-  resolveFile: resolveProtocolFile,
-})
 
 // Resolve file paths for protocol assets
 async function resolveProtocolFile(src: string): Promise<{ url: string } | null> {
