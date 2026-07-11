@@ -18,7 +18,7 @@ Community Edition 包含：
 
 Enterprise 扩展不应直接混入这个仓库，除非该能力对开源版也有通用价值。典型 Enterprise-only 能力包括高级 RBAC/ABAC、SSO/LDAP/AD/SAML、合规审计日志、离线安装包、集群运维和企业支持工具。
 
-面向用户的能力说明见 [Community Edition 功能概览](docs/zh/community-edition.md)。
+面向用户的能力说明见 [Community Edition 功能概览](docs/zh/community-edition.md)。面向单个实验室的生产部署见 [单实验室部署说明](docs/zh/single-lab-deployment.md)。
 
 ## 仓库结构
 
@@ -117,6 +117,16 @@ pnpm dev
 
 Web app 默认监听 `http://localhost:3000`，并把 `/api` 代理到本地后端。
 
+单个实验室正式使用时，应改用生产 profile，而不是开发快速启动：
+
+```bash
+cd deploy/single-lab
+./scripts/generate-env.sh --site-url http://localhost:8080
+./scripts/start.sh
+```
+
+该 profile 已包含构建后的 Web、反向代理/TLS、邀请制初始化、配置校验以及备份、恢复、升级和回滚脚本。
+
 ## 数据持久化与存储安全
 
 默认 Docker Compose 会把核心数据持久化到 `apps/api/.data`：
@@ -151,7 +161,7 @@ pnpm --filter @airalogy/web type-check
 
 - 运行时 `.env` 文件和本地专用密钥。
 - 本地 TLS 证书和私钥。
-- 部署专用脚本和发布 workflow。
+- 生成的备份、回滚状态和主机专用部署产物。
 - 本地缓存、虚拟环境、日志和构建产物。
 - vendored development checkout；后端使用已发布的 `masterbrain` 包。
 

@@ -15,7 +15,7 @@
       :show="isShown"
       preset="card"
       size="huge"
-      class="w-70vw"
+      :class="instanceStore.isSingleLab ? 'max-w-[calc(100vw-32px)] w-180' : 'w-70vw'"
       header-class="border-b !py-5 !px-6"
       content-class="!px-6 !py-6"
       :mask-closable="false"
@@ -37,7 +37,7 @@
             :disabled="!props.showSelect"
             @update-show="fetchLabs"
           >
-            <template v-if="labList.length > 0" #action>
+            <template v-if="labList.length > 0 && !instanceStore.isSingleLab" #action>
               <create-lab-modal
                 show-icon
                 :button-props="{ size: 'small' }"
@@ -47,17 +47,19 @@
           </n-select>
         </n-form-item>
         <n-form-item :label="$t('page.project.createProjectModal.parentProjectLabel')" path="parentProjectId">
-          <n-select
-            v-model:value="model.parentProjectId"
-            :options="parentProjectOptions"
-            :loading="loadingState.parentProjects"
-            clearable
-            filterable
-            :disabled="!selectedLabUid || isParentProjectFixed"
-            :placeholder="$t('page.project.createProjectModal.parentProjectPlaceholder')"
-          />
-          <div class="mt-2 text-sm text-gray-500">
-            {{ isParentProjectFixed ? $t("page.project.createProjectModal.parentProjectFixedHint") : $t("page.project.createProjectModal.parentProjectHint") }}
+          <div class="w-full">
+            <n-select
+              v-model:value="model.parentProjectId"
+              :options="parentProjectOptions"
+              :loading="loadingState.parentProjects"
+              clearable
+              filterable
+              :disabled="!selectedLabUid || isParentProjectFixed"
+              :placeholder="$t('page.project.createProjectModal.parentProjectPlaceholder')"
+            />
+            <div class="mt-2 text-sm text-gray-500">
+              {{ isParentProjectFixed ? $t("page.project.createProjectModal.parentProjectFixedHint") : $t("page.project.createProjectModal.parentProjectHint") }}
+            </div>
           </div>
         </n-form-item>
         <n-form-item :label="$t('page.project.createProjectModal.displayNameLabel')" path="displayName">
@@ -98,15 +100,17 @@
         </n-form-item>
 
         <n-form-item :label="$t('page.project.createProjectModal.withDiaryLabel')" label-placement="top" :show-feedback="false">
-          <n-checkbox v-model:checked="model.withDiary">
-            {{ $t("page.project.createProjectModal.withDiaryOption") }}
-          </n-checkbox>
-          <div class="ml-2 text-sm text-gray-500">
-            {{ $t("page.project.createProjectModal.withDiaryHint") }}
+          <div class="w-full">
+            <n-checkbox v-model:checked="model.withDiary">
+              {{ $t("page.project.createProjectModal.withDiaryOption") }}
+            </n-checkbox>
+            <div class="mt-2 text-sm text-gray-500">
+              {{ $t("page.project.createProjectModal.withDiaryHint") }}
+            </div>
           </div>
         </n-form-item>
 
-        <n-form-item :label="$t('page.project.settingsPage.visibilityLabel')" path="type" label-placement="left" required :show-feedback="false">
+        <n-form-item v-if="!instanceStore.isSingleLab" :label="$t('page.project.settingsPage.visibilityLabel')" path="type" label-placement="left" required :show-feedback="false">
           <n-radio-group v-model:value="model.type">
             <n-radio
               v-for="item in labTypeList"
@@ -125,11 +129,13 @@
         </n-form-item>
 
         <n-form-item v-if="model.parentProjectId" :label="$t('page.project.createProjectModal.accessSetupLabel')" label-placement="top" :show-feedback="false">
-          <n-checkbox v-model:checked="model.copyMembers">
-            {{ $t("page.project.createProjectModal.copyMembersOption") }}
-          </n-checkbox>
-          <div class="ml-2 text-sm text-gray-500">
-            {{ $t("page.project.createProjectModal.copyMembersHint") }}
+          <div class="w-full">
+            <n-checkbox v-model:checked="model.copyMembers">
+              {{ $t("page.project.createProjectModal.copyMembersOption") }}
+            </n-checkbox>
+            <div class="mt-2 text-sm text-gray-500">
+              {{ $t("page.project.createProjectModal.copyMembersHint") }}
+            </div>
           </div>
         </n-form-item>
       </n-form>
@@ -160,6 +166,7 @@ import { postUploadProtocol } from "@/service/api/project-protocols"
 import { checkProjectUid, fetchProjectList, postNewProject } from "@/service/api/projects"
 import { fetchUserLabs } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { snakeCase } from "@/utils/changeCase"
 import { convertDisplayname } from "@/utils/convertDisplayname"
 import { convertProtocolToZip } from "@/utils/protocolPackage"
@@ -216,6 +223,7 @@ interface IEmits {
 const { defaultRequiredRule } = useFormRules()
 const { formRef, validate } = useNaiveForm()
 const message = useClosableMessage()
+const instanceStore = useInstanceStore()
 
 const { loadingState, loadingKeys, startTargetLoading, endTargetLoading } = useLoading(false, ["labs", "submit", "parentProjects"])
 const labList = ref<Api.Lab.LabInfo[]>([])
@@ -291,6 +299,14 @@ const options = computed((): SelectOption[] => {
         disabled: false,
       },
     ]
+  }
+
+  if (instanceStore.isSingleLab) {
+    return [{
+      label: $t("page.project.createProjectModal.labEmptyLabel"),
+      value: -1,
+      disabled: true,
+    }]
   }
 
   return [
@@ -506,6 +522,10 @@ async function fetchLabs(show: boolean) {
     const data = await fetchUserLabs(authStore.userInfo.id)
     if (data) {
       labList.value = data.labs
+      if (instanceStore.isSingleLab && !props.labInfo) {
+        const configuredLab = data.labs.find(lab => lab.uid === instanceStore.lab?.uid)
+        model.value.labId = configuredLab?.id ?? null
+      }
     }
   }
   catch (e) {
@@ -518,6 +538,9 @@ watch(
   async (shown) => {
     if (shown) {
       emits("modal:open")
+      if (instanceStore.isSingleLab) {
+        await fetchLabs(true)
+      }
       await loadParentProjects()
     }
     else {

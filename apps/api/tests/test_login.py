@@ -69,6 +69,12 @@ def test_signup_params_accept_complete_phone_verification():
     assert params.has_phone_verification is True
 
 
+def test_signup_params_accept_frontend_invite_token_alias():
+    params = SignUpParams(**_signup_params(inviteToken="invite-token"))
+
+    assert params.invite_token == "invite-token"
+
+
 def test_signup_params_reject_partial_phone_verification():
     with pytest.raises(ValidationError):
         SignUpParams(**_signup_params(country_code="86", phone="13800138000"))

@@ -1,9 +1,16 @@
 <template>
   <n-form ref="formRef" :model="model" :rules="rules" size="large" :show-label="false">
+    <n-alert v-if="invitation" type="info" class="mb-5">
+      {{ $t("page.instance.invitedTo", { lab: invitation.lab.name }) }}
+    </n-alert>
+    <n-alert v-else-if="invitationRequired" type="warning" class="mb-5">
+      {{ $t("page.instance.invitationRequired") }}
+    </n-alert>
     <n-form-item path="email">
       <n-input
         v-model:value="model.email"
         class="form__input"
+        :readonly="Boolean(invitation)"
         :placeholder="$t('page.login.common.emailPlaceholder')"
       />
     </n-form-item>
@@ -82,6 +89,7 @@
       strong
       block
       :loading="authStore.loginLoading"
+      :disabled="invitationLoading || invitationRequired || Boolean(invitation?.existing_account)"
       class="mt-10"
       @click="handleSubmit"
     >
@@ -104,7 +112,9 @@
 import type { FormItemRule } from "naive-ui"
 import { createPasswordValidator, useFormRules, useNaiveForm } from "@/composables/useForm"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { fetchInvitation, type InvitationInfo } from "@/service/api/instance"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import EyeOffOutline from "~icons/ion/eye-off-outline"
 import EyeOutline from "~icons/ion/eye-outline"
@@ -141,6 +151,14 @@ const model: FormModel = reactive({
 })
 
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
+const route = useRoute()
+const inviteToken = computed(() => typeof route.query.inviteToken === "string" ? route.query.inviteToken : "")
+const invitation = ref<InvitationInfo | null>(null)
+const invitationLoading = ref(Boolean(inviteToken.value))
+const invitationRequired = computed(() => instanceStore.isSingleLab
+  && instanceStore.signupMode !== "open"
+  && !invitation.value)
 const { defaultRequiredRule } = useFormRules()
 const passwordValidator = createPasswordValidator()
 
@@ -199,9 +217,27 @@ function restoreFormValidation() {
 async function handleSubmit() {
   await validate()
 
-  await authStore.signup("email", model)
+  await authStore.signup("email", {
+    ...model,
+    inviteToken: inviteToken.value || undefined,
+  })
   emits("sign-up:password", model)
 }
+
+async function loadInvitation() {
+  if (!inviteToken.value) {
+    invitationLoading.value = false
+    return
+  }
+  const { data } = await fetchInvitation(inviteToken.value)
+  invitation.value = data || null
+  if (data) {
+    model.email = data.email
+  }
+  invitationLoading.value = false
+}
+
+onMounted(loadInvitation)
 </script>
 
 <style scoped lang="sass">

@@ -13,10 +13,12 @@ The `en/` and `zh/` directories follow the same structure:
 docs/
 ├── en/
 │   ├── community-edition.md
+│   ├── single-lab-deployment.md
 │   ├── architecture/
 │   └── development/
 └── zh/
     ├── community-edition.md
+    ├── single-lab-deployment.md
     ├── architecture/
     └── development/
 ```

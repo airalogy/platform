@@ -8,6 +8,7 @@ export enum SetupStoreId {
   PACKAGE = "package-store",
   EDITOR = "editor-store",
   ALIAS = "alias-store",
+  INSTANCE = "instance-store",
 }
 
 export enum LabRole {

@@ -41,5 +41,6 @@ declare namespace Env {
      * Record delete grace period in days (frontend display logic)
      */
     readonly VITE_RECORD_DELETE_GRACE_DAYS?: string
+    readonly VITE_DEPLOYMENT_MODE?: "community" | "single_lab"
   }
 }

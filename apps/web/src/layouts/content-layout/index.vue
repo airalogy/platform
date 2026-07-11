@@ -15,7 +15,7 @@
 
   <n-spin v-if="props.showGlobalSpin" :show="props.loading" content-class="size-full">
     <slot>
-      <div class="flex flex-col">
+      <div class="min-w-0 flex flex-col">
         <n-tabs v-if="Array.isArray(props.tabs) && props.tabs.length > 0" :value="activeTab" v-bind="props.tabsProps" type="line" :class="props.wrapperClass" :style="props.wrapperStyle" @update:value="handleTabChange">
           <template #prefix>
             <slot name="prefix" />
@@ -40,7 +40,7 @@
     </slot>
   </n-spin>
   <slot v-else>
-    <div class="flex flex-col">
+    <div class="min-w-0 flex flex-col">
       <n-tabs v-if="Array.isArray(props.tabs) && props.tabs.length > 0" :value="activeTab" v-bind="props.tabsProps" type="line" :class="props.wrapperClass" :style="props.wrapperStyle" @update:value="handleTabChange">
         <template #prefix>
           <slot name="prefix" />
@@ -82,7 +82,7 @@ const props = withDefaults(defineProps<IProps>(), {
   title: "",
   tabs: () => [] as TabPaneProps[],
   tabsProps: () => defaultTabsProps,
-  wrapperClass: "size-full flex-1",
+  wrapperClass: "size-full min-w-0 flex-1",
   wrapperStyle: "",
   initialActiveTab: null,
   showGlobalSpin: false,

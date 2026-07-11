@@ -1,4 +1,4 @@
-import type { languages } from "monaco-editor"
+import { languages } from "monaco-editor"
 
 /**
  * Reference https://github.com/microsoft/monaco-editor/pull/4786

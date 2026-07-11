@@ -20,9 +20,13 @@ COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# add a no-root user
-RUN useradd -ms /bin/bash deploy
+# Add a non-root user and pre-create writable volume mount points. Docker copies
+# these ownership bits into newly created named volumes.
+RUN useradd -ms /bin/bash deploy && \
+    install -d -o deploy -g deploy /home/deploy/app/log /home/deploy/app/protocols
 USER deploy
 WORKDIR /home/deploy/app
+
+RUN mkdir -p log protocols
 
 COPY --chown=deploy:deploy . .

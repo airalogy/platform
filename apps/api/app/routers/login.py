@@ -14,8 +14,18 @@ from pydantic import (
 
 from app.config import config
 from app.database import DBSession
+from app.models.account_token import AccountTokenType
 from app.models.lab import Lab, LabRole, LabUser
+from app.models.project import ProjectRole
 from app.models.user import User
+from app.services.account_security import get_auth_version
+from app.services.single_lab import (
+    add_user_to_single_lab,
+    find_valid_account_token,
+    get_single_lab,
+    normalize_email,
+    utcnow,
+)
 
 from .depends import create_access_token
 from .utils import UidStr, check_sms_verify_code, send_sms_verify_code
@@ -47,7 +57,10 @@ async def login(params: SignInParams, db_session: DBSession):
     if user is None:
         raise HTTPException(status_code=400, detail="User not found")
 
-    return {"token": create_access_token(user), "user": user}
+    return {
+        "token": create_access_token(user, await get_auth_version(db_session, user.id)),
+        "user": user,
+    }
 
 
 class SignInByEmailParams(BaseModel):
@@ -57,14 +70,18 @@ class SignInByEmailParams(BaseModel):
 
 @router.post("/signin_by_email")
 async def signin_by_email(params: SignInByEmailParams, db_session: DBSession):
-    user: User | None = await User.find_by(db_session, [User.email == params.email])
+    email = normalize_email(str(params.email))
+    user: User | None = await User.find_by(db_session, [User.email == email])
     if user is None:
         raise HTTPException(status_code=400, detail="User not found")
 
     if not user.verify_password(params.password):
         raise HTTPException(status_code=400, detail="The password is incorrect")
 
-    return {"token": create_access_token(user), "user": user}
+    return {
+        "token": create_access_token(user, await get_auth_version(db_session, user.id)),
+        "user": user,
+    }
 
 
 class SignUpParams(BaseModel):
@@ -103,6 +120,10 @@ class SignUpParams(BaseModel):
         str | None, StringConstraints(min_length=6, max_length=6)
     ] = None
     password: Annotated[str, StringConstraints(min_length=8, max_length=32)]
+    invite_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("invite_token", "inviteToken"),
+    )
 
     @model_validator(mode="after")
     def check_passwords_match(self) -> "SignUpParams":
@@ -120,7 +141,36 @@ class SignUpParams(BaseModel):
 
 @router.post("/signup")
 async def signup(params: SignUpParams, db_session: DBSession):
-    email_exists = await User.exists(db_session, [User.email == params.email])
+    email = normalize_email(str(params.email))
+    invitation = None
+    single_lab = None
+    if config.is_single_lab:
+        if config.effective_signup_mode == "disabled":
+            raise HTTPException(status_code=403, detail="Account registration is disabled")
+        if config.effective_signup_mode == "invite_only" and not params.invite_token:
+            raise HTTPException(status_code=403, detail="A valid invitation is required")
+        single_lab = await get_single_lab(db_session)
+        if single_lab is None:
+            raise HTTPException(status_code=409, detail="Single Lab is not initialized")
+        if params.invite_token:
+            invitation = await find_valid_account_token(
+                db_session,
+                params.invite_token,
+                AccountTokenType.INVITATION,
+                for_update=True,
+            )
+            if invitation is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invitation is invalid or expired",
+                )
+            if invitation.lab_id != single_lab.id or invitation.email != email:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Invitation does not match this email or Lab",
+                )
+
+    email_exists = await User.exists(db_session, [User.email == email])
     if email_exists:
         raise HTTPException(status_code=400, detail="Email already exists")
 
@@ -148,7 +198,7 @@ async def signup(params: SignUpParams, db_session: DBSession):
     user = User(
         username=params.username,
         name=params.name,
-        email=params.email,
+        email=email,
         country_code=params.country_code or "",
         phone=params.phone or "",
         password=params.password,
@@ -156,20 +206,46 @@ async def signup(params: SignUpParams, db_session: DBSession):
     )
     db_session.add(user)
     await db_session.flush()
-    lab = Lab(
-        uid=user.username,
-        name=f"{user.username}'s Lab",
-        create_user_id=user.id,
-    )
-    db_session.add(lab)
-    await db_session.flush()
-    lab_user = LabUser(
-        lab_id=lab.id,
-        user_id=user.id,
-        role=LabRole.OWNER,
-        create_user_id=user.id,
-    )
-    db_session.add(lab_user)
+    if config.is_single_lab:
+        assert single_lab is not None
+        await add_user_to_single_lab(
+            db_session,
+            lab=single_lab,
+            user=user,
+            created_by_user_id=(
+                invitation.created_by_user_id
+                if invitation is not None and invitation.created_by_user_id is not None
+                else user.id
+            ),
+            lab_role=LabRole(
+                invitation.lab_role
+                if invitation is not None and invitation.lab_role is not None
+                else LabRole.MEMBER
+            ),
+            project_role=ProjectRole(
+                invitation.project_role
+                if invitation is not None and invitation.project_role is not None
+                else ProjectRole.RECORDER
+            ),
+        )
+        if invitation is not None:
+            invitation.user_id = user.id
+            invitation.consumed_at = utcnow()
+    else:
+        lab = Lab(
+            uid=user.username,
+            name=f"{user.username}'s Lab",
+            create_user_id=user.id,
+        )
+        db_session.add(lab)
+        await db_session.flush()
+        lab_user = LabUser(
+            lab_id=lab.id,
+            user_id=user.id,
+            role=LabRole.OWNER,
+            create_user_id=user.id,
+        )
+        db_session.add(lab_user)
     await db_session.commit()
     return {"token": create_access_token(user), "user": user}
 

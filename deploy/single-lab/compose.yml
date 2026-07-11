@@ -1,0 +1,200 @@
+name: ${COMPOSE_PROJECT_NAME:-airalogy-single-lab}
+
+services:
+  web:
+    image: ${AIRALOGY_WEB_IMAGE:-airalogy-platform-web:local}
+    build:
+      context: ../..
+      dockerfile: deploy/single-lab/web.Dockerfile
+      args:
+        VITE_APP_TITLE: ${VITE_APP_TITLE:-Airalogy Lab}
+        VITE_APP_DESC: ${VITE_APP_DESC:-Private laboratory research workspace.}
+        VITE_SITE_ORIGIN: ${SITE_URL:-http://localhost:8080}
+        VITE_DOCS_URL: ${VITE_DOCS_URL:-https://github.com/airalogy/platform/tree/main/docs}
+        NODE_COMPONENT_BUILD_MEMORY_MB: ${COMPONENT_BUILD_MEMORY_MB:-3072}
+        NODE_BUILD_MEMORY_MB: ${WEB_BUILD_MEMORY_MB:-4096}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api-server:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      TLS_EMAIL: ${TLS_EMAIL:-}
+    ports:
+      - "${HTTP_BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-8080}:80"
+      - "${HTTPS_BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-8443}:443"
+      - "${HTTPS_BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-8443}:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  api-server:
+    image: ${AIRALOGY_API_IMAGE:-airalogy-platform-api:local}
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    command:
+      - sh
+      - -c
+      - >-
+        python3 -m app.cli.validate_deployment &&
+        alembic upgrade head &&
+        exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 4000
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${AIRALOGY_ENV_FILE:-.env}
+    environment:
+      APP_ENV: production
+      DEPLOYMENT_MODE: single_lab
+      API_ROOT_PATH: ""
+      AIRALOGY_ENDPOINT: http://api-server:4000
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9200
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_PROXY_PATH: /minio
+      PROTOCOL_DIR: /home/deploy/app/protocols
+    expose:
+      - "4000"
+    volumes:
+      - api_protocols:/home/deploy/app/protocols
+      - api_logs:/home/deploy/app/log
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:4000/health/ready', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  db:
+    image: ${AIRALOGY_POSTGRES_IMAGE:-airalogy-platform-postgresql:16}
+    build:
+      context: ../../apps/api
+      dockerfile: postgresql.Dockerfile
+      args:
+        APT_DEBIAN_MIRROR: ${APT_DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        APT_DEBIAN_SECURITY_MIRROR: ${APT_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        APT_POSTGRES_MIRROR: ${APT_POSTGRES_MIRROR:-http://apt.postgresql.org/pub/repos/apt}
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 1m
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
+    restart: unless-stopped
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-03-26T22-10-45Z
+    command: server /data --address ":9200" --console-address ":9201"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    expose:
+      - "9200"
+      - "9201"
+    ports:
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9201}:9201"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mc alias set local http://127.0.0.1:9200
+          "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null &&
+          mc ready local
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 10s
+
+  createbuckets:
+    image: quay.io/minio/mc:RELEASE.2024-03-25T16-41-14Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - >-
+        mc alias set local http://minio:9200
+        "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/"$${MINIO_BUCKET}"
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  api_logs:
+  api_protocols:
+  caddy_config:
+  caddy_data:
+  minio_data:
+  postgres_data:

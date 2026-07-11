@@ -34,7 +34,7 @@
     >
       {{ $t("page.login.emailLogin.confirm") }}
     </n-button>
-    <div class="w-full text-center">
+    <div v-if="instanceStore.signupMode === 'open'" class="w-full text-center">
       <span>{{ $t("page.login.common.noAccount") }}</span>
       <n-button
         quaternary class="mt-4 underline"
@@ -79,6 +79,7 @@ import { createLoginPwdValidator, useFormRules, useNaiveForm } from "@/composabl
 import { useRouterPush } from "@/composables/useRouterPush"
 import { type DevQuickstartAccount, postDevQuickstartFixtures } from "@/service/api/auth"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import EyeOffOutline from "~icons/ion/eye-off-outline"
 import EyeOutline from "~icons/ion/eye-outline"
@@ -105,6 +106,7 @@ const model: FormModel = reactive({
 
 const { routerPushByKey } = useRouterPush()
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
 const loginPwdValidator = createLoginPwdValidator()
 const showDevQuickLogin = import.meta.env.DEV && import.meta.env.VITE_SERVICE_ENV !== "prod"
 const devFixtureLoading = ref(false)

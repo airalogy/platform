@@ -4,7 +4,11 @@
     @clickoutside="handleClickOutside"
   >
     <n-button
-      :theme-overrides="buttonThemeOverrides" class="ml-5 h-[36px] rounded-2 px-3" icon-placement="right"
+      :theme-overrides="buttonThemeOverrides"
+      class="ml-5 h-[36px] rounded-2 px-3"
+      icon-placement="right"
+      :aria-label="$t('common.new')"
+      :title="$t('common.new')"
       @click="showDropdown"
     >
       <add-icon class="mr-3" />
@@ -18,6 +22,7 @@
 <script setup lang="ts">
 import type { DropdownMixedOption, DropdownOption } from "naive-ui/es/dropdown/src/interface"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { useInstanceStore } from "@/store/modules/instance"
 import CreateLabModal from "@/views/labs/modules/lab/create-lab-modal.vue"
 import AddProtocolModal from "@/views/project-protocols/modules/add-protocol-modal.vue"
 import SelectProtocolModal from "@/views/project-protocols/modules/select-protocol-modal.vue"
@@ -33,11 +38,12 @@ const { bool: isShow, setFalse: hideDropdown, setTrue: showDropdown } = useBoole
 
 const { bool: isModalOpen, setFalse: closeModal, setTrue: openModal } = useBoolean()
 
+const instanceStore = useInstanceStore()
 const addOptions = computed<DropdownMixedOption[]>(() => ([
   { label: $t("common.newRecord"), key: "new-record" },
   { label: $t("common.newProtocol"), key: "new-protocol" },
   { label: $t("common.newProject"), key: "new-project" },
-  { label: $t("common.newLab"), key: "new-lab" },
+  ...(!instanceStore.isSingleLab ? [{ label: $t("common.newLab"), key: "new-lab" }] : []),
 ]))
 
 const { routerPushByKey } = useRouterPush()

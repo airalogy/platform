@@ -38,6 +38,7 @@
     "@shikijs/types": "catalog:",
     "@types/diff": "catalog:",
     "@types/lodash-es": "catalog:",
+    "@types/node": "catalog:",
     "@types/sortablejs": "catalog:",
     "@types/web": "catalog:",
     "@unocss/core": "catalog:",

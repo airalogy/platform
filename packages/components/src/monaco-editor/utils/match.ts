@@ -144,7 +144,14 @@ function searchElements(
 
     const isOpenTarget = openFilesId === null ? true : openFilesId.has(element.id)
 
-    if (isFile(element) && element.content && isIncluded && !isExcluded && isOpenTarget) {
+    if (
+      isFile(element)
+      && typeof element.content === "string"
+      && element.content
+      && isIncluded
+      && !isExcluded
+      && isOpenTarget
+    ) {
       const lines = element.content.split("\n")
 
       const matchesInFile = searchLines(lines, key, isCaseSensitive, isWholeWord, isRegex, element)
@@ -232,7 +239,14 @@ function searchElementsToTree(
 
     const isOpenTarget = openFilesId === null ? true : openFilesId.has(element.id)
 
-    if (isFile(element) && element.content && isIncluded && !isExcluded && isOpenTarget) {
+    if (
+      isFile(element)
+      && typeof element.content === "string"
+      && element.content
+      && isIncluded
+      && !isExcluded
+      && isOpenTarget
+    ) {
       matchesInFile = searchLines(
         element.content.split("\n"),
         key,

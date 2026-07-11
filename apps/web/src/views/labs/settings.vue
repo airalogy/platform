@@ -95,8 +95,9 @@
       </settings-card>
 
       <!-- Danger Zone -->
-      <div class="mb-4 mt-6 border-t border-gray-200" />
+      <div v-if="!instanceStore.isSingleLab" class="mb-4 mt-6 border-t border-gray-200" />
       <settings-card
+        v-if="!instanceStore.isSingleLab"
         :title="$t('page.labs.settingsPage.dangerTitle')"
         :description="$t('page.labs.settingsPage.dangerDescription')"
         :is-danger="true"
@@ -270,6 +271,7 @@ import {
   postLabForceDelete,
   putLabInfo,
 } from "@/service/api/labs"
+import { useInstanceStore } from "@/store/modules/instance"
 import { useClosableMessage } from "@airalogy/composables"
 import { $t } from "@airalogy/shared/locales"
 import { useOrProvideLabInfoStore } from "./hooks/useLabsInfoStore"
@@ -278,6 +280,7 @@ const { labInfo, fetchLabInfoById } = useOrProvideLabInfoStore(null)
 const { routerPushByKey } = useRouterPush()
 const { canDeleteLab } = useLabPermissions(labInfo)
 const message = useClosableMessage()
+const instanceStore = useInstanceStore()
 interface FormModel extends BaseFormModel {
   displayName?: string
 }

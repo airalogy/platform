@@ -24,5 +24,23 @@ export const authRoute: CustomRoute<AuthRouteNameKey> = {
       name: "forget-password",
       component: () => import("@/views/auth/forget-password.vue"),
     },
+    {
+      meta: { title: "Set up Airalogy Lab" },
+      path: "/setup",
+      name: "instance-setup",
+      component: () => import("@/views/auth/instance-setup.vue"),
+    },
+    {
+      meta: { title: "Join Lab" },
+      path: "/join",
+      name: "join-lab",
+      component: () => import("@/views/auth/join-lab.vue"),
+    },
+    {
+      meta: { title: "Reset Password" },
+      path: "/reset-password",
+      name: "password-reset",
+      component: () => import("@/views/auth/password-reset.vue"),
+    },
   ],
 }

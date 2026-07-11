@@ -56,7 +56,9 @@ export function useZipOperations() {
       }
       else if (isFile(child) && child.content) {
         const filePath = `${currentPath}/${child.name}`
-        zipData[filePath] = encoder.encode(child.content)
+        zipData[filePath] = typeof child.content === "string"
+          ? encoder.encode(child.content)
+          : child.content
       }
     })
   }

@@ -58,6 +58,8 @@ certs/
 apps/api/.data/
 apps/api/protocols/
 apps/api/log/
+deploy/single-lab/backups/
+deploy/single-lab/state/
 
 # Generated API snapshots
 apps/web/openapi.json

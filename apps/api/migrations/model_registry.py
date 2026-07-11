@@ -1,6 +1,8 @@
 from importlib import import_module
 
 MODEL_MODULES = [
+    "app.models.account_security",
+    "app.models.account_token",
     "app.models.airalogy_file",
     "app.models.answer",
     "app.models.attachment",

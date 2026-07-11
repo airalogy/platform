@@ -1,6 +1,7 @@
 import type { ExceptionNameKey, RouteNameKey } from "@/types/page-route"
 import type { LocationQueryValue, RouteLocationRaw } from "vue-router"
 import { router as globalRouter } from "@/router"
+import { useInstanceStore } from "@/store/modules/instance"
 import { useRouter } from "vue-router"
 
 export interface RouterPushOptions {
@@ -18,6 +19,7 @@ export interface RouterPushOptions {
 export function useRouterPush(inSetup = true) {
   const router = inSetup ? useRouter() : globalRouter
   const route = globalRouter.currentRoute
+  const instanceStore = useInstanceStore()
 
   const routerPush = router.push
 
@@ -48,6 +50,11 @@ export function useRouterPush(inSetup = true) {
   }
 
   async function toHome() {
+    if (instanceStore.isSingleLab && instanceStore.lab) {
+      return routerPushByKey("lab-projects", {
+        params: { labUid: instanceStore.lab.uid },
+      })
+    }
     return routerPushByKey("home")
   }
 

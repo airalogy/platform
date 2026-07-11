@@ -1,7 +1,7 @@
 import type { RouteRecordRaw } from "vue-router"
 
 export type RootNameKey = "root"
-export type AuthRouteNameKey = "auth" | "login" | "sign-up" | "forget-password"
+export type AuthRouteNameKey = "auth" | "login" | "sign-up" | "forget-password" | "instance-setup" | "join-lab" | "password-reset"
 export type UserProfileNameKey = "user-profile" | "user-profile" | "profile-settings" | "profile-groups" | "profile-questions" | "profile-answers" | "profile-starred" | "profile-protocols" | "profile-records"
 export type HomeNameKey = "home"
 export type ProjectsNameKey = "projects" | "project-dashboard" | "project-starred"

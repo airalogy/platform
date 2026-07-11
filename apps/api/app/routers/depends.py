@@ -9,16 +9,21 @@ from jose import jwt
 from app.config import config
 from app.database import DBSession
 from app.models.user import User
+from app.services.account_security import get_auth_version
 
 ALGORITHM = "HS256"
 
 logger = logging.getLogger("app")
 
 
-def create_access_token(user: User) -> str:
+def create_access_token(user: User, auth_version: int = 0) -> str:
     expire = datetime.now(UTC) + timedelta(days=30)
 
-    data = {"exp": expire, "user": {"id": str(user.id)}}
+    data = {
+        "exp": expire,
+        "auth_version": auth_version,
+        "user": {"id": str(user.id)},
+    }
     encoded_jwt = jwt.encode(data, config.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -40,6 +45,11 @@ async def get_current_user(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
+        )
+    if payload.get("auth_version", 0) != await get_auth_version(db_session, user.id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized",
         )
     logger.info(f"--- current_user: {user.username}, {user.id} ---")
 
@@ -67,6 +77,9 @@ async def get_optional_current_user(
 
     user = await User.find_by(db_session, [User.id == payload["user"]["id"]])
     if user is None:
+        request.state.current_user = None
+        return None
+    if payload.get("auth_version", 0) != await get_auth_version(db_session, user.id):
         request.state.current_user = None
         return None
 

@@ -9,6 +9,6 @@ export const defaultTabsProps: TabsProps = {
     panePaddingMedium: "1rem 0",
   },
   tabClass: "rounded hover:bg-[#EDEFF4] !px-3",
-  paneClass: "overflow-visible flex-1 max-w-full",
+  paneClass: "min-w-0 overflow-visible flex-1 max-w-full",
   type: "line",
 }

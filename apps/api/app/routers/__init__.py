@@ -1,6 +1,7 @@
 import logging
 import logging.config
 import uuid
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
@@ -12,6 +13,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import config
 from app.libs.protocol_agent import close_protocol_engine_pool
+from app.libs.safe_logging import (
+    safe_json_body,
+    safe_path,
+    safe_query_string,
+    safe_request_target,
+)
 
 from .airalogy_api import router as airalogy_router
 from .airalogy_files import router as airalogy_files_router
@@ -21,7 +28,9 @@ from .attachments import router as attachments_router
 from .chats import router as chats_router
 from .editor import router as editor_router
 from .groups import router as groups_router
+from .health import router as health_router
 from .hub import router as hub_router
+from .instance import router as instance_router
 from .labs import router as labs_router
 from .login import router as login_router
 from .oauth import router as oauth_router
@@ -44,9 +53,21 @@ from .workflow import router as workflow_router
 if config.APP_ENV != "production":
     from .dev_fixtures import router as dev_fixtures_router
 
-Path("log").mkdir(exist_ok=True)
+log_path = Path(config.LOG_FILE)
+log_path.parent.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(default_response_class=ORJSONResponse, root_path=config.API_ROOT_PATH)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await close_protocol_engine_pool()
+
+
+app = FastAPI(
+    default_response_class=ORJSONResponse,
+    root_path=config.API_ROOT_PATH,
+    lifespan=lifespan,
+)
 
 # 使用 ContextVar 来在请求的生命周期中传递 request_id
 request_id_var = ContextVar("request_id", default=None)
@@ -59,12 +80,25 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
+class RedactAccessLogFilter(logging.Filter):
+    def filter(self, record):
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple):
+            args = list(record.args)
+            if len(args) >= 3:
+                args[2] = safe_request_target(str(args[2]))
+                record.args = tuple(args)
+        return True
+
+
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
     "filters": {
         "request_id_filter": {
             "()": RequestIdFilter,
+        },
+        "redact_access_log_filter": {
+            "()": RedactAccessLogFilter,
         },
     },
     "formatters": {
@@ -82,43 +116,46 @@ LOGGING_CONFIG = {
         "console": {
             "class": "rich.logging.RichHandler",
             "formatter": "console_formatter",
-            "level": "INFO",
-            "filters": ["request_id_filter"],
+            "level": config.LOG_LEVEL,
+            "filters": ["request_id_filter", "redact_access_log_filter"],
             "rich_tracebacks": True,  # 开启漂亮的 Traceback
-            "tracebacks_show_locals": True,  # Traceback 中显示局部变量
+            "tracebacks_show_locals": False,
         },
         # 文件处理器，将日志写入文件
         "file": {
-            "class": "logging.FileHandler",
+            "class": "logging.handlers.RotatingFileHandler",
             "formatter": "file_formatter",
-            "filename": "log/app.log",  # 日志文件名
-            "level": "INFO",
-            "filters": ["request_id_filter"],
+            "filename": str(log_path),
+            "level": config.LOG_LEVEL,
+            "filters": ["request_id_filter", "redact_access_log_filter"],
+            "maxBytes": config.LOG_MAX_BYTES,
+            "backupCount": config.LOG_BACKUP_COUNT,
+            "encoding": "utf-8",
         },
     },
     "loggers": {
         # uvicorn 访问日志
         "uvicorn.access": {
             "handlers": ["console", "file"],
-            "level": "INFO",
+            "level": config.LOG_LEVEL,
             "propagate": False,
         },
         # uvicorn 错误日志
         "uvicorn.error": {
             "handlers": ["console", "file"],
-            "level": "INFO",
+            "level": config.LOG_LEVEL,
             "propagate": False,
         },
         # sqlalchemy 引擎日志
         "sqlalchemy.engine": {
             "handlers": ["console", "file"],
-            "level": "INFO",  # 设置为 INFO 来捕获 SQL 语句
+            "level": config.SQL_LOG_LEVEL,
             "propagate": False,
         },
         # 应用自身的日志
         "app": {
             "handlers": ["console", "file"],
-            "level": "INFO",
+            "level": config.LOG_LEVEL,
             "propagate": False,
         },
     },
@@ -135,13 +172,17 @@ async def logger_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
     request_id_var.set(request_id)
     body = ""
-    if request.headers.get("content-type") == "application/json":
+    if (
+        config.LOG_REQUEST_BODIES
+        and request.headers.get("content-type", "").startswith("application/json")
+    ):
         request_body = await request.body()
-        body = request_body.decode("utf-8")
+        body = safe_json_body(request_body)
 
-    log = f"{request.method} {request['path']}"
-    if request.query_params != "":
-        log += f" query: {request.query_params}"
+    log = f"{request.method} {safe_path(request['path'])}"
+    query = safe_query_string(str(request.query_params))
+    if query:
+        log += f" query: {query}"
     if body != "":
         log += f" body: {body}"
     logger.info(log)
@@ -151,16 +192,14 @@ async def logger_middleware(request: Request, call_next):
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
-    logger.error(f"SQLAlchemyError: {exc}")
-    return ORJSONResponse(status_code=400, content={"detail": repr(exc)})
-
-
-@app.on_event("shutdown")
-async def shutdown_protocol_engine_pool():
-    await close_protocol_engine_pool()
+    logger.exception("Database request failed")
+    detail = "Database request failed" if config.APP_ENV == "production" else repr(exc)
+    return ORJSONResponse(status_code=400, content={"detail": detail})
 
 
 app.include_router(login_router)
+app.include_router(instance_router)
+app.include_router(health_router)
 app.include_router(oauth_router)
 app.include_router(attachments_router)
 app.include_router(users_router)

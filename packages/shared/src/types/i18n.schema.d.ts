@@ -501,6 +501,49 @@ declare namespace I18n {
           title: string
         }
       }
+      instance: {
+        setupTitle: string
+        setupDescription: string
+        administrator: string
+        setupCode: string
+        displayName: string
+        username: string
+        email: string
+        password: string
+        confirmPassword: string
+        completeSetup: string
+        setupFailed: string
+        invitedTo: string
+        invitationLoading: string
+        invitationInvalid: string
+        existingAccount: string
+        signInToJoin: string
+        joining: string
+        joinSuccess: string
+        joinFailed: string
+        invitationRequired: string
+        resetTitle: string
+        resetDescription: string
+        resetInvalid: string
+        resetSuccess: string
+        resetAction: string
+        backToLogin: string
+        inviteMember: string
+        inviteDescription: string
+        createInvite: string
+        inviteLink: string
+        copyInviteLink: string
+        createResetLink: string
+        resetLink: string
+        copyResetLink: string
+        linkCopied: string
+        labRole: string
+        projectRole: string
+        currentPassword: string
+        newPassword: string
+        linkExpiresAt: string
+        resetLinkFor: string
+      }
       about: {
         title: string
         introduction: string

@@ -20,6 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import aliased, selectinload
 
+from app.config import config
 from app.database import DBSession
 from app.models.attachment import Attachment
 from app.models.group import Group, GroupProject, GroupUser
@@ -39,9 +40,10 @@ from app.models.project_group import (
 from app.models.protocol import Protocol
 from app.models.record import Record
 from app.models.user import User
-from app.routers.depends import CurrentUser, get_current_user
+from app.routers.depends import CurrentUser, create_access_token, get_current_user
 from app.routers.permission import get_user_project_role, get_user_protocol_role
 from app.routers.utils import UidStr, check_sms_verify_code, send_sms_verify_code
+from app.services.account_security import bump_auth_version
 
 router = APIRouter(
     prefix="/users", tags=["users"], dependencies=[Depends(get_current_user)]
@@ -147,6 +149,8 @@ async def get_user_labs(
     # Add lab-specific conditions
     lab_conditions = Lab.conditions_from_dict(params.model_dump(exclude_none=True))
     where_conditions.extend(lab_conditions)
+    if config.is_single_lab:
+        where_conditions.append(Lab.uid == config.SINGLE_LAB_UID)
 
     # Use count_with_join for proper join handling
     total_count = await Lab.count_with_join(db_session, LabUser, where_conditions)
@@ -1355,8 +1359,12 @@ async def user_change_password(
         current_user.full_phone_number, params.verify_code, "reset_password"
     )
     current_user.password = params.new_password
+    auth_version = await bump_auth_version(db_session, current_user.id)
     await db_session.commit()
-    return {"message": "success"}
+    return {
+        "message": "success",
+        "token": create_access_token(current_user, auth_version),
+    }
 
 
 @router.put("/change_phone")

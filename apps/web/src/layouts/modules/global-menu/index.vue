@@ -41,6 +41,7 @@ import type { ButtonProps } from "naive-ui"
 
 import { useBoolean } from "@/composables"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import { buttonThemeOverrides } from "../global-header/constants"
 
@@ -75,8 +76,9 @@ const { bool: isShow, setFalse: hideDropdown, setTrue: showDropdown } = useBoole
 
 const labelText = computed(() => props.label || $t("common.my"))
 
+const instanceStore = useInstanceStore()
 const menuItems = computed<MenuItem[]>(() => ([
-  { name: "labs-my", label: $t("common.labsLabel") },
+  ...(!instanceStore.isSingleLab ? [{ name: "labs-my" as const, label: $t("common.labsLabel") }] : []),
   { name: "project-dashboard", label: $t("common.projectsLabel") },
   { name: "protocols-my", label: $t("common.protocolsLabel") },
 ]))

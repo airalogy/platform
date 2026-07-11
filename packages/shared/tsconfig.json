@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": false },
+  "compilerOptions": {
+    "noEmit": false,
+    "types": ["vite/client", "unplugin-icons/types/vue"]
+  },
   "include": [
     "./src/**/*.ts",
     "./src/**/*.tsx",

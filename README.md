@@ -18,7 +18,7 @@ Community Edition includes:
 
 Enterprise extensions should stay outside this repository unless they are generally useful to the open-source edition. Typical Enterprise-only areas include advanced RBAC/ABAC, SSO/LDAP/AD/SAML, compliance audit logs, air-gapped installers, cluster operations, and enterprise support tooling.
 
-For a user-facing capability overview, see [Community Edition Overview](docs/en/community-edition.md).
+For a user-facing capability overview, see [Community Edition Overview](docs/en/community-edition.md). For a production-ready deployment serving one laboratory, see [Single-Lab Deployment](docs/en/single-lab-deployment.md).
 
 ## Repository Layout
 
@@ -117,6 +117,16 @@ pnpm dev
 
 The web app listens on `http://localhost:3000` and proxies `/api` to the local backend.
 
+For a single laboratory, use the production profile instead of the development quick start:
+
+```bash
+cd deploy/single-lab
+./scripts/generate-env.sh --site-url http://localhost:8080
+./scripts/start.sh
+```
+
+The profile includes the built web application, reverse proxy/TLS, invite-only setup, configuration validation, and backup/restore/upgrade/rollback scripts.
+
 ## Data Persistence And Storage Safety
 
 The default Compose stack persists core data under `apps/api/.data`:
@@ -151,7 +161,7 @@ This Community Edition source tree intentionally excludes:
 
 - Runtime `.env` files and local-only secrets.
 - Local TLS certificates and private keys.
-- Deployment-specific scripts and release workflows.
+- Generated backups, rollback state, and host-specific deployment artifacts.
 - Local caches, virtual environments, logs, and generated build artifacts.
 - Vendored development checkouts; the backend uses the published `masterbrain` package instead.
 

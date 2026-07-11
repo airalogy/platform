@@ -4,7 +4,7 @@
       <span class="list__title ml-3.5 capitalize !text-2xl">Security Settings</span>
     </template>
     <n-list show-divider>
-      <n-list-item>
+      <n-list-item v-if="!instanceStore.isSingleLab">
         <template #prefix>
           <h4 class="w-40 text-4 color-text-secondary">
             Phone Number
@@ -32,7 +32,7 @@
           </n-button>
         </template>
       </n-list-item>
-      <n-list-item>
+      <n-list-item v-if="!instanceStore.isSingleLab">
         <template #prefix>
           <h4 class="w-40 text-4 color-[#d03050]">
             Delete account
@@ -53,9 +53,10 @@
     </n-list>
   </n-card>
 
-  <change-password-modal v-model:show="showChangePasswordModal" />
+  <single-lab-change-password-modal v-if="instanceStore.isSingleLab" v-model:show="showChangePasswordModal" />
+  <change-password-modal v-else v-model:show="showChangePasswordModal" />
 
-  <change-phone-modal v-model:show="showChangePhoneModal" />
+  <change-phone-modal v-if="!instanceStore.isSingleLab" v-model:show="showChangePhoneModal" />
   <!-- Delete Confirmation Modal -->
   <delete-confirmation-modal
     :show="showDeleteModal"
@@ -74,15 +75,18 @@
 import DeleteConfirmationModal from "@/components/common/settings/DeleteConfirmationModal.vue"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { useClosableMessage } from "@airalogy/composables"
 import { useDialog } from "naive-ui"
 import { computed, ref } from "vue"
 import ChangePasswordModal from "./change-password-modal.vue"
 import ChangePhoneModal from "./change-phone-modal.vue"
+import SingleLabChangePasswordModal from "./single-lab-change-password-modal.vue"
 
 defineOptions({ name: "EditProfile" })
 
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
 const showChangePhoneModal = ref(false)
 const showChangePasswordModal = ref(false)
 

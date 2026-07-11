@@ -1,6 +1,6 @@
 <template>
-  <n-list hoverable>
-    <n-list-item v-for="item in props.list" :key="item.id">
+  <n-list class="member-list" hoverable>
+    <n-list-item v-for="item in props.list" :key="item.id" class="member-list__item">
       <template #prefix>
         <n-avatar
           v-if="item.avatar_url"
@@ -17,10 +17,28 @@
         :is-compact="false"
         :type="props.type"
         :project-type="projectInfo?.type"
-        class="w-fit"
+        class="min-w-0 w-fit"
       />
       <template v-if="checkPermission(item)" #suffix>
-        <div class="flex items-center">
+        <n-dropdown
+          v-if="isMobile"
+          trigger="click"
+          :options="mobileActionOptions(item)"
+          @select="handleMobileAction($event, item)"
+        >
+          <n-button
+            quaternary
+            circle
+            size="small"
+            :aria-label="$t('common.actions')"
+            :title="$t('common.actions')"
+          >
+            <template #icon>
+              <icon-tabler-dots-vertical />
+            </template>
+          </n-button>
+        </n-dropdown>
+        <div v-else class="flex items-center">
           <n-button
             v-if="props.type === 'lab' && checkPermission(item)"
             class="mr-3"
@@ -28,6 +46,15 @@
             @click="showUpdateLabAliasDialog(item as Api.Lab.MemberListItem)"
           >
             {{ $t("common.setAlias") }}
+          </n-button>
+          <n-button
+            v-if="props.type === 'lab' && instanceStore.isSingleLab && checkPermission(item)"
+            class="mr-3"
+            size="small"
+            :loading="resettingUserId === item.id"
+            @click="showPasswordResetLink(item as Api.Lab.MemberListItem)"
+          >
+            {{ $t("page.instance.createResetLink") }}
           </n-button>
           <n-button
             v-if="props.type !== 'group'"
@@ -46,18 +73,22 @@
 
 <script setup lang="tsx">
 import type { RoleInfo } from "@/composables"
-import { getRoleLabel, projectRoleHierarchyPrivate, useClosableMessage, useRoleDescription } from "@/composables"
+import type { DropdownOption } from "naive-ui"
+import { getRoleLabel, projectRoleHierarchyPrivate, useBasicLayout, useClosableMessage, useRoleDescription } from "@/composables"
 import { useLabPermissions } from "@/composables/useLabPermissions"
 import { useProjectPermissions } from "@/composables/useProjectPermissions"
 import { LabRole, ProjectRole, ProjectType } from "@/enum"
 import { deleteGroupsMember } from "@/service/api/groups"
+import { createPasswordResetLink } from "@/service/api/instance"
 import { deleteLabMember, putLabMember } from "@/service/api/labs"
 import { deleteProjectMember, putProjectMember } from "@/service/api/projects"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { useOrProvideLabInfoStore } from "@/views/labs/hooks/useLabsInfoStore"
 import UpdateAliasModal from "@/views/labs/modules/lab/UpdateAliasModal.vue"
 import { useOrProvideProjectInfoStore } from "@/views/project-protocols/hooks/useProjectInfoStore"
+import { copyToClip } from "@airalogy/shared"
 import { useDialog } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import RoleChangeDialog from "./role-change-dialog.vue"
@@ -71,6 +102,9 @@ const props = withDefaults(defineProps<IProps>(), {
 const emit = defineEmits<IEmits>()
 
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
+const { isMobile } = useBasicLayout()
+const resettingUserId = ref("")
 const { projectInfo } = useOrProvideProjectInfoStore(null)
 const { labInfo } = useOrProvideLabInfoStore(null)
 
@@ -144,6 +178,82 @@ const dialog = useDialog()
 const message = useClosableMessage()
 const { reloadPage } = useAppStore()
 const { t } = useI18n()
+
+type MobileMemberAction = "alias" | "reset-password" | "change-role" | "remove"
+
+function mobileActionOptions(
+  item: Api.Lab.MemberListItem | Api.Project.MemberListItem | Api.Groups.MemberListItem,
+): DropdownOption[] {
+  return [
+    ...(props.type === "lab" ? [{ label: t("common.setAlias"), key: "alias" }] : []),
+    ...(props.type === "lab" && instanceStore.isSingleLab
+      ? [{ label: t("page.instance.createResetLink"), key: "reset-password" }]
+      : []),
+    ...(props.type !== "group" ? [{ label: t("common.changeRole"), key: "change-role" }] : []),
+    ...(!checkIsSelf(item) ? [{ label: t("common.remove"), key: "remove" }] : []),
+  ]
+}
+
+function handleMobileAction(
+  key: string | number,
+  item: Api.Lab.MemberListItem | Api.Project.MemberListItem | Api.Groups.MemberListItem,
+) {
+  switch (key as MobileMemberAction) {
+    case "alias":
+      showUpdateLabAliasDialog(item as Api.Lab.MemberListItem)
+      break
+    case "reset-password":
+      showPasswordResetLink(item as Api.Lab.MemberListItem)
+      break
+    case "change-role":
+      showRoleChangeDialog(item)
+      break
+    case "remove":
+      handleRemoveUser(item)
+      break
+  }
+}
+
+async function showPasswordResetLink(item: Api.Lab.MemberListItem) {
+  resettingUserId.value = item.id
+  try {
+    const { data } = await createPasswordResetLink(String(item.id))
+    if (!data)
+      return
+
+    const resetUrl = data.url
+    dialog.info({
+      title: t("page.instance.resetLinkFor", { name: item.name || item.username }),
+      content: () => (
+        <div class="space-y-3">
+          <n-input value={resetUrl} readonly type="textarea" autosize={{ minRows: 2, maxRows: 4 }} />
+          <div class="text-xs text-gray-500">
+            {t("page.instance.linkExpiresAt", {
+              time: new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }).format(new Date(data.expires_at)),
+            })}
+          </div>
+          <n-button
+            type="primary"
+            onClick={async () => {
+              await copyToClip(resetUrl)
+              message.success(t("page.instance.linkCopied"))
+            }}
+          >
+            {t("page.instance.copyResetLink")}
+          </n-button>
+        </div>
+      ),
+      positiveText: t("common.close"),
+      showIcon: false,
+    })
+  }
+  finally {
+    resettingUserId.value = ""
+  }
+}
 
 interface AliasDialogConfig {
   title: string
@@ -408,4 +518,18 @@ function checkPermission(item: Api.Lab.MemberListItem | Api.Project.MemberListIt
 }
 </script>
 
-<style scoped></style>
+<style scoped lang="sass">
+@media (max-width: 639px)
+  :deep(.member-list__item)
+    padding: 12px 8px
+
+  :deep(.member-list__item .n-list-item__main)
+    min-width: 0
+
+  :deep(.member-list__item .n-list-item__prefix)
+    margin-right: 10px
+
+  :deep(.member-list__item .n-list-item__suffix)
+    flex-shrink: 0
+    margin-left: 8px
+</style>

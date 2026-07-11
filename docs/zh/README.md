@@ -5,6 +5,7 @@
 ## 当前文档
 
 - `community-edition.md`: Community Edition 功能概览
+- `single-lab-deployment.md`: 单实验室生产部署与运维说明
 - `architecture/file-storage-bridge.md`: FileId 和文件存储桥接说明
 - `architecture/self-hosted-architecture.md`: 面向大体量科研数据的自托管架构说明
 - `development/frontend.md`: JavaScript workspace 和 Web app 开发说明

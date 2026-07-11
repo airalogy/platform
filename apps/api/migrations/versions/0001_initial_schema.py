@@ -18,6 +18,50 @@ down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# Freeze the schema owned by this revision. `Base.metadata` is also used by
+# Alembic autogeneration and therefore contains models added by later revisions.
+# Without an explicit list, a fresh install would create future tables here and
+# then fail when their real migration runs.
+INITIAL_TABLE_NAMES = (
+    "airalogy_files",
+    "answers",
+    "attachments",
+    "chats",
+    "embeddings",
+    "group_projects",
+    "group_users",
+    "groups",
+    "lab_force_delete_jobs",
+    "lab_users",
+    "labs",
+    "oauth_access_tokens",
+    "oauth_authorization_codes",
+    "oauth_clients",
+    "pinned_items",
+    "project_group_protocols",
+    "project_group_users",
+    "project_groups",
+    "project_users",
+    "projects",
+    "protocol_folder_protocols",
+    "protocol_folders",
+    "protocol_users",
+    "protocol_versions",
+    "protocol_workflows",
+    "protocols",
+    "questions",
+    "records",
+    "star_folders",
+    "stars",
+    "upvotes",
+    "user_aliases",
+    "users",
+)
+
+
+def _initial_tables(metadata):
+    return [metadata.tables[name] for name in INITIAL_TABLE_NAMES]
+
 
 def upgrade() -> None:
     bind = op.get_bind()
@@ -29,7 +73,7 @@ def upgrade() -> None:
     import_models()
     from app.models.base import Base
 
-    Base.metadata.create_all(bind=bind)
+    Base.metadata.create_all(bind=bind, tables=_initial_tables(Base.metadata))
 
     _create_record_search_document_function(bind)
     _create_expression_indexes(bind)
@@ -48,7 +92,7 @@ def downgrade() -> None:
     import_models()
     from app.models.base import Base
 
-    Base.metadata.drop_all(bind=bind)
+    Base.metadata.drop_all(bind=bind, tables=_initial_tables(Base.metadata))
 
     bind.execute(text("DROP FUNCTION IF EXISTS public.record_search_document(jsonb, text);"))
     bind.execute(text("DROP FUNCTION IF EXISTS public.uuid_generate_v7();"))

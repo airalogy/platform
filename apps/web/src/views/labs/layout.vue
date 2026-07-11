@@ -3,7 +3,7 @@
     <content-layout v-if="tabs.length > 0" :tabs="tabs" :title="title" :title-icon="LabIcon">
       <template v-if="userLabRole === LabRole.OWNER || userLabRole === LabRole.MANAGER" #suffix>
         <create-lab-modal
-          v-if="route.name === 'labs-my'" show-icon trigger="New Lab"
+          v-if="route.name === 'labs-my' && !instanceStore.isSingleLab" show-icon trigger="New Lab"
           @modal:new-lab="handleCreateLab"
         />
         <create-project-modal
@@ -11,8 +11,12 @@
           @modal:new-project="handleCreateProject"
         />
         <global-add-member-table-modal
-          v-if="route.name === 'lab-members' && labInfo?.id" :id="labInfo?.id" show-icon :trigger="$t('common.addMember')"
+          v-if="route.name === 'lab-members' && labInfo?.id && !instanceStore.isSingleLab" :id="labInfo?.id" show-icon :trigger="$t('common.addMember')"
           type="lab" @modal:new-member="handleNewMember"
+        />
+        <single-lab-invite-modal
+          v-if="route.name === 'lab-members' && labInfo?.id && instanceStore.isSingleLab && userLabRole"
+          :current-role="userLabRole"
         />
         <add-project-to-group-modal
           v-if="route.name === 'lab-groups' && labInfo" :id="labInfo?.id"
@@ -63,6 +67,7 @@ import ContentLayout from "@/layouts/content-layout/index.vue"
 import GlobalLayout from "@/layouts/global-layout/index.vue"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 
 import { useRouteStore } from "@/store/modules/route"
 import { convertDisplayname } from "@/utils/convertDisplayname"
@@ -77,6 +82,7 @@ import AddProjectToGroupModal from "../group/modules/add-project-to-group-modal.
 import { useProvideLabInfoStore } from "./hooks/useLabsInfoStore"
 import CreateGroupModal from "./modules/group/create-group-modal.vue"
 import CreateLabModal from "./modules/lab/create-lab-modal.vue"
+import SingleLabInviteModal from "./modules/lab/single-lab-invite-modal.vue"
 // import EditLabModal from "./modules/lab/edit-lab-modal.vue"
 
 defineOptions({
@@ -93,6 +99,7 @@ interface Props {
 }
 
 const route = useRoute()
+const instanceStore = useInstanceStore()
 const routerStore = useRouteStore()
 const { userInfo } = useAuthStore()
 
@@ -126,11 +133,14 @@ const tabs = computed((): TabPaneProps[] => {
         name: "lab-members",
         tab: hintTab($t("page.labs.members"), membersHint),
       },
-      {
+    ]
+
+    if (!instanceStore.isSingleLab) {
+      list.push({
         name: "lab-groups",
         tab: hintTab($t("page.labs.groups"), groupsHint),
-      },
-    ]
+      })
+    }
 
     if (canManageLab.value) {
       list.push({ name: "lab-settings", tab: $t("page.labs.settings") })

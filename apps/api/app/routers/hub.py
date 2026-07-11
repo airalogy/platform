@@ -19,6 +19,7 @@ from app.models.user import User
 
 router = APIRouter(prefix="/hub", tags=["hub"])
 
+
 @router.get("")
 async def get_protocols(
     db_session: DBSession,
@@ -34,6 +35,8 @@ async def get_protocols(
     page: int = 1,
     page_size: int = 10,
 ):
+    if config.is_single_lab:
+        raise HTTPException(status_code=404, detail="Not found")
     # Build conditions
     conditions = [Protocol.deleted_at.is_(None)]
 

@@ -19,5 +19,9 @@
     "./types/**/*.d.ts",
     "./src/**/*.d.ts",
     "./src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "./src/markdown-editor/extensions/chat/StepContainerPreToolbar/**/*.tsx",
+    "./src/monaco-editor/modules/panel/protocol-documents-simple.vue"
   ]
 }

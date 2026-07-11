@@ -9,6 +9,7 @@ from sqlalchemy import and_, case, delete, distinct, func, or_, select
 from sqlalchemy.orm import aliased, selectinload
 from typing_extensions import Annotated
 
+from app.config import config
 from app.database import DBSession
 from app.models.group import Group, GroupProject, GroupUser
 from app.models.lab import Lab, LabUser
@@ -30,6 +31,12 @@ from app.routers.permission import (
 )
 
 DEFAULT_PROJECT_UIDS = {"public_protocols", "lab_protocols"}
+
+
+def is_protected_default_project(uid: str) -> bool:
+    return uid in DEFAULT_PROJECT_UIDS or (
+        config.is_single_lab and uid == config.SINGLE_LAB_DEFAULT_PROJECT_UID
+    )
 
 from .depends import CurrentUser, OptionalCurrentUser
 from .utils import UidStr
@@ -165,7 +172,7 @@ async def get_parent_project_for_create(
         raise HTTPException(
             status_code=400, detail="Subprojects cannot have their own child projects"
         )
-    if parent_project.uid in DEFAULT_PROJECT_UIDS:
+    if is_protected_default_project(parent_project.uid):
         raise HTTPException(
             status_code=400, detail="Default projects cannot be used as parent projects"
         )
@@ -456,6 +463,13 @@ async def create_project(
     params: ProjectCreateParams, current_user: CurrentUser, db_session: DBSession
 ):
     lab = await Lab.find(db_session, id=params.lab_id)
+    if config.is_single_lab and lab.uid != config.SINGLE_LAB_UID:
+        raise HTTPException(status_code=404, detail="Lab not found")
+    if config.is_single_lab and params.type != ProjectType.PRIVATE:
+        raise HTTPException(
+            status_code=400,
+            detail="Public Projects are disabled in single-Lab mode",
+        )
     user_in_lab = await LabUser.exists(
         db_session, [LabUser.user_id == current_user.id, LabUser.lab_id == lab.id]
     )
@@ -474,6 +488,15 @@ async def create_project(
         raise HTTPException(status_code=400, detail="Project name already exists")
 
     parent_project = await get_parent_project_for_create(params, current_user, db_session)
+    if (
+        config.is_single_lab
+        and parent_project is not None
+        and parent_project.type != ProjectType.PRIVATE
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Public Projects are disabled in single-Lab mode",
+        )
 
     project_payload = params.model_dump(
         exclude_none=True,
@@ -570,7 +593,17 @@ async def update_project(
     )
 
     if (
-        project.uid in DEFAULT_PROJECT_UIDS
+        config.is_single_lab
+        and params.type is not None
+        and params.type != ProjectType.PRIVATE
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Public Projects are disabled in single-Lab mode",
+        )
+
+    if (
+        is_protected_default_project(project.uid)
         and params.type is not None
         and params.type != project.type
     ):
@@ -596,7 +629,7 @@ async def delete_project(
         action="delete_project",
     )
 
-    if project.uid in DEFAULT_PROJECT_UIDS:
+    if is_protected_default_project(project.uid):
         raise HTTPException(
             status_code=400, detail="Default projects cannot be deleted"
         )

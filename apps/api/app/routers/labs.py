@@ -20,11 +20,17 @@ from app.models.lab import Lab, LabRole, LabUser
 from app.models.lab_force_delete_job import LabForceDeleteJob
 from app.models.pinned_item import PinnedItem, PinnedResourceType
 from app.models.project import Project, ProjectUser
-from app.models.project_group import ProjectGroup, ProjectGroupProtocol, ProjectGroupUser
+from app.models.project_group import (
+    ProjectGroup,
+    ProjectGroupProtocol,
+    ProjectGroupUser,
+    ProtocolUser,
+)
 from app.models.protocol import Protocol
 from app.models.user import User
 from app.models.user_alias import UserAlias
 from app.routers.utils import UidStr
+from app.services.single_lab import revoke_lab_account_tokens
 
 from .depends import CurrentUser, get_current_user
 
@@ -33,6 +39,45 @@ DEFAULT_PROJECT_UIDS = {"public_protocols", "lab_protocols"}
 router = APIRouter(
     prefix="/labs", tags=["labs"], dependencies=[Depends(get_current_user)]
 )
+
+
+def require_configured_single_lab(lab: Lab) -> Lab:
+    if config.is_single_lab and lab.uid != config.SINGLE_LAB_UID:
+        raise HTTPException(status_code=404, detail="Lab not found")
+    return lab
+
+
+async def get_lab_membership(
+    db_session: DBSession,
+    lab_id: UUID,
+    user_id: UUID,
+) -> LabUser | None:
+    return await LabUser.find_by(
+        db_session,
+        [LabUser.lab_id == lab_id, LabUser.user_id == user_id],
+    )
+
+
+async def require_lab_membership(
+    db_session: DBSession,
+    lab_id: UUID,
+    user_id: UUID,
+) -> LabUser:
+    membership = await get_lab_membership(db_session, lab_id, user_id)
+    if membership is None:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return membership
+
+
+async def require_lab_manager(
+    db_session: DBSession,
+    lab_id: UUID,
+    user_id: UUID,
+) -> LabUser:
+    membership = await require_lab_membership(db_session, lab_id, user_id)
+    if membership.role not in {LabRole.OWNER, LabRole.MANAGER}:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return membership
 
 
 class LabQueryParams(BaseModel):
@@ -48,11 +93,17 @@ class LabQueryParams(BaseModel):
 @router.get("")
 async def get_labs(
     db_session: DBSession,
+    current_user: CurrentUser,
     params=Depends(LabQueryParams),
     page: int = 1,
     page_size: int = 10,
 ):
     where_conditions = Lab.conditions_from_dict(params.model_dump(exclude_none=True))
+    if config.is_single_lab:
+        where_conditions.append(Lab.uid == config.SINGLE_LAB_UID)
+        where_conditions.append(
+            Lab.id.in_(select(LabUser.lab_id).where(LabUser.user_id == current_user.id))
+        )
     total_count = await Lab.count(db_session, where_conditions)
     labs = await Lab.all(
         db_session,
@@ -221,6 +272,11 @@ async def ensure_user_can_create_lab(db_session: DBSession, user_id: UUID):
 
 @router.get("/check_uid")
 async def check_lab_uid_exists(uid: UidStr, db_session: DBSession):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="Additional Labs are disabled in single-Lab mode",
+        )
     await check_lab_uid(db_session, uid)
     return {"result": True, "message": "UID is valid and available"}
 
@@ -229,12 +285,16 @@ async def check_lab_uid_exists(uid: UidStr, db_session: DBSession):
 async def get_lab_by_uid(
     lab_uid: str,
     db_session: DBSession,
+    current_user: CurrentUser,
 ):
     lab = await Lab.find_by(
         db_session, [Lab.uid == lab_uid], options=selectinload(Lab.logo_attachment)
     )
     if lab is None:
         raise HTTPException(status_code=400, detail="NoResultFound")
+    require_configured_single_lab(lab)
+    if config.is_single_lab:
+        await require_lab_membership(db_session, lab.id, current_user.id)
     return await lab_response(lab=lab, db_session=db_session)
 
 
@@ -242,11 +302,17 @@ async def get_lab_by_uid(
 async def get_lab_by_id(
     lab_id: UUID,
     db_session: DBSession,
+    current_user: CurrentUser,
 ):
     lab = await Lab.find(
         db_session, id=lab_id, options=selectinload(Lab.logo_attachment)
     )
+    require_configured_single_lab(lab)
+    if config.is_single_lab:
+        await require_lab_membership(db_session, lab.id, current_user.id)
     return await lab_response(lab=lab, db_session=db_session)
+
+
 class LabAddUserParams(BaseModel):
     user_id: UUID
     role: LabRole = LabRole.MEMBER
@@ -269,6 +335,11 @@ class LabCreateParams(BaseModel):
 async def create_lab(
     params: LabCreateParams, current_user: CurrentUser, db_session: DBSession
 ):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="Additional Labs are disabled in single-Lab mode",
+        )
     await ensure_user_can_create_lab(db_session, current_user.id)
 
     # Add UID validation
@@ -341,6 +412,7 @@ async def update_lab(
     lab: Lab = await Lab.find(
         db_session, id=lab_id, options=selectinload(Lab.logo_attachment)
     )
+    require_configured_single_lab(lab)
     if lab.create_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -363,6 +435,11 @@ async def get_lab_force_delete_preview(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="The instance Lab cannot be deleted in single-Lab mode",
+        )
     lab: Lab = await Lab.find(db_session, id=lab_id)
     if lab.create_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -379,6 +456,11 @@ async def force_delete_lab(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="The instance Lab cannot be deleted in single-Lab mode",
+        )
     lab: Lab = await Lab.find(db_session, id=lab_id, with_for_update=True)
     if lab.create_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -435,6 +517,11 @@ async def get_lab_force_delete_job(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="The instance Lab cannot be deleted in single-Lab mode",
+        )
     job = await LabForceDeleteJob.find_by(
         db_session,
         [
@@ -453,6 +540,11 @@ async def get_lab_force_delete_job(
 
 @router.delete("/{lab_id}")
 async def delete_lab(lab_id: UUID, current_user: CurrentUser, db_session: DBSession):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="The instance Lab cannot be deleted in single-Lab mode",
+        )
     lab: Lab = await Lab.find(db_session, id=lab_id)
     if lab.create_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -490,6 +582,9 @@ async def get_lab_users(
     page: int = 1,
     page_size: int = 10,
 ):
+    lab = await Lab.find(db_session, id=lab_id)
+    require_configured_single_lab(lab)
+    await require_lab_membership(db_session, lab_id, current_user.id)
     total_count = await LabUser.count(db_session, [LabUser.lab_id == lab_id])
     query = (
         select(
@@ -533,7 +628,14 @@ async def add_user_to_lab(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    if config.is_single_lab:
+        raise HTTPException(
+            status_code=403,
+            detail="Use a single-Lab invitation to add members",
+        )
     lab: Lab = await Lab.find(db_session, id=lab_id)
+    if lab.create_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     user = await User.find(db_session, id=params.user_id)
     exists = await LabUser.find_by(
         db_session, [LabUser.lab_id == lab.id, LabUser.user_id == user.id]
@@ -568,7 +670,15 @@ async def change_user_role_or_alias_in_lab(
     db_session: DBSession,
 ):
     lab = await Lab.find(db_session, id=lab_id)
-    if lab.create_user_id != current_user.id:
+    require_configured_single_lab(lab)
+    current_membership = None
+    if config.is_single_lab:
+        current_membership = await require_lab_manager(
+            db_session,
+            lab.id,
+            current_user.id,
+        )
+    elif lab.create_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     lab_user = await LabUser.find_by(
         db_session,
@@ -576,6 +686,26 @@ async def change_user_role_or_alias_in_lab(
     )
     if lab_user is None:
         raise HTTPException(status_code=404, detail="User not found in lab")
+    if user_id == lab.create_user_id and params.role != LabRole.OWNER:
+        raise HTTPException(status_code=403, detail="The Lab owner role cannot be changed")
+    if params.role == LabRole.OWNER and user_id != lab.create_user_id:
+        raise HTTPException(status_code=403, detail="Additional Lab owners are not allowed")
+    if current_membership is not None and current_membership.role == LabRole.MANAGER:
+        if lab_user.role != LabRole.MEMBER or params.role != LabRole.MEMBER:
+            raise HTTPException(status_code=403, detail="Managers can only update members")
+    if (
+        lab_user.role == LabRole.OWNER
+        and current_membership is not None
+        and current_membership.role != LabRole.OWNER
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    if lab_user.role == LabRole.MANAGER and params.role == LabRole.MEMBER:
+        await revoke_lab_account_tokens(
+            db_session,
+            lab_id=lab.id,
+            user_id=user_id,
+            include_targeted_tokens=False,
+        )
     lab_user.role = params.role
     lab_user.alias = params.alias
     await db_session.commit()
@@ -590,7 +720,15 @@ async def delete_user_from_lab(
     db_session: DBSession,
 ):
     lab: Lab = await Lab.find(db_session, id=lab_id)
-    if lab.create_user_id != current_user.id:
+    require_configured_single_lab(lab)
+    current_membership = None
+    if config.is_single_lab:
+        current_membership = await require_lab_manager(
+            db_session,
+            lab.id,
+            current_user.id,
+        )
+    elif lab.create_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     if user_id == current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -600,7 +738,52 @@ async def delete_user_from_lab(
     )
     if lab_user is None:
         return {"message": "success"}
+    if lab_user.role == LabRole.OWNER:
+        raise HTTPException(status_code=403, detail="The Lab owner cannot be removed")
+    if (
+        current_membership is not None
+        and current_membership.role == LabRole.MANAGER
+        and lab_user.role != LabRole.MEMBER
+    ):
+        raise HTTPException(status_code=403, detail="Managers can only remove members")
 
+    await revoke_lab_account_tokens(
+        db_session,
+        lab_id=lab.id,
+        user_id=user_id,
+        include_targeted_tokens=True,
+    )
+
+    project_ids = select(Project.id).where(Project.lab_id == lab.id)
+    protocol_ids = select(Protocol.id).where(Protocol.project_id.in_(project_ids))
+    group_ids = select(Group.id).where(Group.lab_id == lab.id)
+    project_group_ids = select(ProjectGroup.id).where(
+        ProjectGroup.project_id.in_(project_ids)
+    )
+    await db_session.execute(
+        delete(ProtocolUser).where(
+            ProtocolUser.user_id == user_id,
+            ProtocolUser.protocol_id.in_(protocol_ids),
+        )
+    )
+    await db_session.execute(
+        delete(ProjectGroupUser).where(
+            ProjectGroupUser.user_id == user_id,
+            ProjectGroupUser.project_group_id.in_(project_group_ids),
+        )
+    )
+    await db_session.execute(
+        delete(GroupUser).where(
+            GroupUser.user_id == user_id,
+            GroupUser.group_id.in_(group_ids),
+        )
+    )
+    await db_session.execute(
+        delete(ProjectUser).where(
+            ProjectUser.user_id == user_id,
+            ProjectUser.project_id.in_(project_ids),
+        )
+    )
     await db_session.delete(lab_user)
     await db_session.flush()
 

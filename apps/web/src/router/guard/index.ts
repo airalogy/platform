@@ -2,6 +2,7 @@ import type { Router } from "vue-router"
 import { createAuthPingGuard } from "./authPing"
 import { createCancelRequestGuard } from "./cancelRequest"
 import { createClearBreadcrumbsGuard } from "./clearBreadcrumbs"
+import { createInstanceGuard } from "./instance"
 import { createPermissionGuard } from "./permission"
 import { createSameRouteParamsGuard } from "./sameRouteParams"
 import { createScrollToTopGuard } from "./scrollToTop"
@@ -21,6 +22,7 @@ export function createRouterGuard(router: Router) {
   // Clear breadcrumbs early before other guards potentially set new ones
   createClearBreadcrumbsGuard(router)
   createCancelRequestGuard(router)
+  createInstanceGuard(router)
   createPermissionGuard(router)
   createAuthPingGuard(router)
   createSameRouteParamsGuard(router)

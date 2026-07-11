@@ -32,4 +32,6 @@ export function setupStore(app: App) {
       }
     },
   })
+
+  return store
 }

@@ -60,7 +60,7 @@ export function readExcludeFileInRootDir(data: TreeViewElement[]): {
       )
       : null
 
-    if (isFile(excludeFile) && excludeFile.content) {
+    if (isFile(excludeFile) && typeof excludeFile.content === "string" && excludeFile.content) {
       const lines = excludeFile.content.split("\n")
       lines.forEach((line) => {
         let trimmedLine = line.trim()

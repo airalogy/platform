@@ -133,9 +133,10 @@ export function postSignup(
     confirmPassword?: string
     code?: string
     countryCode?: string
+    inviteToken?: string
   },
 ) {
-  const { password, email, phone, confirmPassword, username, code, displayName, countryCode } = payload
+  const { password, email, phone, confirmPassword, username, code, displayName, countryCode, inviteToken } = payload
   if (type === "email") {
     return request<Api.Auth.LoginInfo>({
       url: "/signup",
@@ -146,6 +147,7 @@ export function postSignup(
         confirm_password: confirmPassword,
         name: displayName,
         username,
+        invite_token: inviteToken,
       },
     })
   }
@@ -162,6 +164,7 @@ export function postSignup(
       password,
       confirm_password: confirmPassword,
       country_code: countryCode,
+      invite_token: inviteToken,
     },
   })
 }
@@ -172,7 +175,7 @@ export function putChangePassword(payload: {
   confirmPassword: string
 }) {
   const { code, confirmPassword, password } = payload
-  return request<{ message: string }>({
+  return request<{ message: string, token: string }>({
     url: "/users/change_password",
     method: "PUT",
     data: {

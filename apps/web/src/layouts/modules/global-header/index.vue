@@ -1,10 +1,11 @@
 <template>
-  <section class="mx-auto h-[70px] flex items-center" :class="isContainer ? 'container' : ''">
-    <global-logo class="text-white" :class="isMobile ? 'mx-6' : 'mr-18'" monochrome :compact="isMobile" />
+  <section class="mx-auto h-[70px] min-w-0 w-full flex items-center" :class="isContainer ? 'container' : ''">
+    <global-logo class="shrink-0 text-white" :class="isMobile ? 'mx-4' : 'mr-18'" monochrome :compact="isMobile" />
     <template v-if="authStore.isLogin">
       <global-menu />
       <global-add-new />
       <n-button
+        v-if="!isMobile && !instanceStore.isSingleLab"
         :theme-overrides="buttonThemeOverrides"
         class="ml-4 h-[36px] rounded-2 px-3"
         @click="routerPushByKey('hub')"
@@ -12,6 +13,7 @@
         {{ $t("common.hub") }}
       </n-button>
       <n-button
+        v-if="!isMobile"
         :theme-overrides="buttonThemeOverrides"
         class="ml-4 h-[36px] rounded-2 px-3"
         @click="routerPushByKey('global-chat')"
@@ -19,6 +21,7 @@
         {{ $t("common.chat") }}
       </n-button>
       <n-button
+        v-if="!isMobile"
         :theme-overrides="buttonThemeOverrides"
         class="ml-4 h-[36px] rounded-2 px-3"
         @click="handleToDocs"
@@ -40,11 +43,13 @@
     /> -->
     <!-- <div class="ml-auto h-4 w-1px rounded bg-white opacity-40" :class="authStore.isLogin ? 'mr-5' : 'mr-2'" /> -->
     <!-- <n-dropdown v-if="isMobile" :options="options" @select="handleSelect" /> -->
-    <n-dropdown v-if="isMobile" :options="localeDropdownOptions" @select="handleLocaleSelect">
+    <n-dropdown v-if="isMobile" trigger="click" :options="localeDropdownOptions" @select="handleLocaleSelect">
       <n-button
         quaternary
         color="white"
         class="ml-auto mr-2"
+        :aria-label="currentLocaleLabel"
+        :title="currentLocaleLabel"
       >
         <template #icon>
           <n-icon>
@@ -53,8 +58,8 @@
         </template>
       </n-button>
     </n-dropdown>
-    <n-dropdown v-if="isMobile" :options="menuOptions" @select="handleSelect">
-      <n-button quaternary color="white">
+    <n-dropdown v-if="isMobile" trigger="click" :options="menuOptions" @select="handleSelect">
+      <n-button quaternary color="white" :aria-label="$t('common.more')" :title="$t('common.more')">
         <template #icon>
           <n-icon>
             <icon-tabler-menu-2 />
@@ -92,7 +97,7 @@
         >
           {{ $t("common.login") }}
         </n-button>
-        <n-button type="primary" @click="routerPushByKey('sign-up')">
+        <n-button v-if="instanceStore.signupMode === 'open'" type="primary" @click="routerPushByKey('sign-up')">
           {{ $t("common.signup") }}
         </n-button>
       </template>
@@ -109,6 +114,7 @@ import GlobalAddNew from "@/layouts/modules/global-add-new/index.vue"
 import GlobalMenu from "@/layouts/modules/global-menu/index.vue"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import UserAvatar from "./components/user-avatar.vue"
 import { buttonThemeOverrides } from "./constants"
@@ -130,35 +136,59 @@ interface IProps {
 }
 
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
 const appStore = useAppStore()
 const { routerPushByKey } = useRouterPush()
 
 function handleToDocs() {
   window.open(import.meta.env.VITE_DOCS_URL || "https://github.com/airalogy/platform/tree/main/docs", "_blank")
 }
-const menuOptions = computed<DropdownOption[]>(() => ([
-  {
-    label: $t("common.login"),
-    key: "login",
-    props: {
-      onClick: () => {
-        routerPushByKey("login")
-      },
-    },
-  },
-  {
-    label: $t("common.signup"),
-    key: "sign-up",
-    props: {
-      onClick: () => {
-        routerPushByKey("sign-up")
-      },
-    },
-  },
-]))
+const menuOptions = computed<DropdownOption[]>(() => {
+  if (!authStore.isLogin) {
+    return [
+      { label: $t("common.login"), key: "login" },
+      ...(instanceStore.signupMode === "open"
+        ? [{ label: $t("common.signup"), key: "sign-up" }]
+        : []),
+    ]
+  }
 
-function handleSelect(key: string) {
-  console.log(key)
+  return [
+    { label: $t("common.chat"), key: "chat" },
+    { label: $t("common.docs"), key: "docs" },
+    { label: $t("common.profile"), key: "profile" },
+    ...(authStore.userInfo.roles?.some(role => role === "R_ADMIN" || role === "R_SUPER")
+      ? [{ label: $t("common.adminDashboard"), key: "admin-dashboard" }]
+      : []),
+    { type: "divider", key: "account-divider" },
+    { label: $t("common.logout"), key: "logout" },
+  ]
+})
+
+async function handleSelect(key: string | number) {
+  switch (key) {
+    case "login":
+    case "sign-up":
+      await routerPushByKey(key)
+      break
+    case "chat":
+      await routerPushByKey("global-chat")
+      break
+    case "docs":
+      handleToDocs()
+      break
+    case "profile":
+      await routerPushByKey("user-profile", {
+        params: { username: authStore.userInfo.username, tab: "summary" },
+      })
+      break
+    case "admin-dashboard":
+      await routerPushByKey("admin-dashboard")
+      break
+    case "logout":
+      authStore.logout()
+      break
+  }
 }
 
 const localeDropdownOptions = computed<DropdownOption[]>(() => {

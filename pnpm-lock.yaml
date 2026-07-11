@@ -1316,6 +1316,9 @@ importers:
       '@types/lodash-es':
         specifier: 'catalog:'
         version: 4.17.12
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.3.0
       '@types/sortablejs':
         specifier: 'catalog:'
         version: 1.15.8

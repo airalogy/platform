@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["./src/types/html2pdf.js.d.ts"]
+    "types": ["node", "unplugin-icons/types/vue", "vite/client", "./src/types/html2pdf.js.d.ts"]
   },
   "include": [
     "./src/**/*.ts",

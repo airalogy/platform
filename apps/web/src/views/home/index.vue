@@ -52,7 +52,7 @@
                 :trigger="$t('page.home.start.primaryAction')"
                 @modal:new-project="handleCreateProject"
               />
-              <n-button secondary @click="handleOpenHub">
+              <n-button v-if="!instanceStore.isSingleLab" secondary @click="handleOpenHub">
                 {{ $t("page.home.start.hubAction") }}
               </n-button>
             </div>
@@ -131,11 +131,12 @@
             </p>
             <div class="flex flex-wrap items-center justify-center gap-2">
               <create-lab-modal
+                v-if="!instanceStore.isSingleLab"
                 :button-props="{ type: 'primary', ghost: false, text: false }"
                 :trigger="$t('page.home.empty.createLabAction')"
                 @modal:new-lab="handleCreateLab"
               />
-              <n-button secondary @click="handleOpenHub">
+              <n-button v-if="!instanceStore.isSingleLab" secondary @click="handleOpenHub">
                 {{ $t("page.home.empty.hubAction") }}
               </n-button>
             </div>
@@ -146,6 +147,7 @@
 
     <!-- Testing Notification Dialog for New Users -->
     <testing-notification-dialog
+      v-if="!instanceStore.isSingleLab"
       v-model:show="showTestingDialog"
       @get-started="handleGetStarted"
       @dismiss="handleDismissDialog"
@@ -161,6 +163,7 @@ import { getProtocolInfo } from "@/service/api/protocol"
 
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import TestingNotificationDialog from "@/views/auth/components/testing-notification-dialog.vue"
 import CreateLabModal from "@/views/labs/modules/lab/create-lab-modal.vue"
 import CreateProjectModal from "@/views/projects/modules/create-project-modal.vue"
@@ -174,6 +177,7 @@ import PinnedItems from "./components/pinned-items.vue"
 import SiderList from "./components/sider-list.vue"
 
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
 const { loading, startLoading, endLoading } = useLoading()
 const { loading: pinnedLoading, startLoading: startPinnedLoading, endLoading: endPinnedLoading } = useLoading(true)
 const message = useClosableMessage()

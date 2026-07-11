@@ -29,6 +29,11 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
   const isLogin = computed(() => Boolean(token.value))
   const justSignedUp = ref(Boolean(sessionStorage.getItem("justSignedUp")))
 
+  function setToken(authToken: string) {
+    localStgWithExpire.set("token", authToken)
+    token.value = authToken
+  }
+
   /** Reset auth store */
   async function resetStore() {
     const authStore = useAuthStore()
@@ -98,7 +103,7 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
   function loginByInfo(loginInfo: Api.Auth.LoginInfo) {
     const { token: authToken, user } = loginInfo
     // 1. stored in the localStorage, the later requests need it in headers
-    localStgWithExpire.set("token", authToken)
+    setToken(authToken)
     // localStg.set("refreshToken", loginToken.refreshToken)
 
     if (user) {
@@ -106,7 +111,6 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
       localStgWithExpire.set("userInfo", user)
 
       // 3. update auth route
-      token.value = authToken
       Object.assign(userInfo, user)
 
       return true
@@ -116,7 +120,7 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
   }
   async function loginByToken(loginToken: Api.Auth.LoginToken) {
     // 1. stored in the localStorage, the later requests need it in headers
-    localStgWithExpire.set("token", loginToken.token)
+    setToken(loginToken.token)
     // localStg.set("refreshToken", loginToken.refreshToken)
 
     const { data: info, error } = await fetchGetUserInfo()
@@ -126,7 +130,6 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
       localStgWithExpire.set("userInfo", info)
 
       // 3. update auth route
-      token.value = loginToken.token
       Object.assign(userInfo, info)
 
       return true
@@ -164,6 +167,7 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
       confirmPassword: string
       code?: string
       countryCode?: string
+      inviteToken?: string
     },
   ) {
     try {
@@ -222,6 +226,7 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
 
     if (data) {
       if (data.message === "success") {
+        setToken(data.token)
         routeStore.initAuthRoute()
 
         await redirectFromLogin()
@@ -317,6 +322,7 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
     loginLoading,
     justSignedUp,
     resetStore,
+    setToken,
     login,
     logout,
     signup,
