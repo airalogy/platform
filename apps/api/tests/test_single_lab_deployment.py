@@ -10,12 +10,14 @@ from migrations.model_registry import import_models
 def test_deployment_validator_reports_profile_mismatch(monkeypatch):
     monkeypatch.setattr(config, "APP_ENV", "development")
     monkeypatch.setattr(config, "DEPLOYMENT_MODE", "community")
+    monkeypatch.setattr(config, "LAB_STRUCTURE_MODE", "flat")
     monkeypatch.setattr(config, "API_ROOT_PATH", "/api")
 
     errors = validate_single_lab_deployment()
 
     assert "APP_ENV must be production" in errors
     assert "DEPLOYMENT_MODE must be single_lab" in errors
+    assert "LAB_STRUCTURE_MODE must be structured" in errors
     assert "API_ROOT_PATH must be empty because the bundled proxy strips /api" in errors
 
 
@@ -23,7 +25,12 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     initial_revision = import_module("migrations.versions.0001_initial_schema")
     import_models()
 
-    later_tables = {"account_security", "account_tokens"}
+    later_tables = {
+        "account_security",
+        "account_tokens",
+        "access_grants",
+        "access_grant_audits",
+    }
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

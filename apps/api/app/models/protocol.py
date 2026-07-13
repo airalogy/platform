@@ -3,7 +3,7 @@ from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import ARRAY, ForeignKey, String, func
+from sqlalchemy import ARRAY, ForeignKey, String, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config import config
@@ -59,6 +59,9 @@ class Protocol(Base):
         nullable=False, default=ProtocolStatus.ACTIVE.value
     )
     deleted_at: Mapped[datetime] = mapped_column(nullable=True)
+    inherit_permissions: Mapped[bool] = mapped_column(
+        nullable=False, default=True, server_default=true()
+    )
 
     project: Mapped["Project"] = relationship("Project", overlaps="protocols")
     protocol_versions: Mapped[list["ProtocolVersion"]] = relationship(

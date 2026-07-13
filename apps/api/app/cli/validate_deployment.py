@@ -9,6 +9,8 @@ def validate_single_lab_deployment() -> list[str]:
         errors.append("APP_ENV must be production")
     if not config.is_single_lab:
         errors.append("DEPLOYMENT_MODE must be single_lab")
+    if config.effective_lab_structure_mode != "structured":
+        errors.append("LAB_STRUCTURE_MODE must be structured")
     if config.API_ROOT_PATH:
         errors.append("API_ROOT_PATH must be empty because the bundled proxy strips /api")
     if config.LOG_REQUEST_BODIES:

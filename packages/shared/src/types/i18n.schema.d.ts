@@ -1227,6 +1227,71 @@ declare namespace I18n {
         members: string
         projects: string
         groups: string
+        access: {
+          title: string
+          teams: string
+          teamCount: string
+          createTeam: string
+          editTeam: string
+          teamId: string
+          teamIdHint: string
+          parentTeam: string
+          rootTeam: string
+          noTeams: string
+          selectTeam: string
+          noDescription: string
+          deleteTeamConfirm: string
+          removeMemberConfirm: string
+          member: string
+          teamManager: string
+          teamMember: string
+          nameRequired: string
+          grants: string
+          addGrant: string
+          editGrant: string
+          filterSubject: string
+          filterResource: string
+          includeRevoked: string
+          subjectType: string
+          subject: string
+          user: string
+          team: string
+          scopeType: string
+          resource: string
+          project: string
+          protocol: string
+          expiry: string
+          never: string
+          inheritance: string
+          inheritToChildren: string
+          active: string
+          expired: string
+          revoked: string
+          revokeConfirm: string
+          revokedFromWorkspace: string
+          subjectRequired: string
+          resourceRequired: string
+          roleRequired: string
+          reason: string
+          reasonPlaceholder: string
+          effectiveAccess: string
+          inspect: string
+          inspectEmpty: string
+          effectiveRoles: string
+          capabilities: string
+          accessSources: string
+          source: string
+          inherited: string
+          inheritPermissions: string
+          inheritPermissionsHint: string
+          audit: string
+          action: string
+          actor: string
+          yes: string
+          no: string
+          saved: string
+          time: string
+        }
         settings: string
         searchProjectsPlaceholder: string
         settingsPage: {

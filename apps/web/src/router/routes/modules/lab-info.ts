@@ -46,6 +46,18 @@ export const labInfoRoute: CustomRoute<LabInfoNameKey> = {
       component: () => import("@/views/labs/groups.vue"),
     },
     {
+      path: "teams",
+      name: "lab-teams",
+      meta: { title: "Lab Teams" },
+      component: () => import("@/views/labs/teams.vue"),
+    },
+    {
+      path: "access",
+      name: "lab-access",
+      meta: { title: "Lab Access" },
+      component: () => import("@/views/labs/access.vue"),
+    },
+    {
       path: "settings",
       name: "lab-settings",
       component: () => import("@/views/labs/settings.vue"),

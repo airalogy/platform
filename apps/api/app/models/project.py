@@ -3,7 +3,7 @@ from enum import IntEnum
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, func
+from sqlalchemy import ForeignKey, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -69,6 +69,9 @@ class Project(Base):
     deleted_at: Mapped[datetime] = mapped_column(nullable=True)
     permission_type: Mapped[int] = mapped_column(
         nullable=False, default=PermissionType.INHERIT.value
+    )
+    inherit_permissions: Mapped[bool] = mapped_column(
+        nullable=False, default=True, server_default=true()
     )
 
     lab: Mapped[any] = relationship("Lab", overlaps="projects")

@@ -21,6 +21,7 @@ from app.libs.safe_logging import (
 )
 
 from .airalogy_api import router as airalogy_router
+from .access import router as access_router
 from .airalogy_files import router as airalogy_files_router
 from .aira_imports import router as aira_imports_router
 from .answers import router as answers_router
@@ -198,6 +199,7 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
 
 
 app.include_router(login_router)
+app.include_router(access_router)
 app.include_router(instance_router)
 app.include_router(health_router)
 app.include_router(oauth_router)

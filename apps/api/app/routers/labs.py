@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, StringConstraints
 from pydash import py_
 from sqlalchemy import and_, delete, select
@@ -15,6 +16,7 @@ from app.libs.lab_force_delete import (
     collect_lab_force_delete_manifest,
     run_lab_force_delete_job,
 )
+from app.models.access_control import AccessAuditAction, AccessGrant, AccessGrantAudit
 from app.models.group import Group, GroupProject, GroupUser
 from app.models.lab import Lab, LabRole, LabUser
 from app.models.lab_force_delete_job import LabForceDeleteJob
@@ -31,6 +33,7 @@ from app.models.user import User
 from app.models.user_alias import UserAlias
 from app.routers.utils import UidStr
 from app.services.single_lab import revoke_lab_account_tokens
+from app.services.access_control import utcnow_naive
 
 from .depends import CurrentUser, get_current_user
 
@@ -784,6 +787,30 @@ async def delete_user_from_lab(
             ProjectUser.project_id.in_(project_ids),
         )
     )
+    active_access_grants = (
+        await db_session.scalars(
+            select(AccessGrant).where(
+                AccessGrant.lab_id == lab.id,
+                AccessGrant.user_id == user_id,
+                AccessGrant.revoked_at.is_(None),
+            )
+        )
+    ).all()
+    for grant in active_access_grants:
+        before_state = jsonable_encoder(grant.as_dict())
+        grant.revoked_at = utcnow_naive()
+        grant.reason = "Lab membership removed"
+        db_session.add(
+            AccessGrantAudit(
+                grant_id=grant.id,
+                lab_id=lab.id,
+                actor_user_id=current_user.id,
+                action=AccessAuditAction.REVOKED,
+                before_state=before_state,
+                after_state=jsonable_encoder(grant.as_dict()),
+                reason="Lab membership removed",
+            )
+        )
     await db_session.delete(lab_user)
     await db_session.flush()
 

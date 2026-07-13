@@ -29,6 +29,7 @@ for key in SECRET_KEY AES_KEY INNER_API_KEY INITIAL_ADMIN_TOKEN POSTGRES_PASSWOR
 done
 
 [[ "$(env_value DEPLOYMENT_MODE)" == "single_lab" ]] || die "DEPLOYMENT_MODE must be single_lab"
+[[ "$(env_value LAB_STRUCTURE_MODE)" == "structured" ]] || die "LAB_STRUCTURE_MODE must be structured"
 [[ "$(env_value APP_ENV)" == "production" ]] || die "APP_ENV must be production"
 [[ "$(env_value SECRET_KEY)" =~ ^.{32,}$ ]] || die "SECRET_KEY must contain at least 32 characters"
 [[ "$(env_value INNER_API_KEY)" =~ ^.{32,}$ ]] || die "INNER_API_KEY must contain at least 32 characters"

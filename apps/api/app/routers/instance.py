@@ -52,6 +52,7 @@ class InstanceStatus(BaseModel):
     signup_mode: str
     bootstrap_token_required: bool
     site_url: str
+    lab_structure_mode: str
     lab: InstanceLabInfo | None = None
 
 
@@ -65,6 +66,7 @@ async def get_instance_status(db_session: DBSession):
         signup_mode=config.effective_signup_mode,
         bootstrap_token_required=bool(config.INITIAL_ADMIN_TOKEN),
         site_url=config.SITE_URL,
+        lab_structure_mode=config.effective_lab_structure_mode,
         lab=(
             InstanceLabInfo(id=lab.id, uid=lab.uid, name=lab.name)
             if lab is not None

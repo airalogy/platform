@@ -119,6 +119,7 @@ TLS_EMAIL=$tls_email
 
 APP_ENV=production
 DEPLOYMENT_MODE=single_lab
+LAB_STRUCTURE_MODE=structured
 API_ROOT_PATH=
 SIGNUP_MODE=invite_only
 SINGLE_LAB_UID=$lab_uid

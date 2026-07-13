@@ -6,6 +6,7 @@ from fastapi.params import Query
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy import and_, distinct, exists, func, or_, select, update
 
+from app.config import config
 from app.database import DBSession
 from app.models.lab import Lab
 from app.models.project import PermissionType, Project, ProjectRole
@@ -21,6 +22,7 @@ from app.models.record import Record
 from app.models.user import User
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID, UidStr
+from app.services.access_control import structured_protocol_ids_for_action
 
 from .depends import CurrentUser, OptionalCurrentUser
 
@@ -100,12 +102,39 @@ async def get_protocols(
             ~exists().where(ProtocolFolderProtocol.protocol_id == Protocol.id)
         )
 
-    user_role = await check_user_permission(
-        db_session,
-        project=project,
-        user=current_user,
-        action="read_protocol",
-    )
+    structured_protocol_ids: set[UUID] = set()
+    structured_only = False
+    if (
+        current_user is not None
+        and config.effective_lab_structure_mode == "structured"
+    ):
+        candidate_protocols = (
+            await db_session.scalars(
+                select(Protocol).where(
+                    Protocol.project_id == project.id,
+                    Protocol.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        structured_protocol_ids = await structured_protocol_ids_for_action(
+            db_session,
+            current_user.id,
+            project,
+            list(candidate_protocols),
+            "read_protocol",
+        )
+    try:
+        user_role = await check_user_permission(
+            db_session,
+            project=project,
+            user=current_user,
+            action="read_protocol",
+        )
+    except HTTPException:
+        if not structured_protocol_ids:
+            raise
+        user_role = ProjectRole.VIEWER
+        structured_only = True
 
     if current_user is None and project.permission_type == PermissionType.PROTOCOL_LEVEL:
         return {"protocols": [], "total_count": 0}
@@ -139,8 +168,11 @@ async def get_protocols(
                 Protocol.id.in_(direct_access),
                 Protocol.id.in_(group_access),
                 Protocol.user_id == current_user.id,
+                Protocol.id.in_(structured_protocol_ids),
             )
         )
+    elif structured_only:
+        conditions.append(Protocol.id.in_(structured_protocol_ids))
 
     if search_str is not None:
         if search_by == "uid":

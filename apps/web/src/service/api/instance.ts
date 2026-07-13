@@ -2,6 +2,7 @@ import { request } from "../request"
 
 export type DeploymentMode = "community" | "single_lab"
 export type SignupMode = "open" | "invite_only" | "disabled"
+export type LabStructureMode = "flat" | "structured"
 
 export interface InstanceLabInfo {
   id: string
@@ -16,6 +17,7 @@ export interface InstanceStatus {
   signup_mode: SignupMode
   bootstrap_token_required: boolean
   site_url: string
+  lab_structure_mode: LabStructureMode
   lab: InstanceLabInfo | null
 }
 

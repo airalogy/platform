@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select, union_all
 
 from app.database import DBSession
+from app.config import config
 from app.models.group import GroupProject, GroupUser
 from app.models.project import (
     PermissionType,
@@ -25,6 +26,7 @@ from app.models.project_group import (
 from app.models.protocol import Protocol
 from app.models.record import Record
 from app.models.user import User
+from app.services.access_control import resolve_structured_access
 
 # 私有项目权限
 private_project_permissions = {
@@ -244,6 +246,18 @@ async def check_user_permission(
 ) -> ProjectRole:
     if user is None and action not in anonymous_read_actions:
         raise HTTPException(status_code=400, detail="Permission denied")
+
+    if user is not None and config.effective_lab_structure_mode == "structured":
+        structured_access = await resolve_structured_access(
+            db_session,
+            user.id,
+            project.lab_id,
+            project,
+            protocol,
+            include_legacy=False,
+        )
+        if structured_access.allows(action):
+            return structured_access.strongest_project_role or ProjectRole.MANAGER
 
     # First, get user's project role
     role = None

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Deployment profile. `single_lab` keeps the shared domain model while
     # changing instance bootstrap, account admission, and navigation defaults.
     DEPLOYMENT_MODE: Literal["community", "single_lab"] = "community"
+    LAB_STRUCTURE_MODE: Literal["flat", "structured"] | None = None
     SIGNUP_MODE: Literal["open", "invite_only", "disabled"] | None = None
     SITE_URL: str = "http://localhost"
     SINGLE_LAB_UID: str = "main"
@@ -110,6 +111,12 @@ class Settings(BaseSettings):
     @property
     def is_single_lab(self) -> bool:
         return self.DEPLOYMENT_MODE == "single_lab"
+
+    @property
+    def effective_lab_structure_mode(self) -> Literal["flat", "structured"]:
+        if self.LAB_STRUCTURE_MODE is not None:
+            return self.LAB_STRUCTURE_MODE
+        return "structured" if self.is_single_lab else "flat"
 
     @property
     def effective_signup_mode(self) -> Literal["open", "invite_only", "disabled"]:

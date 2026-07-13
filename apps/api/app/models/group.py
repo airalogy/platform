@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -25,6 +25,9 @@ class Group(Base):
     name: Mapped[str] = mapped_column(nullable=False)
     lab_id: Mapped[UUID] = mapped_column(
         ForeignKey("labs.id"), nullable=False, index=True
+    )
+    parent_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("groups.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     lab: Mapped[any] = relationship("Lab", overlaps="groups")
@@ -50,6 +53,9 @@ class GroupUser(Base):
     )
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     create_user_id: Mapped[UUID] = mapped_column(nullable=False)
+    membership_role: Mapped[str] = mapped_column(
+        nullable=False, default="member", server_default=text("'member'")
+    )
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.now)
 
 

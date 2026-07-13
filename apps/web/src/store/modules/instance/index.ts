@@ -11,6 +11,7 @@ function fallbackStatus(): InstanceStatus {
     signup_mode: singleLab ? "invite_only" : "open",
     bootstrap_token_required: false,
     site_url: window.location.origin,
+    lab_structure_mode: singleLab ? "structured" : "flat",
     lab: null,
   }
 }
@@ -24,6 +25,7 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
   const initialized = computed(() => status.value.initialized)
   const signupMode = computed(() => status.value.signup_mode)
   const lab = computed(() => status.value.lab)
+  const isStructuredLab = computed(() => status.value.lab_structure_mode === "structured")
 
   async function load() {
     try {
@@ -52,6 +54,7 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
     initialized,
     signupMode,
     lab,
+    isStructuredLab,
     load,
   }
 })

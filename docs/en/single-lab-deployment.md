@@ -8,7 +8,7 @@ The profile creates one configured Lab, a default private Project, an initial ow
 
 This profile is suitable for a laboratory that can operate one Linux server and accepts short maintenance windows. A practical runtime starting point is 4 CPU cores and 8 GB RAM. A host that builds the web image from source should have 16 GB RAM, with at least 8 GB available to Docker. Size SSD storage for the laboratory's records, file payloads, images, build cache, and backups. Keep backups on a different host or storage system.
 
-It is not an HA cluster or an enterprise identity system. SSO/LDAP, formal audit trails, multi-node failover, air-gapped installers, and compliance-specific controls remain outside this profile.
+It is not an HA cluster or an enterprise identity system. SSO/LDAP, multi-node failover, air-gapped installers, and compliance-specific controls remain outside this profile.
 
 ## Prerequisites
 
@@ -68,6 +68,16 @@ If no owner or manager can sign in, a Docker host administrator can issue a rese
 
 This command works only for a current member of the configured Lab and requires local access to the running API container and deployment `.env`. Creating a new link invalidates any previous unused reset link for that account.
 
+## Teams And Access Control
+
+The single-Lab profile enables `LAB_STRUCTURE_MODE=structured` by default. A Lab can define a team tree up to three levels deep, and a member may belong to multiple teams. A parent-team manager can maintain descendant teams. Teams express organization membership; Projects and Protocols form a separate resource hierarchy, connected through many-to-many scoped grants.
+
+The access workspace provides fixed roles, Lab / Project / Protocol scopes, downward inheritance, resource inheritance breaks, grant expiry, revocation, and effective-access explanations. Effective capabilities are the union of direct grants, grants from the member's teams and ancestor teams, grants inherited from ancestor resources, and compatible legacy roles. Arbitrary policy expressions and explicit deny rules are intentionally excluded so decisions remain explainable.
+
+An actor can delegate only capabilities they already hold at the target scope. Lab owner and administrator are membership identities managed on the Members screen, not ordinary scoped grants. Project managers can delegate lower roles inside Projects they manage; team managers can maintain their team and descendants but gain no research-resource access from that responsibility alone. Grant creation, updates, revocation, and revocation caused by Lab-member removal are recorded in an append-only audit trail.
+
+Existing `ProjectUser`, Lab Group, `ProtocolUser`, and Project Group assignments remain compatibility inputs to the same effective-access resolver. New deployments should prefer teams plus scoped grants and avoid maintaining a legacy Group and a Team for the same organizational purpose.
+
 ## Network And TLS
 
 Caddy is the only public service. It serves the Vue application and proxies same-origin requests:
@@ -84,6 +94,8 @@ Edit `deploy/single-lab/.env`, then restart affected services. Backend-only chan
 Before startup, both `preflight.sh` and the backend validate critical settings. Production rejects placeholder secrets, invalid AES keys, weak MinIO credentials, non-HTTPS remote origins, request-body logging, an incorrect API prefix, and a non-single-Lab profile.
 
 AI features are optional. Set the provider keys in `.env`; protocol and record workflows remain available without them.
+
+`LAB_STRUCTURE_MODE=structured` is required by the production single-Lab stack. The Community profile defaults to `flat` but can opt into `structured`; both profiles use the same authorization engine and database model.
 
 `COMPONENT_BUILD_MEMORY_MB` and `WEB_BUILD_MEMORY_MB` control the Node.js heap limits used only while building the web image. Keep the generated defaults unless the host has a deliberately different Docker memory allocation.
 

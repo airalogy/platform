@@ -29,6 +29,7 @@ from app.routers.permission import (
     private_project_permissions,
     public_project_permissions,
 )
+from app.services.access_control import structured_project_ids_for_action
 
 DEFAULT_PROJECT_UIDS = {"public_protocols", "lab_protocols"}
 
@@ -168,9 +169,20 @@ async def get_parent_project_for_create(
         raise HTTPException(
             status_code=400, detail="Parent project must belong to the same lab"
         )
-    if parent_project.parent_project_id is not None:
+    depth = 1
+    current_parent = parent_project
+    visited = {current_parent.id}
+    while current_parent.parent_project_id is not None:
+        current_parent = await Project.find_by(
+            db_session, [Project.id == current_parent.parent_project_id]
+        )
+        if current_parent is None or current_parent.id in visited:
+            raise HTTPException(status_code=409, detail="Invalid Project hierarchy")
+        visited.add(current_parent.id)
+        depth += 1
+    if depth >= 3:
         raise HTTPException(
-            status_code=400, detail="Subprojects cannot have their own child projects"
+            status_code=400, detail="Project hierarchy supports at most 3 levels"
         )
     if is_protected_default_project(parent_project.uid):
         raise HTTPException(
@@ -240,12 +252,30 @@ async def get_projects(
     if name is not None:
         conditions.append(Project.name.ilike(f"%{name}%"))
 
-    conditions.append(
-        build_project_permission_condition(
-            current_user=current_user,
-            permission_action=permission_action,
-        )
+    permission_condition = build_project_permission_condition(
+        current_user=current_user,
+        permission_action=permission_action,
     )
+    if (
+        current_user is not None
+        and config.effective_lab_structure_mode == "structured"
+    ):
+        candidate_projects = (
+            await db_session.scalars(
+                select(Project).join(Lab).where(*conditions)
+            )
+        ).all()
+        structured_ids = await structured_project_ids_for_action(
+            db_session,
+            current_user.id,
+            list(candidate_projects),
+            permission_action or "read_project",
+        )
+        if structured_ids:
+            permission_condition = or_(
+                permission_condition, Project.id.in_(structured_ids)
+            )
+    conditions.append(permission_condition)
 
     ParentProject = aliased(Project)
     ChildProject = aliased(Project)

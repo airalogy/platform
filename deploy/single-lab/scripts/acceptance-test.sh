@@ -30,6 +30,7 @@ request() {
 
 status="$(request "$api_url/instance")"
 [[ "$(jq -r '.single_lab' <<<"$status")" == "true" ]] || die "instance is not in single-Lab mode"
+[[ "$(jq -r '.lab_structure_mode' <<<"$status")" == "structured" ]] || die "structured Lab access is not enabled"
 [[ "$(jq -r '.initialized' <<<"$status")" == "false" ]] || die "acceptance test requires a fresh, uninitialized deployment"
 
 info "Bootstrapping owner account..."
@@ -96,6 +97,96 @@ lab_after_invite="$(request -H "Auth-Token: $owner_token" "$api_url/labs/uid/$la
 
 member_projects="$(request -H "Auth-Token: $member_token" "$api_url/projects?lab_uid=$lab_uid")"
 jq -e '.projects | any(.uid == "lab_protocols")' <<<"$member_projects" >/dev/null || die "invited member cannot access the default project"
+
+info "Checking hierarchical teams and scoped access grants..."
+structured_project="$(request \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" '{lab_id:$lab_id,name:"Structured access test",uid:"structured_access_test",type:1,permission_type:1}')" \
+  "$api_url/projects")"
+structured_project_id="$(jq -r '.id' <<<"$structured_project")"
+
+member_projects_before_grant="$(request -H "Auth-Token: $member_token" "$api_url/projects?lab_uid=$lab_uid&page_size=100")"
+jq -e '.projects | any(.uid == "structured_access_test") | not' <<<"$member_projects_before_grant" >/dev/null || die "member saw a private Project before it was granted"
+
+root_team="$(request \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" '{lab_id:$lab_id,uid:"research_division",name:"Research Division",description:""}')" \
+  "$api_url/access/teams")"
+root_team_id="$(jq -r '.id' <<<"$root_team")"
+child_team="$(request \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" --argjson parent_group_id "$root_team_id" '{lab_id:$lab_id,uid:"biology_unit",name:"Biology Unit",description:"",parent_group_id:$parent_group_id}')" \
+  "$api_url/access/teams")"
+child_team_id="$(jq -r '.id' <<<"$child_team")"
+grandchild_team="$(request \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" --argjson parent_group_id "$child_team_id" '{lab_id:$lab_id,uid:"assay_team",name:"Assay Team",description:"",parent_group_id:$parent_group_id}')" \
+  "$api_url/access/teams")"
+grandchild_team_id="$(jq -r '.id' <<<"$grandchild_team")"
+
+fourth_level_code="$(curl "${curl_args[@]}" --silent --output /dev/null --write-out '%{http_code}' \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" --argjson parent_group_id "$grandchild_team_id" '{lab_id:$lab_id,uid:"too_deep_team",name:"Too Deep",description:"",parent_group_id:$parent_group_id}')" \
+  "$api_url/access/teams")"
+[[ "$fourth_level_code" == "400" ]] || die "team hierarchy unexpectedly accepted a fourth level"
+
+request \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg user_id "$member_id" '{user_id:$user_id,membership_role:"member"}')" \
+  "$api_url/access/teams/$grandchild_team_id/members" >/dev/null
+
+team_grant="$(request \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $owner_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" --argjson group_id "$root_team_id" '{lab_id:$lab_id,subject_type:"team",group_id:$group_id,scope_type:"lab",role_key:"viewer",inherit_to_children:true,reason:"Acceptance hierarchy test"}')" \
+  "$api_url/access/grants")"
+team_grant_id="$(jq -r '.id' <<<"$team_grant")"
+
+member_projects_after_grant="$(request -H "Auth-Token: $member_token" "$api_url/projects?lab_uid=$lab_uid&page_size=100")"
+jq -e '.projects | any(.uid == "structured_access_test")' <<<"$member_projects_after_grant" >/dev/null || die "ancestor-team Lab grant did not expose the Project"
+
+effective="$(request -H "Auth-Token: $owner_token" "$api_url/access/labs/$lab_id/effective?user_id=$member_id&project_id=$structured_project_id")"
+jq -e --arg subject_id "$root_team_id" '.sources | any(.source_type == "grant" and .subject_type == "team" and .subject_id == $subject_id and .inherited == true)' <<<"$effective" >/dev/null || die "effective-access explanation omitted inherited ancestor-team grant"
+
+ceiling_code="$(curl "${curl_args[@]}" --silent --output /dev/null --write-out '%{http_code}' \
+  -H 'Content-Type: application/json' \
+  -H "Auth-Token: $member_token" \
+  -X POST \
+  -d "$(jq -n --arg lab_id "$lab_id" --arg user_id "$member_id" --arg project_id "$structured_project_id" '{lab_id:$lab_id,subject_type:"user",user_id:$user_id,scope_type:"project",project_id:$project_id,role_key:"project_manager",inherit_to_children:true,reason:"Must fail"}')" \
+  "$api_url/access/grants")"
+[[ "$ceiling_code" == "403" ]] || die "viewer unexpectedly delegated a Project manager role"
+
+request -H 'Content-Type: application/json' -H "Auth-Token: $owner_token" -X PUT \
+  -d '{"inherit_permissions":false}' "$api_url/access/projects/$structured_project_id/inheritance" >/dev/null
+member_projects_isolated="$(request -H "Auth-Token: $member_token" "$api_url/projects?lab_uid=$lab_uid&page_size=100")"
+jq -e '.projects | any(.uid == "structured_access_test") | not' <<<"$member_projects_isolated" >/dev/null || die "Project inheritance break did not isolate the Project"
+
+request -H 'Content-Type: application/json' -H "Auth-Token: $owner_token" -X PUT \
+  -d '{"inherit_permissions":true}' "$api_url/access/projects/$structured_project_id/inheritance" >/dev/null
+member_projects_reinherited="$(request -H "Auth-Token: $member_token" "$api_url/projects?lab_uid=$lab_uid&page_size=100")"
+jq -e '.projects | any(.uid == "structured_access_test")' <<<"$member_projects_reinherited" >/dev/null || die "restored Project inheritance did not restore access"
+
+request -H 'Content-Type: application/json' -H "Auth-Token: $owner_token" -X POST \
+  -d '{"reason":"Acceptance revocation test"}' "$api_url/access/grants/$team_grant_id/revoke" >/dev/null
+member_projects_after_revoke="$(request -H "Auth-Token: $member_token" "$api_url/projects?lab_uid=$lab_uid&page_size=100")"
+jq -e '.projects | any(.uid == "structured_access_test") | not' <<<"$member_projects_after_revoke" >/dev/null || die "revoked grant still exposed the Project"
+
+access_audit="$(request -H "Auth-Token: $owner_token" "$api_url/access/labs/$lab_id/audit")"
+jq -e --arg grant_id "$team_grant_id" '.audits | any(.grant_id == $grant_id and .action == "created")' <<<"$access_audit" >/dev/null || die "grant creation audit is missing"
+jq -e --arg grant_id "$team_grant_id" '.audits | any(.grant_id == $grant_id and .action == "revoked")' <<<"$access_audit" >/dev/null || die "grant revocation audit is missing"
 
 permission_code="$(curl "${curl_args[@]}" --silent --output /dev/null --write-out '%{http_code}' \
   -H 'Content-Type: application/json' \

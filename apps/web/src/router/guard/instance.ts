@@ -7,7 +7,6 @@ const SINGLE_LAB_REDIRECT_ROUTES = new Set([
   "labs",
   "labs-my",
   "labs-public",
-  "lab-groups",
   "lab-group-projects",
   "lab-group-members",
   "lab-group-settings",
@@ -55,7 +54,8 @@ export function createInstanceGuard(router: Router) {
     const targetsAnotherLab = typeof to.params.labUid === "string"
       && instanceStore.lab
       && to.params.labUid !== instanceStore.lab.uid
-    const isUnavailableSurface = to.path.startsWith("/hub") || to.path.includes("/groups")
+    const isUnavailableSurface = to.path.startsWith("/hub")
+      || (instanceStore.isStructuredLab && to.path.includes("/groups"))
 
     if (
       isLogin

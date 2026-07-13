@@ -35,6 +35,20 @@ def test_community_defaults_to_open_signup():
     assert value.effective_signup_mode == "open"
 
 
+def test_structure_mode_defaults_follow_deployment_profile():
+    assert settings(DEPLOYMENT_MODE="community").effective_lab_structure_mode == "flat"
+    assert (
+        settings(DEPLOYMENT_MODE="single_lab").effective_lab_structure_mode
+        == "structured"
+    )
+    assert (
+        settings(
+            DEPLOYMENT_MODE="single_lab", LAB_STRUCTURE_MODE="flat"
+        ).effective_lab_structure_mode
+        == "flat"
+    )
+
+
 def test_explicit_signup_mode_overrides_profile_default():
     value = settings(DEPLOYMENT_MODE="single_lab", SIGNUP_MODE="disabled")
 
