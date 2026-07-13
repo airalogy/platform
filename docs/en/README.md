@@ -6,6 +6,7 @@ This directory contains English documentation for Airalogy Platform Community Ed
 
 - `community-edition.md`: Community Edition feature overview
 - `single-lab-deployment.md`: production deployment and operations for one laboratory
+- `access-control.md`: Teams, scoped grants, permission inheritance, and grant auditing
 - `architecture/file-storage-bridge.md`: FileId and storage bridge design
 - `architecture/self-hosted-architecture.md`: self-hosted architecture for large research data deployments
 - `development/frontend.md`: JavaScript workspace and web app development notes

@@ -78,6 +78,8 @@ An actor can delegate only capabilities they already hold at the target scope. L
 
 Existing `ProjectUser`, Lab Group, `ProtocolUser`, and Project Group assignments remain compatibility inputs to the same effective-access resolver. New deployments should prefer teams plus scoped grants and avoid maintaining a legacy Group and a Team for the same organizational purpose.
 
+See [Lab Access Control](./access-control.md) for the complete role matrix, inheritance rules, administrative workflows, API index, and troubleshooting guidance.
+
 ## Network And TLS
 
 Caddy is the only public service. It serves the Vue application and proxies same-origin requests:

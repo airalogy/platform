@@ -14,11 +14,13 @@ docs/
 ├── en/
 │   ├── community-edition.md
 │   ├── single-lab-deployment.md
+│   ├── access-control.md
 │   ├── architecture/
 │   └── development/
 └── zh/
     ├── community-edition.md
     ├── single-lab-deployment.md
+    ├── access-control.md
     ├── architecture/
     └── development/
 ```
