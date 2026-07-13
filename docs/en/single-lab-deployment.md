@@ -68,15 +68,15 @@ If no owner or manager can sign in, a Docker host administrator can issue a rese
 
 This command works only for a current member of the configured Lab and requires local access to the running API container and deployment `.env`. Creating a new link invalidates any previous unused reset link for that account.
 
-## Teams And Access Control
+## Organization And Access Control
 
-The single-Lab profile enables `LAB_STRUCTURE_MODE=structured` by default. A Lab can define a team tree up to three levels deep, and a member may belong to multiple teams. A parent-team manager can maintain descendant teams. Teams express organization membership; Projects and Protocols form a separate resource hierarchy, connected through many-to-many scoped grants.
+The single-Lab profile enables `LAB_STRUCTURE_MODE=structured` by default. A Lab can define an organizational-unit tree up to three levels deep. Units can be departments, research groups, core facilities, project teams, committees, or other structures. A member may belong to multiple units, and a parent-unit manager can maintain descendants. Organizational units express membership; Projects and Protocols form a separate resource hierarchy, connected through many-to-many scoped grants.
 
-The access workspace provides fixed roles, Lab / Project / Protocol scopes, downward inheritance, resource inheritance breaks, grant expiry, revocation, and effective-access explanations. Effective capabilities are the union of direct grants, grants from the member's teams and ancestor teams, grants inherited from ancestor resources, and compatible legacy roles. Arbitrary policy expressions and explicit deny rules are intentionally excluded so decisions remain explainable.
+The access workspace provides fixed roles, Lab / Project / Protocol scopes, downward inheritance, resource inheritance breaks, grant expiry, revocation, and effective-access explanations. Effective capabilities are the union of direct grants, grants from the member's organizational units and ancestor units, grants inherited from ancestor resources, and compatible legacy roles. Arbitrary policy expressions and explicit deny rules are intentionally excluded so decisions remain explainable.
 
-An actor can delegate only capabilities they already hold at the target scope. Lab owner and administrator are membership identities managed on the Members screen, not ordinary scoped grants. Project managers can delegate lower roles inside Projects they manage; team managers can maintain their team and descendants but gain no research-resource access from that responsibility alone. Grant creation, updates, revocation, and revocation caused by Lab-member removal are recorded in an append-only audit trail.
+An actor can delegate only capabilities they already hold at the target scope. Lab owner and administrator are membership identities managed on the Members screen, not ordinary scoped grants. Project managers can delegate lower roles inside Projects they manage; organizational-unit managers can maintain their unit and descendants but gain no research-resource access from that responsibility alone. Grant creation, updates, revocation, and revocation caused by Lab-member removal are recorded in an append-only audit trail.
 
-Existing `ProjectUser`, Lab Group, `ProtocolUser`, and Project Group assignments remain compatibility inputs to the same effective-access resolver. New deployments should prefer teams plus scoped grants and avoid maintaining a legacy Group and a Team for the same organizational purpose.
+Existing `ProjectUser`, Lab Group, `ProtocolUser`, and Project Group assignments remain compatibility inputs to the same effective-access resolver. Groups created before this upgrade remain as organizational units with the `other` type. New deployments should prefer organizational units plus scoped grants.
 
 See [Lab Access Control](./access-control.md) for the complete role matrix, inheritance rules, administrative workflows, API index, and troubleshooting guidance.
 

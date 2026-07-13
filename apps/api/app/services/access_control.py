@@ -200,7 +200,7 @@ def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-async def team_ids_for_user(
+async def organizational_unit_ids_for_user(
     db_session: AsyncSession, user_id: UUID, lab_id: UUID
 ) -> set[int]:
     direct_ids = set(
@@ -312,10 +312,12 @@ async def resolve_structured_access(
             ),
         )
 
-    team_ids = await team_ids_for_user(db_session, user_id, lab_id)
+    org_unit_ids = await organizational_unit_ids_for_user(db_session, user_id, lab_id)
     subject_condition = AccessGrant.user_id == user_id
-    if team_ids:
-        subject_condition = or_(subject_condition, AccessGrant.group_id.in_(team_ids))
+    if org_unit_ids:
+        subject_condition = or_(
+            subject_condition, AccessGrant.group_id.in_(org_unit_ids)
+        )
     grants = (
         await db_session.scalars(
             select(AccessGrant).where(
@@ -347,7 +349,9 @@ async def resolve_structured_access(
         )
 
     if include_legacy and project is not None:
-        await _add_legacy_project_sources(db_session, decision, user_id, project, team_ids)
+        await _add_legacy_project_sources(
+            db_session, decision, user_id, project, org_unit_ids
+        )
         if protocol is not None:
             await _add_legacy_protocol_sources(db_session, decision, user_id, protocol)
     return decision
@@ -379,11 +383,13 @@ async def structured_project_ids_for_action(
                 result.update(project.id for project in candidates)
                 continue
 
-        team_ids = await team_ids_for_user(db_session, user_id, lab_id)
+        org_unit_ids = await organizational_unit_ids_for_user(
+            db_session, user_id, lab_id
+        )
         subject_condition = AccessGrant.user_id == user_id
-        if team_ids:
+        if org_unit_ids:
             subject_condition = or_(
-                subject_condition, AccessGrant.group_id.in_(team_ids)
+                subject_condition, AccessGrant.group_id.in_(org_unit_ids)
             )
         grants = (
             await db_session.scalars(
@@ -482,10 +488,14 @@ async def structured_protocol_ids_for_action(
         if capability in ROLE_CAPABILITIES[role_key]:
             return {protocol.id for protocol in protocols}
 
-    team_ids = await team_ids_for_user(db_session, user_id, project.lab_id)
+    org_unit_ids = await organizational_unit_ids_for_user(
+        db_session, user_id, project.lab_id
+    )
     subject_condition = AccessGrant.user_id == user_id
-    if team_ids:
-        subject_condition = or_(subject_condition, AccessGrant.group_id.in_(team_ids))
+    if org_unit_ids:
+        subject_condition = or_(
+            subject_condition, AccessGrant.group_id.in_(org_unit_ids)
+        )
     grants = list(
         (
             await db_session.scalars(
@@ -565,7 +575,9 @@ async def manageable_scope_ids(
     structured_project_ids = await structured_project_ids_for_action(
         db_session, user_id, projects, "access.manage"
     )
-    team_ids = await team_ids_for_user(db_session, user_id, lab_id)
+    org_unit_ids = await organizational_unit_ids_for_user(
+        db_session, user_id, lab_id
+    )
 
     legacy_project_ids = set(
         (
@@ -578,12 +590,12 @@ async def manageable_scope_ids(
             )
         ).all()
     ) if project_id_set else set()
-    if team_ids and project_id_set:
+    if org_unit_ids and project_id_set:
         legacy_project_ids.update(
             (
                 await db_session.scalars(
                     select(GroupProject.project_id).where(
-                        GroupProject.group_id.in_(team_ids),
+                        GroupProject.group_id.in_(org_unit_ids),
                         GroupProject.project_id.in_(project_id_set),
                         GroupProject.role <= ProjectRole.MANAGER,
                     )
@@ -604,9 +616,9 @@ async def manageable_scope_ids(
     protocol_id_set = {protocol.id for protocol in protocols}
     if protocol_id_set:
         subject_condition = AccessGrant.user_id == user_id
-        if team_ids:
+        if org_unit_ids:
             subject_condition = or_(
-                subject_condition, AccessGrant.group_id.in_(team_ids)
+                subject_condition, AccessGrant.group_id.in_(org_unit_ids)
             )
         exact_protocol_ids = (
             await db_session.scalars(
@@ -661,7 +673,7 @@ async def _add_legacy_project_sources(
     decision: AccessDecision,
     user_id: UUID,
     project: Project,
-    team_ids: set[int],
+    org_unit_ids: set[int],
 ) -> None:
     direct_roles = (
         await db_session.scalars(
@@ -670,19 +682,19 @@ async def _add_legacy_project_sources(
             )
         )
     ).all()
-    team_roles: list[int] = []
-    if team_ids:
-        team_roles = list(
+    org_unit_roles: list[int] = []
+    if org_unit_ids:
+        org_unit_roles = list(
             (
                 await db_session.scalars(
                     select(GroupProject.role).where(
-                        GroupProject.group_id.in_(team_ids),
+                        GroupProject.group_id.in_(org_unit_ids),
                         GroupProject.project_id == project.id,
                     )
                 )
             ).all()
         )
-    for role_value in [*direct_roles, *team_roles]:
+    for role_value in [*direct_roles, *org_unit_roles]:
         role = ProjectRole(role_value)
         role_key = LEGACY_ROLE_KEY[role]
         decision.add(

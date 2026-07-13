@@ -1,14 +1,31 @@
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, text
+from sqlalchemy import CheckConstraint, ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 
+class OrganizationalUnitType(StrEnum):
+    DEPARTMENT = "department"
+    RESEARCH_GROUP = "research_group"
+    CORE_FACILITY = "core_facility"
+    PROJECT_TEAM = "project_team"
+    COMMITTEE = "committee"
+    OTHER = "other"
+
+
 class Group(Base):
     __tablename__ = "groups"
+    __table_args__ = (
+        CheckConstraint(
+            "unit_type IN ('department', 'research_group', 'core_facility', "
+            "'project_team', 'committee', 'other')",
+            name="ck_groups_unit_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         nullable=False, primary_key=True, autoincrement=True, index=True
@@ -29,6 +46,11 @@ class Group(Base):
     parent_group_id: Mapped[int | None] = mapped_column(
         ForeignKey("groups.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    unit_type: Mapped[str] = mapped_column(
+        nullable=False,
+        default=OrganizationalUnitType.OTHER,
+        server_default=text("'other'"),
+    )
 
     lab: Mapped[any] = relationship("Lab", overlaps="groups")
     users: Mapped[list[any]] = relationship(
@@ -40,6 +62,11 @@ class Group(Base):
         back_populates="groups",
         overlaps="groups",
     )
+
+
+# Keep the established table and relationship name while exposing the generic
+# domain term to new access-control code.
+OrganizationalUnit = Group
 
 
 class GroupUser(Base):

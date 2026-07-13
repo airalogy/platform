@@ -107,7 +107,7 @@
           </n-radio-group>
         </n-form-item>
         <n-form-item :label="$t('page.labs.access.subject')" path="subjectId">
-          <n-select v-model:value="grantForm.subjectId" filterable :disabled="Boolean(editingGrant)" :options="grantForm.subjectType === 'user' ? memberOptions : teamOptions" />
+          <n-select v-model:value="grantForm.subjectId" filterable :disabled="Boolean(editingGrant)" :options="grantForm.subjectType === 'user' ? memberOptions : orgUnitOptions" />
         </n-form-item>
         <n-form-item :label="$t('page.labs.access.scopeType')">
           <n-radio-group v-model:value="grantForm.scopeType" :disabled="Boolean(editingGrant)" size="small" @update:value="resetGrantResource">
@@ -177,7 +177,7 @@ import type {
   AccessSource,
   AccessSubjectType,
   EffectiveAccess,
-  LabTeam,
+  LabOrganizationalUnit,
   ManageableScopes,
 } from "@/service/api/access"
 import type { DataTableColumns, FormInst, FormRules, SelectOption } from "naive-ui"
@@ -188,7 +188,7 @@ import {
   fetchAccessGrants,
   fetchAccessRoles,
   fetchEffectiveAccess,
-  fetchLabTeams,
+  fetchLabOrganizationalUnits,
   fetchManageableScopes,
   postAccessGrant,
   putAccessGrant,
@@ -212,7 +212,7 @@ const { labInfo, userLabRole } = useLabInfoStore()!
 const canManageLab = computed(() => userLabRole.value === LabRole.OWNER || userLabRole.value === LabRole.MANAGER)
 const activeTab = ref("grants")
 const roles = ref<AccessRole[]>([])
-const teams = ref<LabTeam[]>([])
+const organizationalUnits = ref<LabOrganizationalUnit[]>([])
 const members = ref<Api.Lab.MemberListItem[]>([])
 const projects = ref<ResourceItem[]>([])
 const protocols = ref<ResourceItem[]>([])
@@ -230,14 +230,14 @@ const memberOptions = computed<SelectOption[]>(() => members.value.map(member =>
   label: `${member.name || member.username} (@${member.username})`,
   value: String(member.id),
 })))
-const teamOptions = computed<SelectOption[]>(() => teams.value.map(team => ({ label: team.name, value: team.id })))
+const orgUnitOptions = computed<SelectOption[]>(() => organizationalUnits.value.map(unit => ({ label: unit.name, value: unit.id })))
 const projectOptions = computed<SelectOption[]>(() => projects.value.map(project => ({ label: `${project.name} (${project.uid})`, value: project.id })))
 const allProtocolOptions = computed<SelectOption[]>(() => protocols.value.map(protocol => ({ label: protocol.name, value: protocol.id })))
 const grantProjectOptions = computed(() => projectOptions.value.filter(option => manageableScopes.value.project_ids.includes(String(option.value))))
 const roleOptions = computed<SelectOption[]>(() => roles.value.filter(role => role.grantable).map(role => ({ label: role.label, value: role.key })))
 const subjectTypeOptions = computed(() => [
   { label: $t("page.labs.access.user"), value: "user" },
-  { label: $t("page.labs.access.team"), value: "team" },
+  { label: $t("page.labs.access.orgUnit"), value: "org_unit" },
 ])
 const scopeTypeOptions = computed(() => [
   manageableScopes.value.lab ? { label: "Lab", value: "lab" } : null,
@@ -249,15 +249,15 @@ async function loadReferenceData() {
   if (!labInfo.value?.id)
     return
   const labId = String(labInfo.value.id)
-  const [roleResult, teamResult, memberResult, projectResult, scopesResult] = await Promise.all([
+  const [roleResult, unitResult, memberResult, projectResult, scopesResult] = await Promise.all([
     fetchAccessRoles(),
-    fetchLabTeams(labId),
+    fetchLabOrganizationalUnits(labId),
     fetchLabMemberList(labId, { page: 1, pageSize: 1000 }),
     fetchProjectList({ labId, page: 1, pageSize: 1000 }),
     fetchManageableScopes(labId),
   ])
   roles.value = roleResult.data?.roles || []
-  teams.value = teamResult.data?.teams || []
+  organizationalUnits.value = unitResult.data?.organizational_units || []
   members.value = memberResult?.users || []
   projects.value = (projectResult?.projects || []) as ResourceItem[]
   manageableScopes.value = scopesResult.data || { lab: false, project_ids: [], protocol_ids: [] }
@@ -288,7 +288,7 @@ async function loadGrants() {
 
 const subjectFilterOptions = computed<SelectOption[]>(() => [
   ...memberOptions.value.map(option => ({ ...option, value: `user:${option.value}` })),
-  ...teamOptions.value.map(option => ({ ...option, value: `team:${option.value}` })),
+  ...orgUnitOptions.value.map(option => ({ ...option, value: `org_unit:${option.value}` })),
 ])
 const resourceFilterOptions = computed<SelectOption[]>(() => [
   { label: labInfo.value?.name || "Lab", value: `lab:${labInfo.value?.id}` },
@@ -296,7 +296,7 @@ const resourceFilterOptions = computed<SelectOption[]>(() => [
   ...allProtocolOptions.value.map(option => ({ ...option, value: `protocol:${option.value}` })),
 ])
 const filteredGrants = computed(() => grants.value.filter((grant) => {
-  const subject = grant.subject_type === "user" ? `user:${grant.user_id}` : `team:${grant.group_id}`
+  const subject = grant.subject_type === "user" ? `user:${grant.user_id}` : `org_unit:${grant.org_unit_id || grant.group_id}`
   const resourceId = grant.scope_type === "lab" ? grant.lab_id : grant.scope_type === "project" ? grant.project_id : grant.protocol_id
   const resource = `${grant.scope_type}:${resourceId}`
   return (!grantFilters.subject || subject === grantFilters.subject) && (!grantFilters.resource || resource === grantFilters.resource)
@@ -309,11 +309,11 @@ function memberLabel(id: string | null) {
   const member = members.value.find(item => String(item.id) === id)
   return member ? member.name || member.username : id || "-"
 }
-function teamLabel(id: number | null) {
-  return teams.value.find(team => team.id === id)?.name || String(id || "-")
+function orgUnitLabel(id: number | null) {
+  return organizationalUnits.value.find(unit => unit.id === id)?.name || String(id || "-")
 }
 function subjectLabel(grant: AccessGrant) {
-  return grant.subject_type === "user" ? memberLabel(grant.user_id) : teamLabel(grant.group_id)
+  return grant.subject_type === "user" ? memberLabel(grant.user_id) : orgUnitLabel(grant.org_unit_id || grant.group_id)
 }
 function resourceLabel(scopeType: AccessScopeType, scopeId: string | number | null) {
   if (scopeType === "lab")
@@ -387,8 +387,8 @@ function openGrantModal(grant?: AccessGrant) {
   const defaultScope = scopeTypeOptions.value[0]?.value || "project"
   Object.assign(grantForm, grant
     ? {
-        subjectType: grant.subject_type,
-        subjectId: grant.user_id || grant.group_id,
+        subjectType: grant.subject_type === "user" ? "user" : "org_unit",
+        subjectId: grant.user_id || grant.org_unit_id || grant.group_id,
         scopeType: grant.scope_type,
         projectId: grant.scope_type === "protocol" ? grant.project_id : null,
         resourceId: grant.scope_type === "project" ? grant.project_id : grant.scope_type === "protocol" ? grant.protocol_id : null,
@@ -441,7 +441,7 @@ async function saveGrant() {
         labId: String(labInfo.value.id),
         subjectType: grantForm.subjectType,
         userId: grantForm.subjectType === "user" ? String(grantForm.subjectId) : null,
-        groupId: grantForm.subjectType === "team" ? Number(grantForm.subjectId) : null,
+        orgUnitId: grantForm.subjectType === "org_unit" ? Number(grantForm.subjectId) : null,
         scopeType: grantForm.scopeType,
         projectId: grantForm.scopeType === "project" ? grantForm.resourceId : grantForm.scopeType === "protocol" ? grantForm.projectId : null,
         protocolId: grantForm.scopeType === "protocol" ? grantForm.resourceId : null,
@@ -515,7 +515,7 @@ const sourceColumns = computed<DataTableColumns<AccessSource>>(() => [
   { title: $t("common.role"), key: "role_key", render: row => roleLabel(row.role_key) },
   { title: $t("page.labs.access.scopeType"), key: "scope_type" },
   { title: $t("page.labs.access.inherited"), key: "inherited", render: row => row.inherited ? $t("page.labs.access.yes") : $t("page.labs.access.no") },
-  { title: $t("page.labs.access.subject"), key: "subject_id", render: row => row.subject_type === "team" ? teamLabel(Number(row.subject_id)) : memberLabel(row.subject_id) },
+  { title: $t("page.labs.access.subject"), key: "subject_id", render: row => row.subject_type === "org_unit" || row.subject_type === "team" ? orgUnitLabel(Number(row.subject_id)) : memberLabel(row.subject_id) },
 ])
 
 async function loadAudit() {

@@ -1229,23 +1229,33 @@ declare namespace I18n {
         groups: string
         access: {
           title: string
-          teams: string
-          teamCount: string
-          createTeam: string
-          editTeam: string
-          teamId: string
-          teamIdHint: string
-          parentTeam: string
-          rootTeam: string
-          noTeams: string
-          selectTeam: string
+          organization: string
+          organizationalUnits: string
+          unitCount: string
+          createUnit: string
+          editUnit: string
+          unitId: string
+          unitIdHint: string
+          unitType: string
+          parentUnit: string
+          rootUnit: string
+          noUnits: string
+          selectUnit: string
+          deleteUnitConfirm: string
+          removeUnitMemberConfirm: string
+          unitManager: string
+          unitMember: string
+          unitNameRequired: string
+          unitTypes: {
+            department: string
+            research_group: string
+            core_facility: string
+            project_team: string
+            committee: string
+            other: string
+          }
           noDescription: string
-          deleteTeamConfirm: string
-          removeMemberConfirm: string
           member: string
-          teamManager: string
-          teamMember: string
-          nameRequired: string
           grants: string
           addGrant: string
           editGrant: string
@@ -1255,7 +1265,7 @@ declare namespace I18n {
           subjectType: string
           subject: string
           user: string
-          team: string
+          orgUnit: string
           scopeType: string
           resource: string
           project: string

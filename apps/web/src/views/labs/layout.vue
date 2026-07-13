@@ -103,7 +103,7 @@ const instanceStore = useInstanceStore()
 const routerStore = useRouteStore()
 const { userInfo } = useAuthStore()
 
-const showIconRoute = ["lab-projects", "lab-records", "lab-members", "lab-groups", "lab-teams", "lab-access", "lab-settings", "project-protocols", "project-records", "project-members"]
+const showIconRoute = ["lab-projects", "lab-records", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings", "project-protocols", "project-records", "project-members"]
 const showIcon = computed(() => typeof route.name === "string" && showIconRoute.includes(route.name))
 
 const { routerPushByKey } = useRouterPush()
@@ -121,7 +121,7 @@ const tabs = computed((): TabPaneProps[] => {
     ]
   }
 
-  if (["lab-projects", "lab-records", "lab-members", "lab-groups", "lab-teams", "lab-access", "lab-settings"].includes(String(name))) {
+  if (["lab-projects", "lab-records", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings"].includes(String(name))) {
     const membersHint = $t("page.labs.tab.membersHint")
     const groupsHint = $t("page.labs.tab.groupsHint")
     const hintTab = (label: string, hint: string) =>
@@ -144,7 +144,7 @@ const tabs = computed((): TabPaneProps[] => {
 
     if (instanceStore.isStructuredLab) {
       list.push(
-        { name: "lab-teams", tab: $t("page.labs.access.teams") },
+        { name: "lab-organization", tab: $t("page.labs.access.organization") },
         { name: "lab-access", tab: $t("page.labs.access.title") },
       )
     }
@@ -183,7 +183,7 @@ const title = computed(() => {
     return "Labs"
   }
 
-  if (["lab-projects", "lab-records", "lab-members", "lab-groups", "lab-teams", "lab-access", "lab-settings"].includes(String(name))) {
+  if (["lab-projects", "lab-records", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings"].includes(String(name))) {
     const { name: labName, uid } = labInfo.value || {}
 
     return labName || uid || "Labs"

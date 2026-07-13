@@ -16,7 +16,7 @@ class AccessScopeType(StrEnum):
 
 class AccessSubjectType(StrEnum):
     USER = "user"
-    TEAM = "team"
+    ORG_UNIT = "org_unit"
 
 
 class AccessAuditAction(StrEnum):
@@ -30,7 +30,7 @@ class AccessGrant(Base):
     __table_args__ = (
         CheckConstraint(
             "(subject_type = 'user' AND user_id IS NOT NULL AND group_id IS NULL) "
-            "OR (subject_type = 'team' AND group_id IS NOT NULL AND user_id IS NULL)",
+            "OR (subject_type = 'org_unit' AND group_id IS NOT NULL AND user_id IS NULL)",
             name="ck_access_grants_subject",
         ),
         CheckConstraint(

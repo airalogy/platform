@@ -1,8 +1,9 @@
 import { request } from "../request"
 
 export type AccessScopeType = "lab" | "project" | "protocol"
-export type AccessSubjectType = "user" | "team"
-export type TeamMembershipRole = "manager" | "member"
+export type AccessSubjectType = "user" | "org_unit"
+export type OrganizationalUnitMembershipRole = "manager" | "member"
+export type OrganizationalUnitType = "department" | "research_group" | "core_facility" | "project_team" | "committee" | "other"
 
 export interface AccessRole {
   key: string
@@ -11,29 +12,32 @@ export interface AccessRole {
   grantable: boolean
 }
 
-export interface TeamMember {
+export interface OrganizationalUnitMember {
   id: string
   username: string
   name: string
-  membership_role: TeamMembershipRole
+  membership_role: OrganizationalUnitMembershipRole
 }
 
-export interface LabTeam {
+export interface LabOrganizationalUnit {
   id: number
   lab_id: string
+  parent_unit_id: number | null
   parent_group_id: number | null
+  unit_type: OrganizationalUnitType
   uid: string
   name: string
   description: string
   users_count: number
-  members: TeamMember[]
+  members: OrganizationalUnitMember[]
 }
 
 export interface AccessGrant {
   id: string
   lab_id: string
-  subject_type: AccessSubjectType
+  subject_type: AccessSubjectType | "team"
   user_id: string | null
+  org_unit_id: number | null
   group_id: number | null
   scope_type: AccessScopeType
   project_id: string | null
@@ -55,7 +59,7 @@ export interface AccessSource {
   scope_id: string
   inherited: boolean
   grant_id: string | null
-  subject_type: AccessSubjectType | "user" | null
+  subject_type: AccessSubjectType | "team" | null
   subject_id: string | null
 }
 
@@ -86,6 +90,7 @@ export interface GrantPayload {
   labId: string
   subjectType: AccessSubjectType
   userId?: string | null
+  orgUnitId?: number | null
   groupId?: number | null
   scopeType: AccessScopeType
   projectId?: string | null
@@ -101,7 +106,7 @@ function grantData(payload: GrantPayload) {
     lab_id: payload.labId,
     subject_type: payload.subjectType,
     user_id: payload.subjectType === "user" ? payload.userId : null,
-    group_id: payload.subjectType === "team" ? payload.groupId : null,
+    org_unit_id: payload.subjectType === "org_unit" ? payload.orgUnitId || payload.groupId : null,
     scope_type: payload.scopeType,
     project_id: payload.scopeType === "project" || payload.scopeType === "protocol" ? payload.projectId : null,
     protocol_id: payload.scopeType === "protocol" ? payload.protocolId : null,
@@ -116,73 +121,77 @@ export async function fetchAccessRoles() {
   return request<{ roles: AccessRole[] }>({ url: "/access/roles" })
 }
 
-export async function fetchLabTeams(labId: string) {
-  return request<{ teams: LabTeam[] }>({ url: `/access/labs/${labId}/teams` })
+export async function fetchLabOrganizationalUnits(labId: string) {
+  return request<{ organizational_units: LabOrganizationalUnit[] }>({ url: `/access/labs/${labId}/organizational-units` })
 }
 
-export async function postTeam(payload: {
+export async function postOrganizationalUnit(payload: {
   labId: string
   uid: string
   name: string
   description: string
-  parentGroupId?: number | null
+  unitType: OrganizationalUnitType
+  parentUnitId?: number | null
 }) {
-  return request<LabTeam>({
-    url: "/access/teams",
+  return request<LabOrganizationalUnit>({
+    url: "/access/organizational-units",
     method: "POST",
     data: {
       lab_id: payload.labId,
       uid: payload.uid,
       name: payload.name,
       description: payload.description,
-      parent_group_id: payload.parentGroupId || null,
+      unit_type: payload.unitType,
+      parent_unit_id: payload.parentUnitId || null,
     },
   })
 }
 
-export async function putTeam(teamId: number, payload: {
+export async function putOrganizationalUnit(unitId: number, payload: {
   name?: string
   description?: string
-  parentGroupId?: number | null
+  unitType?: OrganizationalUnitType
+  parentUnitId?: number | null
   updateParent?: boolean
 }) {
-  return request<LabTeam>({
-    url: `/access/teams/${teamId}`,
+  return request<LabOrganizationalUnit>({
+    url: `/access/organizational-units/${unitId}`,
     method: "PUT",
     data: {
       name: payload.name,
       description: payload.description,
-      parent_group_id: payload.parentGroupId,
+      unit_type: payload.unitType,
+      parent_unit_id: payload.parentUnitId,
       update_parent: payload.updateParent || false,
     },
   })
 }
 
-export async function deleteTeam(teamId: number) {
-  return request({ url: `/access/teams/${teamId}`, method: "DELETE" })
+export async function deleteOrganizationalUnit(unitId: number) {
+  return request({ url: `/access/organizational-units/${unitId}`, method: "DELETE" })
 }
 
-export async function putTeamMember(teamId: number, payload: {
+export async function putOrganizationalUnitMember(unitId: number, payload: {
   userId: string
-  membershipRole: TeamMembershipRole
+  membershipRole: OrganizationalUnitMembershipRole
 }) {
   return request({
-    url: `/access/teams/${teamId}/members`,
+    url: `/access/organizational-units/${unitId}/members`,
     method: "POST",
     data: { user_id: payload.userId, membership_role: payload.membershipRole },
   })
 }
 
-export async function deleteTeamMember(teamId: number, userId: string) {
+export async function deleteOrganizationalUnitMember(unitId: number, userId: string) {
   return request({
-    url: `/access/teams/${teamId}/members/${userId}`,
+    url: `/access/organizational-units/${unitId}/members/${userId}`,
     method: "DELETE",
   })
 }
 
 export async function fetchAccessGrants(labId: string, filters: Partial<{
   userId: string
-  groupId: number
+  orgUnitId: number
   projectId: string
   protocolId: string
   includeRevoked: boolean
@@ -191,7 +200,7 @@ export async function fetchAccessGrants(labId: string, filters: Partial<{
     url: `/access/labs/${labId}/grants`,
     params: {
       user_id: filters.userId,
-      group_id: filters.groupId,
+      org_unit_id: filters.orgUnitId,
       project_id: filters.projectId,
       protocol_id: filters.protocolId,
       include_revoked: filters.includeRevoked,

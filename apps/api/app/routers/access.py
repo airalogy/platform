@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, StringConstraints, model_validator
+from pydantic import BaseModel, StringConstraints, field_validator, model_validator
 from sqlalchemy import func, or_, select
 
 from app.config import config
@@ -16,7 +16,7 @@ from app.models.access_control import (
     AccessScopeType,
     AccessSubjectType,
 )
-from app.models.group import Group, GroupUser
+from app.models.group import Group, GroupUser, OrganizationalUnitType
 from app.models.lab import Lab, LabRole, LabUser
 from app.models.project import Project
 from app.models.protocol import Protocol
@@ -34,7 +34,7 @@ from .depends import CurrentUser
 
 router = APIRouter(prefix="/access", tags=["access"])
 
-TeamRole = Literal["manager", "member"]
+OrganizationalUnitRole = Literal["manager", "member"]
 
 
 def ensure_structured_mode() -> None:
@@ -68,17 +68,17 @@ async def require_lab_member(
     return membership
 
 
-async def require_team_manager(
-    db_session: DBSession, group: Group, user_id: UUID
+async def require_organizational_unit_manager(
+    db_session: DBSession, unit: Group, user_id: UUID
 ) -> None:
-    lab_membership = await get_lab_membership(db_session, group.lab_id, user_id)
+    lab_membership = await get_lab_membership(db_session, unit.lab_id, user_id)
     if lab_membership is not None and lab_membership.role <= LabRole.MANAGER:
         return
-    current: Group | None = group
+    current: Group | None = unit
     visited: set[int] = set()
     while current is not None and current.id not in visited:
         visited.add(current.id)
-        team_membership = await GroupUser.find_by(
+        unit_membership = await GroupUser.find_by(
             db_session,
             [
                 GroupUser.group_id == current.id,
@@ -86,7 +86,7 @@ async def require_team_manager(
                 GroupUser.membership_role == "manager",
             ],
         )
-        if team_membership is not None:
+        if unit_membership is not None:
             return
         current = (
             await Group.find_by(db_session, [Group.id == current.parent_group_id])
@@ -96,21 +96,24 @@ async def require_team_manager(
     raise HTTPException(status_code=403, detail="Permission denied")
 
 
-async def team_depth(db_session: DBSession, team: Group | None) -> int:
+async def organizational_unit_depth(db_session: DBSession, unit: Group | None) -> int:
     depth = 0
     visited: set[int] = set()
-    while team is not None:
-        if team.id in visited:
-            raise HTTPException(status_code=409, detail="Team hierarchy contains a cycle")
-        visited.add(team.id)
+    while unit is not None:
+        if unit.id in visited:
+            raise HTTPException(
+                status_code=409,
+                detail="Organizational-unit hierarchy contains a cycle",
+            )
+        visited.add(unit.id)
         depth += 1
-        if team.parent_group_id is None:
+        if unit.parent_group_id is None:
             break
-        team = await Group.find_by(db_session, [Group.id == team.parent_group_id])
+        unit = await Group.find_by(db_session, [Group.id == unit.parent_group_id])
     return depth
 
 
-async def validate_parent(
+async def validate_organizational_unit_parent(
     db_session: DBSession,
     lab_id: UUID,
     parent_group_id: int | None,
@@ -122,13 +125,19 @@ async def validate_parent(
         db_session, [Group.id == parent_group_id, Group.lab_id == lab_id]
     )
     if parent is None:
-        raise HTTPException(status_code=400, detail="Parent team is not in this Lab")
+        raise HTTPException(
+            status_code=400,
+            detail="Parent organizational unit is not in this Lab",
+        )
     if moving_group_id is not None:
         current: Group | None = parent
         visited: set[int] = set()
         while current is not None:
             if current.id == moving_group_id:
-                raise HTTPException(status_code=409, detail="Team hierarchy cannot contain a cycle")
+                raise HTTPException(
+                    status_code=409,
+                    detail="Organizational-unit hierarchy cannot contain a cycle",
+                )
             if current.id in visited or current.parent_group_id is None:
                 break
             visited.add(current.id)
@@ -137,33 +146,41 @@ async def validate_parent(
             )
     subtree_height = 1
     if moving_group_id is not None:
-        all_teams = (
+        all_units = (
             await db_session.scalars(select(Group).where(Group.lab_id == lab_id))
         ).all()
         children: dict[int, list[int]] = {}
-        for item in all_teams:
+        for item in all_units:
             if item.parent_group_id is not None:
                 children.setdefault(item.parent_group_id, []).append(item.id)
 
-        def height(team_id: int, visited: set[int]) -> int:
-            if team_id in visited:
+        def height(unit_id: int, visited: set[int]) -> int:
+            if unit_id in visited:
                 raise HTTPException(
-                    status_code=409, detail="Team hierarchy contains a cycle"
+                    status_code=409,
+                    detail="Organizational-unit hierarchy contains a cycle",
                 )
-            descendants = children.get(team_id, [])
+            descendants = children.get(unit_id, [])
             if not descendants:
                 return 1
-            next_visited = {*visited, team_id}
+            next_visited = {*visited, unit_id}
             return 1 + max(height(child_id, next_visited) for child_id in descendants)
 
         subtree_height = height(moving_group_id, set())
-    if await team_depth(db_session, parent) + subtree_height > 3:
-        raise HTTPException(status_code=400, detail="Team hierarchy supports at most 3 levels")
+    if await organizational_unit_depth(db_session, parent) + subtree_height > 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Organizational-unit hierarchy supports at most 3 levels",
+        )
     return parent
 
 
-def team_dict(team: Group, members: list[dict] | None = None) -> dict:
-    return team.as_dict(members=members or [])
+def organizational_unit_dict(
+    unit: Group, members: list[dict] | None = None
+) -> dict:
+    state = unit.as_dict(members=members or [])
+    state["parent_unit_id"] = unit.parent_group_id
+    return state
 
 
 @router.get("/roles")
@@ -172,11 +189,12 @@ async def get_roles(_: CurrentUser):
     return {"roles": role_catalog()}
 
 
-@router.get("/labs/{lab_id}/teams")
-async def get_teams(lab_id: UUID, current_user: CurrentUser, db_session: DBSession):
+async def list_organizational_units(
+    lab_id: UUID, current_user: CurrentUser, db_session: DBSession
+) -> list[dict]:
     ensure_structured_mode()
     await require_lab_member(db_session, lab_id, current_user.id)
-    teams = (
+    units = (
         await db_session.scalars(
             select(Group).where(Group.lab_id == lab_id).order_by(Group.name.asc())
         )
@@ -190,9 +208,9 @@ async def get_teams(lab_id: UUID, current_user: CurrentUser, db_session: DBSessi
             .order_by(User.name.asc())
         )
     ).all()
-    by_team: dict[int, list[dict]] = {}
+    by_unit: dict[int, list[dict]] = {}
     for membership, user in memberships:
-        by_team.setdefault(membership.group_id, []).append(
+        by_unit.setdefault(membership.group_id, []).append(
             {
                 "id": str(user.id),
                 "username": user.username,
@@ -200,118 +218,184 @@ async def get_teams(lab_id: UUID, current_user: CurrentUser, db_session: DBSessi
                 "membership_role": membership.membership_role,
             }
         )
-    return {"teams": [team_dict(team, by_team.get(team.id)) for team in teams]}
+    return [organizational_unit_dict(unit, by_unit.get(unit.id)) for unit in units]
 
 
-class TeamCreateParams(BaseModel):
+@router.get("/labs/{lab_id}/organizational-units")
+async def get_organizational_units(
+    lab_id: UUID, current_user: CurrentUser, db_session: DBSession
+):
+    units = await list_organizational_units(lab_id, current_user, db_session)
+    return {"organizational_units": units}
+
+
+@router.get("/labs/{lab_id}/teams", include_in_schema=False)
+async def get_teams_compat(
+    lab_id: UUID, current_user: CurrentUser, db_session: DBSession
+):
+    units = await list_organizational_units(lab_id, current_user, db_session)
+    return {"teams": units}
+
+
+class OrganizationalUnitCreateParams(BaseModel):
     lab_id: UUID
     uid: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{2,31}$")]
     name: Annotated[str, StringConstraints(min_length=1, max_length=64, strip_whitespace=True)]
     description: Annotated[str, StringConstraints(max_length=256, strip_whitespace=True)] = ""
+    unit_type: OrganizationalUnitType = OrganizationalUnitType.RESEARCH_GROUP
+    parent_unit_id: int | None = None
     parent_group_id: int | None = None
 
+    @model_validator(mode="after")
+    def normalize_parent(self):
+        if (
+            self.parent_unit_id is not None
+            and self.parent_group_id is not None
+            and self.parent_unit_id != self.parent_group_id
+        ):
+            raise ValueError("parent_unit_id and parent_group_id must match")
+        self.parent_group_id = self.parent_unit_id or self.parent_group_id
+        self.parent_unit_id = self.parent_group_id
+        return self
 
-@router.post("/teams")
-async def create_team(
-    params: TeamCreateParams, current_user: CurrentUser, db_session: DBSession
+
+@router.post("/organizational-units")
+@router.post("/teams", include_in_schema=False)
+async def create_organizational_unit(
+    params: OrganizationalUnitCreateParams,
+    current_user: CurrentUser,
+    db_session: DBSession,
 ):
     ensure_structured_mode()
-    parent = await validate_parent(
+    parent = await validate_organizational_unit_parent(
         db_session, params.lab_id, params.parent_group_id
     )
     if parent is None:
         await require_lab_manager(db_session, params.lab_id, current_user.id)
     else:
-        await require_team_manager(db_session, parent, current_user.id)
+        await require_organizational_unit_manager(
+            db_session, parent, current_user.id
+        )
     existing = await Group.find_by(
         db_session, [Group.lab_id == params.lab_id, Group.uid == params.uid]
     )
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Team UID already exists")
-    team = Group(
-        **params.model_dump(),
+        raise HTTPException(
+            status_code=409,
+            detail="Organizational-unit UID already exists",
+        )
+    unit = Group(
+        **params.model_dump(exclude={"parent_unit_id"}),
         create_user_id=current_user.id,
         users_count=0,
         projects_count=0,
     )
-    db_session.add(team)
+    db_session.add(unit)
     await db_session.flush()
     await db_session.commit()
-    return team
+    return organizational_unit_dict(unit)
 
 
-class TeamUpdateParams(BaseModel):
+class OrganizationalUnitUpdateParams(BaseModel):
     name: Annotated[str, StringConstraints(min_length=1, max_length=64, strip_whitespace=True)] | None = None
     description: Annotated[str, StringConstraints(max_length=256, strip_whitespace=True)] | None = None
+    unit_type: OrganizationalUnitType | None = None
+    parent_unit_id: int | None = None
     parent_group_id: int | None = None
     update_parent: bool = False
 
+    @model_validator(mode="after")
+    def normalize_parent(self):
+        if (
+            self.parent_unit_id is not None
+            and self.parent_group_id is not None
+            and self.parent_unit_id != self.parent_group_id
+        ):
+            raise ValueError("parent_unit_id and parent_group_id must match")
+        self.parent_group_id = self.parent_unit_id or self.parent_group_id
+        self.parent_unit_id = self.parent_group_id
+        return self
 
-@router.put("/teams/{team_id}")
-async def update_team(
-    team_id: int,
-    params: TeamUpdateParams,
+
+@router.put("/organizational-units/{unit_id}")
+@router.put("/teams/{unit_id}", include_in_schema=False)
+async def update_organizational_unit(
+    unit_id: int,
+    params: OrganizationalUnitUpdateParams,
     current_user: CurrentUser,
     db_session: DBSession,
 ):
     ensure_structured_mode()
-    team = await Group.find(db_session, team_id)
-    await require_team_manager(db_session, team, current_user.id)
-    values = params.model_dump(exclude_none=True, exclude={"update_parent"})
+    unit = await Group.find(db_session, unit_id)
+    await require_organizational_unit_manager(db_session, unit, current_user.id)
+    values = params.model_dump(
+        exclude_none=True,
+        exclude={"update_parent", "parent_unit_id", "parent_group_id"},
+    )
     if params.update_parent:
-        await require_lab_manager(db_session, team.lab_id, current_user.id)
-        await validate_parent(db_session, team.lab_id, params.parent_group_id, team.id)
+        await require_lab_manager(db_session, unit.lab_id, current_user.id)
+        await validate_organizational_unit_parent(
+            db_session,
+            unit.lab_id,
+            params.parent_group_id,
+            unit.id,
+        )
         values["parent_group_id"] = params.parent_group_id
-    team.set_attrs(**values)
+    unit.set_attrs(**values)
     await db_session.commit()
-    return team
+    return organizational_unit_dict(unit)
 
 
-@router.delete("/teams/{team_id}")
-async def delete_team(
-    team_id: int, current_user: CurrentUser, db_session: DBSession
+@router.delete("/organizational-units/{unit_id}")
+@router.delete("/teams/{unit_id}", include_in_schema=False)
+async def delete_organizational_unit(
+    unit_id: int,
+    current_user: CurrentUser,
+    db_session: DBSession,
 ):
     ensure_structured_mode()
-    team = await Group.find(db_session, team_id)
-    await require_team_manager(db_session, team, current_user.id)
-    has_children = await Group.exists(db_session, [Group.parent_group_id == team.id])
-    has_members = await GroupUser.exists(db_session, [GroupUser.group_id == team.id])
+    unit = await Group.find(db_session, unit_id)
+    await require_organizational_unit_manager(db_session, unit, current_user.id)
+    has_children = await Group.exists(db_session, [Group.parent_group_id == unit.id])
+    has_members = await GroupUser.exists(db_session, [GroupUser.group_id == unit.id])
     has_grants = await AccessGrant.exists(
         db_session,
-        [AccessGrant.group_id == team.id, AccessGrant.revoked_at.is_(None)],
+        [AccessGrant.group_id == unit.id, AccessGrant.revoked_at.is_(None)],
     )
     if has_children or has_members or has_grants:
         raise HTTPException(
             status_code=409,
-            detail="Remove child teams, members, and active grants before deleting the team",
+            detail="Remove child units, members, and active grants before deleting the organizational unit",
         )
-    await db_session.delete(team)
+    await db_session.delete(unit)
     await db_session.commit()
     return {"success": True}
 
 
-class TeamMemberParams(BaseModel):
+class OrganizationalUnitMemberParams(BaseModel):
     user_id: UUID
-    membership_role: TeamRole = "member"
+    membership_role: OrganizationalUnitRole = "member"
 
 
-@router.post("/teams/{team_id}/members")
-async def add_team_member(
-    team_id: int,
-    params: TeamMemberParams,
+@router.post("/organizational-units/{unit_id}/members")
+@router.post("/teams/{unit_id}/members", include_in_schema=False)
+async def add_organizational_unit_member(
+    unit_id: int,
+    params: OrganizationalUnitMemberParams,
     current_user: CurrentUser,
     db_session: DBSession,
 ):
     ensure_structured_mode()
-    team = await Group.find(db_session, team_id)
-    await require_team_manager(db_session, team, current_user.id)
-    await require_lab_member(db_session, team.lab_id, params.user_id)
+    unit = await Group.find(db_session, unit_id)
+    await require_organizational_unit_manager(db_session, unit, current_user.id)
+    await require_lab_member(db_session, unit.lab_id, params.user_id)
     membership = await GroupUser.find_by(
-        db_session, [GroupUser.group_id == team.id, GroupUser.user_id == params.user_id]
+        db_session,
+        [GroupUser.group_id == unit.id, GroupUser.user_id == params.user_id],
     )
     if membership is None:
         membership = GroupUser(
-            group_id=team.id,
+            group_id=unit.id,
             user_id=params.user_id,
             membership_role=params.membership_role,
             create_user_id=current_user.id,
@@ -320,31 +404,34 @@ async def add_team_member(
     else:
         membership.membership_role = params.membership_role
     await db_session.flush()
-    team.users_count = await GroupUser.count(
-        db_session, [GroupUser.group_id == team.id]
+    unit.users_count = await GroupUser.count(
+        db_session, [GroupUser.group_id == unit.id]
     )
     await db_session.commit()
     return {"success": True}
 
 
-@router.delete("/teams/{team_id}/members/{user_id}")
-async def remove_team_member(
-    team_id: int,
+@router.delete("/organizational-units/{unit_id}/members/{user_id}")
+@router.delete(
+    "/teams/{unit_id}/members/{user_id}", include_in_schema=False
+)
+async def remove_organizational_unit_member(
+    unit_id: int,
     user_id: UUID,
     current_user: CurrentUser,
     db_session: DBSession,
 ):
     ensure_structured_mode()
-    team = await Group.find(db_session, team_id)
-    await require_team_manager(db_session, team, current_user.id)
+    unit = await Group.find(db_session, unit_id)
+    await require_organizational_unit_manager(db_session, unit, current_user.id)
     membership = await GroupUser.find_by(
-        db_session, [GroupUser.group_id == team.id, GroupUser.user_id == user_id]
+        db_session, [GroupUser.group_id == unit.id, GroupUser.user_id == user_id]
     )
     if membership is not None:
         await db_session.delete(membership)
         await db_session.flush()
-    team.users_count = await GroupUser.count(
-        db_session, [GroupUser.group_id == team.id]
+    unit.users_count = await GroupUser.count(
+        db_session, [GroupUser.group_id == unit.id]
     )
     await db_session.commit()
     return {"success": True}
@@ -354,6 +441,8 @@ class GrantParams(BaseModel):
     lab_id: UUID
     subject_type: AccessSubjectType
     user_id: UUID | None = None
+    org_unit_id: int | None = None
+    # Compatibility input for clients using the underlying Group identifier.
     group_id: int | None = None
     scope_type: AccessScopeType
     project_id: UUID | None = None
@@ -363,15 +452,36 @@ class GrantParams(BaseModel):
     expires_at: datetime | None = None
     reason: Annotated[str, StringConstraints(max_length=256, strip_whitespace=True)] = ""
 
+    @field_validator("subject_type", mode="before")
+    @classmethod
+    def normalize_legacy_subject_type(cls, value):
+        return AccessSubjectType.ORG_UNIT if value == "team" else value
+
     @model_validator(mode="after")
     def validate_shape(self):
         if self.role_key not in GRANTABLE_ROLE_KEYS:
             raise ValueError("Role cannot be assigned through a scoped grant")
         if self.subject_type == AccessSubjectType.USER:
-            if self.user_id is None or self.group_id is not None:
+            if (
+                self.user_id is None
+                or self.org_unit_id is not None
+                or self.group_id is not None
+            ):
                 raise ValueError("A user subject requires only user_id")
-        elif self.group_id is None or self.user_id is not None:
-            raise ValueError("A team subject requires only group_id")
+        else:
+            if (
+                self.org_unit_id is not None
+                and self.group_id is not None
+                and self.org_unit_id != self.group_id
+            ):
+                raise ValueError("org_unit_id and group_id must match")
+            unit_id = self.org_unit_id or self.group_id
+            if unit_id is None or self.user_id is not None:
+                raise ValueError(
+                    "An organizational-unit subject requires only org_unit_id"
+                )
+            self.org_unit_id = unit_id
+            self.group_id = unit_id
         if self.scope_type == AccessScopeType.LAB:
             if self.project_id is not None or self.protocol_id is not None:
                 raise ValueError("Lab scope cannot include project_id or protocol_id")
@@ -393,9 +503,12 @@ async def validate_grant_references(db_session: DBSession, params: GrantParams) 
     if params.user_id is not None:
         await require_lab_member(db_session, params.lab_id, params.user_id)
     if params.group_id is not None:
-        team = await Group.find(db_session, params.group_id)
-        if team.lab_id != params.lab_id:
-            raise HTTPException(status_code=400, detail="Team is not in this Lab")
+        unit = await Group.find(db_session, params.group_id)
+        if unit.lab_id != params.lab_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Organizational unit is not in this Lab",
+            )
     if params.project_id is not None:
         project = await Project.find(db_session, params.project_id)
         if project.lab_id != params.lab_id:
@@ -440,7 +553,9 @@ async def require_grant_delegation(
 
 
 def grant_state(grant: AccessGrant) -> dict:
-    return jsonable_encoder(grant.as_dict())
+    state = jsonable_encoder(grant.as_dict())
+    state["org_unit_id"] = state["group_id"]
+    return state
 
 
 def add_audit(
@@ -471,6 +586,7 @@ async def get_grants(
     current_user: CurrentUser,
     db_session: DBSession,
     user_id: UUID | None = None,
+    org_unit_id: int | None = None,
     group_id: int | None = None,
     project_id: UUID | None = None,
     protocol_id: UUID | None = None,
@@ -478,12 +594,22 @@ async def get_grants(
 ):
     ensure_structured_mode()
     membership = await require_lab_member(db_session, lab_id, current_user.id)
+    if (
+        org_unit_id is not None
+        and group_id is not None
+        and org_unit_id != group_id
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="org_unit_id and group_id must match",
+        )
+    unit_id = org_unit_id or group_id
     conditions = [AccessGrant.lab_id == lab_id]
     if not include_revoked:
         conditions.append(AccessGrant.revoked_at.is_(None))
     for column, value in (
         (AccessGrant.user_id, user_id),
-        (AccessGrant.group_id, group_id),
+        (AccessGrant.group_id, unit_id),
         (AccessGrant.project_id, project_id),
         (AccessGrant.protocol_id, protocol_id),
     ):
@@ -559,7 +685,7 @@ async def create_grant(
     if await AccessGrant.exists(db_session, duplicate_conditions):
         raise HTTPException(status_code=409, detail="Equivalent active grant already exists")
     grant = AccessGrant(
-        **params.model_dump(),
+        **params.model_dump(exclude={"org_unit_id"}),
         created_by_user_id=current_user.id,
     )
     db_session.add(grant)

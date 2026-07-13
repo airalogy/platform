@@ -4,8 +4,15 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from app.models.access_control import AccessSubjectType
+from app.models.group import OrganizationalUnitType
 from app.models.project import ProjectRole
-from app.routers.access import GrantParams, GrantUpdateParams
+from app.main import app
+from app.routers.access import (
+    GrantParams,
+    GrantUpdateParams,
+    OrganizationalUnitCreateParams,
+)
 from app.services.access_control import (
     AccessDecision,
     AccessSource,
@@ -33,6 +40,18 @@ def test_role_catalog_exposes_stable_capability_sets():
     assert catalog["project_manager"]["grantable"] is True
     assert "record.read" in catalog["viewer"]["capabilities"]
     assert "record.create" not in catalog["viewer"]["capabilities"]
+
+
+def test_openapi_exposes_only_canonical_organizational_unit_contract():
+    schema = app.openapi()
+
+    assert "/access/organizational-units" in schema["paths"]
+    assert "/access/labs/{lab_id}/organizational-units" in schema["paths"]
+    assert not any("/access/teams" in path for path in schema["paths"])
+    assert schema["components"]["schemas"]["AccessSubjectType"]["enum"] == [
+        "user",
+        "org_unit",
+    ]
 
 
 def test_decision_unions_multiple_roles_and_explains_sources():
@@ -105,6 +124,70 @@ def test_protocol_grant_can_include_project_for_reference_validation():
     )
 
     assert params.project_id == project_id
+
+
+def test_organizational_unit_grant_uses_canonical_subject_fields():
+    params = GrantParams(
+        **grant_payload(
+            subject_type="org_unit",
+            user_id=None,
+            org_unit_id=7,
+        )
+    )
+
+    assert params.subject_type == AccessSubjectType.ORG_UNIT
+    assert params.org_unit_id == 7
+    assert params.group_id == 7
+
+
+def test_legacy_team_grant_is_normalized_at_the_api_boundary():
+    params = GrantParams(
+        **grant_payload(
+            subject_type="team",
+            user_id=None,
+            group_id=9,
+        )
+    )
+
+    assert params.subject_type == AccessSubjectType.ORG_UNIT
+    assert params.org_unit_id == 9
+    assert params.group_id == 9
+
+
+def test_organizational_unit_grant_rejects_conflicting_identifiers():
+    with pytest.raises(ValidationError):
+        GrantParams(
+            **grant_payload(
+                subject_type="org_unit",
+                user_id=None,
+                org_unit_id=7,
+                group_id=9,
+            )
+        )
+
+
+def test_organizational_unit_create_params_normalize_parent_and_type():
+    parent_id = 5
+    params = OrganizationalUnitCreateParams(
+        lab_id=uuid4(),
+        uid="molecular_biology",
+        name="Molecular Biology",
+        parent_unit_id=parent_id,
+    )
+
+    assert params.unit_type == OrganizationalUnitType.RESEARCH_GROUP
+    assert params.parent_unit_id == parent_id
+    assert params.parent_group_id == parent_id
+
+
+def test_organizational_unit_create_params_reject_invalid_type():
+    with pytest.raises(ValidationError):
+        OrganizationalUnitCreateParams(
+            lab_id=uuid4(),
+            uid="molecular_biology",
+            name="Molecular Biology",
+            unit_type="division",
+        )
 
 
 def test_grant_update_validates_expiry_and_clear_conflicts():
