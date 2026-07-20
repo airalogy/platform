@@ -793,8 +793,17 @@ async def delete_protocol(
         protocol=protocol,
     )
 
+    deleted_at = datetime.now()
     protocol.status = ProtocolStatus.DELETED
-    protocol.deleted_at = datetime.now()
+    protocol.deleted_at = deleted_at
+    await db_session.execute(
+        update(Record)
+        .where(
+            Record.protocol_id == protocol.id,
+            Record.deleted_at.is_(None),
+        )
+        .values(deleted_at=deleted_at)
+    )
     await db_session.flush()
 
     # update parent protocol forks_count

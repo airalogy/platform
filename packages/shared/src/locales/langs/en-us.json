@@ -997,7 +997,14 @@
         "fileRequired": "Select a .aira file first",
         "success": "Imported {protocols} protocol(s), {records} record(s), and {files} file(s)",
         "errorTitle": "Import failed",
-        "unknownError": "Import failed. Check the archive and try again."
+        "unknownError": "Import failed. Check the archive and try again.",
+        "serverError": "The server encountered an unexpected error while importing. Retry; if the problem continues, use the request ID below to locate the server log.",
+        "storageUnavailable": "Object storage is temporarily unavailable. Check that MinIO or the configured storage service is running, then retry.",
+        "networkError": "The API could not be reached. Check that the backend is running, then retry.",
+        "httpStatus": "HTTP status: {status}",
+        "requestId": "Request ID: {id}",
+        "requestIdHint": "Provide the request ID to an administrator to locate the corresponding server log.",
+        "recordPath": "Archive entry: {path}"
       },
       "workflow": {
         "ended": "Workflow ended",

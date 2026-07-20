@@ -2,6 +2,7 @@ import type { ChatProviderContext, ChatProviderProps, ContextDialogState, Curren
 import { postAddAttachments } from "@/service/api/attachments"
 import { baseURL } from "@/service/request"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { createDefaultRendererContext } from "@airalogy/components/chat/providers/useChatProvider"
 import { postToolResultChat as _postToolResultChat, stopStream as _stopStream } from "../service/api/chat"
 
@@ -181,10 +182,12 @@ export function createChatInjectContext(payload: {
 }
 const [useProvideChatConfigStore, _useChatConfigStore] = createInjectionState((): ChatProviderContext & { enableDiscussion: Ref<boolean>, discussionScope: Ref<"protocol" | "project" | "lab"> } => {
   const authStore = useAuthStore()
+  const instanceStore = useInstanceStore()
   const baseUrl = computed(() => `${baseURL}/chats`)
   const token = computed(() => authStore.token)
   const enableDiscussion = ref<boolean>(true)
   const discussionScope = ref<"protocol" | "project" | "lab">("protocol")
+  const enabledModels = computed(() => instanceStore.enabledChatModels)
 
   const contextDialog: Ref<ContextDialogState> = ref({
     selected: [],
@@ -250,6 +253,7 @@ const [useProvideChatConfigStore, _useChatConfigStore] = createInjectionState(()
   return {
     enableDiscussion,
     discussionScope,
+    enabledModels,
     baseUrl,
     token,
     userInfo,

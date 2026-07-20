@@ -7,11 +7,11 @@ from sqlalchemy import func, select
 from app.database import DBSession
 from app.models.chat import (
     Chat,
-    ChatModelType,
     ChatType,
 )
 from app.routers.chats.utils import UsageLimit
 from app.routers.depends import CurrentUser, get_current_user
+from app.services.chat_models import enabled_chat_model_types
 
 router = APIRouter(
     dependencies=[Depends(get_current_user)],
@@ -37,7 +37,7 @@ async def get_usage(db_session: DBSession, current_user: CurrentUser):
     used_counts = {row.model_type: row.total_count for row in rows}
 
     usage = {}
-    for model_type in ChatModelType:
+    for model_type in enabled_chat_model_types():
         count = used_counts.get(model_type.value, 0)
         limit = user_limit.get(model_type, 0)
         usage[model_type.name.capitalize()] = {"used": count, "limit": limit}

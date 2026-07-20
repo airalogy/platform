@@ -1002,6 +1002,13 @@ declare namespace I18n {
           success: string
           errorTitle: string
           unknownError: string
+          serverError: string
+          storageUnavailable: string
+          networkError: string
+          httpStatus: string
+          requestId: string
+          requestIdHint: string
+          recordPath: string
         }
         workflow: {
           ended: string

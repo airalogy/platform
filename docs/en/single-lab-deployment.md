@@ -95,7 +95,7 @@ Edit `deploy/single-lab/.env`, then restart affected services. Backend-only chan
 
 Before startup, both `preflight.sh` and the backend validate critical settings. Production rejects placeholder secrets, invalid AES keys, weak MinIO credentials, non-HTTPS remote origins, request-body logging, an incorrect API prefix, and a non-single-Lab profile.
 
-AI features are optional. Set the provider keys in `.env`; protocol and record workflows remain available without them.
+AI features are optional. Set the provider keys in `.env`; protocol and record workflows remain available without them. GPT is disabled by default: it is omitted from the model selector and rejected by the API. To enable it, set both `OPENAI_API_KEY` and `ENABLE_GPT_MODEL=true`. A legacy external Masterbrain deployment may instead use `MASTERBRAIN_CALL_MODE=external` with `CHAT_API_ENDPOINT`. This backend-only change requires an API container restart, not a Web image rebuild.
 
 `LAB_STRUCTURE_MODE=structured` is required by the production single-Lab stack. The Community profile defaults to `flat` but can opt into `structured`; both profiles use the same authorization engine and database model.
 

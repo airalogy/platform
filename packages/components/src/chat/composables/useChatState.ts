@@ -1,9 +1,9 @@
 import type { SelectOption } from "naive-ui"
-import type { ToRefs } from "vue"
+import type { MaybeRefOrGetter, ToRefs } from "vue"
 import type { ChatController, ChatState, InputMethod, IProps } from "./types"
 import { useLoading } from "@airalogy/composables"
-import { $t } from "@airalogy/shared/locales"
 import { ChatModel, ChatType } from "@airalogy/shared/enum/chat"
+import { $t } from "@airalogy/shared/locales"
 import { nanoid } from "nanoid"
 import { computed, ref, watch } from "vue"
 // import { useAuthStore } from "../../store/modules/auth"
@@ -16,7 +16,12 @@ const modelOptionDefs = [
   { labelKey: "chat.model.basic", value: ChatModel.BASIC, key: "basic", requiredLevel: 1 },
 ] as const
 
-export function useChatState(props: ToRefs<IProps>): ChatState {
+const defaultEnabledModels = [ChatModel.BASIC, ChatModel.PLUS, ChatModel.PRO]
+
+export function useChatState(
+  props: ToRefs<IProps>,
+  enabledModelsRef: MaybeRefOrGetter<ChatModel[]> = defaultEnabledModels,
+): ChatState {
   const { chatId: defaultChatId, source: sourceRef, role: roleRef, level: levelRef } = props as ToRefs<Required<IProps>>
   const hubSearchDefault = props.hubSearchDefault ?? ref(false)
   const airalogyId = props.airalogyId || ref(null)
@@ -38,6 +43,16 @@ export function useChatState(props: ToRefs<IProps>): ChatState {
   const enableThinking = ref<boolean>(false)
   const enableSearch = ref<boolean>(false)
   const enableHubSearch = ref<boolean>(Boolean(toValue(hubSearchDefault)))
+
+  watch(
+    () => toValue(enabledModelsRef),
+    (enabledModels) => {
+      if (!enabledModels.includes(selectedModel.value)) {
+        selectedModel.value = enabledModels[0] ?? ChatModel.BASIC
+      }
+    },
+    { immediate: true },
+  )
 
   // UI state
   const inputMethod = ref<InputMethod>("text")
@@ -96,8 +111,9 @@ export function useChatState(props: ToRefs<IProps>): ChatState {
 
   const modelOptions = computed<SelectOption[]>(() => {
     const level = toValue(levelRef) ?? 3 // Default to highest permission level, showing all options
+    const enabledModels = toValue(enabledModelsRef)
     return modelOptionDefs
-      .filter(item => level >= item.requiredLevel)
+      .filter(item => enabledModels.includes(item.value) && level >= item.requiredLevel)
       .map(item => ({
         label: $t(item.labelKey),
         value: item.value,

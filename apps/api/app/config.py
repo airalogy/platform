@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     DASHSCOPE_BASE_URL: str = ""
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = ""
+    ENABLE_GPT_MODEL: bool = False
     # Masterbrain runs in-process through the installed `masterbrain` package by
     # default. The old external service path is deprecated and should only be
     # enabled as a compatibility escape hatch.
@@ -150,6 +151,20 @@ class Settings(BaseSettings):
             raise ValueError("LOG_MAX_BYTES must be positive")
         if self.LOG_BACKUP_COUNT <= 0:
             raise ValueError("LOG_BACKUP_COUNT must be positive")
+
+        external_chat_configured = (
+            self.MASTERBRAIN_CALL_MODE.strip().lower() == "external"
+            and bool(self.CHAT_API_ENDPOINT.strip())
+        )
+        if (
+            self.ENABLE_GPT_MODEL
+            and not self.OPENAI_API_KEY.strip()
+            and not external_chat_configured
+        ):
+            raise ValueError(
+                "ENABLE_GPT_MODEL requires OPENAI_API_KEY or an external "
+                "Masterbrain endpoint"
+            )
 
         parsed_site_url = urlparse(self.SITE_URL)
         if parsed_site_url.scheme not in {"http", "https"} or not parsed_site_url.netloc:

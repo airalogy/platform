@@ -21,7 +21,7 @@ const [useProvideChatInfoStore, useChatInfoStore] = createInjectionState((props:
   const providerContext = useChatProvider()
   const { postToolResultChat, mode } = providerContext
   // Initialize all composable states and functionality
-  const state = useChatState(props)
+  const state = useChatState(props, providerContext.enabledModels)
   const mutations = useChatMutations(state, providerContext as unknown as ChatProviderProps)
   const stream = useChatStream(state, scrollToBottom, postToolResultChat, providerContext)
   const navigation = useChatSessionNavigation(state)

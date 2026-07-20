@@ -55,6 +55,25 @@ def test_explicit_signup_mode_overrides_profile_default():
     assert value.effective_signup_mode == "disabled"
 
 
+def test_gpt_model_is_disabled_by_default():
+    assert settings().ENABLE_GPT_MODEL is False
+
+
+def test_gpt_model_requires_an_openai_or_external_provider():
+    with pytest.raises(ValidationError, match="ENABLE_GPT_MODEL"):
+        settings(ENABLE_GPT_MODEL=True)
+
+    assert settings(
+        ENABLE_GPT_MODEL=True,
+        OPENAI_API_KEY="test-openai-key",
+    ).ENABLE_GPT_MODEL is True
+    assert settings(
+        ENABLE_GPT_MODEL=True,
+        MASTERBRAIN_CALL_MODE="external",
+        CHAT_API_ENDPOINT="https://chat.example.org",
+    ).ENABLE_GPT_MODEL is True
+
+
 def test_single_lab_uid_must_be_stable_route_identifier():
     with pytest.raises(ValidationError, match="SINGLE_LAB_UID"):
         settings(DEPLOYMENT_MODE="single_lab", SINGLE_LAB_UID="Invalid Lab")

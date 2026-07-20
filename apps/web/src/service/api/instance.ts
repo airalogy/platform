@@ -1,3 +1,4 @@
+import type { ChatModel } from "@airalogy/shared/enum/chat"
 import { request } from "../request"
 
 export type DeploymentMode = "community" | "single_lab"
@@ -9,7 +10,6 @@ export interface InstanceLabInfo {
   uid: string
   name: string
 }
-
 export interface InstanceStatus {
   deployment_mode: DeploymentMode
   single_lab: boolean
@@ -18,6 +18,7 @@ export interface InstanceStatus {
   bootstrap_token_required: boolean
   site_url: string
   lab_structure_mode: LabStructureMode
+  enabled_chat_models: ChatModel[]
   lab: InstanceLabInfo | null
 }
 

@@ -521,6 +521,7 @@ export interface ImportAiraArchiveProtocolResult {
   protocol_version_id: string
   version: string
   created_protocol: boolean
+  restored_protocol: boolean
   created_version: boolean
   reused_version: boolean
 }
@@ -535,6 +536,7 @@ export interface ImportAiraArchiveResponse {
     protocol_uid: string
     protocol_version: string
     number: number
+    restored?: boolean
   }>
   files: Array<{
     id: string

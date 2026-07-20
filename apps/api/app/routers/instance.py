@@ -11,10 +11,12 @@ from sqlalchemy import func, select, text
 from app.config import config
 from app.database import DBSession
 from app.models.account_token import AccountTokenType
+from app.models.chat import ChatModelType
 from app.models.lab import Lab, LabRole, LabUser
 from app.models.project import ProjectRole
 from app.models.user import User
 from app.services.account_security import bump_auth_version
+from app.services.chat_models import enabled_chat_model_types
 from app.services.single_lab import (
     add_user_to_single_lab,
     create_account_token,
@@ -53,6 +55,7 @@ class InstanceStatus(BaseModel):
     bootstrap_token_required: bool
     site_url: str
     lab_structure_mode: str
+    enabled_chat_models: list[ChatModelType]
     lab: InstanceLabInfo | None = None
 
 
@@ -67,6 +70,7 @@ async def get_instance_status(db_session: DBSession):
         bootstrap_token_required=bool(config.INITIAL_ADMIN_TOKEN),
         site_url=config.SITE_URL,
         lab_structure_mode=config.effective_lab_structure_mode,
+        enabled_chat_models=list(enabled_chat_model_types()),
         lab=(
             InstanceLabInfo(id=lab.id, uid=lab.uid, name=lab.name)
             if lab is not None

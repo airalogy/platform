@@ -997,7 +997,14 @@
         "fileRequired": "请先选择 .aira 文件",
         "success": "已导入 {protocols} 个协议、{records} 条记录和 {files} 个文件",
         "errorTitle": "导入失败",
-        "unknownError": "导入失败，请检查归档后重试。"
+        "unknownError": "导入失败，请检查归档后重试。",
+        "serverError": "服务器处理导入时发生意外错误。请重试；若问题持续，请使用下方请求编号定位服务端日志。",
+        "storageUnavailable": "对象存储服务暂时不可用。请确认 MinIO 等存储服务正常后重试。",
+        "networkError": "无法连接 API 服务。请确认后端已启动并重试。",
+        "httpStatus": "HTTP 状态：{status}",
+        "requestId": "请求编号：{id}",
+        "requestIdHint": "请将请求编号提供给管理员，可用于查找对应的服务端日志。",
+        "recordPath": "归档条目：{path}"
       },
       "workflow": {
         "ended": "流程已结束",

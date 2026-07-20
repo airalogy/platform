@@ -95,7 +95,7 @@ PostgreSQL、Redis 和 MinIO API 不映射到公网；MinIO console 只绑定 `1
 
 启动前，`preflight.sh` 和后端会分别执行配置校验。生产环境会拒绝占位密钥、无效 AES key、弱 MinIO 凭据、远程 HTTP 地址、请求正文日志、错误 API prefix 和非单实验室 profile。即使绕过脚本直接启动，错误配置也不会静默进入运行状态。
 
-AI 功能是可选项。需要时在 `.env` 中配置模型供应商 key；不配置 AI 也不影响 Protocol / Record 基础流程。
+AI 功能是可选项。需要时在 `.env` 中配置模型供应商 key；不配置 AI 也不影响 Protocol / Record 基础流程。GPT 默认关闭，不会出现在模型选择器中，后端也会拒绝 GPT 请求。启用时需同时设置 `OPENAI_API_KEY` 和 `ENABLE_GPT_MODEL=true`；使用旧的外部 Masterbrain 服务时，可改为配置 `MASTERBRAIN_CALL_MODE=external` 与 `CHAT_API_ENDPOINT`。修改后只需重启 API 容器，无需重新构建 Web 镜像。
 
 `LAB_STRUCTURE_MODE=structured` 是 single-Lab 生产部署的必需配置。Community profile 默认保持 `flat`，也可显式启用 `structured`，两种 profile 共用同一权限引擎和数据库模型。
 

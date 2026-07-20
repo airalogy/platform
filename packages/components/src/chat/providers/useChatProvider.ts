@@ -1,5 +1,6 @@
 import type { RenderMode } from "@airalogy/aimd-core/types"
 import type { ProtocolModels } from "@airalogy/shared"
+import type { ChatModel } from "@airalogy/shared/enum/chat"
 import type { CascaderOption, SelectOption } from "naive-ui"
 import type { Component, InjectionKey, MaybeRefOrGetter, ToRefs } from "vue"
 import { pick } from "lodash-es"
@@ -13,7 +14,6 @@ export interface LegacyRendererContext {
   rules: Record<string, unknown>
   nodeRenderer: () => null
 }
-
 export interface CurrentEditorProtocolContext {
   enabled: boolean
   title?: string
@@ -63,6 +63,7 @@ export interface ChatProviderProps<InjectContext = any> {
   createChatContext: (context?: Chat.ChatContext[] | null) => InjectContext
   currentEditorProtocolContext: CurrentEditorProtocolContext
   currentRecorderRecordContext: CurrentRecorderRecordContext
+  enabledModels: ChatModel[]
   /**
    * @deprecated This function is no longer used since markdown-preview migrated to unified system.
    * Kept for backward compatibility only.
@@ -104,7 +105,7 @@ export function createDefaultCurrentRecorderRecordContext(): CurrentRecorderReco
 }
 
 export function useProvideChatProvider(config: ChatProviderContext) {
-  const context = pick(config, ["postToolResultChat", "uploadAttachment", "stopStream", "baseUrl", "token", "mode", "protocolId", "userInfo", "contextDialog", "contextDialogEventHandlers", "contextOptions", "createChatContext", "currentEditorProtocolContext", "currentRecorderRecordContext", "createRendererContext"])
+  const context = pick(config, ["postToolResultChat", "uploadAttachment", "stopStream", "baseUrl", "token", "mode", "protocolId", "userInfo", "contextDialog", "contextDialogEventHandlers", "contextOptions", "createChatContext", "currentEditorProtocolContext", "currentRecorderRecordContext", "enabledModels", "createRendererContext"])
 
   provide(ChatProviderKey, context)
 

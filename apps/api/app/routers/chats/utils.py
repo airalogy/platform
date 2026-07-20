@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.database import DBSession
 from app.models.chat import Chat, ChatModel, ChatModelType
 from app.models.user import User
+from app.services.chat_models import is_chat_model_enabled
 
 UsageLimit = {
     1: {
@@ -68,6 +69,9 @@ def generate_tool_call_messages(
 async def check_model_usage(
     db_session: DBSession, current_user: User, model: ChatModel
 ):
+    if not is_chat_model_enabled(model.model_type):
+        raise HTTPException(status_code=400, detail="Chat model is not enabled.")
+
     user_limit = UsageLimit.get(current_user.level, UsageLimit[1])
 
     query = (

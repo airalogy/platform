@@ -12,7 +12,7 @@
     v-model:show="showModal"
     preset="card"
     :title="t('page.protocol.airaImport.title')"
-    class="w-[calc(100vw-32px)] max-w-[620px]"
+    class="max-w-[620px] w-[calc(100vw-32px)]"
     :mask-closable="!loading"
     @after-leave="resetState"
   >
@@ -50,12 +50,31 @@
       </n-upload>
 
       <n-alert
-        v-if="errorMessage"
+        v-if="errorInfo"
         type="error"
         :title="t('page.protocol.airaImport.errorTitle')"
       >
-        <div class="whitespace-pre-wrap text-xs leading-5">
-          {{ errorMessage }}
+        <div class="break-words text-sm leading-6">
+          {{ errorInfo.message }}
+        </div>
+        <ul v-if="errorInfo.details.length" class="mt-2 list-disc break-words pl-5 text-xs leading-5 space-y-1">
+          <li v-for="(detail, index) in errorInfo.details" :key="`${index}-${detail}`">
+            {{ detail }}
+          </li>
+        </ul>
+        <div
+          v-if="errorInfo.status || errorInfo.requestId"
+          class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-red-200 pt-2 text-xs text-gray-600"
+        >
+          <span v-if="errorInfo.status">
+            {{ t("page.protocol.airaImport.httpStatus", { status: errorInfo.status }) }}
+          </span>
+          <span v-if="errorInfo.requestId" class="break-all">
+            {{ t("page.protocol.airaImport.requestId", { id: errorInfo.requestId }) }}
+          </span>
+        </div>
+        <div v-if="errorInfo.requestId" class="mt-2 text-xs text-gray-500 leading-5">
+          {{ t("page.protocol.airaImport.requestIdHint") }}
         </div>
       </n-alert>
     </div>
@@ -116,7 +135,15 @@ const showModal = ref(false)
 const loading = ref(false)
 const fileList = ref<UploadFileInfo[]>([])
 const selectedProject = ref<Project | null>(null)
-const errorMessage = ref("")
+
+interface ImportErrorInfo {
+  message: string
+  details: string[]
+  status?: number
+  requestId?: string
+}
+
+const errorInfo = ref<ImportErrorInfo | null>(null)
 
 function open() {
   showModal.value = true
@@ -156,7 +183,7 @@ watch(
 
 function resetState() {
   fileList.value = []
-  errorMessage.value = ""
+  errorInfo.value = null
   loading.value = false
   selectedProject.value = defaultProject.value
 }
@@ -172,36 +199,125 @@ function handleBeforeUpload(options: { file: UploadFileInfo }) {
 
 function handleFileListUpdate(nextFileList: UploadFileInfo[]) {
   fileList.value = nextFileList.slice(-1)
-  errorMessage.value = ""
+  errorInfo.value = null
 }
 
 function getSelectedFile() {
   return fileList.value[0]?.file || null
 }
 
-function getErrorDetail(error: unknown) {
-  return (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+function errorDetailText(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value
+  }
+  if (!value || typeof value !== "object") {
+    return null
+  }
+
+  const item = value as Record<string, unknown>
+  const message = [item.message, item.msg, item.detail].find(candidate => typeof candidate === "string")
+  const namedLocation = [item.record_path, item.path, item.field].find(candidate => typeof candidate === "string")
+  const location = typeof namedLocation === "string"
+    ? namedLocation
+    : Array.isArray(item.loc)
+      ? item.loc.map(String).join(" > ")
+      : null
+  if (typeof message === "string") {
+    return typeof location === "string" ? `${location}: ${message}` : message
+  }
+  if (location) {
+    return location
+  }
+
+  try {
+    return JSON.stringify(value)
+  }
+  catch {
+    return String(value)
+  }
 }
 
-function parseErrorMessage(error: unknown) {
-  const detail = getErrorDetail(error)
+function responseHeader(headers: unknown, name: string): string | undefined {
+  if (!headers || typeof headers !== "object") {
+    return undefined
+  }
+  const headerBag = headers as Record<string, unknown> & { get?: (key: string) => unknown }
+  const fromGetter = typeof headerBag.get === "function" ? headerBag.get(name) : undefined
+  const value = fromGetter ?? headerBag[name] ?? headerBag[name.toLowerCase()]
+  return typeof value === "string" && value ? value : undefined
+}
+
+function parseErrorInfo(error: unknown): ImportErrorInfo {
+  const response = (error as {
+    response?: {
+      status?: number
+      data?: unknown
+      headers?: unknown
+    }
+  })?.response
+  const responseData = response?.data
+  const detail = responseData && typeof responseData === "object" && "detail" in responseData
+    ? (responseData as { detail?: unknown }).detail
+    : responseData
+  const details: string[] = []
+  let messageText = ""
+  let code = ""
+  let requestId = responseHeader(response?.headers, "x-request-id")
+
   if (typeof detail === "string") {
-    return detail
+    if (detail !== "Internal Server Error") {
+      messageText = detail
+    }
   }
-  if (detail && typeof detail === "object") {
-    const message = (detail as { message?: unknown }).message
-    const errors = (detail as { errors?: unknown }).errors
+  if (Array.isArray(detail)) {
+    details.push(
+      ...detail
+        .map(errorDetailText)
+        .filter((item): item is string => Boolean(item)),
+    )
+  }
+  else if (detail && typeof detail === "object") {
+    const detailObject = detail as Record<string, unknown>
+    code = typeof detailObject.code === "string" ? detailObject.code : ""
+    messageText = typeof detailObject.message === "string" ? detailObject.message : ""
+    requestId = typeof detailObject.request_id === "string"
+      ? detailObject.request_id
+      : requestId
+    const errors = detailObject.errors
     if (Array.isArray(errors) && errors.length > 0) {
-      return errors.map(item => String(item)).join("\n")
+      details.push(
+        ...errors
+          .map(errorDetailText)
+          .filter((item): item is string => Boolean(item)),
+      )
     }
-    if (typeof message === "string") {
-      return message
+    if (typeof detailObject.record_path === "string") {
+      details.unshift(t("page.protocol.airaImport.recordPath", {
+        path: detailObject.record_path,
+      }))
     }
   }
-  if (error instanceof Error) {
-    return error.message
+
+  const status = response?.status
+  if (code === "storage_unavailable") {
+    messageText = t("page.protocol.airaImport.storageUnavailable")
   }
-  return t("page.protocol.airaImport.unknownError")
+  else if (status && status >= 500) {
+    messageText = t("page.protocol.airaImport.serverError")
+  }
+  else if (!response) {
+    messageText = t("page.protocol.airaImport.networkError")
+  }
+  else if (!messageText && error instanceof Error && !error.message.startsWith("Request failed with status code")) {
+    messageText = error.message
+  }
+
+  return {
+    message: messageText || t("page.protocol.airaImport.unknownError"),
+    details,
+    status,
+    requestId,
+  }
 }
 
 async function handleImport() {
@@ -217,7 +333,7 @@ async function handleImport() {
   }
 
   loading.value = true
-  errorMessage.value = ""
+  errorInfo.value = null
   try {
     const result = await postImportAiraArchive(projectId, { file })
     message.success(t("page.protocol.airaImport.success", {
@@ -229,7 +345,7 @@ async function handleImport() {
     showModal.value = false
   }
   catch (error) {
-    errorMessage.value = parseErrorMessage(error)
+    errorInfo.value = parseErrorInfo(error)
   }
   finally {
     loading.value = false

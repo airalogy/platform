@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 import mimetypes
 import re
 import tempfile
@@ -11,7 +12,9 @@ from urllib.parse import urlparse
 
 from airalogy.archive import ArchiveError, unpack_archive, validate_archive
 from airalogy.record.hash import get_data_sha1
+from aiohttp import ClientError
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from miniopy_async.error import S3Error
 from sqlalchemy import func, select
 
 from app.database import DBSession
@@ -31,6 +34,7 @@ router = APIRouter(
     prefix="/projects/{project_id}/aira",
     tags=["aira-imports"],
 )
+logger = logging.getLogger("app")
 
 _AIRALOGY_FILE_ID_RE = re.compile(
     r"^airalogy\.id\.file\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(.+)$"
@@ -294,6 +298,7 @@ def _protocol_response(
         "protocol_version_id": str(protocol_version.id),
         "version": protocol_version.version,
         "created_protocol": result.created_protocol,
+        "restored_protocol": result.restored_protocol,
         "created_version": result.created_version,
         "reused_version": result.reused_version,
     }
@@ -368,6 +373,7 @@ class AiraArchiveImporter:
         self.user = user
         self.background_tasks = background_tasks
         self.imported_protocols_by_root: dict[str, ImportedProtocol] = {}
+        self.restored_protocol_ids: set[uuid.UUID] = set()
         self.protocol_results: list[dict[str, Any]] = []
         self.record_results: list[dict[str, Any]] = []
         self.file_results: list[dict[str, Any]] = []
@@ -500,6 +506,8 @@ class AiraArchiveImporter:
             result=result,
         )
         self.imported_protocols_by_root[archive_root] = imported_protocol
+        if result.restored_protocol:
+            self.restored_protocol_ids.add(result.protocol.id)
         self.protocol_results.append(
             _protocol_response(
                 imported_protocol=imported_protocol,
@@ -765,6 +773,33 @@ class AiraArchiveImporter:
                 ],
             )
             if existing_exact is not None:
+                pending_hash = get_data_sha1({"data": pending_record.data})
+                can_restore = (
+                    pending_record.protocol.id in self.restored_protocol_ids
+                    and existing_exact.protocol_id == pending_record.protocol.id
+                    and existing_exact.protocol_version
+                    == pending_record.protocol_version.version
+                    and existing_exact.hash == pending_hash
+                    and existing_exact.report == pending_record.report
+                )
+                if can_restore:
+                    existing_exact.deleted_at = None
+                    created_by_key[(existing_exact.id, existing_exact.version)] = (
+                        existing_exact
+                    )
+                    self.record_results.append(
+                        {
+                            "id": str(existing_exact.id),
+                            "version": existing_exact.version,
+                            "protocol_id": str(existing_exact.protocol_id),
+                            "protocol_uid": pending_record.protocol.uid,
+                            "protocol_version": existing_exact.protocol_version,
+                            "number": existing_exact.number,
+                            "restored": True,
+                        }
+                    )
+                    continue
+
                 raise HTTPException(
                     status_code=400,
                     detail=(
@@ -904,7 +939,20 @@ async def import_aira_archive(
             user=current_user,
             background_tasks=background_tasks,
         )
-        result = await importer.import_archive(unpack_dir=unpack_dir, manifest=manifest)
+        try:
+            result = await importer.import_archive(
+                unpack_dir=unpack_dir,
+                manifest=manifest,
+            )
+        except (ClientError, S3Error) as exc:
+            logger.exception("Object storage failed during .aira import")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "storage_unavailable",
+                    "message": "Object storage is unavailable. Check the storage service and retry.",
+                },
+            ) from exc
 
     await db_session.commit()
     return result

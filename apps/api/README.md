@@ -94,6 +94,8 @@ The recommended path is to use the published `masterbrain` Python package in-pro
 
 The old separately deployed Masterbrain API path is retained only as a compatibility escape hatch. Set `MASTERBRAIN_CALL_MODE=external` and `CHAT_API_ENDPOINT` only when intentionally routing AI requests to a legacy external service.
 
+The GPT chat option is disabled by default. Configure `OPENAI_API_KEY` and set `ENABLE_GPT_MODEL=true` to expose it in the Web model selector and allow GPT requests. When using an external Masterbrain endpoint, the endpoint configuration can satisfy the provider requirement instead of a local OpenAI key.
+
 ## Safety
 
 Do not commit real `.env` files, provider API keys, deployment-specific endpoints, TLS private keys, or production object-storage credentials.

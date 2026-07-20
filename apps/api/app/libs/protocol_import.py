@@ -9,6 +9,7 @@ from typing import Any
 from dotenv import dotenv_values
 from fastapi import BackgroundTasks, HTTPException
 from pydantic_core import ValidationError
+from sqlalchemy import update
 
 from app.config import config
 from app.database import DBSession
@@ -16,8 +17,9 @@ from app.libs.protocol_agent import protocol_exec, remove_exclude_files, zip_dir
 from app.libs.version import Version
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.project import Project
-from app.models.protocol import Protocol
+from app.models.protocol import Protocol, ProtocolStatus
 from app.models.protocol_version import ProtocolMetadata, ProtocolVersion
+from app.models.record import Record
 from app.models.user import User
 
 
@@ -26,6 +28,7 @@ class ProtocolImportResult:
     protocol: Protocol
     protocol_version: ProtocolVersion
     created_protocol: bool
+    restored_protocol: bool
     created_version: bool
     reused_version: bool
 
@@ -132,6 +135,18 @@ async def import_protocol_directory(
             ],
             with_for_update=True,
         )
+        restored_protocol = False
+        if protocol is None:
+            protocol = await Protocol.find_by(
+                db_session,
+                [
+                    Protocol.uid == meta_data.id,
+                    Protocol.project_id == project.id,
+                    Protocol.deleted_at.is_not(None),
+                ],
+                with_for_update=True,
+            )
+            restored_protocol = protocol is not None
         created_protocol = protocol is None
 
         if protocol is None:
@@ -149,6 +164,18 @@ async def import_protocol_directory(
             db_session.add(protocol)
             await db_session.flush()
         else:
+            if restored_protocol:
+                await db_session.execute(
+                    update(Record)
+                    .where(
+                        Record.protocol_id == protocol.id,
+                        Record.deleted_at.is_(None),
+                    )
+                    .values(deleted_at=protocol.deleted_at)
+                )
+                protocol.status = ProtocolStatus.ACTIVE
+                protocol.deleted_at = None
+
             info, meta_data = await _load_protocol_info(
                 staged_name=staged_name,
                 env_vars=env_vars,
@@ -176,6 +203,7 @@ async def import_protocol_directory(
                 protocol=protocol,
                 protocol_version=existing_protocol_version,
                 created_protocol=created_protocol,
+                restored_protocol=restored_protocol,
                 created_version=False,
                 reused_version=True,
             )
@@ -228,6 +256,7 @@ async def import_protocol_directory(
             protocol=protocol,
             protocol_version=protocol_version,
             created_protocol=created_protocol,
+            restored_protocol=restored_protocol,
             created_version=True,
             reused_version=False,
         )

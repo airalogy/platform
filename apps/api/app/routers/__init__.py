@@ -172,6 +172,7 @@ logger = logging.getLogger("app")
 async def logger_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
     request_id_var.set(request_id)
+    request.state.request_id = request_id
     body = ""
     if (
         config.LOG_REQUEST_BODIES
@@ -188,6 +189,7 @@ async def logger_middleware(request: Request, call_next):
         log += f" body: {body}"
     logger.info(log)
     response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
     return response
 
 
@@ -196,6 +198,19 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.exception("Database request failed")
     detail = "Database request failed" if config.APP_ENV == "production" else repr(exc)
     return ORJSONResponse(status_code=400, content={"detail": detail})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled request failed")
+    request_id = getattr(request.state, "request_id", None) or request_id_var.get()
+    detail = {
+        "code": "internal_server_error",
+        "message": "The server could not complete this request.",
+        "request_id": request_id,
+    }
+    headers = {"X-Request-ID": request_id} if request_id else None
+    return ORJSONResponse(status_code=500, content={"detail": detail}, headers=headers)
 
 
 app.include_router(login_router)
