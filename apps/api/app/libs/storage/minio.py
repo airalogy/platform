@@ -61,8 +61,12 @@ class MinioStorage(StorageBackend):
         return await self.client.fget_object(self.bucket, object_key, file_path)
 
     async def get_file_content(self, object_key: str) -> bytes:
-        response = await self.client.get_object(self.bucket, object_key, session=None)
-        return response.read()
+        async with aiohttp.ClientSession() as session:
+            response = await self.client.get_object(self.bucket, object_key, session)
+            try:
+                return await response.read()
+            finally:
+                response.release()
 
     async def get_file_with_stream(
         self, object_key: str

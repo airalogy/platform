@@ -50,8 +50,8 @@ services:
       - "9200"
       - "9201"
     ports:
-      - "127.0.0.1:9200:9200"
-      - "127.0.0.1:9201:9201"
+      - "127.0.0.1:${MINIO_API_PORT:-9200}:9200"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9202}:9201"
     volumes:
       - ${MINIO_DATA_PATH}:/data
     environment:

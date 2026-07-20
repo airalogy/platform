@@ -63,8 +63,8 @@ This starts:
 - API: `http://127.0.0.1:4000`
 - PostgreSQL: `127.0.0.1:54322`
 - Redis: `127.0.0.1:6379`
-- MinIO API: `http://127.0.0.1:9200`
-- MinIO console: `http://127.0.0.1:9201`
+- MinIO API: `http://127.0.0.1:9200` by default (`MINIO_API_PORT`)
+- MinIO console: `http://127.0.0.1:9202` by default (`MINIO_CONSOLE_PORT`)
 
 The Compose stack creates the default MinIO bucket from `MINIO_BUCKET`.
 
