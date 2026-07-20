@@ -1175,14 +1175,14 @@
         "addToChat": "加入聊天上下文",
         "exportJsonData": "导出 JSON 数据",
         "viewReport": "查看报告",
+        "expandRecord": "展开",
+        "collapseRecord": "收起",
         "jsonPreviewTitle": "JSON 预览：{name}",
         "downloadJson": "下载 JSON",
         "copyToClipboard": "复制到剪贴板",
         "previewJson": "预览 JSON",
         "downloadSuccess": "JSON 文件已下载",
-        "copySuccess": "JSON 已复制到剪贴板",
-        "modeTimeline": "时间线",
-        "modePreview": "预览"
+        "copySuccess": "JSON 已复制到剪贴板"
       },
       "records": {
         "advancedSearch": "高级搜索",

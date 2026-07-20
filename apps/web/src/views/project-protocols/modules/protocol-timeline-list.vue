@@ -3,7 +3,11 @@
     v-model:collapsed-item="collapsedItem"
     :list="list"
     class="mt-5 min-h-[375px] pl-20"
+    collapsed-content-class="h-32"
     content-class="-mt-2.5"
+    :expand-label="$t('page.protocol.timeline.expandRecord')"
+    :collapse-label="$t('page.protocol.timeline.collapseRecord')"
+    show-collapse-toggle
     @show-detail="emit('showReport', $event)"
   >
     <template #actions="{ item }">
@@ -34,7 +38,11 @@
     </template>
 
     <template #content="{ item }">
-      <timeline-list-item :item="item" :protocol-id="protocolInfo?.id" class="relative" :mode="recordMode">
+      <timeline-list-item
+        :item="item"
+        :protocol-id="protocolInfo?.id"
+        class="relative"
+      >
         <template #header-suffix>
           <n-dropdown
             :options="jsonExportOptions"
@@ -61,11 +69,22 @@
             </template>
             {{ $t("common.id") }}
           </tooltip-button>
-          <n-button type="primary" quaternary @click="emit('showReport', item)">
+          <n-button type="primary" quaternary @click.stop="emit('showReport', item)">
             {{ $t("page.protocol.timeline.viewReport") }}
           </n-button>
-          <n-button type="primary" quaternary @click="recordMode = 'preview'">
-            {{ recordModeLabel }}
+          <n-button
+            v-if="!collapsedItem[item.id]"
+            type="primary"
+            quaternary
+            size="small"
+            @click="collapsedItem[item.id] = true"
+          >
+            <template #icon>
+              <n-icon size="16">
+                <icon-tabler-chevron-up />
+              </n-icon>
+            </template>
+            {{ $t("page.protocol.timeline.collapseRecord") }}
           </n-button>
           <n-tooltip v-if="canDeleteByRole(item)" :disabled="!getDeleteBlockedReason(item)">
             <template #trigger>
@@ -220,13 +239,6 @@ function handleJsonExport(key: string, item: ITimelineItem) {
     showPreviewModal.value = true
   }
 }
-
-const recordMode = ref<"timeline" | "preview">("preview")
-const recordModeLabel = computed(() => {
-  return recordMode.value === "timeline"
-    ? t("page.protocol.timeline.modeTimeline")
-    : t("page.protocol.timeline.modePreview")
-})
 
 const deleteGraceDays = computed(() => {
   if (Number.isFinite(props.deleteGraceDays) && (props.deleteGraceDays as number) > 0) {

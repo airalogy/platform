@@ -260,24 +260,41 @@ function handleUpdateShow(show: boolean) {
   }
 }
 
-function handleShowReport(item: ITimelineItem) {
-  const { recordId, recordVersion = 1, protocolVersion } = item
+async function handleShowReport(item: ITimelineItem) {
+  const record = item.record
+  const metadata = record?.metadata
+  const recordId = item.recordId || record?.record_id
+  const recordVersion = item.recordVersion || record?.record_version || 1
+  const protocolVersion = item.protocolVersion || metadata?.protocol_version
+  const protocolUid = protocolInfo.value?.uid || metadata?.protocol_id || metadata?.airalogy_protocol_id
+  const labUid = protocolInfo.value?.lab?.uid || metadata?.lab_id
+  const projectUid = protocolInfo.value?.project?.uid || metadata?.project_id
 
-  const { uid, lab, project } = protocolInfo.value || {}
-  if (!uid || !lab?.uid || !project?.uid || !recordId || !protocolVersion) {
+  if (!protocolUid || !labUid || !projectUid || !recordId || !protocolVersion) {
+    if (record) {
+      currentRecordData.value = record
+    }
     return
   }
 
-  routerPushByKey("protocol-record-report", {
-    params: {
-      recordId,
-      recordVersion: String(recordVersion),
-      protocolUid: uid,
-      labUid: lab.uid,
-      projectUid: project.uid,
-      protocolVersion,
-    },
-  })
+  try {
+    await routerPushByKey("protocol-record-report", {
+      params: {
+        recordId,
+        recordVersion: String(recordVersion),
+        protocolUid,
+        labUid,
+        projectUid,
+        protocolVersion,
+      },
+    })
+  }
+  catch (error) {
+    console.error("Failed to open record report:", error)
+    if (record) {
+      currentRecordData.value = record
+    }
+  }
 }
 
 async function handleCreateRecord() {

@@ -1179,14 +1179,14 @@ declare namespace I18n {
           addToChat: string
           exportJsonData: string
           viewReport: string
+          expandRecord: string
+          collapseRecord: string
           jsonPreviewTitle: string
           downloadJson: string
           copyToClipboard: string
           previewJson: string
           downloadSuccess: string
           copySuccess: string
-          modeTimeline: string
-          modePreview: string
         }
         records: {
           advancedSearch: string

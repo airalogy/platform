@@ -1,4 +1,3 @@
-import type { ITimelineItem } from "@/views/project-protocols/types"
 import type { IRecordData } from "@airalogy/aimd-core/types"
 import type { ProtocolModels } from "@airalogy/shared/types"
 import type { MaybeRefOrGetter, Ref } from "vue"
@@ -10,7 +9,7 @@ import { extractAssetId } from "@/views/project-protocols/utils"
 import { useClosableMessage } from "@airalogy/composables"
 import { formatDate } from "@airalogy/shared/utils"
 import { cloneDeep as _cloneDeep, get as _get, mergeWith as _mergeWith } from "lodash-es"
-import { toRaw, toValue } from "vue"
+import { toRaw } from "vue"
 
 // Draft data structure
 export interface IDraftData<T = any> {
@@ -308,24 +307,11 @@ export function useDraftManagement(
   //   }
   // }
 
-  function transformDraftForPreview(data: IRecordData): IRecordData {
-    if (!data)
-      return {} as IRecordData
-
-    const jsonSchema = toRaw(toValue(protocol)?.json_schema)
-
-    const field = _cloneDeep(jsonSchema) as any as ITimelineItem["field"]
-    _mergeWith(field, data, schemaCustomizer)
-
-    return field
-  }
-
   return {
     getDraft,
     saveDraft,
     prepareRestoreDraft,
     deleteDraft,
     formatLastModified,
-    transformDraftForPreview,
   }
 }

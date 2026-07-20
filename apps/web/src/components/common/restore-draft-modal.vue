@@ -64,9 +64,8 @@
                 class="max-h-40vh overflow-y-auto"
                 :protocol-id="props.protocolId"
                 :item="draftPreviewItem"
-                :is-draft="true"
+                :record-data="draftPreviewRecord"
                 :show-header="false"
-                mode="draft"
               />
             </n-collapse-item>
           </n-collapse>
@@ -93,12 +92,14 @@
 <script setup lang="ts">
 import type { IDraftData } from "@/views/project-protocols/modules/protocol/composables/useDraftManagement"
 import type { ITimelineItem } from "@/views/project-protocols/types"
+import type { AimdRecordDataValue } from "@airalogy/aimd-core/utils"
 import type { IRecordData } from "@airalogy/shared"
 import type { ProtocolModels } from "@airalogy/shared/types/models"
 import type { FieldRecord } from "../../views/project-protocols/modules/protocol/helpers/parseFieldStructure"
 import TimelineListItem from "@/components/common/protocol-timeline/timeline-list-item.vue"
 import { useClosableMessage, useLoading, useShowModal } from "@/composables"
 import { useDraftManagement } from "@/views/project-protocols/modules/protocol/composables/useDraftManagement"
+import { normalizeAimdRecordDataValue } from "@airalogy/aimd-core/utils"
 
 interface IProps {
   data: Partial<IRecordData>
@@ -123,22 +124,31 @@ const message = useClosableMessage()
 
 const data = useVModel(props, "data", emit)
 
-const { getDraft, saveDraft, deleteDraft: handleDeleteDraft, prepareRestoreDraft, formatLastModified, transformDraftForPreview } = useDraftManagement(props.protocol, data)
+const { getDraft, saveDraft, deleteDraft: handleDeleteDraft, prepareRestoreDraft, formatLastModified } = useDraftManagement(props.protocol, data)
 
 const draft = ref<IDraftData | null>(getDraft(props.protocolId))
 
 const lastModified = computed(() => formatLastModified(draft.value))
 const draftViewTab = ref<"preview" | "json">("preview")
 
+const draftPreviewRecord = computed<AimdRecordDataValue>(() => {
+  const data = (draft.value?.data || {}) as Record<string, unknown>
+
+  // Compatibility boundary for drafts written by the legacy Platform form model.
+  return normalizeAimdRecordDataValue({
+    var: data.var ?? data.research_variable,
+    var_table: data.var_table,
+    step: data.step ?? data.research_step,
+    check: data.check ?? data.research_check,
+    quiz: data.quiz,
+  })
+})
+
 const draftPreviewItem = computed(() => {
-  const transformedData = draft.value?.data ? transformDraftForPreview(draft.value.data) : {} as any as IRecordData
-
-  console.debug("Draft preview data (transformed):", transformedData)
-
   return {
     id: "draft-preview",
     time: lastModified.value,
-    field: transformedData,
+    field: draft.value?.data || {} as IRecordData,
   } as ITimelineItem
 })
 

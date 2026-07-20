@@ -124,17 +124,17 @@ const timelineList = computed((): ITimelineItem[] => {
 })
 
 watch(timelineList, (list) => {
+  const previous = collapsedItem.value
   collapsedItem.value = list.reduce(
     (acc, item) => {
-      const { id, field } = item
-
-      acc[id] = field.research_variable ? Object.keys(field.research_variable).length >= 4 : false
+      const { id } = item
+      acc[id] = id in previous ? previous[id] : true
 
       return acc
     },
     {} as Record<string | number, boolean>,
   )
-})
+}, { immediate: true })
 </script>
 
 <style scoped lang="sass">

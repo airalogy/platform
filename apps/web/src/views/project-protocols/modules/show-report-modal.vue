@@ -25,13 +25,9 @@
         :content-class="`h-full w-full${props.record ? '' : ' flex-center flex-col'}`"
       >
         <template v-if="props.record && props.aimd">
-          <aimd-markdown-preview
-            :content="props.aimd"
-            :mermaid-component="MermaidBlock"
-            :readonly-record-data="props.record"
-            :resolve-url="resolveRecordFile"
-            body-class="markdown-body"
-            mode="report"
+          <readonly-record-preview
+            :aimd="props.aimd"
+            :record="props.record"
           />
         </template>
         <template v-else-if="!loading">
@@ -45,9 +41,7 @@
 <script setup lang="ts">
 import type { ProtocolModels } from "@airalogy/shared/types"
 import { useLoading, useShowModal } from "@/composables/"
-import { resolveProtocolFile } from "@/utils/resolveProtocolFile"
-import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
-import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
+import ReadonlyRecordPreview from "./readonly-record-preview.vue"
 
 defineOptions({ name: "ShowReportModal" })
 
@@ -76,15 +70,6 @@ const handleUpdateShow = (show: boolean) => setModalStatus(show)
 
 function handleTransitionEnd() {
   emits("update:show", isShown.value)
-}
-
-async function resolveRecordFile(src: string) {
-  const protocolId = props.record?.metadata?.airalogy_protocol_id
-  if (!protocolId) {
-    return null
-  }
-
-  return resolveProtocolFile(src, protocolId)
 }
 
 watch(

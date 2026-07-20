@@ -158,7 +158,6 @@
                 :item="getTimelineItem(item)"
                 :protocol-id="String(item.protocol.id)"
                 :show-header="false"
-                mode="preview"
               />
               <div
                 v-if="!isRecordExpanded(item)"

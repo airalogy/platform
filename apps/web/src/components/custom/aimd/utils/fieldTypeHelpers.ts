@@ -4,7 +4,7 @@ import { isObject } from "lodash-es"
 
 /**
  * Unified field type detection for both display and input purposes
- * Used across timeline-data-cell, aimd-item, and timeline-aimd-input
+ * Used across timeline-data-cell and aimd-item
  */
 export function getUnifiedFieldType(value: any, schemaInfo?: { type?: string, scope?: string }): {
   displayType: string // For human-readable display (e.g., "Boolean", "Text", "File")

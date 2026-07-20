@@ -1175,14 +1175,14 @@
         "addToChat": "Add to chat context",
         "exportJsonData": "Export JSON data",
         "viewReport": "View report",
+        "expandRecord": "Expand",
+        "collapseRecord": "Collapse",
         "jsonPreviewTitle": "JSON preview: {name}",
         "downloadJson": "Download JSON",
         "copyToClipboard": "Copy to clipboard",
         "previewJson": "Preview JSON",
         "downloadSuccess": "JSON file downloaded successfully",
-        "copySuccess": "JSON data copied to clipboard",
-        "modeTimeline": "Timeline",
-        "modePreview": "Preview"
+        "copySuccess": "JSON data copied to clipboard"
       },
       "records": {
         "advancedSearch": "Advanced search",

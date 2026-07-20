@@ -6,7 +6,7 @@
   >
     <n-timeline-item
       v-for="(item, idx) in list"
-      :key="item.time"
+      :key="item.id"
       :style="[idx === 0 && '--item-top: 0', itemStyle]"
       class="pb-4" :class="itemClass"
     >
@@ -35,7 +35,10 @@
 
       <div
         class="w-full pl-5"
-        :class="[{ 'relative h-50 overflow-hidden': collapsedItem[item.id] }, contentClass]"
+        :class="[
+          collapsedItem[item.id] && ['relative overflow-hidden', collapsedContentClass],
+          contentClass,
+        ]"
       >
         <slot name="content" :item="item" :index="idx" />
       </div>
@@ -43,17 +46,31 @@
       <slot name="footer" :item="item" :index="idx">
         <div
           v-if="collapsedItem[item.id]"
-          class="absolute-bl h-fit w-full flex justify-center bg-gradient-from-white bg-gradient-to-transparent bg-gradient-linear bg-gradient-to-t pt-10"
+          class="pointer-events-none absolute-bl h-fit w-full flex justify-center bg-gradient-from-white bg-gradient-to-transparent bg-gradient-linear bg-gradient-to-t pt-10"
         >
           <n-button
             type="primary"
             quaternary
             icon-placement="right"
+            class="pointer-events-auto"
             @click="() => (collapsedItem[item.id] = false)"
           >
-            {{ $t("common.more") }}
+            {{ props.expandLabel || $t("common.readMore") }}
             <template #icon>
               <icon-local-dropdown-outline />
+            </template>
+          </n-button>
+        </div>
+        <div v-else-if="props.showCollapseToggle" class="mt-2 flex justify-center">
+          <n-button
+            type="primary"
+            quaternary
+            icon-placement="right"
+            @click="() => (collapsedItem[item.id] = true)"
+          >
+            {{ props.collapseLabel || $t("common.showLess") }}
+            <template #icon>
+              <icon-local-dropdown-outline class="rotate-180" />
             </template>
           </n-button>
         </div>
@@ -69,7 +86,7 @@ import { $t } from "@airalogy/shared/locales"
 // eslint-disable-next-line ts/consistent-type-definitions
 type Emits = {
   (e: "showDetail", item: T): void
-  (e: "updateCollapsedItem", item: T, collapsed: boolean): void
+  (e: "update:collapsedItem", value: Record<string | number, boolean>): void
 }
 
 const props = withDefaults(defineProps<{
@@ -82,8 +99,14 @@ const props = withDefaults(defineProps<{
   iconSize?: number
   showHeader?: boolean
   contentClass?: HTMLAttributes["class"]
+  collapsedContentClass?: HTMLAttributes["class"]
+  showCollapseToggle?: boolean
+  expandLabel?: string
+  collapseLabel?: string
 }>(), {
+  collapsedContentClass: "h-50",
   showHeader: false,
+  showCollapseToggle: false,
 })
 const emit = defineEmits<Emits>()
 
