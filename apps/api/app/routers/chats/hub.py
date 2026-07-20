@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from datetime import datetime
 
@@ -21,12 +22,18 @@ from app.models.lab import Lab
 from app.models.project import Project, ProjectType
 from app.models.protocol import Protocol
 from app.models.protocol_version import ProtocolVersion
-from app.routers.chats.utils import check_model_usage, generate_tool_call_messages
+from app.routers.chats.utils import (
+    build_chat_stream_error_data,
+    check_model_usage,
+    generate_tool_call_messages,
+)
 from app.routers.depends import CurrentUser, get_current_user
 
 router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
+
+logger = logging.getLogger("app")
 
 
 async def inject_recommend_airalogy_protocols(db_session, content: str, limit: int = 3):
@@ -174,7 +181,13 @@ async def send_hub_chat_message(
     # 创建一个新的流式响应，同时捕获内容
     async def capture_and_forward_stream():
         # 先讲 chat id 已 chunk 的方式发送
-        meta_data = {"type": "meta", "data": {"chat_id": str(chat.id)}}
+        meta_data = {
+            "type": "meta",
+            "data": {
+                "chat_id": str(chat.id),
+                "model": chat.model.get("name"),
+            },
+        }
         yield f"data: {json.dumps(meta_data, ensure_ascii=False)}\n\n"
 
         # 发送 tool_call 的消息
@@ -199,18 +212,35 @@ async def send_hub_chat_message(
         original_stream = hub_chat(chat=chat)
 
         full_response = ""
-        async for chunk in original_stream:
-            # 累积响应内容
-            full_response += chunk
-            # 将块转发给客户端
-            chunk_message = {
-                "type": "message",
-                "data": {
-                    "index": response_message_index,
-                    "message": {"content": chunk},
-                },
+        try:
+            async for chunk in original_stream:
+                # 累积响应内容
+                full_response += chunk
+                # 将块转发给客户端
+                chunk_message = {
+                    "type": "message",
+                    "data": {
+                        "index": response_message_index,
+                        "message": {"content": chunk},
+                    },
+                }
+                yield f"data: {json.dumps(chunk_message, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            logger.exception(
+                "Hub model stream failed for chat %s using model %s",
+                chat.id,
+                chat.model.get("name"),
+            )
+            error_event = {
+                "type": "error",
+                "data": build_chat_stream_error_data(
+                    exc,
+                    chat_id=chat.id,
+                    model=chat.model.get("name"),
+                ),
             }
-            yield f"data: {json.dumps(chunk_message, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+            return
 
         yield "data: [DONE]\n\n"
 

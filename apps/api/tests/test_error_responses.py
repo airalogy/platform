@@ -1,12 +1,14 @@
 import asyncio
 import json
 
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import Response
 
 from app.routers import (
     logger_middleware,
     request_id_var,
+    sqlalchemy_exception_handler,
     unhandled_exception_handler,
 )
 
@@ -64,3 +66,66 @@ def test_unhandled_exception_returns_safe_request_reference(monkeypatch):
         }
     }
     assert "secret server detail" not in response.body.decode()
+
+
+def test_database_exception_in_production_hides_internal_detail(monkeypatch):
+    request = make_request()
+    request.state.request_id = "production-request"
+    token = request_id_var.set("production-request")
+    monkeypatch.setattr("app.routers.config.APP_ENV", "production")
+    monkeypatch.setattr("app.routers.logger.exception", lambda *_args, **_kwargs: None)
+
+    try:
+        response = asyncio.run(
+            sqlalchemy_exception_handler(
+                request,
+                SQLAlchemyError("secret table and constraint detail"),
+            )
+        )
+    finally:
+        request_id_var.reset(token)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 500
+    assert response.headers["x-request-id"] == "production-request"
+    assert payload == {
+        "detail": {
+            "code": "internal_server_error",
+            "message": "The server could not complete this request.",
+            "request_id": "production-request",
+        }
+    }
+    assert "secret table and constraint detail" not in response.body.decode()
+
+
+def test_database_exception_in_development_includes_debug_detail(monkeypatch):
+    request = make_request()
+    request.state.request_id = "development-request"
+    token = request_id_var.set("development-request")
+    monkeypatch.setattr("app.routers.config.APP_ENV", "development")
+    monkeypatch.setattr("app.routers.logger.exception", lambda *_args, **_kwargs: None)
+
+    try:
+        response = asyncio.run(
+            sqlalchemy_exception_handler(
+                request,
+                SQLAlchemyError("useful development detail"),
+            )
+        )
+    finally:
+        request_id_var.reset(token)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 500
+    assert response.headers["x-request-id"] == "development-request"
+    assert payload == {
+        "detail": {
+            "code": "internal_server_error",
+            "message": "The server could not complete this request.",
+            "request_id": "development-request",
+            "debug": {
+                "exception": "SQLAlchemyError",
+                "message": "SQLAlchemyError('useful development detail')",
+            },
+        }
+    }

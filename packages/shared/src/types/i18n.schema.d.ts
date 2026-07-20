@@ -1793,6 +1793,40 @@ declare namespace I18n {
       preview: string
       showRawText: string
       thinking: string
+      errors: {
+        connectionTimeout: string
+        modelStartTimeout: string
+        streamIdleTimeout: string
+        streamInterrupted: string
+        networkError: string
+        authenticationFailed: string
+        rateLimited: string
+        requestRejected: string
+        serverError: string
+        invalidStreamResponse: string
+        modelTimeout: string
+        modelUnavailable: string
+        modelAuthenticationFailed: string
+        modelRateLimited: string
+        modelRequestRejected: string
+        modelUpstreamError: string
+        modelStreamError: string
+        unknown: string
+        stage: string
+        stages: {
+          connection: string
+          request: string
+          model: string
+          stream: string
+        }
+        model: string
+        httpStatus: string
+        requestId: string
+        chatId: string
+        errorCode: string
+        retryHint: string
+        debug: string
+      }
       enableThinking: string
       thinkingEnabled: string
       enableSearch: string

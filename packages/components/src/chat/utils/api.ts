@@ -1,10 +1,9 @@
 import type { ChatModel } from "@airalogy/shared/enum"
 import type { ChatContext } from "./message"
-import { fetchEventSource } from "@airalogy/shared/utils/request"
+import { EventStreamContentType, fetchEventSource } from "@airalogy/shared/utils/request"
 import { chatModelToConfig, createUserMessage } from "./message"
 
-// Define DefaultRetryInterval for fetchEventSource retries
-const DefaultRetryInterval = 1000
+const ChatStreamIdleTimeoutMs = 60_000
 
 export enum ChatType {
   NORMAL = 1,
@@ -27,6 +26,31 @@ export interface ChatEvent {
   type: "meta" | "message" | "done" | "error"
   data: any
   done?: boolean
+}
+
+export type ChatStreamErrorStage = "connection" | "request" | "model" | "stream"
+
+export interface ChatStreamErrorData {
+  code: string
+  stage: ChatStreamErrorStage
+  message?: string
+  chat_id?: string
+  request_id?: string
+  model?: string
+  http_status?: number
+  timeout_seconds?: number
+  retryable?: boolean
+  debug?: {
+    exception?: string
+    detail?: string
+  }
+}
+
+class ChatStreamError extends Error {
+  constructor(public readonly data: ChatStreamErrorData) {
+    super(data.message || data.code)
+    this.name = "ChatStreamError"
+  }
 }
 
 interface ChatAttachmentPayload {
@@ -88,6 +112,87 @@ function createChatUserMessage(content: string, attachments?: ChatAttachmentPayl
   }
 }
 
+function parseErrorResponse(rawBody: string): { code?: string, message?: string, requestId?: string } {
+  if (!rawBody) {
+    return {}
+  }
+
+  try {
+    const payload = JSON.parse(rawBody)
+    const detail = payload?.detail ?? payload
+    if (typeof detail === "string") {
+      return { message: detail }
+    }
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      return {
+        code: typeof detail.code === "string" ? detail.code : undefined,
+        message: typeof detail.message === "string" ? detail.message : undefined,
+        requestId: typeof detail.request_id === "string" ? detail.request_id : undefined,
+      }
+    }
+  }
+  catch {
+    return { message: rawBody }
+  }
+
+  return {}
+}
+
+function createHttpErrorData(response: Response, rawBody: string): ChatStreamErrorData {
+  const parsed = parseErrorResponse(rawBody)
+  const requestId = response.headers.get("x-request-id") || parsed.requestId || undefined
+  const common = {
+    stage: "request" as const,
+    request_id: requestId,
+    http_status: response.status,
+    debug: import.meta.env.DEV
+      ? {
+          exception: "HTTPError",
+          detail: parsed.message || `${response.status} ${response.statusText}`,
+        }
+      : undefined,
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return { ...common, code: "AUTHENTICATION_FAILED", retryable: false }
+  }
+  if (response.status === 429) {
+    return { ...common, code: "RATE_LIMITED", retryable: true }
+  }
+  if (response.status >= 500) {
+    return {
+      ...common,
+      code: parsed.code === "internal_server_error" ? "SERVER_ERROR" : (parsed.code || "SERVER_ERROR"),
+      retryable: true,
+    }
+  }
+  return {
+    ...common,
+    code: parsed.code || "REQUEST_REJECTED",
+    message: parsed.message,
+    retryable: false,
+  }
+}
+
+function normalizeChatStreamError(
+  error: unknown,
+  context: Partial<Pick<ChatStreamErrorData, "chat_id" | "request_id" | "model">>,
+): ChatStreamErrorData {
+  if (error instanceof ChatStreamError) {
+    return { ...context, ...error.data }
+  }
+
+  const exception = error instanceof Error ? error.name : "UnknownError"
+  const detail = error instanceof Error ? error.message : String(error)
+  return {
+    code: "NETWORK_ERROR",
+    stage: "connection",
+    retryable: true,
+    ...context,
+    debug: import.meta.env.DEV ? { exception, detail } : undefined,
+  }
+}
+
 /**
  * Common function to create a streaming chat request
  */
@@ -107,7 +212,13 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
   // Queue for incoming events to avoid race conditions
   const eventQueue: IteratorResult<ChatEvent, ChatResponse>[] = []
   let resolveNextEvent: ((value: IteratorResult<ChatEvent, ChatResponse>) => void) | null = null
-  let rejectNextEvent: ((error: Error) => void) | null = null
+  let responseOpened = false
+  let modelOutputStarted = false
+  let streamCompleted = false
+  let terminalErrorQueued = false
+  let requestId: string | undefined
+  let modelName: string | undefined
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
 
   // Function to process the event queue
   function processQueue() {
@@ -115,9 +226,70 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
       const event = eventQueue.shift()!
       resolveNextEvent(event)
       resolveNextEvent = null
-      rejectNextEvent = null
     }
   }
+
+  function clearStreamTimeout() {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId)
+      timeoutId = undefined
+    }
+  }
+
+  function queueTerminalError(data: ChatStreamErrorData) {
+    if (terminalErrorQueued || streamCompleted) {
+      return
+    }
+
+    terminalErrorQueued = true
+    clearStreamTimeout()
+    eventQueue.push({
+      done: false,
+      value: {
+        type: "error",
+        data: {
+          chat_id: responseData.chatId,
+          request_id: requestId,
+          model: modelName,
+          ...data,
+        },
+      },
+    })
+    eventQueue.push({ done: true, value: responseData })
+    processQueue()
+  }
+
+  function armStreamTimeout() {
+    clearStreamTimeout()
+    timeoutId = setTimeout(() => {
+      const timeoutSeconds = ChatStreamIdleTimeoutMs / 1000
+      const data: ChatStreamErrorData = modelOutputStarted
+        ? {
+            code: "STREAM_IDLE_TIMEOUT",
+            stage: "stream",
+            timeout_seconds: timeoutSeconds,
+            retryable: true,
+          }
+        : responseOpened
+          ? {
+              code: "MODEL_START_TIMEOUT",
+              stage: "model",
+              timeout_seconds: timeoutSeconds,
+              retryable: true,
+            }
+          : {
+              code: "CONNECTION_TIMEOUT",
+              stage: "connection",
+              timeout_seconds: timeoutSeconds,
+              retryable: true,
+            }
+
+      queueTerminalError(data)
+      controller.abort()
+    }, ChatStreamIdleTimeoutMs)
+  }
+
+  armStreamTimeout()
 
   // Start fetch request
   const fetchPromise = fetchEventSource(url, {
@@ -129,6 +301,38 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
     },
     signal: controller.signal,
     body: JSON.stringify(body, null, 0),
+    onopen: async (response) => {
+      responseOpened = true
+      requestId = response.headers.get("x-request-id") || undefined
+      armStreamTimeout()
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          const handler = (window as any)?.$handleUnauthorized
+          if (typeof handler === "function") {
+            handler()
+          }
+        }
+        throw new ChatStreamError(createHttpErrorData(response, await response.text()))
+      }
+
+      const contentType = response.headers.get("content-type")
+      if (!contentType?.startsWith(EventStreamContentType)) {
+        throw new ChatStreamError({
+          code: "INVALID_STREAM_RESPONSE",
+          stage: "connection",
+          request_id: requestId,
+          http_status: response.status,
+          retryable: false,
+          debug: import.meta.env.DEV
+            ? {
+                exception: "InvalidContentType",
+                detail: `Expected ${EventStreamContentType}, received ${contentType || "no content type"}`,
+              }
+            : undefined,
+        })
+      }
+    },
     onmessage: (event) => {
       const { data: eventData } = event
       // Skip empty events
@@ -137,6 +341,8 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
 
       // Check for the end of the stream
       if (eventData === "[DONE]") {
+        streamCompleted = true
+        clearStreamTimeout()
         eventQueue.push({
           done: true,
           value: responseData,
@@ -152,6 +358,7 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
         if (type === "meta" && data.chat_id) {
           responseData.chatId = data.chat_id
           responseData.id = data.chat_id
+          modelName = typeof data.model === "string" ? data.model : modelName
 
           const chatEvent: ChatEvent = {
             type: "meta",
@@ -166,6 +373,16 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
         // Handle message events
         if (type === "message" && data) {
           const { index, message } = data
+          const priorMessage = messageMap.get(index)
+
+          if (
+            (message?.role === "assistant" || priorMessage?.role === "assistant")
+            && typeof message.content === "string"
+            && message.content.length > 0
+          ) {
+            modelOutputStarted = true
+            armStreamTimeout()
+          }
 
           // Initialize this message in the map if it doesn't exist
           if (!messageMap.has(index)) {
@@ -214,83 +431,59 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
           })
         }
         if (type === "error" && data) {
-          const chatEvent: ChatEvent = {
-            type: "error",
-            data,
-          }
-          eventQueue.push({
-            done: false,
-            value: chatEvent,
-          })
+          queueTerminalError(data)
+          controller.abort()
+          return
         }
         processQueue()
       }
       catch (e) {
         console.error("Error parsing SSE message:", e)
-        if (rejectNextEvent) {
-          rejectNextEvent(e instanceof Error ? e : new Error(String(e)))
-          rejectNextEvent = null
-        }
+        throw new ChatStreamError({
+          code: "INVALID_STREAM_RESPONSE",
+          stage: "stream",
+          retryable: false,
+          debug: import.meta.env.DEV
+            ? {
+                exception: e instanceof Error ? e.name : "ParseError",
+                detail: e instanceof Error ? e.message : String(e),
+              }
+            : undefined,
+        })
+      }
+    },
+    onclose: () => {
+      if (!streamCompleted && !terminalErrorQueued) {
+        throw new ChatStreamError({
+          code: "STREAM_INTERRUPTED",
+          stage: modelOutputStarted ? "stream" : "model",
+          retryable: true,
+        })
       }
     },
     onerror: (err) => {
-      if (rejectNextEvent) {
-        rejectNextEvent(err instanceof Error ? err : new Error(String(err)))
-        rejectNextEvent = null
-      }
-
-      // Return retry interval (default behavior) or throw to stop
       if (err instanceof Error && err.name === "AbortError") {
-        throw err // Don't retry on aborts
-      }
-      const message = err instanceof Error ? err.message : String(err)
-      const nonRetryStatusList = ["400", "401", "403", "404", "422"]
-      const shouldStopRetry = nonRetryStatusList.some(status =>
-        message.includes(`status ${status}`),
-      )
-      if (shouldStopRetry) {
         throw err
       }
-      return DefaultRetryInterval
+      // Retrying a POST stream can invoke the model twice. Let the user retry explicitly.
+      throw err
     },
   })
 
-  // Setup a timeout
-  const timeoutId = setTimeout(() => {
-    controller.abort()
-    if (rejectNextEvent) {
-      const timeoutError = new Error("Request timed out")
-
-      // Create an error event to be yielded before terminating
-      eventQueue.push({
-        done: false,
-        value: {
-          type: "error",
-          data: { error: timeoutError, message: "Request timed out after 1 minute" },
-        },
-      })
-      processQueue()
-
-      // Reject the promise with the timeout error
-      rejectNextEvent(timeoutError)
-      rejectNextEvent = null
-    }
-  }, 1000 * 60 * 1) // 1 minute timeout
-
   // Handle fetch promise rejection
   fetchPromise.catch((error) => {
-    if (rejectNextEvent) {
-      rejectNextEvent(error)
-      rejectNextEvent = null
-    }
+    queueTerminalError(normalizeChatStreamError(error, {
+      chat_id: responseData.chatId,
+      request_id: requestId,
+      model: modelName,
+    }))
   })
 
   try {
     // Keep yielding events until done
     while (true) {
-      const eventPromise = new Promise<IteratorResult<ChatEvent, ChatResponse>>((resolve, reject) => {
+      const eventPromise = new Promise<IteratorResult<ChatEvent, ChatResponse>>((resolve) => {
         resolveNextEvent = resolve
-        rejectNextEvent = reject
         processQueue() // Process queue in case events arrived before promise was set
       })
 
@@ -298,7 +491,7 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
 
       if (result.done) {
         // Return the final result
-        clearTimeout(timeoutId)
+        clearStreamTimeout()
         return result.value
       }
 
@@ -307,7 +500,7 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
   }
   finally {
     // Clean up
-    clearTimeout(timeoutId)
+    clearStreamTimeout()
     controller.abort()
   }
 }

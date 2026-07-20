@@ -104,7 +104,7 @@
         </template>
       </text-component>
       <!-- Error message display -->
-      <p v-if="props.message.error && props.message.errorMessage && props.message.inversion" class="ml-auto w-fit text-red">
+      <p v-if="props.message.error && props.message.errorMessage && props.message.inversion" class="ml-auto max-w-[min(100%,36rem)] w-fit whitespace-pre-line text-right text-xs text-red leading-5">
         {{ props.message.errorMessage }}
       </p>
 

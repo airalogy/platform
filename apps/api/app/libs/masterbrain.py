@@ -103,7 +103,7 @@ async def stream_request(path, json_body, *, method="POST"):
             timeout=300.0,
         ) as response:
             if response.status_code != 200:
-                print(response)
+                await response.aread()
                 raise _chat_api_error(response)
 
             async for chunk in response.aiter_text():

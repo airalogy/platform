@@ -196,8 +196,19 @@ async def logger_middleware(request: Request, call_next):
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.exception("Database request failed")
-    detail = "Database request failed" if config.APP_ENV == "production" else repr(exc)
-    return ORJSONResponse(status_code=400, content={"detail": detail})
+    request_id = getattr(request.state, "request_id", None) or request_id_var.get()
+    detail: dict[str, object] = {
+        "code": "internal_server_error",
+        "message": "The server could not complete this request.",
+        "request_id": request_id,
+    }
+    if config.APP_ENV != "production":
+        detail["debug"] = {
+            "exception": type(exc).__name__,
+            "message": repr(exc),
+        }
+    headers = {"X-Request-ID": request_id} if request_id else None
+    return ORJSONResponse(status_code=500, content={"detail": detail}, headers=headers)
 
 
 @app.exception_handler(Exception)

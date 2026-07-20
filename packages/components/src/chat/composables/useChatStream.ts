@@ -3,7 +3,7 @@ import type { ChatEvent } from "../utils/api"
 import type { ChatState, ChatStream, ChatStreamProcessorParams } from "./types"
 import { fieldEventKey } from "@airalogy/shared/constants"
 import { useEventBus } from "@vueuse/core"
-import { formatErrorMessage } from "./utils"
+import { formatChatErrorMessage } from "./utils"
 
 export function useChatStream(state: ChatState, scrollToBottom: () => Promise<void>, postToolResultChat: ChatProviderContext["postToolResultChat"], provider: ChatProviderContext): ChatStream {
   const { chatStore, startLoading, endLoading } = state
@@ -46,7 +46,7 @@ export function useChatStream(state: ChatState, scrollToBottom: () => Promise<vo
     }
 
     // Handle error events - Update user message with error status
-    const errorMessage = data.message || formatErrorMessage(data.error) || "An error occurred during chat"
+    const errorMessage = formatChatErrorMessage(data)
 
     // Update user message (messageIndex - 1) with error status
     if (messageIndex > 0) {
@@ -356,6 +356,7 @@ export function useChatStream(state: ChatState, scrollToBottom: () => Promise<vo
       // Use refs for mutable state that handlers need to update
       let lastMessage: any = null
       let lastToolCallMessage: any = null
+      let streamFailed = false
 
       // Process events from generator
       try {
@@ -368,6 +369,8 @@ export function useChatStream(state: ChatState, scrollToBottom: () => Promise<vo
           }
           else if (type === "error") {
             await handleErrorEvent(event, chat, messageIndex, content, requestOptions)
+            streamFailed = true
+            break
           }
           else if (type === "message") {
             const { message, toolCallMessage } = await handleMessageEvent(event, chat, messageIndex, responseData, requestOptions)
@@ -379,14 +382,12 @@ export function useChatStream(state: ChatState, scrollToBottom: () => Promise<vo
           await scrollToBottom() // Smart scroll during streaming
         }
       }
-      catch (error) {
-        handleErrorEvent({ data: error, type: "error" }, chat, messageIndex, content, requestOptions)
-
-        // Rethrow so outer catch can handle it
-        throw error
-      }
       finally {
         await scrollToBottom() // Smart scroll after streaming
+      }
+
+      if (streamFailed) {
+        return responseData
       }
 
       // When generator completes, final data is available
