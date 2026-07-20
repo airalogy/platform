@@ -86,6 +86,18 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml u
 docker compose --env-file .env restart api-server
 ```
 
+不同类型的后端改动需要使用不同的更新方式：
+
+| 改动 | 如何生效 |
+| --- | --- |
+| `app/**/*.py` | reload override 会自动重载；默认 Docker 模式需要 `docker compose --env-file .env restart api-server` |
+| `migrations/` | reload 不会自动执行数据库升级；执行 `docker compose --env-file .env exec api-server alembic upgrade head`，或重启 `api-server` |
+| `pyproject.toml` 或 `uv.lock` | 依赖已构建到镜像中；执行 `docker compose --env-file .env up -d --build api-server` |
+| `.env` | 环境变量只在容器创建时读取；执行 `docker compose --env-file .env up -d --force-recreate api-server` |
+| Dockerfile 或 Compose 构建配置 | 执行 `docker compose --env-file .env up -d --build` |
+
+Compose 会把 `apps/api` 挂载进 API 容器，所以源码修改会立即出现在容器内；是否自动重启 Python 进程则取决于是否启用 reload override。
+
 API 默认监听 `http://127.0.0.1:4000`。
 
 开发环境快速开始 fixture 默认使用已发布 `airalogy` Python 包内的协议示例。如果需要在示例正式打包进 Airalogy 前测试本地 Protocol，可以在 `apps/api/.env` 中把 `AIRALOGY_PROTOCOL_EXAMPLES_DIR` 指向 API 进程可访问、且带有 `index.json` 的本地 `examples/protocols` 目录；设置后 fixture 会使用这个本地目录，而不是包内示例。

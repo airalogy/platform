@@ -86,6 +86,18 @@ Without the reload override, restart the API container after backend code change
 docker compose --env-file .env restart api-server
 ```
 
+Use the appropriate refresh action for each type of backend change:
+
+| Change | How to apply it |
+| --- | --- |
+| `app/**/*.py` | The reload override reloads automatically; in the default Docker mode, run `docker compose --env-file .env restart api-server` |
+| `migrations/` | Reload does not apply database migrations; run `docker compose --env-file .env exec api-server alembic upgrade head`, or restart `api-server` |
+| `pyproject.toml` or `uv.lock` | Dependencies are built into the image; run `docker compose --env-file .env up -d --build api-server` |
+| `.env` | Environment variables are read when the container is created; run `docker compose --env-file .env up -d --force-recreate api-server` |
+| Dockerfile or Compose build settings | Run `docker compose --env-file .env up -d --build` |
+
+Compose bind-mounts `apps/api` into the API container, so source changes are immediately visible inside the container. Whether the Python process restarts automatically depends on whether the reload override is enabled.
+
 The API listens on `http://127.0.0.1:4000`.
 
 Development quick-start fixtures use protocol examples packaged in the published `airalogy` Python package by default. To test local protocol examples before they are packaged in Airalogy, set `AIRALOGY_PROTOCOL_EXAMPLES_DIR` in `apps/api/.env` to an API-visible local `examples/protocols` directory with an `index.json`; when set, the fixture loads that local directory instead of the packaged examples.
