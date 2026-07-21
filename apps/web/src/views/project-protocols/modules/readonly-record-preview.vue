@@ -1,18 +1,17 @@
 <template>
-  <aimd-markdown-preview
-    :content="props.aimd"
+  <aimd-record-report
+    :aimd="props.aimd"
     :mermaid-component="MermaidBlock"
-    :readonly-record-data="props.record"
+    :record="props.record"
     :resolve-url="resolveRecordFile"
     body-class="markdown-body"
-    mode="report"
   />
 </template>
 
 <script setup lang="ts">
 import type { ProtocolModels } from "@airalogy/shared/types"
 import { resolveProtocolFile } from "@/utils/resolveProtocolFile"
-import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
+import { AimdRecordReport } from "@airalogy/aimd-renderer/vue"
 import MermaidBlock from "@airalogy/components/markdown-editor/modules/mermaid/mermaid-block.vue"
 
 interface Props {

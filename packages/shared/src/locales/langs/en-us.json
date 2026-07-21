@@ -1185,6 +1185,11 @@
         "copySuccess": "JSON data copied to clipboard"
       },
       "records": {
+        "tableView": "Table view",
+        "compareView": "Compare view ({count}/4)",
+        "submittedAt": "Submitted at",
+        "submittedBy": "Submitted by",
+        "recordVersion": "Record version",
         "advancedSearch": "Advanced search",
         "searchContentPlaceholder": "Search record content to see whether a term was mentioned",
         "searchRecordNumber": "Search record number",

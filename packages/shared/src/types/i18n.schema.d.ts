@@ -1189,6 +1189,11 @@ declare namespace I18n {
           copySuccess: string
         }
         records: {
+          tableView: string
+          compareView: string
+          submittedAt: string
+          submittedBy: string
+          recordVersion: string
           advancedSearch: string
           searchContentPlaceholder: string
           searchRecordNumber: string

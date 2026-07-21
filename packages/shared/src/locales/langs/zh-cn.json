@@ -1185,6 +1185,11 @@
         "copySuccess": "JSON 已复制到剪贴板"
       },
       "records": {
+        "tableView": "表格视图",
+        "compareView": "对比视图（{count}/4）",
+        "submittedAt": "提交时间",
+        "submittedBy": "提交人",
+        "recordVersion": "记录版本",
         "advancedSearch": "高级搜索",
         "searchContentPlaceholder": "搜索记录内容，查找是否提及某个词",
         "searchRecordNumber": "搜索记录编号",
