@@ -51,6 +51,8 @@
 import type { FormItemInst, FormItemRule } from "naive-ui"
 import type { IAIMDItemProps } from "../types/aimd-types"
 import InsertWbr from "@/components/common/insert-wbr.vue"
+import { usePlatformAimdValidation } from "@/views/project-protocols/modules/protocol/composables/useAimdRecordValidation"
+import { getAimdVarTableCellFieldKey } from "@airalogy/aimd-recorder"
 import { BuiltInType } from "@airalogy/shared/enum/airalogy"
 import { isUploadFileType } from "@airalogy/shared/utils"
 import { themeOverridesRecord } from "../composables/themeOverrides"
@@ -79,49 +81,24 @@ const formPath = computed(() => {
   return `${props.scope}.${props.prop}.value`
 })
 
-/**
- * Get cell-level validation rules for table cells (returns array for n-form-item)
- * This enables pattern validation for individual cells
- */
+const validation = usePlatformAimdValidation()
+
 const cellRules = computed<FormItemRule[]>(() => {
-  // Only apply for table cells
-  if (props.scope !== "var_table" || !props.info?.group) {
-    return []
-  }
-
-  // Get pattern from info (which comes from tableRecord)
-  const pattern = props.info?.pattern
-  const isRequired = props.required || false
-
-  if (!pattern && !isRequired) {
+  if (
+    !validation
+    || props.scope !== "var_table"
+    || props.info?.group === undefined
+    || props.info?.row === undefined
+  ) {
     return []
   }
 
   return [{
-    required: isRequired,
-    trigger: ["blur"],
-    validator: (_rule, value) => {
-      // Required validation
-      if (isRequired && (value === null || value === undefined || value === "")) {
-        return new Error(`${props.prop} is required`)
-      }
-
-      // Pattern validation - skip if pattern is empty string or only whitespace
-      if (pattern && pattern.trim() && typeof value === "string" && value.trim()) {
-        try {
-          const regex = new RegExp(pattern)
-          const trimmedValue = value.trim()
-          if (!regex.test(trimmedValue)) {
-            return new Error(`${props.prop} does not match required pattern`)
-          }
-        }
-        catch (e) {
-          console.warn(`Invalid regex pattern for ${props.prop}:`, pattern, e)
-        }
-      }
-
-      return true
-    },
+    trigger: ["change", "blur"],
+    validator: () => validation.validateField(
+      getAimdVarTableCellFieldKey(String(props.info.group), Number(props.info.row), props.prop),
+      true,
+    ),
   }]
 })
 

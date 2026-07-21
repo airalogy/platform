@@ -2,11 +2,9 @@ import type { JsonSchema } from "@/components/custom/aimd/types/aimd-types"
 import type { FieldKey, IFileDataItem, IRecordData, IRecordDataItem, IRecordDataKey, ScopeFieldKey } from "@airalogy/aimd-core/types"
 import type { FieldItem, ProtocolInfo } from "@airalogy/shared/types/models/protocol"
 import type { JSONSchemaType } from "ajv"
-import type { FormItemRule } from "naive-ui"
 import type { Ref } from "vue"
 import type { IFieldItem as IExtendedFieldItem } from "../types/types"
 import { getInputType } from "@/components/custom/aimd/composables/useAIMDHelpers"
-import { ajv } from "@/utils/ajv"
 import { DYNAMIC_TABLE_LINK, DYNAMIC_TABLE_SUB_VAR, ESCAPED_PROTOCOL_FIELDS } from "@airalogy/shared/constants"
 import { BuiltInType } from "@airalogy/shared/enum/airalogy.js"
 import { fileTypes, getFileType, getRefValue, type IAiralogyIdFileItem, parseAiralogyId } from "@airalogy/shared/utils"
@@ -21,7 +19,8 @@ type ExtendedFieldRecord = {
 
 export interface ExtendedExtractResult {
   field: Partial<Record<ScopeFieldKey, ExtendedFieldRecord>>
-  rules: Partial<Record<FieldKey, Partial<Record<string, { ajv: import("ajv").ValidateFunction | null, value: FormItemRule }>>>>
+  /** Schema metadata consumed by the platform field renderers. Validation lives in aimd-recorder. */
+  rules: Partial<Record<FieldKey, Partial<Record<string, { ajv: { schema: Record<string, any> } }>>>>
 }
 
 export type ExtractResult = ExtendedExtractResult
@@ -370,9 +369,6 @@ export function getFieldStructure(
     FieldItem[],
   ][]
 
-  /** Rv_ref and ref_step ref fields */
-  const refEntries: ["rv_ref" | "ref_step", Set<string>][] = []
-
   // Create dependentMap to track field dependencies
   const dependentMap = new Map<string, Array<{ scope: IRecordDataKey, name: string }>>()
 
@@ -389,7 +385,6 @@ export function getFieldStructure(
           ...info.get(scopeName)?.[name],
         })),
       ])
-      refEntries.push([scopeName, fieldList])
       return
     }
 
@@ -447,7 +442,6 @@ export function getFieldStructure(
         title: scopeTitle = "",
         type: scopeType = "text",
         description,
-        $defs,
       } = schema || {}
 
       const hasRequired = Boolean(required)
@@ -590,154 +584,13 @@ export function getFieldStructure(
           }
         }
 
-        // Add validation rules
-        if (fieldProps) {
-          let ajvValidate = null
-          try {
-            ajvValidate = ajv.compile({ $defs: $defs || { [name]: {} }, ...fieldProps })
-          }
-          catch (err) {
-            console.error(`Failed to compile rule for ${name}:`, err)
-          }
-
-          if (!acc.rules[k as FieldKey]) {
-            acc.rules[k as FieldKey] = {}
-          }
-
-          // Special handling for reference fields
-          if (k === "rv_ref" || k === "ref_step") {
-            acc.rules[k as FieldKey]![fieldKey] = {
-              ajv: null,
-              value: {
-                required: isRequired,
-                trigger: ["change", "blur"],
-                validator: (rule, value) => {
-                  if (!value)
-                    return isRequired ? new Error("Reference is required") : true
-
-                  // Validate reference exists
-                  const refExists = validateReference(k, value, refEntries)
-                  if (!refExists) {
-                    return new Error(`Invalid reference: ${value}`)
-                  }
-                  return true
-                },
-                key: `${k}.${name}.value`,
-              },
-            }
-          }
-          else {
-            acc.rules[k as FieldKey]![fieldKey] = {
-              ajv: ajvValidate,
-              value: {
-                required: isRequired,
-                trigger: ["change", "blur", "submit"],
-                validator: (rule, value) => {
-                  if (typeof fieldProps.default === "object" && fieldProps.default?.rrec_airalogy_id) {
-                    return true
-                  }
-
-                  // Skip "should not be empty" validation for assigner fields
-                  // Assigner fields are computed by backend, user should click compute button
-                  // The validation will happen when user submits the form (before submission we should ensure all assigners are computed)
-                  if (!assigner && isRequired && (value === null || typeof value === "undefined" || value === "")) {
-                    return new Error("Should not be empty")
-                  }
-
-                  // Add array/list validation (including list[Partner] which has rawType='table')
-                  // Check inputType first as it's more reliable for array types
-                  // Note: Cell-level validation is now handled by dynamic cell rules (see below)
-                  // This array-level validation is kept for backward compatibility and overall array validation
-                  if (inputType === "array" || type === "array") {
-                    // Validate even if array is empty or undefined (for required fields)
-                    const arrayValue = Array.isArray(value) ? value : []
-                    // Only validate array-level constraints (like minimum items), skip item validation
-                    // Item validation is now done at cell level
-                    if (isRequired && arrayValue.length === 0 && !assigner) {
-                      return new Error("At least one item is required")
-                    }
-                  }
-                  // Add table validation (for var_table fields)
-                  else if (rawType === "table" && Array.isArray(value)) {
-                    const tableValidation = validateTableStructure(value, items)
-                    if (!tableValidation.valid) {
-                      return new Error(tableValidation.message)
-                    }
-                  }
-
-                  if (inputType === "date") {
-                    if (typeof value === "string") {
-                      const date = dayjs(value)
-                      if (!date.isValid()) {
-                        return new Error("Invalid date")
-                      }
-                    }
-                    else if (typeof value === "object" && Object.hasOwn(value, "value")) {
-                      const date = dayjs(value.value)
-                      if (!date.isValid()) {
-                        return new Error("Invalid date")
-                      }
-                    }
-                  }
-
-                  if (ajvValidate) {
-                    let validateValue = value
-                    const builtInType = (ajvValidate.schema as any)?.airalogy_built_in_type || (ajvValidate.schema as any)?.airalogy_type
-                    if (builtInType) {
-                      if (builtInType === "ATCG") {
-                        if (!/^[ATCG]*$/.test(value)) {
-                          return new Error("ATCG sequence can only contain the letters A, T, C, G.")
-                        }
-                      }
-                      if (Array.isArray(value)) {
-                        // For file uploads, check if files are still uploading (no airalogyId yet)
-                        // If so, skip ajv validation - we just need to verify files exist
-                        const hasUploadingFile = value.some((f: any) => f && !f.airalogyId && f.status !== "finished")
-                        if (hasUploadingFile && value.length > 0) {
-                          // Files are selected but still uploading, consider valid for now
-                          return true
-                        }
-                        validateValue = value[0]?.airalogyId || value[0]?.id
-                      }
-                      else if (value?.airalogy_file_id) {
-                        validateValue = value?.airalogy_file_id
-                      }
-                      else if (value?.formattedValue) {
-                        validateValue = value.formattedValue
-                      }
-                      else if (value?.value) {
-                        validateValue = value.value
-                      }
-                      else {
-                        validateValue = value
-                      }
-                    }
-                    else if (value !== null && typeof value === "object") {
-                      if (Array.isArray(value)) {
-                        validateValue = normalizeAjvValue(value)
-                      }
-                      else {
-                        validateValue = normalizeAjvValue(value)
-                      }
-                    }
-                    else if (!isRequired && (typeof value === "undefined" || value === null)) {
-                      if (type === "string") {
-                        validateValue = ""
-                      }
-                    }
-
-                    const isValid = ajvValidate(validateValue)
-                    if (ajvValidate.errors) {
-                      return ajvValidate.errors.map(err => new Error(err.message))
-                    }
-                    return isValid
-                  }
-
-                  return true
-                },
-                key: `${k}.${name}.value`,
-              },
-            }
+        // Keep the JSON Schema attached to each field for renderer metadata
+        // (input kind, enums, file extension, etc.). All validation is delegated
+        // to @airalogy/aimd-recorder by protocol-add-record-form.
+        if (fieldProps && k !== "rv_ref" && k !== "ref_step") {
+          acc.rules[k as FieldKey] ??= {}
+          acc.rules[k as FieldKey]![fieldKey] = {
+            ajv: { schema: fieldProps as Record<string, any> },
           }
         }
 
@@ -890,387 +743,10 @@ export function getFieldStructure(
     }
   })
 
-  // Generate cell-level validation rules for array fields (list[Partner] style)
-  // This enables validation to show errors on individual cells instead of the entire array
-  generateCellValidationRules(result, json_schema)
-
   return result
 }
 
-/**
- * Generate cell-level validation rules for array fields
- * This creates dynamic validation paths like: research_variable.partners.value[*].partner_email
- * which can be used to validate individual cells in the array
- */
-function generateCellValidationRules(
-  result: ExtractResult,
-  json_schema: Record<string, any> | undefined,
-): void {
-  if (!json_schema || !result.rules)
-    return
-
-  Object.entries(result.field).forEach(([scopeKey, scopeFields]) => {
-    if (!scopeFields || scopeKey === "__SCOPE__")
-      return
-
-    Object.entries(scopeFields).forEach(([fieldKey, fieldItem]) => {
-      if (!fieldItem || fieldKey === "__SCOPE__")
-        return
-
-      const { type, raw } = fieldItem as any
-      const schema = json_schema[scopeKey as keyof typeof json_schema]
-
-      // Check if this is an array/list type field (e.g., list[Partner])
-      if (type === "table" || type === "array") {
-        const fieldProps = schema?.properties?.[fieldKey]
-        const items = fieldProps?.items
-
-        // Get subvars from raw or from JSON schema items.properties
-        const subvars = raw?.subvars || (items?.properties ? Object.keys(items.properties) : [])
-        const subvarDefs = raw?.subvarDefs || {}
-
-        if (subvars.length > 0 && items?.properties) {
-          // Initialize cellRules in the rules object if not exists
-          if (!(result.rules as any).cellRules) {
-            (result.rules as any).cellRules = {}
-          }
-
-          // Create cell-level rules for each subvar
-          subvars.forEach((subvarName: string) => {
-            const subvarPropSchema = items.properties[subvarName] || {}
-            const subvarDef = subvarDefs[subvarName] || {}
-
-            // Get pattern from subvarDef (parsed from markdown) or from schema
-            const pattern = subvarDef.pattern || subvarDef.kwargs?.pattern || subvarPropSchema.pattern
-            const subvarType = subvarPropSchema.type || subvarDef.type || "string"
-            const isRequired = items.required?.includes(subvarName) || false
-
-            // Create the cell rule key: scope.field.subvar
-            const cellRuleKey = `${scopeKey}.${fieldKey}.${subvarName}`
-
-            ;(result.rules as any).cellRules[cellRuleKey] = {
-              pattern,
-              type: subvarType,
-              required: isRequired,
-              // Validator function that can be called for individual cells
-              validator: (value: any, rowIndex: number): { valid: boolean, message: string } => {
-                // Skip validation for empty values if not required
-                if (!isRequired && (value === null || value === undefined || value === "")) {
-                  return { valid: true, message: "" }
-                }
-
-                // Required field validation
-                if (isRequired && (value === null || value === undefined || value === "")) {
-                  return { valid: false, message: `${subvarName} is required` }
-                }
-
-                // Pattern validation - skip if pattern is empty string or only whitespace
-                if (pattern && pattern.trim() && typeof value === "string" && value.trim()) {
-                  try {
-                    const regex = new RegExp(pattern)
-                    const trimmedValue = value.trim()
-                    if (!regex.test(trimmedValue)) {
-                      return { valid: false, message: `${subvarName} does not match required pattern` }
-                    }
-                  }
-                  catch (e) {
-                    console.warn(`Invalid regex pattern for ${subvarName}:`, pattern, e)
-                  }
-                }
-
-                // Type validation
-                const typeMap: Record<string, string> = { str: "string", int: "number", float: "number", bool: "boolean" }
-                const expectedType = typeMap[subvarType] || subvarType
-                const actualType = typeof value
-
-                if (expectedType === "number" && actualType !== "number" && value !== null && value !== undefined) {
-                  if (Number.isNaN(Number(value))) {
-                    return { valid: false, message: `${subvarName} must be a valid number` }
-                  }
-                }
-
-                return { valid: true, message: "" }
-              },
-            }
-          })
-        }
-      }
-    })
-  })
-}
-
-// Helper functions for validation
-function validateTableStructure(value: any[], items: any): { valid: boolean, message: string } {
-  if (!items || !items.properties) {
-    return { valid: true, message: "" }
-  }
-
-  const requiredProps = items.required || []
-  const properties = items.properties
-
-  for (const row of value) {
-    // Check required properties
-    for (const prop of requiredProps) {
-      if (row[prop] === undefined || row[prop] === null || row[prop] === "") {
-        return { valid: false, message: `Missing required property: ${prop}` }
-      }
-    }
-
-    // Validate property types and formats
-    for (const [key, val] of Object.entries(row)) {
-      const propSchema = properties[key]
-      if (!propSchema)
-        continue
-
-      const expectedType = propSchema.type
-
-      // Skip validation for null/empty values (unless required)
-      if (val === null || val === undefined || val === "") {
-        if (requiredProps.includes(key)) {
-          return { valid: false, message: `Missing required property: ${key}` }
-        }
-        continue
-      }
-
-      // Type validation
-      const actualType = typeof val
-      if (actualType !== expectedType
-        && !(expectedType === "number" && actualType === "object" && val instanceof Big)) {
-        return {
-          valid: false,
-          message: `Invalid type for ${key}: expected ${expectedType}, got ${actualType}`,
-        }
-      }
-
-      // Pattern (regex) validation - skip if pattern is empty string or only whitespace
-      const expectedPattern = propSchema.pattern
-      if (expectedPattern && expectedPattern.trim() && actualType === "string") {
-        const stringVal = String(val).trim()
-        if (stringVal) { // Only validate non-empty strings
-          try {
-            const regex = new RegExp(expectedPattern)
-            if (!regex.test(stringVal)) {
-              return {
-                valid: false,
-                message: `Invalid format for ${key}: ${stringVal} does not match required pattern`,
-              }
-            }
-          }
-          catch (e) {
-            console.warn(`Invalid regex pattern for ${key}:`, expectedPattern, e)
-          }
-        }
-      }
-    }
-  }
-
-  return { valid: true, message: "" }
-}
-
-// const UUID_REGEX = /^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/i
-const UUID_REGEX = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i
-
-const EXAMPLE_ID_REGEX = /^x{8}-x{4}-x{4}-x{4}-x{12}$/
-type ExampleType = "record" | "file" | "image"
-function validateByExample(value: string, example: `airalogy.id.${ExampleType}.${string}` | `airalogy.id.${ExampleType}.${string}.${string}`) {
-  if (!example || !value) {
-    return true
-  }
-
-  const target = example.split(".")
-  const [_prefixAiralogy, _prefixId, type, id] = target
-  const result = value.split(".")
-  const [resultPrefixAiralogy, resultPrefixId, resultType, resultId, resultExt, resultVersion] = result
-
-  const targetLength = (type === "record" && resultVersion ? 2 : 0) + target.length
-
-  if (result.length !== targetLength) {
-    return false
-  }
-
-  if (resultPrefixAiralogy !== _prefixAiralogy) {
-    return false
-  }
-
-  if (resultPrefixId !== _prefixId) {
-    return false
-  }
-
-  if (resultType !== type) {
-    return false
-  }
-
-  if (type === "file" && !resultExt) {
-    return false
-  }
-
-  if (EXAMPLE_ID_REGEX.test(id)) {
-    return UUID_REGEX.test(resultId)
-  }
-
-  return true
-}
 export const EMPTY_ARRAY_MESSAGE = "Array is empty"
-
-function validateArrayItems(
-  value: any[],
-  items: any,
-  rule: FormItemRule,
-  subvarDefs?: Record<string, { name: string, type?: string, pattern?: string, kwargs?: Record<string, any> }>,
-): { valid: boolean, message: string } {
-  if (!items) {
-    return { valid: true, message: "" }
-  }
-
-  const { type, format, airalogy_type, airalogy_built_in_type, examples, properties, required: requiredProps } = items
-
-  const size = value?.length
-  // Check if array is empty
-  if (!size || size === 0) {
-    // For list[SubModel] types (object arrays with properties), empty array is valid
-    // since list[SubModel] in Python allows empty list [] as a valid value
-    // Check both direct object type and $ref references (which indicate SubModel types)
-    if ((type === "object" && properties) || items.$ref) {
-      return { valid: true, message: "" }
-    }
-    // For other required fields, empty array is invalid
-    if (rule.required) {
-      return { valid: false, message: "At least one item is required" }
-    }
-    // For optional fields, empty array is valid
-    return { valid: true, message: "" }
-  }
-
-  for (let i = 0; i < value.length; i++) {
-    const item = value[i]
-
-    // Validate special types (FileId, RecordId)
-    if ((airalogy_type === "FileId" || airalogy_built_in_type === "FileId") && !validateByExample(item, examples[0])) {
-      return { valid: false, message: `Array items must be ${examples[0]}` }
-    }
-
-    if ((airalogy_type === "RecordId" || airalogy_built_in_type === "RecordId") && !validateByExample(item, examples[0])) {
-      return { valid: false, message: `Array items must be ${examples[0]}` }
-    }
-
-    // Validate simple types
-    if (type === "string" && typeof item !== "string") {
-      return { valid: false, message: "Array items must be strings" }
-    }
-
-    if (type === "number" && typeof item !== "number") {
-      return { valid: false, message: "Array items must be numbers" }
-    }
-
-    if (format === "date-time" && !dayjs(item).isValid()) {
-      return { valid: false, message: "Invalid date-time format" }
-    }
-
-    // Validate object arrays (e.g., list[Partner])
-    // Check if item is an object and we have either schema properties or subvarDefs from markdown
-    const isObjectItem = typeof item === "object" && item !== null && !Array.isArray(item)
-    const hasValidationDefs = properties || (subvarDefs && Object.keys(subvarDefs).length > 0)
-
-    if (isObjectItem && hasValidationDefs) {
-      // Check required properties
-      if (requiredProps && Array.isArray(requiredProps)) {
-        for (const prop of requiredProps) {
-          if (item[prop] === undefined || item[prop] === null || item[prop] === "") {
-            return { valid: false, message: `Item ${i + 1}: Missing required property '${prop}'` }
-          }
-        }
-      }
-
-      // Validate all properties defined in subvarDefs, not just those in item
-      const allKeys = new Set([...Object.keys(item), ...(subvarDefs ? Object.keys(subvarDefs) : [])])
-
-      for (const key of allKeys) {
-        const val = item[key]
-        const propSchema = properties?.[key] || {}
-        // Get subvar definition from parsed markdown (contains pattern from template)
-        const subvarDef = subvarDefs?.[key]
-
-        // Map Python types to JavaScript types
-        const typeMap: Record<string, string> = { str: "string", int: "number", float: "number", bool: "boolean" }
-        const rawExpectedType = propSchema.type || subvarDef?.type
-        const expectedType = rawExpectedType ? (typeMap[rawExpectedType] || rawExpectedType) : undefined
-        // Pattern from subvarDefs (markdown) takes precedence over JSON schema
-        const expectedPattern = subvarDef?.pattern || subvarDef?.kwargs?.pattern || propSchema.pattern
-
-        // Skip validation for null/empty values (unless required)
-        if (val === null || val === undefined || val === "") {
-          if (requiredProps && requiredProps.includes(key)) {
-            return { valid: false, message: `Item ${i + 1}: Missing required property '${key}'` }
-          }
-          continue
-        }
-
-        // Type validation
-        const actualType = typeof val
-        if (expectedType && actualType !== expectedType && !(expectedType === "number" && actualType === "object" && val instanceof Big)) {
-          return { valid: false, message: `Item ${i + 1}: Property '${key}' must be of type ${expectedType}` }
-        }
-
-        // Pattern (regex) validation - skip if pattern is empty string or only whitespace
-        if (expectedPattern && expectedPattern.trim() && (actualType === "string" || typeof val === "string")) {
-          const stringVal = String(val).trim()
-          if (stringVal) {
-            try {
-              const regex = new RegExp(expectedPattern)
-              if (!regex.test(stringVal)) {
-                return { valid: false, message: `Item ${i + 1}: Property '${key}' does not match required pattern` }
-              }
-            }
-            catch (e) {
-              console.warn(`Invalid regex pattern for ${key}:`, expectedPattern, e)
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return { valid: rule.required ? !!value : true, message: "" }
-}
-
-function validateReference(type: string, value: string, refEntries: ["rv_ref" | "ref_step", Set<string>][]): boolean {
-  const refEntry = refEntries.find(([t]) => t === type)
-  if (!refEntry)
-    return false
-
-  const [_, refs] = refEntry
-  return refs.has(value)
-}
-
-function normalizeAjvValue(value: any): any {
-  if (Array.isArray(value)) {
-    return value.map(item => normalizeAjvValue(item))
-  }
-
-  if (!value || typeof value !== "object") {
-    return value
-  }
-
-  if (value.type === "image" || value.type === "file" || value.airalogy_file_id) {
-    return value.airalogy_file_id
-  }
-
-  if (value.value instanceof Big) {
-    return value.value.toNumber()
-  }
-
-  if ("value" in value && ("displayedValue" in value || "formattedValue" in value || "type" in value)) {
-    return normalizeAjvValue(value.value)
-  }
-
-  if ("formattedValue" in value && !("value" in value)) {
-    return value.formattedValue
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, nestedValue]) => [key, normalizeAjvValue(nestedValue)]),
-  )
-}
 
 function handleTableUpdate(
   value: any,

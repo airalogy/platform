@@ -66,7 +66,7 @@
           class="px-4"
           :class="{ hidden: isCollapsed }"
         >
-          <n-form ref="formRef" class="h-full pb-3" :rules="fieldRecordDefault.rules" :model="fieldModel">
+          <n-form ref="formRef" class="h-full pb-3" :rules="validationRules" :model="fieldModel">
             <n-collapse-item v-for="(scopeName, idx) in scopeList" :key="scopeName" :name="scopeName">
               <template #header>
                 <span class="text-4 font-500 capitalize">
@@ -132,7 +132,7 @@
       <n-form
         v-else-if="fieldRecordDefault"
         class="platform-aimd-form-preview"
-        :rules="previewFormRecord?.rules"
+        :rules="props.readonly ? undefined : validationRules"
         :model="previewValue"
       >
         <aimd-markdown-preview
@@ -202,11 +202,13 @@ import { useEventBus } from "@vueuse/core"
 import Big from "big.js"
 import { cloneDeepWith as _cloneDeepWith, get as _get } from "lodash-es"
 import { nanoid } from "nanoid"
+import { useI18n } from "vue-i18n"
 import { useProtocolInfoStore } from "../../hooks/useProtocolInfoStore"
 import AssignerProgressModal from "./components/AssignerProgressModal.vue"
 import FieldInputBar from "./components/field-input-bar.vue"
 import WorkflowWorkspace from "./components/workflow-workspace.vue"
 
+import { useAimdRecordValidation } from "./composables/useAimdRecordValidation"
 import { useAssignerManagement } from "./composables/useAssignerManagement"
 import { getAssignerProgress } from "./composables/useAssignerProgress"
 import { useFieldEventBus } from "./composables/useFieldEventBus"
@@ -255,6 +257,7 @@ interface Emits {
 // const { bool: isCollapsed, setTrue: collapse, setFalse: expand, toggle } = useBoolean(false)
 const isCollapsed = useVModel(props, "collapsed")
 const message = useClosableMessage()
+const { locale } = useI18n()
 
 const chatRef = ref<{ setDocked: (val: boolean) => void } | null>(null)
 
@@ -432,6 +435,16 @@ const {
   // Restore Field Record
   restoreFieldRecord,
 } = useFieldState(props, templateRef)
+
+const {
+  rules: validationRules,
+  validateRecord: validateAimdRecord,
+} = useAimdRecordValidation({
+  content: templateRef,
+  fieldModel,
+  locale,
+  schema: () => props.protocol?.json_schema as Record<string, unknown> | undefined,
+})
 
 const previewMode = computed(() => props.readonly ? "report" : "edit")
 const previewFormRecord = computed(() => props.readonly ? null : fieldRecordDefault.value)
@@ -853,6 +866,7 @@ async function wrappedValidate() {
   expandedNamesRef.value = [...scopeList.value]
   await nextTick()
 
+  const aimdValidation = validateAimdRecord()
   let leftFormError: Error | null = null
   let rightFormError: Error | null = null
 
@@ -892,8 +906,8 @@ async function wrappedValidate() {
   }
 
   // If there are any validation errors, throw the first error to maintain original behavior
-  if (leftFormError || rightFormError) {
-    throw leftFormError || rightFormError
+  if (!aimdValidation.valid || leftFormError || rightFormError) {
+    throw leftFormError || rightFormError || new Error(aimdValidation.issues[0]?.message || "Invalid AIMD record")
   }
 }
 

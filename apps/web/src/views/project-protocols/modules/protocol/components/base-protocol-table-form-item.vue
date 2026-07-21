@@ -167,7 +167,9 @@ import type { IFieldItem } from "../types/types"
 import AssignerDependencies from "@/components/custom/aimd/components/assigner-dependencies.vue"
 import { fieldEventKey } from "@/utils/template/eventKey"
 import { getSubvarNames } from "@airalogy/aimd-core"
+import { getAimdVarTableCellFieldKey } from "@airalogy/aimd-recorder"
 import { get } from "lodash-es"
+import { usePlatformAimdValidation } from "../composables/useAimdRecordValidation"
 import { useProtocolFormInject } from "../composables/useProtocolForm"
 import FormItemInput from "./form-item-input.vue"
 
@@ -183,13 +185,6 @@ interface Props {
   dependentRecord?: Record<string, { name: string, scope: IRecordDataKey }[]>
   assignerRecord?: Record<string, ProtocolModels.Assigner>
   id: string
-  // Cell validation rules from parseFieldStructure
-  cellRules?: Record<string, {
-    pattern?: string
-    type?: string
-    required?: boolean
-    validator?: (value: any, rowIndex: number) => { valid: boolean, message: string }
-  }>
 }
 
 const props = defineProps<Props>()
@@ -241,48 +236,20 @@ function handleCellFormItemRef(path: string, el: FormItemInst | null) {
   }
 }
 
-/**
- * Get cell-level validation rules for a specific subvar (returns array for n-form-item)
- */
+const validation = usePlatformAimdValidation()
+
 function getCellRules(subvarKey: string, rowIdx: number): FormItemRule[] {
-  // Try to get cell rule from props.cellRules
-  const cellRuleKey = `${props.scope}.${props.prop}.${subvarKey}`
-  const cellRule = props.cellRules?.[cellRuleKey]
-
-  // Also try to get pattern from tableRecord
-  const tableSchema = tableRecord.value?.[props.prop]?.[subvarKey] as Record<string, any> | undefined
-  const pattern = cellRule?.pattern || tableSchema?.pattern
-  const isRequired = cellRule?.required || tableSchema?.required || false
-
-  if (!pattern && !isRequired) {
+  if (!validation) {
     return []
   }
 
+  const tableName = props.model.originalName || props.model.label || props.prop
   return [{
-    required: isRequired,
-    trigger: ["blur"],
-    validator: (_rule, value) => {
-      // Required validation
-      if (isRequired && (value === null || value === undefined || value === "")) {
-        return new Error(`${subvarKey} is required`)
-      }
-
-      // Pattern validation - skip if pattern is empty string or only whitespace
-      if (pattern && pattern.trim() && typeof value === "string" && value.trim()) {
-        try {
-          const regex = new RegExp(pattern)
-          const trimmedValue = value.trim()
-          if (!regex.test(trimmedValue)) {
-            return new Error(`${subvarKey} does not match required pattern`)
-          }
-        }
-        catch (e) {
-          console.warn(`Invalid regex pattern for ${subvarKey}:`, pattern, e)
-        }
-      }
-
-      return true
-    },
+    trigger: ["change", "blur"],
+    validator: () => validation.validateField(
+      getAimdVarTableCellFieldKey(tableName, rowIdx, subvarKey),
+      true,
+    ),
   }]
 }
 
@@ -295,9 +262,6 @@ const tableAssignerError = computed(() => {
 
 // Normalize subvars to string array (handles both string[] and {name: string}[] formats)
 const subvarNames = computed(() => getSubvarNames(props.model.raw?.subvars))
-
-// Note: Validation is triggered on blur, not on value change
-// This provides a better UX by not showing errors while the user is still typing
 
 function getInputProps(payload: {
   prop: string
