@@ -1187,6 +1187,8 @@
       "records": {
         "tableView": "表格视图",
         "compareView": "对比视图（{count}/4）",
+        "addSelectedToChat": "加入 AI 对话（{count}）",
+        "exportSelectedJson": "导出所选 JSON（{count}）",
         "submittedAt": "提交时间",
         "submittedBy": "提交人",
         "recordVersion": "记录版本",

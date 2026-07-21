@@ -125,9 +125,11 @@
         :total="total"
         :latest-record-number="latestRecordNumber"
         :delete-grace-days="deleteGraceDays"
+        :initial-page-size="preferredRecordPageSize"
         :is-item-in-chat-context="isItemInChatContext"
         :is-item-in-chat-context-disabled="isItemInChatContextDisabled"
         @add-to-chat="handleAddToChat"
+        @add-selected-to-chat="handleAddSelectedToChat"
         @remove-from-chat="handleRemoveFromChat"
         @show-report="handleShowReport"
         @fetch-records="handleFetchRecords"
@@ -168,6 +170,7 @@ import AddLogModal from "./modules/add-log-modal.vue"
 import BulkImportRecordsModal from "./modules/bulk-import-records-modal.vue"
 import ProtocolRecordList from "./modules/protocol-record-list.vue"
 import ShowReportModal from "./modules/show-report-modal.vue"
+import { getRecordPageSizePreference } from "./record-view-preferences"
 
 defineOptions({ inheritAttrs: false })
 
@@ -194,9 +197,10 @@ const { t, locale } = useI18n()
 const recordList = ref<ProtocolModels.RecordInfo[]>([])
 const total = ref<number>(0)
 const latestRecordNumber = ref<number | null>(null)
+const preferredRecordPageSize = computed(() => getRecordPageSizePreference(authStore.userInfo.id))
 const lastFetchPayload = ref<{ currentPage: number, currentPageSize: number }>({
   currentPage: 1,
-  currentPageSize: 10,
+  currentPageSize: preferredRecordPageSize.value,
 })
 
 const deleteGraceDays = computed(() => getRecordDeleteGraceDays())
@@ -313,7 +317,10 @@ async function handleSearch(
   startTargetLoading("search")
   try {
     // Reset to first page when searching
-    await handleFetchRecords({ currentPage: 1, currentPageSize: 10 })
+    await handleFetchRecords({
+      currentPage: 1,
+      currentPageSize: lastFetchPayload.value.currentPageSize,
+    })
   }
   finally {
     endTargetLoading("search")
@@ -480,44 +487,61 @@ function isItemInChatContextDisabled(id: string | number) {
   return true
 }
 
-function handleAddToChat(item: ITimelineItem) {
+function createRecordChatContext(item: ITimelineItem): Chat.ChatRecordContext | null {
   const { recordId, record } = item
   const target = record || recordList.value.find(it => it.record_id === recordId)
 
   if (!protocolInfo.value || !recordId || !target)
+    return null
+
+  const { lab, project, uid, name, id } = protocolInfo.value
+  return {
+    ...target,
+    lab,
+    project,
+    protocol: {
+      uid,
+      name,
+      id,
+    },
+    item: target,
+    type: "record",
+    id: String(recordId),
+    airalogyId: target.airalogy_record_id,
+    isLocal: false,
+    removable: true,
+  }
+}
+
+function handleAddSelectedToChat(items: ITimelineItem[]) {
+  if (items.length === 0)
     return
 
   startTargetLoading("chat")
   try {
-    const { lab, project, uid, name, id } = protocolInfo.value
-    const recordKey = String(recordId)
-    const newItem: Chat.ChatRecordContext = {
-      ...target,
-      lab,
-      project,
-      protocol: {
-        uid,
-        name,
-        id,
-      },
-      item: target,
-      type: "record",
-      id: recordKey,
-      airalogyId: target.airalogy_record_id,
-      isLocal: false,
-      removable: true,
+    const currentContext = toValue(context) || []
+    const contextIds = new Set(currentContext.map(item => String(item.id)))
+    const newItems: Chat.ChatRecordContext[] = []
+
+    for (const item of items) {
+      const newItem = createRecordChatContext(item)
+      if (newItem && !contextIds.has(String(newItem.id))) {
+        contextIds.add(String(newItem.id))
+        newItems.push(newItem)
+      }
     }
 
-    // Get current context and add new item if not already present
-    const currentContext = toValue(context) || []
-    if (currentContext.findIndex(item => String(item.id) === recordKey) === -1) {
-      const newContext = [...currentContext, newItem]
-      updateContext(newContext)
+    if (newItems.length > 0) {
+      updateContext([...currentContext, ...newItems])
     }
   }
   finally {
     endTargetLoading("chat")
   }
+}
+
+function handleAddToChat(item: ITimelineItem) {
+  handleAddSelectedToChat([item])
 }
 
 function handleRemoveFromChat(item: ITimelineItem) {
@@ -548,7 +572,7 @@ watch(
 
     await handleFetchRecords({
       currentPage: 1,
-      currentPageSize: 10,
+      currentPageSize: lastFetchPayload.value.currentPageSize,
     })
   },
   { immediate: true },

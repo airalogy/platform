@@ -1187,6 +1187,8 @@
       "records": {
         "tableView": "Table view",
         "compareView": "Compare view ({count}/4)",
+        "addSelectedToChat": "Add selected to AI chat ({count})",
+        "exportSelectedJson": "Export selected JSON ({count})",
         "submittedAt": "Submitted at",
         "submittedBy": "Submitted by",
         "recordVersion": "Record version",

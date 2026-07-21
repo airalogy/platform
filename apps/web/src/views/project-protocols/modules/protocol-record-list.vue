@@ -28,6 +28,41 @@
           @open-record="handleOpenRecord"
           @update:selected-record-keys="handleSelectedRecordKeysUpdate"
         >
+          <template #toolbar>
+            <div class="record-batch-actions">
+              <n-button
+                type="primary"
+                secondary
+                size="small"
+                :disabled="selectedRecordsNotInChat.length === 0"
+                @click="handleAddSelectedToChat"
+              >
+                <template #icon>
+                  <n-icon size="16">
+                    <icon-tabler-message-plus />
+                  </n-icon>
+                </template>
+                {{ $t("page.protocol.records.addSelectedToChat", { count: selectedRecordsNotInChat.length }) }}
+              </n-button>
+
+              <n-dropdown
+                :options="jsonExportOptions"
+                trigger="click"
+                placement="bottom-end"
+                @select="handleSelectedJsonExport"
+              >
+                <n-button size="small" :disabled="selectedRecords.length === 0">
+                  <template #icon>
+                    <n-icon size="16">
+                      <icon-mdi-code-json />
+                    </n-icon>
+                  </template>
+                  {{ $t("page.protocol.records.exportSelectedJson", { count: selectedRecords.length }) }}
+                </n-button>
+              </n-dropdown>
+            </div>
+          </template>
+
           <template #actions="{ record, index }">
             <div class="record-row-actions">
               <n-tooltip v-if="isItemInChatContext(getRecordKey(record, index))" trigger="hover">
@@ -144,7 +179,7 @@
           v-model:show-only-differences="showOnlyDifferences"
           :aimd="protocolInfo.aimd"
           :records="selectedRecords"
-          :field-keys="visibleFieldKeys"
+          :max-default-columns="compareMaxDefaultColumns"
           :record-key="getRecordKey"
           :record-label="getRecordLabel"
           :locale="locale"
@@ -167,7 +202,10 @@
       :page="currentPage"
       :page-size="currentPageSize"
       :page-count="pageCount"
+      :page-sizes="recordPageSizeOptions"
+      show-size-picker
       @update:page="handlePageChange"
+      @update:page-size="handlePageSizeChange"
     />
   </n-spin>
 
@@ -222,6 +260,12 @@ import { copyToClip, downloadAs, formatDate } from "@airalogy/shared/utils"
 import dayjs from "dayjs"
 import { useI18n } from "vue-i18n"
 import { useProjectInfoStore } from "../hooks/useProjectInfoStore"
+import {
+  getRecordFieldKeysPreference,
+  RECORD_PAGE_SIZE_OPTIONS,
+  setRecordFieldKeysPreference,
+  setRecordPageSizePreference,
+} from "../record-view-preferences"
 import { createProtocolRecordData } from "../utils"
 
 interface Props {
@@ -231,6 +275,7 @@ interface Props {
   total: number
   latestRecordNumber?: number | null
   deleteGraceDays?: number
+  initialPageSize?: number
   isItemInChatContext: (id: string | number) => boolean
   isItemInChatContextDisabled: (id: string | number) => boolean
 }
@@ -239,6 +284,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   (e: "addToChat", item: ITimelineItem): void
+  (e: "addSelectedToChat", items: ITimelineItem[]): void
   (e: "removeFromChat", item: ITimelineItem): void
   (e: "showReport", item: ITimelineItem): void
   (e: "update:page", page: number): void
@@ -257,14 +303,34 @@ const visibleFieldKeys = ref<string[]>([])
 const selectedRecordKeys = ref<AimdRecordViewKey[]>([])
 const selectedRecordMap = shallowReactive(new Map<AimdRecordViewKey, ProtocolModels.RecordInfo>())
 const showOnlyDifferences = ref(false)
+// Keep comparisons complete while Platform is compatible with renderer 2.11.
+const compareMaxDefaultColumns = Number.MAX_SAFE_INTEGER
+const recordPageSizeOptions = [...RECORD_PAGE_SIZE_OPTIONS]
+
+watch(
+  [() => authStore.userInfo.id, () => props.protocolInfo.id],
+  ([userId, protocolId]) => {
+    visibleFieldKeys.value = getRecordFieldKeysPreference(userId, protocolId)
+  },
+  { immediate: true },
+)
+
+watch(visibleFieldKeys, (fieldKeys) => {
+  setRecordFieldKeysPreference(authStore.userInfo.id, props.protocolInfo.id, fieldKeys)
+}, { deep: true })
 
 const { currentPage, currentPageSize, handlePageChange, pageCount } = usePagination({
-  options: { page: 1, pageSize: 10, total: computed(() => props.total) },
+  options: { page: 1, pageSize: props.initialPageSize || 10, total: computed(() => props.total) },
   fetchData: (payload) => {
     emit("fetchRecords", payload)
     return Promise.resolve()
   },
 })
+
+function handlePageSizeChange(pageSize: number) {
+  setRecordPageSizePreference(authStore.userInfo.id, pageSize)
+  currentPageSize.value = pageSize
+}
 
 function getRecordKey(record: unknown, _index = 0): AimdRecordViewKey {
   return (record as ProtocolModels.RecordInfo).record_id
@@ -322,6 +388,17 @@ function handleSelectedRecordKeysUpdate(keys: AimdRecordViewKey[]) {
 const selectedRecords = computed(() => selectedRecordKeys.value
   .map(key => selectedRecordMap.get(key))
   .filter((record): record is ProtocolModels.RecordInfo => Boolean(record)))
+
+const selectedRecordsNotInChat = computed(() => selectedRecords.value.filter(record => (
+  !props.isItemInChatContext(getRecordKey(record))
+)))
+
+function handleAddSelectedToChat() {
+  const items = selectedRecordsNotInChat.value.map(record => toTimelineItem(record))
+  if (items.length > 0) {
+    emit("addSelectedToChat", items)
+  }
+}
 
 watch(() => props.recordList, (records) => {
   const selectedSet = new Set(selectedRecordKeys.value)
@@ -385,11 +462,27 @@ function getFilename(record: ProtocolModels.RecordInfo) {
   ].filter(Boolean).join("-")
 }
 
-function handleJsonExport(key: string, value: unknown) {
-  const record = value as ProtocolModels.RecordInfo
-  const jsonData = JSON.stringify(record, null, 2)
+function getSelectedRecordsFilename(records: ProtocolModels.RecordInfo[]) {
+  const { lab, project, name } = props.protocolInfo
+  const recordNumbers = records
+    .map(record => record.metadata.record_num)
+    .filter((recordNumber): recordNumber is number => typeof recordNumber === "number")
+  const recordsLabel = recordNumbers.length === records.length
+    ? `records-${recordNumbers.join("-")}`
+    : `records-${records.length}`
+
+  return [
+    lab?.name,
+    project?.name,
+    name,
+    recordsLabel,
+  ].filter(Boolean).join("-")
+}
+
+function exportJson(key: string, value: unknown, filename: string) {
+  const jsonData = JSON.stringify(value, null, 2)
   if (key === "download") {
-    downloadAs(jsonData, `${getFilename(record)}.json`)
+    downloadAs(jsonData, `${filename}.json`)
     message.success(t("page.protocol.timeline.downloadSuccess"))
   }
   else if (key === "copy") {
@@ -398,8 +491,20 @@ function handleJsonExport(key: string, value: unknown) {
   }
   else if (key === "preview") {
     previewJsonData.value = jsonData
-    previewJsonFilename.value = getFilename(record)
+    previewJsonFilename.value = filename
     showPreviewModal.value = true
+  }
+}
+
+function handleJsonExport(key: string, value: unknown) {
+  const record = value as ProtocolModels.RecordInfo
+  exportJson(key, record, getFilename(record))
+}
+
+function handleSelectedJsonExport(key: string) {
+  const records = selectedRecords.value
+  if (records.length > 0) {
+    exportJson(key, records, getSelectedRecordsFilename(records))
   }
 }
 
@@ -517,6 +622,13 @@ function handleDeleteSuccess() {
   gap: 2px;
 }
 
+.record-batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 :deep(.record-metadata-column--time) {
   min-width: 172px;
   white-space: nowrap;
@@ -534,6 +646,11 @@ function handleDeleteSuccess() {
 @media (max-width: 640px) {
   .record-view-tabs :deep(.n-tabs-nav) {
     max-width: none;
+  }
+
+  .record-batch-actions {
+    flex-wrap: wrap;
+    white-space: normal;
   }
 }
 </style>
