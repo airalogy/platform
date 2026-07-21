@@ -29,7 +29,7 @@
           @update:selected-record-keys="handleSelectedRecordKeysUpdate"
         >
           <template #toolbar>
-            <div class="record-batch-actions">
+            <div v-if="selectedRecords.length > 0" class="record-batch-actions">
               <n-button
                 type="primary"
                 secondary
