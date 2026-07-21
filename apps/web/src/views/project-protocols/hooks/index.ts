@@ -11,7 +11,7 @@ export function useFetchResearch() {
       return null
 
     startLoading()
-    const { data, error } = await getProtocolInfo(protocolId)
+    const { data } = await getProtocolInfo(protocolId)
     endLoading()
 
     if (data) {
@@ -38,14 +38,21 @@ export function useFetchProtocolRecords() {
 
     const { page, pageSize, protocolVersion, number, version, userId, q } = payload
 
-    const { data, error } = await innerFetchProtocolRecords(protocolId, { page, pageSize, protocolVersion, number, version, userId, q })
-    endLoading()
+    try {
+      const { data, error } = await innerFetchProtocolRecords(protocolId, { page, pageSize, protocolVersion, number, version, userId, q })
 
-    if (data) {
-      return data
+      if (error)
+        throw error
+
+      if (data) {
+        return data
+      }
+
+      return null
     }
-
-    return null
+    finally {
+      endLoading()
+    }
   }
 
   return { loading, startLoading, endLoading, fetchProtocolRecords }

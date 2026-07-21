@@ -10,103 +10,114 @@
     default-selected-tab="ai-assistant"
   >
     <section>
-      <n-grid
+      <div
         v-if="protocolInfo && protocolInfo.lab && protocolInfo.project && protocolInfo.uid"
-        cols="12"
-        :x-gap="16"
-        :y-gap="8"
         class="px-4"
       >
-        <n-grid-item :span="6">
-          <div class="flex gap-3">
-            <search-input
-              v-model:value="searchInputVal"
-              class="flex-1"
-              icon-position="right"
-              :placeholder="$t('page.protocol.records.searchContentPlaceholder')"
-              @submit:search="handleSearch('input')"
-              @clear="handleSearch('clear')"
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <search-input
+            v-model:value="searchInputVal"
+            class="min-w-64 flex-1"
+            icon-position="right"
+            :placeholder="$t('page.protocol.records.searchContentPlaceholder')"
+            @submit:search="handleSearch"
+            @clear="handleSearch"
+          />
+
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            <n-button
+              quaternary
+              type="primary"
+              :loading="loadingState.search"
+              :aria-expanded="showAdvancedSearch"
+              @click="showAdvancedSearch = !showAdvancedSearch"
+            >
+              <template #icon>
+                <n-icon>
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 4H21V6H3V4ZM9 11V13H15V11H9ZM6 18V16H18V18H6Z" fill="currentColor" />
+                  </svg>
+                </n-icon>
+              </template>
+              {{ $t("page.protocol.records.advancedSearch") }}
+            </n-button>
+
+            <bulk-import-records-modal
+              v-if="canSubmitDataToOthers"
+              :protocol-id="protocolInfo.id"
+              @imported="handleRecordsImported"
             />
-            <global-add-member
-              v-if="authStore.isLogin"
-              size="medium"
-              :filter-user="false"
-              :theme-overrides="selectThemeOverrides"
-              @update:select="handleUserSelect"
+
+            <add-log-modal
+              v-if="canSubmitDataToOthers"
+              :lab-uid="protocolInfo.lab.uid"
+              :project-uid="protocolInfo.project.uid"
+              :protocol-uid="protocolInfo.uid"
+              :loading="loadingState.create"
+              @modal:new-record="handleCreateRecord"
             />
           </div>
-        </n-grid-item>
-        <n-grid-item :span="12" class="flex justify-end gap-4">
-          <n-button
-            quaternary
-            type="primary"
-            :loading="loadingState.search"
-            @click="showAdvancedSearch = !showAdvancedSearch"
-          >
-            <template #icon>
-              <n-icon>
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 4H21V6H3V4ZM9 11V13H15V11H9ZM6 18V16H18V18H6Z" fill="currentColor" />
-                </svg>
-              </n-icon>
-            </template>
-            {{ $t("page.protocol.records.advancedSearch") }}
-          </n-button>
+        </div>
 
-          <bulk-import-records-modal
-            v-if="canSubmitDataToOthers"
-            :protocol-id="protocolInfo.id"
-            @imported="handleRecordsImported"
-          />
+        <n-collapse-transition :show="showAdvancedSearch">
+          <div class="mt-3 border-y border-gray-200 py-4">
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
+              <div v-if="authStore.isLogin">
+                <label class="mb-2 block text-sm text-gray-700 font-medium">
+                  {{ $t("page.protocol.records.submittedBy") }}
+                </label>
+                <global-add-member
+                  v-model:value="selectedUserId"
+                  class="w-full"
+                  size="medium"
+                  :multiple="false"
+                  :filter-user="false"
+                  :placeholder="$t('page.protocol.records.submitterSearchPlaceholder')"
+                  :theme-overrides="selectThemeOverrides"
+                />
+              </div>
 
-          <add-log-modal
-            v-if="canSubmitDataToOthers"
-            :lab-uid="protocolInfo.lab.uid"
-            :project-uid="protocolInfo.project.uid"
-            :protocol-uid="protocolInfo.uid"
-            :loading="loadingState.create"
-            @modal:new-record="handleCreateRecord"
-          />
-        </n-grid-item>
-        <!-- Advanced Search Panel -->
-        <n-grid-item :span="12">
-          <n-collapse-transition :show="showAdvancedSearch">
-            <div class="mb-4">
-              <label class="mb-2 block text-sm text-gray-700 font-medium">
-                {{ $t("page.protocol.records.searchRecordNumber") }}
-              </label>
-              <n-input-number
-                v-model:value="recordNumberInput"
-                :placeholder="$t('page.protocol.records.recordNumberPlaceholder')"
-                :min="1"
-                @keydown.enter="handleSearch('recordVersion')"
+              <div>
+                <label class="mb-2 block text-sm text-gray-700 font-medium">
+                  {{ $t("page.protocol.records.searchRecordNumber") }}
+                </label>
+                <n-input-number
+                  v-model:value="recordNumberInput"
+                  class="w-full"
+                  :placeholder="$t('page.protocol.records.recordNumberPlaceholder')"
+                  :min="1"
+                  @keydown.enter="handleSearch"
+                />
+              </div>
+
+              <div>
+                <label class="mb-2 block text-sm text-gray-700 font-medium">
+                  {{ $t("page.protocol.records.searchRecordVersion") }}
+                </label>
+                <n-input-number
+                  v-model:value="recordVersionInput"
+                  class="w-full"
+                  :placeholder="$t('page.protocol.records.recordVersionPlaceholder')"
+                  :min="1"
+                  @keydown.enter="handleSearch"
+                />
+              </div>
+
+              <global-sort-selector
+                v-model="protocolVersionOption"
+                :options="protocolVersionOptions"
+                :loading="loadingState.versions"
+                :label="$t('page.protocol.records.protocolVersionLabel')"
+                class="w-full"
+                @update:show="fetchProtocolVersions"
               />
             </div>
-            <div class="mb-4">
-              <label class="mb-2 block text-sm text-gray-700 font-medium">
-                {{ $t("page.protocol.records.searchRecordVersion") }}
-              </label>
-              <n-input-number
-                v-model:value="recordVersionInput"
-                :placeholder="$t('page.protocol.records.recordVersionPlaceholder')"
-                :min="1"
-                @keydown.enter="handleSearch('recordVersion')"
-              />
-            </div>
-            <global-sort-selector
-              v-model="protocolVersionOption"
-              :options="protocolVersionOptions"
-              :loading="loadingState.versions"
-              :label="$t('page.protocol.records.protocolVersionLabel')"
-              class="w-full"
-              @update:value="handleSearch('version')"
-              @update:show="fetchProtocolVersions"
-            />
+
             <div class="mt-4 flex gap-2">
               <n-button
                 type="primary"
                 :loading="loadingState.search"
-                @click="handleSearch('apply')"
+                @click="handleSearch"
               >
                 {{ $t("page.protocol.records.applyFilters") }}
               </n-button>
@@ -114,9 +125,9 @@
                 {{ $t("page.protocol.records.clearAll") }}
               </n-button>
             </div>
-          </n-collapse-transition>
-        </n-grid-item>
-      </n-grid>
+          </div>
+        </n-collapse-transition>
+      </div>
       <protocol-record-list
         v-if="protocolInfo"
         :loading="loadingState.records"
@@ -141,7 +152,6 @@
 </template>
 
 <script setup lang="ts">
-import type { ICustomSelectOption } from "@/components/common/global-add-member.vue"
 import type { ProtocolModels } from "@airalogy/shared/types"
 
 import type { SelectOption } from "naive-ui"
@@ -178,7 +188,7 @@ const { protocolInfo, airalogyId, protocolId } = useOrProvideProtocolInfoStore(n
 const { projectInfo } = useOrProvideProjectInfoStore(null)
 const authStore = useAuthStore()
 
-const { endLoading, fetchProtocolRecords, loading } = useFetchProtocolRecords()
+const { fetchProtocolRecords } = useFetchProtocolRecords()
 const { canSubmitDataToOthers } = useProjectPermissions(projectInfo)
 const { reloadPage } = useAppStore()
 
@@ -225,7 +235,7 @@ const selectThemeOverrides = {
 // Search functionality variables
 const searchInputVal = ref("")
 const protocolVersionOption = ref<string>("all")
-const selectedUsers = ref<ICustomSelectOption[]>([])
+const selectedUserId = ref<string | null>(null)
 const recordNumberInput = ref<number | null>(null)
 const recordVersionInput = ref<number | null>(null)
 
@@ -311,9 +321,7 @@ async function handleCreateRecord() {
   }
 }
 
-async function handleSearch(
-  source: "input" | "clear" | "version" | "apply" | "clearFilters" | "recordVersion",
-) {
+async function handleSearch() {
   startTargetLoading("search")
   try {
     // Reset to first page when searching
@@ -327,22 +335,16 @@ async function handleSearch(
   }
 }
 
-function handleUserSelect(users: ICustomSelectOption[]) {
-  selectedUsers.value = users
-  // Trigger search when users are selected
-  handleSearch("apply")
-}
-
 function handleClearFilters() {
   searchInputVal.value = ""
   protocolVersionOption.value = "all"
-  selectedUsers.value = []
+  selectedUserId.value = null
   showAdvancedSearch.value = false
   recordNumberInput.value = null
   recordVersionInput.value = null
 
   // Trigger search with cleared filters
-  handleSearch("clear")
+  handleSearch()
 }
 
 async function handleFetchRecords(payload: { currentPage: number, currentPageSize: number }) {
@@ -388,10 +390,9 @@ async function handleFetchRecords(payload: { currentPage: number, currentPageSiz
       searchParams.version = String(recordVersionInput.value)
     }
 
-    // Add user ID filter from selected users
-    if (selectedUsers.value.length > 0) {
-      // For now, use the first selected user ID (API supports single userId)
-      searchParams.userId = selectedUsers.value[0].value
+    // Add submitter filter
+    if (selectedUserId.value) {
+      searchParams.userId = selectedUserId.value
     }
 
     const data = await fetchProtocolRecords(protocolInfo.value.id, searchParams)
@@ -409,7 +410,6 @@ async function handleFetchRecords(payload: { currentPage: number, currentPageSiz
   }
   finally {
     endTargetLoading("records")
-    endLoading()
   }
 }
 

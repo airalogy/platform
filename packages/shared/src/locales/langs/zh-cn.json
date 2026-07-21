@@ -1191,6 +1191,7 @@
         "exportSelectedJson": "导出所选 JSON（{count}）",
         "submittedAt": "提交时间",
         "submittedBy": "提交人",
+        "submitterSearchPlaceholder": "输入邮箱或用户名搜索提交人",
         "recordVersion": "记录版本",
         "advancedSearch": "高级搜索",
         "searchContentPlaceholder": "搜索记录内容，查找是否提及某个词",

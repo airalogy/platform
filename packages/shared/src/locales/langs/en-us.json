@@ -1191,6 +1191,7 @@
         "exportSelectedJson": "Export selected JSON ({count})",
         "submittedAt": "Submitted at",
         "submittedBy": "Submitted by",
+        "submitterSearchPlaceholder": "Search submitters by email or username",
         "recordVersion": "Record version",
         "advancedSearch": "Advanced search",
         "searchContentPlaceholder": "Search record content to see whether a term was mentioned",

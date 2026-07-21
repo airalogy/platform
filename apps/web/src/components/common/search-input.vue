@@ -5,7 +5,7 @@
     :on-focus="setInputFocus"
     :on-blur="setInputBlur"
     type="text"
-    placeholder="Search"
+    :placeholder="props.placeholder"
     size="medium"
     :maxlength="props.maxlength"
     class="h-9 rounded-2 bg-[rgba(255,255,255,0.1)]"
@@ -46,6 +46,7 @@ import { useAuthStore } from "@/store/modules/auth"
 import { useBoolean } from "@airalogy/composables"
 
 export interface IProps {
+  value?: string
   isStatic?: boolean
   blurClass?: string
   focusClass?: string
@@ -55,6 +56,7 @@ export interface IProps {
   onSubmit?: null | ((val: string) => void)
   maxlength?: number
   iconPosition?: "left" | "right"
+  placeholder?: string
 }
 
 interface IEmits {
@@ -74,19 +76,23 @@ const props = withDefaults(defineProps<IProps>(), {
   inputStyle: () => ({}),
   maxlength: 100,
   iconPosition: "left",
+  placeholder: "Search",
 })
 
 const emits = defineEmits<IEmits>()
-const search = ref<string>("")
+const internalSearch = ref("")
+const search = computed(() => props.value ?? internalSearch.value)
 const authStore = useAuthStore()
 
 const { bool: isInputFocus, setTrue: setInputFocus, setFalse: setInputBlur } = useBoolean()
 const handleInputChange: InputProps["onUpdateValue"] = (val, meta) => {
+  if (props.value === undefined) {
+    internalSearch.value = val
+  }
   emits("update:value", val)
   if (meta.source === "clear") {
     emits("clear")
   }
-  search.value = val
 }
 
 function handleSubmit(e: KeyboardEvent | MouseEvent) {

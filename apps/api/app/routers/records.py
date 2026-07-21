@@ -11,13 +11,12 @@ from airalogy.record.hash import get_data_sha1
 from dotenv import dotenv_values
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import cast, distinct, func, literal_column, select, update
+from sqlalchemy import and_, cast, distinct, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.config import config
 from app.database import DBSession
 from app.libs.protocol_agent import prepare_protocol_package, protocol_exec
-from app.libs.text_splitter import text_to_words
 from app.models.lab import Lab
 from app.models.project import Project, ProjectRole, ProjectType
 from app.models.protocol import Protocol
@@ -35,9 +34,6 @@ router = APIRouter(
     tags=["records"],
 )
 
-SEARCH_CONFIG = literal_column("'english'")
-
-
 def build_record_search_document():
     return func.record_search_document(
         cast(Record.data, JSONB),
@@ -49,19 +45,27 @@ def build_record_keyword_condition(q: str | None):
     if q is None:
         return None
 
-    keyword = q.strip()
-    if not keyword:
+    keywords = q.split()
+    if not keywords:
         return None
 
-    qs = " & ".join(text_to_words(q.lower()))
     search_document = build_record_search_document()
-    search_query = func.to_tsquery(SEARCH_CONFIG, qs)
+    return and_(
+        *(
+            search_document.ilike(
+                f"%{escape_like_pattern(keyword)}%",
+                escape="\\",
+            )
+            for keyword in keywords
+        )
+    )
 
-    return func.to_tsvector(
-        SEARCH_CONFIG,
-        search_document,
-    ).bool_op("@@")(
-        search_query,
+
+def escape_like_pattern(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
     )
 
 

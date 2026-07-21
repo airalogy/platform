@@ -1,17 +1,17 @@
 <template>
   <n-select
-    v-model:value="memberIdList"
+    :value="memberValue"
     :size="props.size"
     :options="memberOptions"
     :render-label="renderLabel"
-    :render-tag="renderMultipleSelectTag"
+    :render-tag="props.multiple ? renderMultipleSelectTag : undefined"
     :loading="loading"
     :clear-filter-after-select="true"
-    :placeholder="$t('common.memberSearchPlaceholder')"
+    :placeholder="props.placeholder || $t('common.memberSearchPlaceholder')"
     remote
     clearable
     filterable
-    multiple
+    :multiple="props.multiple"
     :show="isShowMenu"
     :consistent-menu-width="false"
     :theme-overrides="props.themeOverrides"
@@ -40,16 +40,20 @@ import { LabRole, ProjectRole } from "../../enum"
 defineOptions({ name: "GlobalAddMember" })
 const props = withDefaults(defineProps<IProps>(), {
   filterUser: true,
+  multiple: true,
 })
 
 const emits = defineEmits<IEmits>()
 
 export interface IProps {
+  value?: string | string[] | null
   type?: "lab" | "group" | "project"
   themeOverrides?: SelectProps["themeOverrides"]
   size?: SelectProps["size"]
   filterUser?: boolean
   isPrivate?: boolean
+  multiple?: boolean
+  placeholder?: string
 }
 
 export interface ICustomSelectOption {
@@ -61,9 +65,11 @@ export interface ICustomSelectOption {
 }
 interface IEmits {
   (ev: "update:select", val: ICustomSelectOption[]): void
+  (ev: "update:value", val: string | string[] | null): void
 }
 
-const memberIdList = ref<string[]>([])
+const internalValue = ref<string | string[] | null>(props.multiple ? [] : null)
+const memberValue = computed(() => props.value === undefined ? internalValue.value : props.value)
 const memberOptions = ref<SelectOption[]>([])
 const selectedMembers = ref<ICustomSelectOption[]>([])
 
@@ -167,7 +173,15 @@ function handleClearOption() {
 }
 function handleClear() {
   handleClearOption()
-  memberIdList.value = []
+  updateMemberValue(props.multiple ? [] : null)
+  selectedMembers.value = []
+}
+
+function updateMemberValue(value: string | string[] | null) {
+  if (props.value === undefined) {
+    internalValue.value = value
+  }
+  emits("update:value", value)
 }
 
 const handleSearch = useDebounceFn(async (val: string) => {
@@ -219,12 +233,21 @@ const handleSearch = useDebounceFn(async (val: string) => {
   }
 }, 500)
 
-const handleValueChange: SelectProps["onUpdate:value"] = (
-  _,
-  option: { label: string, value: string, email: string, role: Api.Lab.LabRole }[],
-) => {
-  selectedMembers.value = option
-  handleClearOption()
+function handleValueChange(
+  value: string | number | Array<string | number> | null,
+  option: SelectOption | SelectOption[] | null,
+) {
+  const normalizedValue = props.multiple
+    ? (Array.isArray(value) ? value.map(String) : [])
+    : value === null || value === undefined
+      ? null
+      : String(Array.isArray(value) ? value[0] : value)
+
+  const normalizedOptions = (Array.isArray(option) ? option : option ? [option] : []) as unknown as ICustomSelectOption[]
+
+  updateMemberValue(normalizedValue)
+  selectedMembers.value = normalizedOptions
+  hideMenu()
 }
 
 watch(

@@ -1195,6 +1195,7 @@ declare namespace I18n {
           exportSelectedJson: string
           submittedAt: string
           submittedBy: string
+          submitterSearchPlaceholder: string
           recordVersion: string
           advancedSearch: string
           searchContentPlaceholder: string
