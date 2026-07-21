@@ -57,12 +57,11 @@
 </template>
 
 <script setup lang="ts">
-import { useOrProvideShiki } from "@airalogy/composables"
+import { $t } from "@airalogy/shared/locales"
 import { type IProps, useOrProvideChatInfoStore } from "./composables/useChatInfoStore"
 import ChatInput from "./modules/chat-input.vue"
 import ChatPlaceholder from "./modules/chat-placeholder.vue"
 import MessageBox from "./modules/Message/index.vue"
-import { $t } from "@airalogy/shared/locales"
 
 defineOptions({
   name: "ChatSessionInterface",
@@ -93,7 +92,6 @@ const emit = defineEmits<IEmits>()
 interface IEmits {
   (e: "scrollToBottom", isBottom?: boolean): void
 }
-
 
 const {
   emptyDraftId,
@@ -312,8 +310,6 @@ function handleEdit(item: Chat.ChatMessage) {
   item.editing = true
 }
 
-const { initializeShiki } = useOrProvideShiki({ themes: ["github-light"], langs: ["markdown", "json", "python"] })
-
 // Pagination state
 const PAGE_SIZE = 5
 const loadedMessageCount = ref(PAGE_SIZE)
@@ -457,10 +453,6 @@ watch(() => allActiveMessages.value.length, (newLength, oldLength) => {
       emit("scrollToBottom", true) // Smart scroll for streaming content
     })
   }
-})
-
-onMounted(async () => {
-  await initializeShiki()
 })
 </script>
 

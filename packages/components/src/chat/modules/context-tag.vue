@@ -19,12 +19,12 @@
               v{{ props.context.item.latest_version }}
             </n-tag>
           </n-ellipsis>
-          <span v-else class="max-w-[4em] overflow-hidden text-ellipsis" style="direction: rtl">#{{ props.context.id }}</span>
+          <span v-else class="whitespace-nowrap">{{ contextDisplayLabel }}</span>
           <n-icon :size="14">
             <icon-ion-open-outline />
           </n-icon>
         </router-link>
-        <span v-else> {{ props.context.id }} </span>
+        <span v-else>{{ contextDisplayLabel }}</span>
       </n-tag>
     </template>
     <div>
@@ -74,7 +74,9 @@
         <n-icon size="14">
           <icon-shared-record-outline />
         </n-icon>
-        <span class="tooltip-value">{{ formatDate(props.context.item.metadata.record_current_version_submission_time, "date-time") }}</span>
+        <span class="tooltip-value">
+          {{ contextDisplayLabel }} · {{ formatDate(props.context.item.metadata.record_current_version_submission_time, "date-time") }}
+        </span>
       </div>
 
       <div v-if="props.context.type === 'record'" class="tooltip-row">
@@ -114,6 +116,21 @@ interface IEmit {
 function handleClose() {
   emit("close", String(props.context.id))
 }
+
+const contextDisplayLabel = computed(() => {
+  if (props.context.type === "record") {
+    const recordNumber = props.context.item.metadata?.record_num
+    return recordNumber !== undefined && recordNumber !== null
+      ? `#${recordNumber}`
+      : `...${String(props.context.id).slice(-6)}`
+  }
+
+  if (props.context.type === "protocol") {
+    return props.context.item.name
+  }
+
+  return String(props.context.id)
+})
 
 const navigateTo = computed<RouteLocationRaw | null>(() => {
   const { lab, project, protocol, id } = props.context

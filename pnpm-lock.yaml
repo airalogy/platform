@@ -555,8 +555,8 @@ importers:
         specifier: ^1.21.0
         version: 1.21.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer':
-        specifier: ^2.11.0
-        version: 2.11.0(vue@3.5.17(typescript@5.8.3))
+        specifier: 2.11.1
+        version: 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@airalogy/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -979,8 +979,8 @@ importers:
         specifier: ^1.21.0
         version: 1.21.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer':
-        specifier: ^2.10.0
-        version: 2.10.0(vue@3.5.17(typescript@5.8.3))
+        specifier: 2.11.1
+        version: 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@airalogy/composables':
         specifier: workspace:*
         version: link:../composables
@@ -1368,8 +1368,8 @@ importers:
         specifier: ^2.13.0
         version: 2.13.0
       '@airalogy/aimd-renderer':
-        specifier: ^2.10.0
-        version: 2.10.0(vue@3.5.17(typescript@5.9.2))
+        specifier: 2.11.1
+        version: 2.11.1(vue@3.5.17(typescript@5.9.2))
       '@monaco-editor/loader':
         specifier: 'catalog:'
         version: 1.4.0(monaco-editor@0.52.2)
@@ -1544,13 +1544,8 @@ packages:
       naive-ui: 2.41.0
       vue: ^3.5.17
 
-  '@airalogy/aimd-renderer@2.10.0':
-    resolution: {integrity: sha512-bzqRdONgBRG6NnkRZB4wsXIgEWJNoaj9gq7YrLNqL2LdZs/dyd6RmynHiPgyIgmRKxN9yWlqQKa9IiGbiz77mw==}
-    peerDependencies:
-      vue: ^3.5.17
-
-  '@airalogy/aimd-renderer@2.11.0':
-    resolution: {integrity: sha512-KoAc2t4UXAjj9Aa8vP3xBtiw+HfOCvoE3ttibVkDwSyxqrSZkqAMVCgEuyEkbPsVQUWyIuyHP2TfKRsoMYlfXA==}
+  '@airalogy/aimd-renderer@2.11.1':
+    resolution: {integrity: sha512-+Jw5pkwCaKRJ2QfzGSVIVnImzv+wH+W0JIorXxRI7QRxDTlwAUCOo0x+cHOaWXdd4M21Nl/VfhoBPwfGmfDL6w==}
     peerDependencies:
       vue: ^3.5.17
 
@@ -9910,7 +9905,7 @@ snapshots:
   '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9932,7 +9927,7 @@ snapshots:
   '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9954,7 +9949,7 @@ snapshots:
   '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9977,7 +9972,7 @@ snapshots:
     dependencies:
       '@airalogy/aimd-core': 2.14.0
       '@airalogy/aimd-editor': 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
-      '@airalogy/aimd-renderer': 2.11.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@vueuse/core': 13.5.0(vue@3.5.17(typescript@5.8.3))
       mermaid: 11.16.0
@@ -10002,7 +9997,7 @@ snapshots:
     dependencies:
       '@airalogy/aimd-core': 2.14.0
       '@airalogy/aimd-editor': 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
-      '@airalogy/aimd-renderer': 2.11.0(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@vueuse/core': 13.5.0(vue@3.5.17(typescript@5.8.3))
       mermaid: 11.16.0
@@ -10023,7 +10018,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-renderer@2.10.0(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-renderer@2.11.1(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@airalogy/aimd-core': 2.14.0
       '@types/hast': 3.0.4
@@ -10043,7 +10038,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@airalogy/aimd-renderer@2.10.0(vue@3.5.17(typescript@5.9.2))':
+  '@airalogy/aimd-renderer@2.11.1(vue@3.5.17(typescript@5.9.2))':
     dependencies:
       '@airalogy/aimd-core': 2.14.0
       '@types/hast': 3.0.4
@@ -10060,26 +10055,6 @@ snapshots:
       unified: 11.0.5
       vfile: 6.0.3
       vue: 3.5.17(typescript@5.9.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@airalogy/aimd-renderer@2.11.0(vue@3.5.17(typescript@5.8.3))':
-    dependencies:
-      '@airalogy/aimd-core': 2.14.0
-      '@types/hast': 3.0.4
-      hast-util-to-html: 9.0.5
-      katex: 0.16.45
-      rehype-katex: 7.0.1
-      rehype-raw: 7.0.0
-      remark-breaks: 4.0.0
-      remark-gfm: 4.0.1
-      remark-math: 6.0.0
-      remark-parse: 11.0.0
-      remark-rehype: 11.1.2
-      shiki: 2.5.0
-      unified: 11.0.5
-      vfile: 6.0.3
-      vue: 3.5.17(typescript@5.8.3)
     transitivePeerDependencies:
       - supports-color
 

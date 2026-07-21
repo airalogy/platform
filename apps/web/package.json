@@ -31,7 +31,7 @@
     "@airalogy/aimd-core": "^2.14.0",
     "@airalogy/aimd-editor": "^1.10.0",
     "@airalogy/aimd-recorder": "^1.21.0",
-    "@airalogy/aimd-renderer": "^2.11.0",
+    "@airalogy/aimd-renderer": "2.11.1",
     "@airalogy/components": "workspace:*",
     "@airalogy/composables": "workspace:*",
     "@airalogy/shared": "workspace:*",

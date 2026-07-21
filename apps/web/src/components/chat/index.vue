@@ -56,7 +56,6 @@ import { type IProps, useOrProvideChatInfoStore } from "@airalogy/components/cha
 import ChatInterface from "@airalogy/components/chat/index.vue"
 import ChatWrapper from "@airalogy/components/chat/modules/chat-wrapper.vue"
 import ChatWrapperActions from "@airalogy/components/chat/modules/chat-wrapper-actions.vue"
-import { useOrProvideShiki } from "@airalogy/composables/file/useShiki"
 import { ChatType } from "@airalogy/shared/enum"
 import { useDraggable, useVModel } from "@vueuse/core"
 import DocumentIcon from "~icons/fluent/document-20-regular"
@@ -253,7 +252,6 @@ watch([protocolInfo, chatId], ([info]) => {
   }
 }, { immediate: true, flush: "post" })
 
-const { initializeShiki } = useOrProvideShiki({ themes: ["github-light"] })
 // Reset position when switching modes
 // watch([collapsed, fullScreen, docked], ([newCollapsed, newFullScreen, newDocked]) => {
 //   if (newFullScreen) {
@@ -507,12 +505,11 @@ watch(context, (val) => {
 
   contextDialog.value.selected = val.map(it => it.id)
 })
-onMounted(async () => {
+onMounted(() => {
   measure()
   scrollToBottom({ smart: false, instant: true })
 
   contextDialogEventHandlers.value.confirm = handleConfirmContexts
-  await initializeShiki()
 })
 
 defineExpose({

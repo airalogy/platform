@@ -29,7 +29,6 @@
         <!-- Actual content -->
         <styled-markdown-preview
           v-if="parsedContent.hasThinkTag ? parsedContent.actual : true"
-          :class="{ 'markdown-body-generate': loading }"
           :source="parsedContent.hasThinkTag ? parsedContent.actual : props.text"
           :loading="props.loading"
           :resolve-file="props.resolveFile"
@@ -211,24 +210,6 @@ function handleCancel() {
 </script>
 
 <style lang="sass">
-@use "./style" as *
-
-.chat-markdown-body
-  ol, ul
-    padding-left: 16px
-
-:deep(.shiki)
-  margin: 0
-  padding: 0.5rem
-  border-radius: 0.375rem
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace
-  font-size: 0.875rem
-  line-height: 1.25rem
-  overflow-x: auto
-
-  .line
-    white-space: nowrap
-
 .message-input-editor
   &.ProseMirror-focused
     outline: none

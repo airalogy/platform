@@ -8,7 +8,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     IconBxFontSize: typeof import('~icons/bx/font-size')['default']
-    IconCarbonDownload: typeof import('~icons/carbon/download')['default']
     IconIonAddOutline: typeof import('~icons/ion/add-outline')['default']
     IconIonArrowUp: typeof import('~icons/ion/arrow-up')['default']
     IconIonChevronDown: typeof import('~icons/ion/chevron-down')['default']
@@ -37,7 +36,6 @@ declare module 'vue' {
     NCheckbox: typeof import('naive-ui')['NCheckbox']
     NCollapse: typeof import('naive-ui')['NCollapse']
     NCollapseItem: typeof import('naive-ui')['NCollapseItem']
-    NCollapseTransition: typeof import('naive-ui')['NCollapseTransition']
     NDivider: typeof import('naive-ui')['NDivider']
     NDropdown: typeof import('naive-ui')['NDropdown']
     NEllipsis: typeof import('naive-ui')['NEllipsis']
