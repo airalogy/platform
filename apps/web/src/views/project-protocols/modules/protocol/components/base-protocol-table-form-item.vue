@@ -244,12 +244,11 @@ function getCellRules(subvarKey: string, rowIdx: number): FormItemRule[] {
   }
 
   const tableName = props.model.originalName || props.model.label || props.prop
+  const fieldKey = getAimdVarTableCellFieldKey(tableName, rowIdx, subvarKey)
   return [{
+    required: validation.isRequired(fieldKey),
     trigger: ["change", "blur"],
-    validator: () => validation.validateField(
-      getAimdVarTableCellFieldKey(tableName, rowIdx, subvarKey),
-      true,
-    ),
+    validator: () => validation.validateField(fieldKey, true),
   }]
 }
 

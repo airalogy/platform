@@ -15,7 +15,6 @@
         :lab-uid="props.item.lab.uid "
         :project-uid="props.item.project.uid"
         :protocol-uid="props.item.uid"
-        @modal:new-record="handleAddRecord"
       />
       <apply-protocol-modal
         ref="applyProtocolModalRef"
@@ -214,18 +213,6 @@ const actionList = computed<DropdownOption[] >(() => [
 ])
 
 const parentProtocolInfo = ref<ProtocolModels.ProjectProtocolInfo | null>(null)
-
-function handleAddRecord() {
-  const { uid: protocolUid, lab, project, latest_version } = props.item
-  if (!protocolUid || !lab.uid || !project.uid || !latest_version) {
-    message.error("invalid protocol id")
-    return
-  }
-
-  void routerPushByKey("add-protocol-record", {
-    params: { protocolUid, labUid: lab.uid, projectUid: project.uid, protocolVersion: latest_version },
-  })
-}
 
 const requestId = ref<string | null>(null)
 watchEffect(async () => {

@@ -9,6 +9,8 @@ import type { InjectionKey, MaybeRefOrGetter } from "vue"
 import type { IFieldItem } from "../types/types"
 import {
   createAimdRecorderMessages,
+  getAimdRequiredFieldKeys,
+  matchesAimdValidationFieldSelector,
   validateAimdRecord,
   validateAimdField as validateSharedAimdField,
 } from "@airalogy/aimd-recorder"
@@ -27,6 +29,7 @@ interface UseAimdRecordValidationOptions {
 
 export interface PlatformAimdValidationContext {
   validateField: (fieldKey: string, exact?: boolean) => true | Error
+  isRequired: (fieldKey: string) => boolean
 }
 
 export const PLATFORM_AIMD_VALIDATION_KEY = Symbol("platform-aimd-validation") as InjectionKey<PlatformAimdValidationContext>
@@ -84,6 +87,7 @@ function createValidationRules(
   fieldModel: PlatformFieldModel,
   fields: ExtractedAimdFields,
   validateField: PlatformAimdValidationContext["validateField"],
+  isRequired: PlatformAimdValidationContext["isRequired"],
 ): PlatformValidationRules {
   const rules: PlatformValidationRules = {}
   const tableIds = new Set(fields.var_table.map(field => field.id))
@@ -105,6 +109,7 @@ function createValidationRules(
       rules[scope] ??= {}
       rules[scope][key] = {
         value: {
+          required: isRequired(validationFieldKey),
           trigger: ["change", "blur"],
           validator: () => validateField(validationFieldKey, true),
         },
@@ -117,6 +122,9 @@ function createValidationRules(
 
 export function useAimdRecordValidation(options: UseAimdRecordValidationOptions) {
   const fields = computed(() => parseAndExtract(toValue(options.content)))
+  const requiredFieldKeys = computed(() => getAimdRequiredFieldKeys(fields.value, {
+    schema: toValue(options.schema),
+  }))
 
   function getValidationOptions() {
     return {
@@ -142,12 +150,19 @@ export function useAimdRecordValidation(options: UseAimdRecordValidationOptions)
     return issue ? new Error(issue.message) : true
   }
 
-  const context: PlatformAimdValidationContext = { validateField }
+  function isRequired(fieldKey: string): boolean {
+    return [...requiredFieldKeys.value]
+      .some(selector => matchesAimdValidationFieldSelector(fieldKey, selector))
+  }
+
+  const context: PlatformAimdValidationContext = { isRequired, validateField }
   provide(PLATFORM_AIMD_VALIDATION_KEY, context)
 
   return {
     fields,
-    rules: computed(() => createValidationRules(options.fieldModel, fields.value, validateField)),
+    requiredFieldKeys,
+    rules: computed(() => createValidationRules(options.fieldModel, fields.value, validateField, isRequired)),
+    isRequired,
     validateField,
     validateRecord,
   }

@@ -93,12 +93,15 @@ const cellRules = computed<FormItemRule[]>(() => {
     return []
   }
 
+  const fieldKey = getAimdVarTableCellFieldKey(
+    String(props.info.group),
+    Number(props.info.row),
+    props.prop,
+  )
   return [{
+    required: validation.isRequired(fieldKey),
     trigger: ["change", "blur"],
-    validator: () => validation.validateField(
-      getAimdVarTableCellFieldKey(String(props.info.group), Number(props.info.row), props.prop),
-      true,
-    ),
+    validator: () => validation.validateField(fieldKey, true),
   }]
 })
 
