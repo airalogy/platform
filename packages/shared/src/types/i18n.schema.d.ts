@@ -20,6 +20,7 @@ declare namespace I18n {
       confirm: string
       cancel: string
       undo: string
+      required: string
       pleaseCheckValue: string
       action: string
       backToHome: string

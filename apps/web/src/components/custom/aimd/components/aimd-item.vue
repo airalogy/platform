@@ -12,8 +12,8 @@
     :theme-overrides="
       props.scope === 'research_variable' ? themeOverridesRecord.formItem : undefined
     "
-    :required="props.required"
-    require-mark-placement="left"
+    :required="isRequiredField"
+    :show-require-mark="false"
     style="--n-label-height: 12px"
   >
     <template #label>
@@ -21,7 +21,10 @@
         <span class="aimd-field__scope" :class="`aimd-field__scope--${props.type}`">
           {{ props.fieldType }}
         </span>
-        <insert-wbr :text="props.prop" class="aimd-field__name flex-1" />
+        <span class="aimd-field__name min-w-0 flex-1">
+          <insert-wbr :text="props.prop" class="min-w-0" />
+          <AimdRequiredMarker v-if="isRequiredField" :label="$t('common.required')" />
+        </span>
       </div>
     </template>
     <n-input-group v-if="showAssigner && isMdInput" class="assigner-input-group">
@@ -52,7 +55,7 @@ import type { FormItemInst, FormItemRule } from "naive-ui"
 import type { IAIMDItemProps } from "../types/aimd-types"
 import InsertWbr from "@/components/common/insert-wbr.vue"
 import { usePlatformAimdValidation } from "@/views/project-protocols/modules/protocol/composables/useAimdRecordValidation"
-import { getAimdVarTableCellFieldKey } from "@airalogy/aimd-recorder"
+import { AimdRequiredMarker, getAimdVarTableCellFieldKey } from "@airalogy/aimd-recorder"
 import { BuiltInType } from "@airalogy/shared/enum/airalogy"
 import { isUploadFileType } from "@airalogy/shared/utils"
 import { themeOverridesRecord } from "../composables/themeOverrides"
@@ -104,6 +107,11 @@ const cellRules = computed<FormItemRule[]>(() => {
     validator: () => validation.validateField(fieldKey, true),
   }]
 })
+
+const isRequiredField = computed(() => (
+  props.required === true
+  || cellRules.value.some(rule => rule.required === true)
+))
 
 // Keep backward compatible path ref
 const path = formPath

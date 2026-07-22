@@ -21,9 +21,7 @@
             class="mr-auto text-4 font-500 capitalize"
           >
             <span> {{ model.title || model.label }} </span>
-            <span v-if="model.required" class="n-form-item-label__asterisk mr-auto flex-1">
-              &nbsp;*
-            </span>
+            <AimdRequiredMarker v-if="model.required" :label="$t('common.required')" />
           </n-ellipsis>
         </template>
         <field-info-display
@@ -82,6 +80,7 @@ import type { ProtocolModels } from "@airalogy/shared/types"
 import type { ValidateFunction } from "ajv"
 import type { IFieldItem } from "../types/types"
 import FieldInfoDisplay from "@/components/common/field-info-display.vue"
+import { AimdRequiredMarker } from "@airalogy/aimd-recorder"
 import { scopeKeyRecord } from "@airalogy/shared/utils/schema/constants"
 import { useProtocolFormInject } from "../composables/useProtocolForm"
 import FormItemInput from "./form-item-input.vue"

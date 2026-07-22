@@ -14,9 +14,7 @@
         <template #header>
           <n-ellipsis v-if="Boolean(model.title || model.label)" class="mr-auto text-4 font-500 capitalize">
             <span> {{ model.title || model.label }} </span>
-            <span v-if="model.required" class="n-form-item-label__asterisk mr-auto flex-1">
-              &nbsp;*
-            </span>
+            <AimdRequiredMarker v-if="isTableRequired" :label="$t('common.required')" />
           </n-ellipsis>
         </template>
 
@@ -122,7 +120,11 @@
       <n-collapse display-directive="show">
         <n-collapse-item v-for="(row, rowIdx) in model.value" :key="rowIdx" :title="$t('common.rowIndex', { index: rowIdx + 1 })" class="!ml-0">
           <n-descriptions v-if="subvarNames.length > 0" bordered label-class="break-all" class="table-row-descriptions">
-            <n-descriptions-item v-for="(key, colIdx) in subvarNames" :key="key" :label="key">
+            <n-descriptions-item v-for="(key, colIdx) in subvarNames" :key="key">
+              <template #label>
+                <span>{{ key }}</span>
+                <AimdRequiredMarker v-if="isTableColumnRequired(key)" :label="$t('common.required')" />
+              </template>
               <!-- Wrap each cell in n-form-item for cell-level validation -->
               <n-form-item
                 :ref="(el: any) => handleCellFormItemRef(`${scope}_${prop}_${rowIdx}_${key}`, el)"
@@ -167,7 +169,7 @@ import type { IFieldItem } from "../types/types"
 import AssignerDependencies from "@/components/custom/aimd/components/assigner-dependencies.vue"
 import { fieldEventKey } from "@/utils/template/eventKey"
 import { getSubvarNames } from "@airalogy/aimd-core"
-import { getAimdVarTableCellFieldKey } from "@airalogy/aimd-recorder"
+import { AimdRequiredMarker, getAimdVarTableCellFieldKey } from "@airalogy/aimd-recorder"
 import { get } from "lodash-es"
 import { usePlatformAimdValidation } from "../composables/useAimdRecordValidation"
 import { useProtocolFormInject } from "../composables/useProtocolForm"
@@ -238,13 +240,22 @@ function handleCellFormItemRef(path: string, el: FormItemInst | null) {
 
 const validation = usePlatformAimdValidation()
 
+const tableName = computed(() => props.model.originalName || props.model.label || props.prop)
+const isTableRequired = computed(() => (
+  props.model.required === true
+  || validation?.isRequired(`var_table:${tableName.value}`) === true
+))
+
+function isTableColumnRequired(column: string): boolean {
+  return validation?.isRequired(getAimdVarTableCellFieldKey(tableName.value, 0, column)) === true
+}
+
 function getCellRules(subvarKey: string, rowIdx: number): FormItemRule[] {
   if (!validation) {
     return []
   }
 
-  const tableName = props.model.originalName || props.model.label || props.prop
-  const fieldKey = getAimdVarTableCellFieldKey(tableName, rowIdx, subvarKey)
+  const fieldKey = getAimdVarTableCellFieldKey(tableName.value, rowIdx, subvarKey)
   return [{
     required: validation.isRequired(fieldKey),
     trigger: ["change", "blur"],

@@ -16,6 +16,7 @@
     "confirm": "确认",
     "cancel": "取消",
     "undo": "撤销",
+    "required": "必填",
     "pleaseCheckValue": "请检查输入的值是否合法",
     "action": "操作",
     "backToHome": "返回首页",

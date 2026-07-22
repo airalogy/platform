@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@airalogy/aimd-core": "^2.13.0",
-    "@airalogy/aimd-recorder": "^1.24.3",
+    "@airalogy/aimd-recorder": "^1.24.4",
     "@airalogy/aimd-renderer": "2.11.1",
     "@airalogy/composables": "workspace:*",
     "@airalogy/shared": "workspace:*",
