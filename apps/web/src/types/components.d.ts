@@ -210,7 +210,6 @@ declare module 'vue' {
     IconTablerSquareRoundedPlus: typeof import('~icons/tabler/square-rounded-plus')['default']
     IconTablerStar: typeof import('~icons/tabler/star')['default']
     IconTablerStarFilled: typeof import('~icons/tabler/star-filled')['default']
-    IconTablerTable: typeof import('~icons/tabler/table')['default']
     IconTablerTrash: typeof import('~icons/tabler/trash')['default']
     IconTablerUpload: typeof import('~icons/tabler/upload')['default']
     IconUilDialpadAlt: typeof import('~icons/uil/dialpad-alt')['default']

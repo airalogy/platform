@@ -1188,6 +1188,11 @@
       "records": {
         "tableView": "Table view",
         "compareView": "Compare view ({count}/4)",
+        "selectOneMoreToCompare": "Select 1 more record to compare",
+        "compareSelected": "Compare selected records ({count})",
+        "compareSelectionLimit": "Comparison supports up to 4 records; reduce the selection to compare",
+        "comparingSelected": "Comparing {count} records",
+        "backToTableSelection": "Back to table to adjust selection",
         "addSelectedToChat": "Add selected to AI chat ({count})",
         "exportSelectedJson": "Export selected JSON ({count})",
         "submittedAt": "Submitted at",

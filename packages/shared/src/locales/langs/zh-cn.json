@@ -1188,6 +1188,11 @@
       "records": {
         "tableView": "表格视图",
         "compareView": "对比视图（{count}/4）",
+        "selectOneMoreToCompare": "再选择 1 条记录即可对比",
+        "compareSelected": "对比已选记录（{count}）",
+        "compareSelectionLimit": "对比最多支持 4 条记录，请减少选择后再对比",
+        "comparingSelected": "正在对比 {count} 条记录",
+        "backToTableSelection": "返回表格调整选择",
         "addSelectedToChat": "加入 AI 对话（{count}）",
         "exportSelectedJson": "导出所选 JSON（{count}）",
         "submittedAt": "提交时间",

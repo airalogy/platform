@@ -1192,6 +1192,11 @@ declare namespace I18n {
         records: {
           tableView: string
           compareView: string
+          selectOneMoreToCompare: string
+          compareSelected: string
+          compareSelectionLimit: string
+          comparingSelected: string
+          backToTableSelection: string
           addSelectedToChat: string
           exportSelectedJson: string
           submittedAt: string

@@ -46,6 +46,26 @@ function getFieldKeysKey(userId: string | undefined, protocolId: string) {
   return `${STORAGE_PREFIX}:${getUserScope(userId)}:protocol:${protocolId}:field-keys`
 }
 
+function getMetadataColumnKeysKey(userId: string | undefined, protocolId: string) {
+  return `${STORAGE_PREFIX}:${getUserScope(userId)}:protocol:${protocolId}:metadata-column-keys`
+}
+
+function parseStringArray(value: string | null) {
+  if (value === null) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed)
+      ? [...new Set(parsed.filter((item): item is string => typeof item === "string" && item.length > 0))]
+      : undefined
+  }
+  catch {
+    return undefined
+  }
+}
+
 export function getRecordPageSizePreference(userId?: string) {
   const value = Number(readStorageItem(getPageSizeKey(userId)))
   return RECORD_PAGE_SIZE_OPTIONS.includes(value as typeof RECORD_PAGE_SIZE_OPTIONS[number])
@@ -66,15 +86,7 @@ export function getRecordFieldKeysPreference(userId: string | undefined, protoco
     return []
   }
 
-  try {
-    const value = JSON.parse(readStorageItem(getFieldKeysKey(userId, protocolId)) || "[]")
-    return Array.isArray(value)
-      ? [...new Set(value.filter((item): item is string => typeof item === "string" && item.length > 0))]
-      : []
-  }
-  catch {
-    return []
-  }
+  return parseStringArray(readStorageItem(getFieldKeysKey(userId, protocolId))) ?? []
 }
 
 export function setRecordFieldKeysPreference(
@@ -89,5 +101,31 @@ export function setRecordFieldKeysPreference(
   writeStorageItem(
     getFieldKeysKey(userId, protocolId),
     JSON.stringify([...new Set(fieldKeys)]),
+  )
+}
+
+export function getRecordMetadataColumnKeysPreference(
+  userId: string | undefined,
+  protocolId: string,
+) {
+  if (!protocolId) {
+    return undefined
+  }
+
+  return parseStringArray(readStorageItem(getMetadataColumnKeysKey(userId, protocolId)))
+}
+
+export function setRecordMetadataColumnKeysPreference(
+  userId: string | undefined,
+  protocolId: string,
+  metadataColumnKeys: string[] | undefined,
+) {
+  if (!protocolId || metadataColumnKeys === undefined) {
+    return
+  }
+
+  writeStorageItem(
+    getMetadataColumnKeysKey(userId, protocolId),
+    JSON.stringify([...new Set(metadataColumnKeys)]),
   )
 }

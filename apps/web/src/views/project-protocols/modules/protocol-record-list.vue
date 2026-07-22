@@ -1,65 +1,75 @@
 <template>
   <n-spin :show="loading" class="min-h-60">
-    <n-tabs
-      v-if="recordList.length > 0"
-      v-model:value="activeView"
-      type="segment"
-      animated
-      class="record-view-tabs mt-4"
-    >
-      <n-tab-pane name="table">
-        <template #tab>
-          <div class="flex items-center gap-2">
-            <icon-tabler-table />
-            <span>{{ $t("page.protocol.records.tableView") }}</span>
-          </div>
-        </template>
-
+    <div v-if="recordList.length > 0" class="record-collection mt-4">
+      <template v-if="activeView === 'table'">
         <aimd-record-table
           v-model:selected-record-keys="selectedRecordKeys"
           v-model:field-keys="visibleFieldKeys"
+          v-model:metadata-column-keys="visibleMetadataColumnKeys"
           :aimd="protocolInfo.aimd"
           :records="recordList"
           :metadata-columns="metadataColumns"
           :record-key="getRecordKey"
           :record-label="getRecordLabel"
           :locale="locale"
-          :selection-limit="4"
+          :selection-limit="0"
           @open-record="handleOpenRecord"
           @update:selected-record-keys="handleSelectedRecordKeysUpdate"
         >
           <template #toolbar>
-            <div v-if="selectedRecords.length > 0" class="record-batch-actions">
-              <n-button
-                type="primary"
-                secondary
-                size="small"
-                :disabled="selectedRecordsNotInChat.length === 0"
-                @click="handleAddSelectedToChat"
-              >
+            <div v-if="selectedRecords.length > 0" class="record-selection-actions">
+              <div v-if="selectedRecords.length === 1" class="record-compare-hint" role="status">
+                <n-icon size="16">
+                  <icon-tabler-arrows-diff />
+                </n-icon>
+                <span>{{ $t("page.protocol.records.selectOneMoreToCompare") }}</span>
+              </div>
+              <n-button v-else-if="selectedRecords.length <= 4" type="primary" size="small" @click="handleOpenComparison">
                 <template #icon>
                   <n-icon size="16">
-                    <icon-tabler-message-plus />
+                    <icon-tabler-arrows-diff />
                   </n-icon>
                 </template>
-                {{ $t("page.protocol.records.addSelectedToChat", { count: selectedRecordsNotInChat.length }) }}
+                {{ $t("page.protocol.records.compareSelected", { count: selectedRecords.length }) }}
               </n-button>
+              <div v-else class="record-compare-hint record-compare-hint--warning" role="status">
+                <n-icon size="16">
+                  <icon-tabler-alert-triangle />
+                </n-icon>
+                <span>{{ $t("page.protocol.records.compareSelectionLimit") }}</span>
+              </div>
 
-              <n-dropdown
-                :options="jsonExportOptions"
-                trigger="click"
-                placement="bottom-end"
-                @select="handleSelectedJsonExport"
-              >
-                <n-button size="small" :disabled="selectedRecords.length === 0">
+              <div class="record-batch-actions">
+                <n-button
+                  secondary
+                  size="small"
+                  :disabled="selectedRecordsNotInChat.length === 0"
+                  @click="handleAddSelectedToChat"
+                >
                   <template #icon>
                     <n-icon size="16">
-                      <icon-mdi-code-json />
+                      <icon-tabler-message-plus />
                     </n-icon>
                   </template>
-                  {{ $t("page.protocol.records.exportSelectedJson", { count: selectedRecords.length }) }}
+                  {{ $t("page.protocol.records.addSelectedToChat", { count: selectedRecordsNotInChat.length }) }}
                 </n-button>
-              </n-dropdown>
+
+                <n-dropdown
+                  :options="jsonExportOptions"
+                  trigger="click"
+                  placement="bottom-end"
+                  @select="handleSelectedJsonExport"
+                >
+                  <n-button size="small">
+                    <template #icon>
+                      <n-icon size="16">
+                        <icon-mdi-code-json />
+                      </n-icon>
+                    </template>
+                    {{ $t("page.protocol.records.exportSelectedJson", { count: selectedRecords.length }) }}
+                  </n-button>
+                </n-dropdown>
+              </div>
             </div>
           </template>
 
@@ -165,15 +175,27 @@
             </div>
           </template>
         </aimd-record-table>
-      </n-tab-pane>
+      </template>
 
-      <n-tab-pane name="compare" :disabled="selectedRecords.length < 2">
-        <template #tab>
-          <div class="flex items-center gap-2">
-            <icon-tabler-arrows-diff />
-            <span>{{ $t("page.protocol.records.compareView", { count: selectedRecords.length }) }}</span>
+      <template v-else>
+        <header class="record-compare-header">
+          <n-button quaternary size="small" @click="handleReturnToTable">
+            <template #icon>
+              <n-icon size="16">
+                <icon-tabler-arrow-left />
+              </n-icon>
+            </template>
+            {{ $t("page.protocol.records.backToTableSelection") }}
+          </n-button>
+
+          <div class="record-compare-heading">
+            <n-icon size="20">
+              <icon-tabler-arrows-diff />
+            </n-icon>
+            <span>{{ $t("page.protocol.records.comparingSelected", { count: selectedRecords.length }) }}</span>
+            <span class="record-compare-labels">{{ selectedRecordLabels }}</span>
           </div>
-        </template>
+        </header>
 
         <aimd-record-compare
           v-model:show-only-differences="showOnlyDifferences"
@@ -185,8 +207,8 @@
           :locale="locale"
           @open-record="handleOpenRecord"
         />
-      </n-tab-pane>
-    </n-tabs>
+      </template>
+    </div>
 
     <div v-else-if="!loading" class="my-10 select-none text-center">
       <img
@@ -197,7 +219,7 @@
     </div>
 
     <n-pagination
-      v-if="total > 0"
+      v-if="total > 0 && activeView === 'table'"
       class="my-5 w-full justify-center"
       :page="currentPage"
       :page-size="currentPageSize"
@@ -262,8 +284,10 @@ import { useI18n } from "vue-i18n"
 import { useProjectInfoStore } from "../hooks/useProjectInfoStore"
 import {
   getRecordFieldKeysPreference,
+  getRecordMetadataColumnKeysPreference,
   RECORD_PAGE_SIZE_OPTIONS,
   setRecordFieldKeysPreference,
+  setRecordMetadataColumnKeysPreference,
   setRecordPageSizePreference,
 } from "../record-view-preferences"
 import { createProtocolRecordData } from "../utils"
@@ -300,6 +324,7 @@ const { canDeleteOthersRecords, canDeleteOwnRecords } = useProjectPermissions(pr
 
 const activeView = ref<"table" | "compare">("table")
 const visibleFieldKeys = ref<string[]>([])
+const visibleMetadataColumnKeys = ref<string[] | undefined>(undefined)
 const selectedRecordKeys = ref<AimdRecordViewKey[]>([])
 const selectedRecordMap = shallowReactive(new Map<AimdRecordViewKey, ProtocolModels.RecordInfo>())
 const showOnlyDifferences = ref(false)
@@ -311,12 +336,21 @@ watch(
   [() => authStore.userInfo.id, () => props.protocolInfo.id],
   ([userId, protocolId]) => {
     visibleFieldKeys.value = getRecordFieldKeysPreference(userId, protocolId)
+    visibleMetadataColumnKeys.value = getRecordMetadataColumnKeysPreference(userId, protocolId)
   },
   { immediate: true },
 )
 
 watch(visibleFieldKeys, (fieldKeys) => {
   setRecordFieldKeysPreference(authStore.userInfo.id, props.protocolInfo.id, fieldKeys)
+}, { deep: true })
+
+watch(visibleMetadataColumnKeys, (metadataColumnKeys) => {
+  setRecordMetadataColumnKeysPreference(
+    authStore.userInfo.id,
+    props.protocolInfo.id,
+    metadataColumnKeys,
+  )
 }, { deep: true })
 
 const { currentPage, currentPageSize, handlePageChange, pageCount } = usePagination({
@@ -388,10 +422,23 @@ function handleSelectedRecordKeysUpdate(keys: AimdRecordViewKey[]) {
 const selectedRecords = computed(() => selectedRecordKeys.value
   .map(key => selectedRecordMap.get(key))
   .filter((record): record is ProtocolModels.RecordInfo => Boolean(record)))
+const selectedRecordLabels = computed(() => selectedRecords.value
+  .map(record => getRecordLabel(record))
+  .join(" · "))
 
 const selectedRecordsNotInChat = computed(() => selectedRecords.value.filter(record => (
   !props.isItemInChatContext(getRecordKey(record))
 )))
+
+function handleOpenComparison() {
+  if (selectedRecords.value.length >= 2 && selectedRecords.value.length <= 4) {
+    activeView.value = "compare"
+  }
+}
+
+function handleReturnToTable() {
+  activeView.value = "table"
+}
 
 function handleAddSelectedToChat() {
   const items = selectedRecordsNotInChat.value.map(record => toTimelineItem(record))
@@ -611,22 +658,69 @@ function handleDeleteSuccess() {
 </script>
 
 <style scoped>
-.record-view-tabs :deep(.n-tabs-nav) {
-  max-width: 420px;
-  margin-bottom: 14px;
-}
-
 .record-row-actions {
   display: flex;
   align-items: center;
   gap: 2px;
 }
 
+.record-selection-actions,
 .record-batch-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.record-selection-actions {
+  min-width: 0;
+}
+
+.record-compare-hint {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid rgba(36, 122, 100, 0.18);
+  border-radius: 5px;
+  background: #eef8f4;
+  color: #236451;
+  font-size: 13px;
   white-space: nowrap;
+}
+
+.record-compare-hint--warning {
+  border-color: rgba(196, 125, 28, 0.24);
+  background: #fff8e8;
+  color: #8a5716;
+}
+
+.record-batch-actions {
+  white-space: nowrap;
+}
+
+.record-compare-header {
+  display: flex;
+  align-items: center;
+  gap: 12px 18px;
+  flex-wrap: wrap;
+  padding: 0 12px 12px;
+}
+
+.record-compare-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #253247;
+  font-weight: 650;
+}
+
+.record-compare-labels {
+  color: #607079;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 :deep(.record-metadata-column--time) {
@@ -644,13 +738,23 @@ function handleDeleteSuccess() {
 }
 
 @media (max-width: 640px) {
-  .record-view-tabs :deep(.n-tabs-nav) {
-    max-width: none;
+  .record-selection-actions {
+    width: 100%;
   }
 
+  .record-compare-hint,
   .record-batch-actions {
-    flex-wrap: wrap;
     white-space: normal;
+  }
+
+  .record-compare-header {
+    align-items: flex-start;
+    padding-inline: 10px;
+  }
+
+  .record-compare-heading {
+    width: 100%;
+    flex-wrap: wrap;
   }
 }
 </style>
