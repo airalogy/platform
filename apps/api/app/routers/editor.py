@@ -22,6 +22,7 @@ from app.models.chat import Chat, ChatModel, ChatType
 from app.routers.chats.file_processor import trim_content
 from app.routers.chats.utils import check_model_usage
 from app.routers.depends import CurrentUser
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(
     prefix="/editor",
@@ -166,10 +167,16 @@ async def generate_protocol_aimd(
         model=model.model_dump(),
         model_type=model.model_type.value,
     )
+    usage_context = create_usage_context(
+        feature="editor.protocol_generate_aimd",
+        user_id=current_user.id,
+    )
 
     async def capture_and_forward_stream():
         full_response = ""
-        async for chunk in protocol_generate_aimd(chat):
+        async for chunk in protocol_generate_aimd(
+            chat, usage_context=usage_context
+        ):
             full_response += chunk
             yield chunk
 
@@ -200,10 +207,16 @@ async def generate_protocol_model(
         model=model.model_dump(),
         model_type=model.model_type.value,
     )
+    usage_context = create_usage_context(
+        feature="editor.protocol_generate_model",
+        user_id=current_user.id,
+    )
 
     async def capture_and_forward_stream():
         full_response = ""
-        async for chunk in protocol_generate_model(chat):
+        async for chunk in protocol_generate_model(
+            chat, usage_context=usage_context
+        ):
             full_response += chunk
             yield chunk
 
@@ -235,10 +248,16 @@ async def generate_protocol_assigner(
         model=model.model_dump(),
         model_type=model.model_type.value,
     )
+    usage_context = create_usage_context(
+        feature="editor.protocol_generate_assigner",
+        user_id=current_user.id,
+    )
 
     async def capture_and_forward_stream():
         full_response = ""
-        async for chunk in protocol_generate_assigner(chat):
+        async for chunk in protocol_generate_assigner(
+            chat, usage_context=usage_context
+        ):
             full_response += chunk
             yield chunk
 
@@ -285,10 +304,14 @@ async def check_protocol(
         model=params.model.model_dump(),
         model_type=params.model.model_type.value,
     )
+    usage_context = create_usage_context(
+        feature="editor.protocol_check",
+        user_id=current_user.id,
+    )
 
     async def capture_and_forward_stream():
         full_response = ""
-        async for chunk in protocol_check(chat):
+        async for chunk in protocol_check(chat, usage_context=usage_context):
             full_response += chunk
             yield chunk
 
@@ -331,8 +354,12 @@ async def debug_protocol_content(
         model=params.model.model_dump(),
         model_type=params.model.model_type.value,
     )
+    usage_context = create_usage_context(
+        feature="editor.protocol_debug",
+        user_id=current_user.id,
+    )
 
-    response = await protocol_debug(chat)
+    response = await protocol_debug(chat, usage_context=usage_context)
 
     chat.messages.append({"role": "assistant", "content": response["response"]})
     db_session.add(chat)
@@ -379,4 +406,8 @@ async def code_edit_protocol(
     workspace_suffix = params.workspace_id or "default"
     payload["workspace_id"] = f"user:{current_user.id}:editor:{workspace_suffix}"
 
-    return await protocol_code_edit(payload)
+    usage_context = create_usage_context(
+        feature="editor.code_edit",
+        user_id=current_user.id,
+    )
+    return await protocol_code_edit(payload, usage_context=usage_context)

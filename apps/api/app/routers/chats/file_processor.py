@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
+from masterbrain.usage import UsageContext
 
 from app.database import DBSession
 from app.libs.file_storage import download_file
@@ -107,7 +108,9 @@ async def _process_document_file(attachment: Attachment, file_type: str) -> str:
             os.unlink(tmp_file_path)
 
 
-async def _process_image_files(file_urls: list[str]) -> str:
+async def _process_image_files(
+    file_urls: list[str], *, usage_context: UsageContext | None = None
+) -> str:
     """
     Process image files using the image_vision function.
 
@@ -117,7 +120,9 @@ async def _process_image_files(file_urls: list[str]) -> str:
     Returns:
         str: The vision processing result
     """
-    image_vision_result = await image_vision(file_urls)
+    image_vision_result = await image_vision(
+        file_urls, usage_context=usage_context
+    )
     return image_vision_result["history"][-1]["content"]
 
 
@@ -125,6 +130,8 @@ async def process_files(
     db_session: DBSession,
     files: list[ChatFile],
     user_id: UUID,
+    *,
+    usage_context: UsageContext | None = None,
 ) -> list[dict[str, Any]]:
     """
     Process uploaded files and return tool call messages.
@@ -187,7 +194,9 @@ async def process_files(
     # Process images together (they can be batch processed)
     if image_files:
         file_urls = [await attachment.url() for _, attachment in image_files]
-        image_content = await _process_image_files(file_urls)
+        image_content = await _process_image_files(
+            file_urls, usage_context=usage_context
+        )
 
         messages = generate_tool_call_messages(
             function_name="processing_user_uploaded_image_file",

@@ -12,6 +12,7 @@ MODEL_MODULES = [
     "app.models.group",
     "app.models.lab",
     "app.models.lab_force_delete_job",
+    "app.models.model_usage",
     "app.models.oauth",
     "app.models.pinned_item",
     "app.models.project",

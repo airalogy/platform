@@ -21,6 +21,7 @@ from app.routers.chats.file_processor import process_files
 from app.routers.chats.utils import check_model_usage
 from app.routers.depends import CurrentUser, get_current_user
 from app.routers.permission import check_user_permission
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(
     dependencies=[Depends(get_current_user)],
@@ -90,6 +91,14 @@ async def send_field_input_chat_message(
         db_session.add(chat)
         await db_session.flush()
 
+    usage_context = create_usage_context(
+        feature="chat.field_input",
+        user_id=current_user.id,
+        lab_id=lab.id,
+        project_id=project.id,
+        chat_id=chat.id,
+    )
+
     if params.model.name != chat.model["name"]:
         chat.model = {
             "name": params.model.name,
@@ -100,11 +109,12 @@ async def send_field_input_chat_message(
             db_session,
             params.message.files,
             current_user.id,
+            usage_context=usage_context,
         )
         chat.messages.extend(file_tool_call_messages)
 
     chat.messages.append(params.message.model_dump())
-    response = await field_input_chat(chat)
+    response = await field_input_chat(chat, usage_context=usage_context)
     chat.messages = response["history"]
     chat.model = response["model"]
     chat.user_message_count += 1

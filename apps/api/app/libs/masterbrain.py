@@ -1,14 +1,16 @@
 import os
 import re
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from masterbrain.usage import UsageContext, bind_usage_context
 
 from app.config import config
 from app.models.chat import Chat
+from app.services.model_usage import configure_embedded_masterbrain_app
 
 
 MASTERBRAIN_MODEL_NAME_MAP = {
@@ -41,6 +43,7 @@ def _get_masterbrain_app() -> FastAPI:
         _sync_masterbrain_env()
         from masterbrain.fastapi.main import app as masterbrain_app
 
+        configure_embedded_masterbrain_app(masterbrain_app)
         _MASTERBRAIN_APP = masterbrain_app
 
     return _MASTERBRAIN_APP
@@ -90,42 +93,74 @@ def _chat_api_error(response: httpx.Response) -> HTTPException:
     return HTTPException(status_code=response.status_code, detail=detail)
 
 
-async def stream_request(path, json_body, *, method="POST"):
+def _usage_headers(usage_context: UsageContext | None) -> dict[str, str]:
+    if usage_context is None:
+        return {}
+    headers = {"X-Masterbrain-Operation-Id": usage_context.operation_id}
+    if usage_context.request_id:
+        headers["X-Request-Id"] = usage_context.request_id
+    return headers
+
+
+async def stream_request(
+    path,
+    json_body,
+    *,
+    method="POST",
+    usage_context: UsageContext | None = None,
+):
     # print("~~~~~~~~stream chat request params:")
     # print(json.dumps(json, ensure_ascii=False))
 
     request_target = _masterbrain_request_target(path)
-    async with _masterbrain_client() as client:
-        async with client.stream(
-            method,
-            request_target,
-            json=json_body,
-            timeout=300.0,
-        ) as response:
-            if response.status_code != 200:
-                await response.aread()
-                raise _chat_api_error(response)
+    usage_scope = (
+        bind_usage_context(usage_context) if usage_context is not None else nullcontext()
+    )
+    with usage_scope:
+        async with _masterbrain_client() as client:
+            async with client.stream(
+                method,
+                request_target,
+                json=json_body,
+                headers=_usage_headers(usage_context),
+                timeout=300.0,
+            ) as response:
+                if response.status_code != 200:
+                    await response.aread()
+                    raise _chat_api_error(response)
 
-            async for chunk in response.aiter_text():
-                yield chunk
+                async for chunk in response.aiter_text():
+                    yield chunk
 
 
-async def json_request(path, json_body, *, method="POST", timeout=60.0):
+async def json_request(
+    path,
+    json_body,
+    *,
+    method="POST",
+    timeout=60.0,
+    usage_context: UsageContext | None = None,
+):
     # print("~~~~~~~~json request params:")
     # print(json.dumps(json_body, ensure_ascii=False))
     request_target = _masterbrain_request_target(path)
-    async with _masterbrain_client() as client:
-        response = await client.request(
-            method,
-            request_target,
-            json=json_body,
-            timeout=timeout,
-        )
-        if response.status_code != 200:
-            print(response)
-            print(response.text)
-            raise _chat_api_error(response)
-        return response.json()
+    usage_scope = (
+        bind_usage_context(usage_context) if usage_context is not None else nullcontext()
+    )
+    with usage_scope:
+        async with _masterbrain_client() as client:
+            response = await client.request(
+                method,
+                request_target,
+                json=json_body,
+                headers=_usage_headers(usage_context),
+                timeout=timeout,
+            )
+            if response.status_code != 200:
+                print(response)
+                print(response.text)
+                raise _chat_api_error(response)
+            return response.json()
 
 
 def remove_think_from_message(message: dict) -> dict:
@@ -146,7 +181,9 @@ def build_masterbrain_model(model: dict) -> dict:
     }
 
 
-async def chat_qa_language(chat: Chat):
+async def chat_qa_language(
+    chat: Chat, *, usage_context: UsageContext | None = None
+):
     # qa chat
     async for chunk in stream_request(
         "endpoints/chat/qa/language",
@@ -154,22 +191,26 @@ async def chat_qa_language(chat: Chat):
             "model": build_masterbrain_model(chat.model),
             "messages": [remove_think_from_message(msg) for msg in chat.messages],
         },
+        usage_context=usage_context,
     ):
         yield chunk
 
 
-async def hub_chat(chat: Chat):
+async def hub_chat(chat: Chat, *, usage_context: UsageContext | None = None):
     async for chunk in stream_request(
         "endpoints/chat/qa/language",
         {
             "model": build_masterbrain_model(chat.model),
             "messages": [remove_think_from_message(msg) for msg in chat.messages],
         },
+        usage_context=usage_context,
     ):
         yield chunk
 
 
-async def field_input_chat(chat: Chat):
+async def field_input_chat(
+    chat: Chat, *, usage_context: UsageContext | None = None
+):
     response = await json_request(
         "endpoints/chat/field_input",
         {
@@ -180,11 +221,14 @@ async def field_input_chat(chat: Chat):
             "scenario": {"protocol_schema": chat.context["protocol_schema"]},
             "image_mode": "two_step",
         },
+        usage_context=usage_context,
     )
     return response
 
 
-async def stt(audio_base64: str):
+async def stt(
+    audio_base64: str, *, usage_context: UsageContext | None = None
+):
     response = await json_request(
         "endpoints/chat/qa/stt",
         {
@@ -193,6 +237,7 @@ async def stt(audio_base64: str):
             "audio_format": "wav",
             "model": "qwen3-asr-flash",
         },
+        usage_context=usage_context,
     )
     return response
 
@@ -202,6 +247,8 @@ async def image_vision(
     model: Literal[
         "qwen3-vl-flash", "qwen3-vl-plus", "qwen3-vl-max"
     ] = "qwen3-vl-flash",
+    *,
+    usage_context: UsageContext | None = None,
 ):
     content = [{"type": "text", "text": "What do you see in this image?"}]
     for image_url in image_urls:
@@ -220,33 +267,42 @@ async def image_vision(
             ],
             "scenario": {},
         },
+        usage_context=usage_context,
     )
     return response
 
 
-async def protocol_generate_aimd(chat: Chat):
+async def protocol_generate_aimd(
+    chat: Chat, *, usage_context: UsageContext | None = None
+):
     async for chunk in stream_request(
         "endpoints/protocol_generation/aimd",
         {
             "use_model": build_masterbrain_model(chat.model),
             "instruction": chat.context["instruction"],
         },
+        usage_context=usage_context,
     ):
         yield chunk
 
 
-async def protocol_generate_model(chat: Chat):
+async def protocol_generate_model(
+    chat: Chat, *, usage_context: UsageContext | None = None
+):
     async for chunk in stream_request(
         "endpoints/protocol_generation/model",
         {
             "use_model": build_masterbrain_model(chat.model),
             "protocol_aimd": chat.context["protocol_aimd"],
         },
+        usage_context=usage_context,
     ):
         yield chunk
 
 
-async def protocol_generate_assigner(chat: Chat):
+async def protocol_generate_assigner(
+    chat: Chat, *, usage_context: UsageContext | None = None
+):
     async for chunk in stream_request(
         "endpoints/protocol_generation/assigner",
         {
@@ -254,12 +310,15 @@ async def protocol_generate_assigner(chat: Chat):
             "protocol_aimd": chat.context["protocol_aimd"],
             "protocol_model": chat.context["protocol_model"],
         },
+        usage_context=usage_context,
     ):
         yield chunk
 
 
 async def protocol_check(
     chat: Chat,
+    *,
+    usage_context: UsageContext | None = None,
 ):
     async for chunk in stream_request(
         "endpoints/protocol_check",
@@ -272,11 +331,14 @@ async def protocol_check(
             "py_model": chat.context["py_model"],
             "py_assigner": chat.context["py_assigner"],
         },
+        usage_context=usage_context,
     ):
         yield chunk
 
 
-async def protocol_debug(chat: Chat):
+async def protocol_debug(
+    chat: Chat, *, usage_context: UsageContext | None = None
+):
     response = await json_request(
         "endpoints/protocol_debug",
         {
@@ -284,11 +346,14 @@ async def protocol_debug(chat: Chat):
             "full_protocol": chat.context["full_protocol"],
             "suspect_protocol": chat.context["suspect_protocol"],
         },
+        usage_context=usage_context,
     )
     return response
 
 
-async def protocol_code_edit(payload: dict):
+async def protocol_code_edit(
+    payload: dict, *, usage_context: UsageContext | None = None
+):
     request_payload = {
         **payload,
         "model": build_masterbrain_model(payload["model"]),
@@ -297,6 +362,7 @@ async def protocol_code_edit(payload: dict):
         "endpoints/code_edit",
         request_payload,
         timeout=300.0,
+        usage_context=usage_context,
     )
     return response
 
@@ -306,7 +372,12 @@ def build_masterbrain_aira_model(model_name: str | None) -> str:
     return MASTERBRAIN_MODEL_NAME_MAP.get(model, model)
 
 
-async def aira_workflow_step(workflow_data: dict, model_name: str | None = None):
+async def aira_workflow_step(
+    workflow_data: dict,
+    model_name: str | None = None,
+    *,
+    usage_context: UsageContext | None = None,
+):
     response = await json_request(
         "endpoints/aira",
         {
@@ -314,5 +385,6 @@ async def aira_workflow_step(workflow_data: dict, model_name: str | None = None)
             "workflow_data": workflow_data,
         },
         timeout=300.0,
+        usage_context=usage_context,
     )
     return response

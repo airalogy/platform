@@ -24,7 +24,7 @@ dependencies = [
     "semantic-text-splitter == 0.29.0",
     "cutword == 0.1.1",
     "openai>=2.8.0,<3",
-    "masterbrain==0.9.1",
+    "masterbrain==0.10.0",
     "alibabacloud-oss-v2 == 1.2.0",
     "alibabacloud-dysmsapi20170525 == 4.2.0",
     "alibabacloud-dysmsapi20180501 == 1.0.9",

@@ -24,6 +24,7 @@ from app.models.workflow import ProtocolWorkflow
 from app.routers.depends import CurrentUser
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
 
@@ -766,9 +767,17 @@ async def generate_workflow_step(
         )
 
     workflow_data = _build_workflow_response(workflow.workflow_info, contexts, path_data)
+    usage_context = create_usage_context(
+        feature="workflow.step",
+        user_id=current_user.id,
+        lab_id=contexts[0].lab.id if contexts else None,
+        project_id=workflow.project_id,
+        attributes={"workflow_id": str(workflow.id)},
+    )
     next_step = await aira_workflow_step(
         workflow_data,
         params.model or config.CHAT_MODEL_FAST,
+        usage_context=usage_context,
     )
     path_data["steps"] = [*path_data["steps"], next_step]
     _derive_path_fields(path_data, next_step)

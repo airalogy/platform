@@ -104,7 +104,9 @@ uv run fastapi dev app --host 0.0.0.0 --port 4000 --reload
 
 The recommended path is to use the published `masterbrain` Python package in-process. Keep `MASTERBRAIN_CALL_MODE` unset or set to `package`.
 
-The old separately deployed Masterbrain API path is retained only as a compatibility escape hatch. Set `MASTERBRAIN_CALL_MODE=external` and `CHAT_API_ENDPOINT` only when intentionally routing AI requests to a legacy external service.
+In package mode, every real provider call is stored as an immutable row in `model_usage_events`. The ledger records authenticated user/Lab/project/chat identity, model and detailed token usage, call status, correlation IDs, and any optional provider-reported cost. Provider cost is retained only for upstream cost analysis and reconciliation; customer pricing must be calculated separately from Platform's versioned price catalog. Apply database migrations before enabling AI traffic after an upgrade.
+
+The old separately deployed Masterbrain API path is retained only as a compatibility escape hatch. Set `MASTERBRAIN_CALL_MODE=external` and `CHAT_API_ENDPOINT` only when intentionally routing AI requests to a legacy external service. Because an external process cannot use Platform's in-process database sink, that deployment must configure its own durable `UsageSink`; otherwise its provider usage will not appear in Platform's ledger.
 
 The GPT chat option is disabled by default. Configure `OPENAI_API_KEY` and set `ENABLE_GPT_MODEL=true` to expose it in the Web model selector and allow GPT requests. When using an external Masterbrain endpoint, the endpoint configuration can satisfy the provider requirement instead of a local OpenAI key.
 

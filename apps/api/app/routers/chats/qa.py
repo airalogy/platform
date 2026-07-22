@@ -20,6 +20,7 @@ from app.models.project import Project
 from app.models.protocol import Protocol
 from app.routers.depends import CurrentUser, get_current_user
 from app.routers.permission import check_user_permission
+from app.services.model_usage import create_usage_context
 
 from .context_inject import (
     build_current_editor_protocol_context_message,
@@ -72,9 +73,10 @@ async def send_qa_chat_message(
     params: QAChatMessageParams,
 ) -> StreamingResponse:
     protocol: Protocol | None = None
+    project: Project | None = None
     if params.protocol_id is not None:
         protocol = await Protocol.find(db_session, id=params.protocol_id)
-        project: Project | None = await Project.find(db_session, id=protocol.project_id)
+        project = await Project.find(db_session, id=protocol.project_id)
         await check_user_permission(
             db_session,
             project=project,
@@ -102,12 +104,25 @@ async def send_qa_chat_message(
         db_session.add(chat)
         await db_session.flush()
 
+    if project is None and chat.protocol_id is not None:
+        chat_protocol = await Protocol.find(db_session, id=chat.protocol_id)
+        project = await Project.find(db_session, id=chat_protocol.project_id)
+
+    usage_context = create_usage_context(
+        feature="chat.qa",
+        user_id=current_user.id,
+        lab_id=project.lab_id if project is not None else None,
+        project_id=project.id if project is not None else None,
+        chat_id=chat.id,
+    )
+
     # files
     if params.message.files is not None and len(params.message.files) > 0:
         file_tool_call_messages = await process_files(
             db_session,
             params.message.files,
             current_user.id,
+            usage_context=usage_context,
         )
         chat.messages.extend(file_tool_call_messages)
 
@@ -284,7 +299,9 @@ async def send_qa_chat_message(
         yield f"data: {json.dumps(response_message, ensure_ascii=False)}\n\n"
 
         # 获取原始的流式响应
-        original_stream = chat_qa_language(chat=chat)
+        original_stream = chat_qa_language(
+            chat=chat, usage_context=usage_context
+        )
 
         full_response = ""
         try:

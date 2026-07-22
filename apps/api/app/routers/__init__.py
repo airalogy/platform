@@ -2,7 +2,6 @@ import logging
 import logging.config
 import uuid
 from contextlib import asynccontextmanager
-from contextvars import ContextVar
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -13,11 +12,16 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import config
 from app.libs.protocol_agent import close_protocol_engine_pool
+from app.libs.request_context import request_id_var
 from app.libs.safe_logging import (
     safe_json_body,
     safe_path,
     safe_query_string,
     safe_request_target,
+)
+from app.services.model_usage import (
+    clear_platform_usage_tracking,
+    configure_platform_usage_tracking,
 )
 
 from .airalogy_api import router as airalogy_router
@@ -60,8 +64,12 @@ log_path.parent.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    yield
-    await close_protocol_engine_pool()
+    configure_platform_usage_tracking()
+    try:
+        yield
+    finally:
+        clear_platform_usage_tracking()
+        await close_protocol_engine_pool()
 
 
 app = FastAPI(
@@ -69,10 +77,6 @@ app = FastAPI(
     root_path=config.API_ROOT_PATH,
     lifespan=lifespan,
 )
-
-# 使用 ContextVar 来在请求的生命周期中传递 request_id
-request_id_var = ContextVar("request_id", default=None)
-
 
 # 自定义一个 Filter，为所有日志记录添加 request_id
 class RequestIdFilter(logging.Filter):

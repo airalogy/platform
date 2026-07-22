@@ -28,6 +28,7 @@ from app.routers.chats.utils import (
     generate_tool_call_messages,
 )
 from app.routers.depends import CurrentUser, get_current_user
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(
     dependencies=[Depends(get_current_user)],
@@ -147,6 +148,12 @@ async def send_hub_chat_message(
         db_session.add(chat)
         await db_session.flush()
 
+    usage_context = create_usage_context(
+        feature="chat.hub",
+        user_id=current_user.id,
+        chat_id=chat.id,
+    )
+
     message = params.message
     context = chat.context
 
@@ -209,7 +216,7 @@ async def send_hub_chat_message(
         yield f"data: {json.dumps(response_message, ensure_ascii=False)}\n\n"
 
         # 获取原始的流式响应
-        original_stream = hub_chat(chat=chat)
+        original_stream = hub_chat(chat=chat, usage_context=usage_context)
 
         full_response = ""
         try:

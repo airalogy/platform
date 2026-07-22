@@ -30,6 +30,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
         "account_tokens",
         "access_grants",
         "access_grant_audits",
+        "model_usage_events",
     }
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
