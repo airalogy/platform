@@ -35,8 +35,8 @@
           <h3 class="text-5 font-500">
             {{ $t("page.protocol.addRecord.title") }}
           </h3>
-          <n-tag v-if="protocolInfo?.latest_version" type="success" size="small">
-            v{{ protocolInfo.latest_version }}
+          <n-tag v-if="displayProtocolVersion" type="success" size="small">
+            v{{ displayProtocolVersion }}
           </n-tag>
         </div>
         <protocol-title-section :protocol-info="protocolInfo" :title="protocolInfo?.name" :is-protocol-link="true" :show-icon="false" size="tiny" />
@@ -47,6 +47,13 @@
         {{ $t("common.close") }}
       </n-button>
       <template v-else>
+        <n-input
+          v-if="route.query.record"
+          v-model:value="correctionReason"
+          class="mr-3 w-72"
+          size="medium"
+          :placeholder="$t('page.protocol.addRecord.correctionReason')"
+        />
         <restore-draft-modal
           v-if="protocolId && formRef?.fieldModel" v-model:data="recordData" :field-model="formRef.fieldModel"
           :protocol-id="protocolId"
@@ -54,7 +61,7 @@
           @restore:draft="handleRestoreDraft"
         />
         <n-button
-          size="medium" type="primary" :disabled="loading || isReadonly" :loading="loading" class="mr-4 px-4"
+          size="medium" type="primary" :disabled="loading || isReadonly || (!!route.query.record && !correctionReason.trim())" :loading="loading" class="mr-4 px-4"
           @click="handleConfirm"
         >
           {{ $t("common.submit") }}
@@ -188,6 +195,8 @@ function handleCancel() {
 }
 
 const protocol = ref<ProtocolModels.ProtocolInfo | null>(null)
+const editingProtocolVersion = ref<string | null>(null)
+const correctionReason = ref("")
 
 const formRef = ref<{
   validate: () => any
@@ -207,6 +216,12 @@ const authStore = useAuthStore()
 
 const { endLoading, loading, startLoading } = useLoading()
 const { fetchProtocolInfoByUid, protocolInfo, protocolUid, protocolId } = useProvideProtocolInfoStore(null)
+const displayProtocolVersion = computed(() =>
+  editingProtocolVersion.value
+  || (protocol.value as ProtocolModels.ProjectProtocolInfo | null)?.metadata?.version
+  || protocolInfo.value?.latest_version
+  || "",
+)
 
 const uploadAction = computed(() => {
   return protocolUid.value ? `${baseURL}/protocols` : ""
@@ -371,6 +386,108 @@ const handleFinish: UploadOnFinish = (options) => {
   }
 }
 
+interface ResourceCommitSummary {
+  field: string
+  role: string
+  label: string
+  quantity?: string
+  unit?: string
+  container?: string
+  booking?: string
+}
+
+function resourceCommitSummary(
+  values: Record<string, any>,
+): ResourceCommitSummary[] {
+  const fields = (protocol.value?.fields || {}) as Record<string, any>
+  const templates = fields.templates && typeof fields.templates === "object"
+    ? fields.templates
+    : fields
+  const definitions = templates.var_definitions
+    || templates.vars
+    || templates.var
+    || []
+  const summaries: ResourceCommitSummary[] = []
+  for (const definition of definitions) {
+    const type = String(definition?.type || definition?.type_annotation || "")
+    if (!type.includes("ResourceRef"))
+      continue
+    const field = String(definition?.id || definition?.name || "")
+    const value = values[field]
+    if (!field || !value || typeof value !== "object")
+      continue
+    const kwargs = definition?.kwargs && typeof definition.kwargs === "object"
+      ? definition.kwargs
+      : {}
+    const role = String(kwargs.resource_role || "reference")
+    if (!["input", "output", "equipment"].includes(role))
+      continue
+    const quantityField = kwargs.quantity_field
+      ? String(kwargs.quantity_field).replace(/^var\./, "")
+      : ""
+    const quantity = quantityField ? values[quantityField] : value.quantity
+    summaries.push({
+      field,
+      role,
+      label: String(value.label || value.snapshot?.name || value.id),
+      quantity: quantity === null || quantity === undefined
+        ? undefined
+        : String(quantity),
+      unit: value.unit ? String(value.unit) : undefined,
+      container: value.container_id ? String(value.container_id) : undefined,
+      booking: value.booking_id ? String(value.booking_id) : undefined,
+    })
+  }
+  return summaries
+}
+
+function confirmResourceCommit(
+  values: Record<string, any>,
+): Promise<boolean> {
+  const summaries = resourceCommitSummary(values)
+  if (!summaries.length)
+    return Promise.resolve(true)
+  return new Promise((resolve) => {
+    let settled = false
+    const settle = (value: boolean) => {
+      if (!settled) {
+        settled = true
+        resolve(value)
+      }
+    }
+    dialog.warning({
+      title: t("page.protocol.addRecord.resourceCommitTitle"),
+      content: () => h(
+        "div",
+        { class: "space-y-2" },
+        [
+          h("p", t("page.protocol.addRecord.resourceCommitDescription")),
+          ...summaries.map(item =>
+            h("div", { class: "rounded border p-2 text-sm" }, [
+              h("strong", `${item.field} · ${item.role}`),
+              h("div", item.label),
+              item.quantity
+                ? h("div", `${item.quantity} ${item.unit || ""}`.trim())
+                : null,
+              item.container
+                ? h("div", `${t("page.protocol.addRecord.resourceContainer")}: ${item.container}`)
+                : null,
+              item.booking
+                ? h("div", `${t("page.protocol.addRecord.resourceBooking")}: ${item.booking}`)
+                : null,
+            ]),
+          ),
+        ],
+      ),
+      positiveText: t("page.protocol.addRecord.confirmResourceCommit"),
+      negativeText: t("common.cancel"),
+      onPositiveClick: () => settle(true),
+      onNegativeClick: () => settle(false),
+      onClose: () => settle(false),
+    })
+  })
+}
+
 async function handleConfirm() {
   if (!formRef.value || isReadonly.value) {
     return
@@ -390,6 +507,7 @@ async function handleConfirm() {
     const { data: result, error: validateError } = await postValidateRecord(
       protocolId.value,
       payload,
+      editingProtocolVersion.value || undefined,
     )
 
     if (validateError) {
@@ -413,6 +531,9 @@ async function handleConfirm() {
     const { research_variable = {} } = result
     // const preparedReport = formRef.value?.preparedReport()
     const { record } = route.query
+    if (!record && !(await confirmResourceCommit(research_variable))) {
+      return
+    }
 
     const { data, error } = await (record
       ? putUpdateResearchRecord(protocolId.value, record as string, {
@@ -421,6 +542,7 @@ async function handleConfirm() {
         research_result: research_result as any,
         research_step: research_step as any,
         report: "",
+        revision_reason: correctionReason.value.trim(),
       })
       : postNewResearchRecord(protocolId.value, {
         research_variable: research_variable as any,
@@ -702,7 +824,7 @@ async function handleRestoreDraft(data: Partial<IRecordData>) {
 }
 
 async function fetchRecord() {
-  const { record: recordId } = route.query
+  const { record: recordId, recordVersion } = route.query
   if (!recordId || !protocolInfo.value) {
     return
   }
@@ -712,10 +834,28 @@ async function fetchRecord() {
 
     const { id: protocolId } = protocolInfo.value
 
-    const recordRes = await getProtocolRecordReport({ recordId: recordId as string, protocolId })
+    const recordRes = await getProtocolRecordReport({
+      recordId: recordId as string,
+      protocolId,
+      version: String(recordVersion || "1"),
+    })
 
-    let protocolData: ProtocolModels.ProtocolInfo | null = null
-    protocolData = transformFields(protocolInfo.value) || null
+    const { labUid, projectUid, protocolUid } = route.params as {
+      labUid: string
+      projectUid: string
+      protocolUid: string
+    }
+    const sourceVersion = recordRes.metadata.protocol_version
+    const versionedInfo = protocolInfo.value.metadata?.version === sourceVersion
+      ? protocolInfo.value
+      : await fetchProtocolInfoByUid(
+        { labUid, projectUid, protocolUid, version: sourceVersion },
+        true,
+        false,
+      )
+    const protocolData = versionedInfo
+      ? transformFields(versionedInfo as ProtocolModels.ProjectProtocolInfo)
+      : null
 
     const { check, step, var: varData } = recordRes.data
 
@@ -732,6 +872,7 @@ async function fetchRecord() {
     }
 
     protocol.value = protocolData
+    editingProtocolVersion.value = sourceVersion
     recordData.value = convertedData
     resetAutosaveBaseline(recordData.value)
   }

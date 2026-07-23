@@ -304,6 +304,10 @@ export interface RecordMetadata {
   /** Protocol UUID */
   protocol_id: string
   protocol_version: string
+  revision_kind: "initial" | "correction" | "schema_migration" | "import" | "legacy_revision"
+  revision_reason: string
+  source_protocol_version: string | null
+  migration_run_id: string | null
   record_current_version_submission_time: string
   record_current_version_submission_user_id: string
   record_initial_version_submission_time: string

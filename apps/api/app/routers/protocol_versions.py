@@ -3,6 +3,7 @@ import re
 import shutil
 import uuid
 from io import StringIO
+from pathlib import Path
 
 from dotenv import dotenv_values
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, UploadFile
@@ -18,15 +19,19 @@ from app.libs.protocol_agent import (
     unzip_file,
     zip_dir,
 )
-from app.libs.version import Version
 from app.models.airalogy_file import AiralogyFile
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.lab import Lab
 from app.models.project import Project
-from app.models.protocol import Protocol
+from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolMetadata, ProtocolVersion
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
+from app.services.schema_governance import (
+    SchemaGovernanceError,
+    build_compatibility_report,
+    load_package_migration_manifests,
+)
 
 from .depends import CurrentUser, OptionalCurrentUser
 
@@ -45,9 +50,67 @@ def clear_protocol(protocol_name: str):
 
 # compare version
 def is_new_version(current_version: str, new_version: str) -> bool:
-    v1 = Version(new_version)
-    v2 = Version(current_version)
-    return v1 > v2
+    try:
+        return tuple(map(int, new_version.split("."))) > tuple(
+            map(int, current_version.split("."))
+        )
+    except ValueError:
+        return False
+
+
+def _validate_resource_definition(info: dict, kind: str) -> None:
+    if kind != ProtocolKind.RESOURCE_DEFINITION:
+        return
+    fields = info.get("fields") if isinstance(info.get("fields"), dict) else {}
+    forbidden = {
+        "steps": fields.get("steps"),
+        "checks": fields.get("checks"),
+        "quizzes": fields.get("quizzes"),
+        "workflow": fields.get("workflow"),
+        "collectors": fields.get("collectors"),
+        "client_assigner": fields.get("client_assigner"),
+        "assigners": info.get("assigners"),
+    }
+    used = sorted(key for key, value in forbidden.items() if value)
+    if used:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "resource_definition contains experimental runtime features",
+                "features": used,
+            },
+        )
+
+
+def _load_migration_manifests(
+    protocol_path: str,
+    *,
+    target_version: str,
+) -> list[dict]:
+    migrations_dir = Path(protocol_path) / "migrations"
+    if not migrations_dir.is_dir():
+        return []
+    try:
+        manifests = load_package_migration_manifests(Path(protocol_path))
+    except SchemaGovernanceError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    # A package can carry the complete migration graph, including jumps from
+    # older versions. The direct edge is not mandatory for compatible changes.
+    for manifest in manifests:
+        if not is_new_version(manifest["from"], manifest["to"]):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Migration edges must move forward: "
+                    f"{manifest['from']} -> {manifest['to']}"
+                ),
+            )
+        if is_new_version(target_version, manifest["to"]):
+            raise HTTPException(
+                status_code=400,
+                detail="Migration manifest cannot target a future package version",
+            )
+    return manifests
 
 
 @router.get("/{protocol_id}/versions")
@@ -165,7 +228,10 @@ async def upload_package(
             status_code=400,
             detail=f"Invalid protocol.toml, error: {e.errors()}",
         )
+    _validate_resource_definition(info, meta_data.kind)
 
+    compatibility_report = None
+    migration_manifest: list[dict] | None = None
     if protocol is None:
         uid_exists = await Protocol.find_by(
             db_session,
@@ -182,6 +248,7 @@ async def upload_package(
             user_id=current_user.id,
             uid=meta_data.id,
             name=meta_data.name,
+            kind=meta_data.kind,
             latest_version=meta_data.version,
             disciplines=meta_data.disciplines,
             keywords=meta_data.keywords,
@@ -193,9 +260,38 @@ async def upload_package(
     else:
         if protocol.uid != meta_data.id:
             raise HTTPException(status_code=400, detail="Protocol id cannot be changed")
+        if protocol.kind != meta_data.kind:
+            raise HTTPException(status_code=400, detail="Protocol kind cannot be changed")
         if not is_new_version(protocol.latest_version, meta_data.version):
-            # auto increment version number. eg: 0.0.1 -> 0.0.2
-            meta_data.version = str(Version(protocol.latest_version).increment())
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Protocol package version must be explicitly greater than "
+                    f"{protocol.latest_version}; Platform does not rewrite versions"
+                ),
+            )
+        previous_version = await ProtocolVersion.find_by(
+            db_session,
+            [
+                ProtocolVersion.protocol_id == protocol.id,
+                ProtocolVersion.version == protocol.latest_version,
+            ],
+        )
+        if previous_version is None:
+            raise HTTPException(status_code=400, detail="Current Protocol version not found")
+        try:
+            compatibility_report = build_compatibility_report(
+                previous_version.json_schema,
+                info["json_schema"],
+                previous_version=previous_version.version,
+                current_version=meta_data.version,
+            )
+        except SchemaGovernanceError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        migration_manifest = _load_migration_manifests(
+            tmp_protocol_path,
+            target_version=meta_data.version,
+        )
         protocol.latest_version = meta_data.version
         if len(env_vars) > 0:
             protocol.env_vars = env_vars
@@ -223,6 +319,8 @@ async def upload_package(
         aimd=info["aimd"],
         version=meta_data.version,
         meta_data=meta_data.model_dump(),
+        compatibility_report=compatibility_report,
+        migration_manifest=migration_manifest,
     )
     db_session.add(protocol_version)
     await db_session.flush()

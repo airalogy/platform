@@ -16,7 +16,7 @@ from app.database import DBSession
 from app.libs.masterbrain import aira_workflow_step
 from app.models.lab import Lab
 from app.models.project import Project
-from app.models.protocol import Protocol
+from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
 from app.models.user import User
@@ -237,6 +237,7 @@ async def _resolve_protocol_reference(
                 Protocol.project_id == project.id,
                 Protocol.uid == protocol_uid,
                 Protocol.deleted_at.is_(None),
+                Protocol.kind == ProtocolKind.EXPERIMENT,
             ],
         )
     else:
@@ -252,12 +253,14 @@ async def _resolve_protocol_reference(
                 [
                     Protocol.id == protocol_uuid,
                     Protocol.deleted_at.is_(None),
+                    Protocol.kind == ProtocolKind.EXPERIMENT,
                 ],
             )
         else:
             conditions = [
                 Protocol.uid == value,
                 Protocol.deleted_at.is_(None),
+                Protocol.kind == ProtocolKind.EXPERIMENT,
             ]
             if project_id is not None:
                 conditions.append(Protocol.project_id == project_id)

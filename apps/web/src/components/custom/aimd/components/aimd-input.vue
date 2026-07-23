@@ -1,7 +1,9 @@
 <template>
   <div class="h-full w-full" :class="anyOfSchemas && anyOfSchemas.length > 1 && 'flex flex-row items-center gap-2'">
     <!-- Use compact table file cell in var_table scope -->
-    <template v-if="isUploadFileType(componentType)">
+    <resource-ref-input v-if="isResourceRef" v-bind="props" />
+
+    <template v-else-if="isUploadFileType(componentType)">
       <table-file-cell v-if="props.scope === 'var_table'" v-bind="props" />
       <file-input v-else v-bind="props" />
     </template>
@@ -18,6 +20,7 @@
 import type { IAIMDInputProps } from "@/components/custom/aimd/types/props"
 import type { JsonSchema } from "../types/aimd-types"
 import { useAnyOfSchemas } from "@/components/custom/aimd/composables/useInputProps"
+import { isResourceRefVarType } from "@airalogy/aimd-recorder"
 import { BuiltInType } from "@airalogy/shared/enum/airalogy"
 import { isUploadFileType } from "@airalogy/shared/utils"
 import AnnotationInput from "./inputs/annotation-input.vue"
@@ -31,6 +34,7 @@ import MdInput from "./inputs/md-input.vue"
 import NumberInput from "./inputs/number-input.vue"
 import RecordIdInput from "./inputs/record-id-input.vue"
 import ResearchStepMinimalInput from "./inputs/research-step-minimal-input.vue"
+import ResourceRefInput from "./inputs/resource-ref-input.vue"
 import TableFileCell from "./inputs/table-file-cell.vue"
 import TextInput from "./inputs/text-input.vue"
 import TimePickerInput from "./inputs/time-picker-input.vue"
@@ -39,6 +43,12 @@ const props = defineProps<IAIMDInputProps>()
 
 const { effectiveType, anyOfSchemas } = useAnyOfSchemas(props)
 const componentType = ref(effectiveType.value)
+const resourceType = computed(() => String(props.info?.type_annotation || props.info?.type || props.type))
+const isResourceRef = computed(() => isResourceRefVarType(
+  resourceType.value,
+  props.info?.kwargs,
+  props.ajvInfo?.schema,
+))
 
 const inputComponent = computed(() => {
   const { enumInfo } = props

@@ -99,6 +99,29 @@
         {{ deleteBlockedReason }}
       </n-tooltip>
     </header>
+    <div
+      v-if="record && protocolInfo"
+      class="flex flex-wrap items-center gap-2 px-8 pb-3"
+    >
+      <n-tag size="small" :bordered="false">
+        {{ $t("page.protocol.schemaGovernance.recordRevision", { version: record.record_version }) }}
+      </n-tag>
+      <n-tag
+        v-if="record.metadata.revision_kind"
+        size="small"
+        :type="record.metadata.revision_kind === 'schema_migration' ? 'warning' : 'default'"
+        :bordered="false"
+      >
+        {{ record.metadata.revision_kind }}
+      </n-tag>
+      <record-schema-governance
+        :protocol-id="String(protocolInfo.id)"
+        :record-id="record.record_id"
+        :source-version="record.metadata.protocol_version"
+        :allow-migration="authStore.isLogin"
+        @migrated="handleSchemaMigrated"
+      />
+    </div>
     <n-divider class="!mt-0" />
     <n-spin
       :show="loading" class="h-[calc(100vh-165px)] w-full pl-8"
@@ -232,6 +255,7 @@ import { useAuthStore } from "../../store/modules/auth"
 import { useOrProvideProjectInfoStore } from "./hooks/useProjectInfoStore"
 import { useProvideProtocolInfoStore } from "./hooks/useProtocolInfoStore"
 import ProtocolAddRecordForm from "./modules/protocol/protocol-add-record-form.vue"
+import RecordSchemaGovernance from "./modules/protocol/record-schema-governance.vue"
 import { createProtocolRecordData } from "./utils"
 
 defineOptions({ name: "RecordReport" })
@@ -552,8 +576,9 @@ async function fetchLatestRecordNumber(protocolId: string | number) {
 }
 
 async function fetchRecord() {
-  const { recordId, protocolUid, labUid, projectUid, protocolVersion } = route.params as {
+  const { recordId, recordVersion, protocolUid, labUid, projectUid, protocolVersion } = route.params as {
     recordId: string
+    recordVersion: string
     protocolUid: string
     labUid: string
     projectUid: string
@@ -582,20 +607,34 @@ async function fetchRecord() {
       return
     }
 
-    const recordRes = await getProtocolRecordReport({ recordId, protocolId })
+    const recordRes = await getProtocolRecordReport({
+      recordId,
+      protocolId,
+      version: recordVersion,
+    })
 
     record.value = recordRes
 
     void fetchLatestRecordNumber(protocolId)
 
-    let protocolData: ProtocolModels.ProtocolInfo | null = null
-    if (protocolInfo.value) {
-      if (recordRes.metadata.airalogy_protocol_id === protocolInfo.value.airalogy_id) {
-        protocolData = transformFields(protocolInfo.value as unknown as ProtocolModels.ProjectProtocolInfo) || null
-      }
-      else {
-        protocolData = transformFields(recordRes as unknown as ProtocolModels.ProjectProtocolInfo) || null
-      }
+    let protocolData: ProtocolModels.ProtocolInfo | null
+      = protocolInfo.value?.metadata?.version === recordRes.metadata.protocol_version
+        ? transformFields(protocolInfo.value as unknown as ProtocolModels.ProjectProtocolInfo)
+        : null
+    if (!protocolData) {
+      const versionedProtocol = await fetchProtocolInfoByUid(
+        {
+          labUid,
+          projectUid,
+          protocolUid,
+          version: recordRes.metadata.protocol_version,
+        },
+        true,
+        false,
+      )
+      protocolData = versionedProtocol
+        ? transformFields(versionedProtocol as unknown as ProtocolModels.ProjectProtocolInfo)
+        : null
     }
 
     const convertedData = createProtocolRecordData(recordRes.data)
@@ -755,8 +794,24 @@ function handleModify() {
     },
     query: {
       record: recordId,
+      recordVersion: String(record.value?.record_version || 1),
     },
   })
+}
+
+async function handleSchemaMigrated(migrated: {
+  version: number
+  protocol_version: string
+}) {
+  await router.replace({
+    name: "protocol-record-report",
+    params: {
+      ...route.params,
+      protocolVersion: migrated.protocol_version,
+      recordVersion: String(migrated.version),
+    },
+  })
+  await fetchRecord()
 }
 onMounted(async () => {
   await fetchRecord()

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, StringConstraints, field_validator, model_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 
 from app.config import config
 from app.database import DBSession
@@ -20,11 +20,13 @@ from app.models.group import Group, GroupUser, OrganizationalUnitType
 from app.models.lab import Lab, LabRole, LabUser
 from app.models.project import Project
 from app.models.protocol import Protocol
+from app.models.resource import Resource, ResourceLocation, ResourceType
 from app.models.user import User
 from app.services.access_control import (
     GRANTABLE_ROLE_KEYS,
     can_delegate,
     manageable_scope_ids,
+    resolve_resource_access,
     resolve_structured_access,
     role_catalog,
     utcnow_naive,
@@ -447,6 +449,9 @@ class GrantParams(BaseModel):
     scope_type: AccessScopeType
     project_id: UUID | None = None
     protocol_id: UUID | None = None
+    resource_type_id: UUID | None = None
+    resource_id: UUID | None = None
+    location_id: UUID | None = None
     role_key: str
     inherit_to_children: bool = True
     expires_at: datetime | None = None
@@ -461,6 +466,25 @@ class GrantParams(BaseModel):
     def validate_shape(self):
         if self.role_key not in GRANTABLE_ROLE_KEYS:
             raise ValueError("Role cannot be assigned through a scoped grant")
+        resource_scopes = {
+            AccessScopeType.RESOURCE_TYPE,
+            AccessScopeType.RESOURCE,
+            AccessScopeType.LOCATION,
+        }
+        resource_roles = {
+            "resource_manager",
+            "resource_custodian",
+            "resource_operator",
+            "resource_viewer",
+        }
+        if self.scope_type in resource_scopes and self.role_key not in resource_roles:
+            raise ValueError(
+                "Resource scopes require a resource manager, custodian, operator, or viewer role"
+            )
+        if self.scope_type not in resource_scopes and self.role_key in resource_roles:
+            raise ValueError(
+                "Resource roles can only be assigned to a resource type, resource, or location scope"
+            )
         if self.subject_type == AccessSubjectType.USER:
             if (
                 self.user_id is None
@@ -482,14 +506,33 @@ class GrantParams(BaseModel):
                 )
             self.org_unit_id = unit_id
             self.group_id = unit_id
+        scope_values = {
+            AccessScopeType.PROJECT: self.project_id,
+            AccessScopeType.PROTOCOL: self.protocol_id,
+            AccessScopeType.RESOURCE_TYPE: self.resource_type_id,
+            AccessScopeType.RESOURCE: self.resource_id,
+            AccessScopeType.LOCATION: self.location_id,
+        }
+        populated = [key for key, value in scope_values.items() if value is not None]
         if self.scope_type == AccessScopeType.LAB:
-            if self.project_id is not None or self.protocol_id is not None:
-                raise ValueError("Lab scope cannot include project_id or protocol_id")
-        elif self.scope_type == AccessScopeType.PROJECT:
-            if self.project_id is None or self.protocol_id is not None:
-                raise ValueError("Project scope requires only project_id")
-        elif self.protocol_id is None:
-            raise ValueError("Protocol scope requires protocol_id")
+            if populated:
+                raise ValueError("Lab scope cannot include a child scope id")
+        elif self.scope_type == AccessScopeType.PROTOCOL:
+            if self.protocol_id is None or any(
+                value is not None
+                for value in (
+                    self.resource_type_id,
+                    self.resource_id,
+                    self.location_id,
+                )
+            ):
+                raise ValueError(
+                    "Protocol scope requires protocol_id and may include project_id"
+                )
+        elif scope_values.get(self.scope_type) is None or populated != [self.scope_type]:
+            raise ValueError(
+                f"{self.scope_type.value} scope requires only its matching id"
+            )
         if self.expires_at is not None:
             expires = self.expires_at.replace(tzinfo=None)
             if expires <= utcnow_naive():
@@ -523,6 +566,24 @@ async def validate_grant_references(db_session: DBSession, params: GrantParams) 
                 status_code=400,
                 detail="Protocol does not belong to the selected Project",
             )
+    if params.resource_type_id is not None:
+        resource_type = await ResourceType.find(db_session, params.resource_type_id)
+        if resource_type.lab_id != params.lab_id:
+            raise HTTPException(
+                status_code=400, detail="Resource type is not in this Lab"
+            )
+    if params.resource_id is not None:
+        resource = await Resource.find(db_session, params.resource_id)
+        if resource.lab_id != params.lab_id:
+            raise HTTPException(
+                status_code=400, detail="Resource is not in this Lab"
+            )
+    if params.location_id is not None:
+        location = await ResourceLocation.find(db_session, params.location_id)
+        if location.lab_id != params.lab_id:
+            raise HTTPException(
+                status_code=400, detail="Location is not in this Lab"
+            )
 
 
 async def grant_scope_resources(
@@ -541,6 +602,25 @@ async def grant_scope_resources(
 async def require_grant_delegation(
     db_session: DBSession, params: GrantParams, actor_id: UUID
 ) -> None:
+    if params.scope_type in {
+        AccessScopeType.RESOURCE_TYPE,
+        AccessScopeType.RESOURCE,
+        AccessScopeType.LOCATION,
+    }:
+        actor = await resolve_resource_access(
+            db_session,
+            actor_id,
+            params.lab_id,
+            resource_type_id=params.resource_type_id,
+            resource_id=params.resource_id,
+            location_id=params.location_id,
+        )
+        if not can_delegate(actor, params.role_key):
+            raise HTTPException(
+                status_code=403,
+                detail="You cannot delegate capabilities you do not hold at this scope",
+            )
+        return
     project, protocol = await grant_scope_resources(db_session, params)
     actor = await resolve_structured_access(
         db_session, actor_id, params.lab_id, project, protocol
@@ -590,6 +670,9 @@ async def get_grants(
     group_id: int | None = None,
     project_id: UUID | None = None,
     protocol_id: UUID | None = None,
+    resource_type_id: UUID | None = None,
+    resource_id: UUID | None = None,
+    location_id: UUID | None = None,
     include_revoked: bool = False,
 ):
     ensure_structured_mode()
@@ -612,6 +695,9 @@ async def get_grants(
         (AccessGrant.group_id, unit_id),
         (AccessGrant.project_id, project_id),
         (AccessGrant.protocol_id, protocol_id),
+        (AccessGrant.resource_type_id, resource_type_id),
+        (AccessGrant.resource_id, resource_id),
+        (AccessGrant.location_id, location_id),
     ):
         if value is not None:
             conditions.append(column == value)
@@ -623,6 +709,30 @@ async def get_grants(
     if membership.role > LabRole.MANAGER:
         visible_grants: list[AccessGrant] = []
         for grant in grants:
+            if grant.scope_type in {
+                AccessScopeType.RESOURCE_TYPE,
+                AccessScopeType.RESOURCE,
+                AccessScopeType.LOCATION,
+            }:
+                decision = await resolve_resource_access(
+                    db_session,
+                    current_user.id,
+                    lab_id,
+                    resource_type_id=grant.resource_type_id,
+                    resource_id=grant.resource_id,
+                    location_id=grant.location_id,
+                )
+                if any(
+                    can_delegate(decision, role)
+                    for role in (
+                        "resource_manager",
+                        "resource_custodian",
+                        "resource_operator",
+                        "resource_viewer",
+                    )
+                ):
+                    visible_grants.append(grant)
+                continue
             protocol = (
                 await Protocol.find(db_session, grant.protocol_id)
                 if grant.protocol_id is not None
@@ -654,10 +764,66 @@ async def get_manageable_scopes(
     lab_access, project_ids, protocol_ids = await manageable_scope_ids(
         db_session, current_user.id, lab_id
     )
+    resource_types = (
+        await db_session.scalars(
+            select(ResourceType).where(
+                ResourceType.lab_id == lab_id,
+                ResourceType.archived_at.is_(None),
+            )
+        )
+    ).all()
+    resources = (
+        await db_session.scalars(
+            select(Resource).where(
+                Resource.lab_id == lab_id,
+                Resource.archived_at.is_(None),
+            )
+        )
+    ).all()
+    locations = (
+        await db_session.scalars(
+            select(ResourceLocation).where(
+                ResourceLocation.lab_id == lab_id,
+                ResourceLocation.archived_at.is_(None),
+            )
+        )
+    ).all()
+
+    async def can_manage_resource_scope(**scope) -> bool:
+        if lab_access:
+            return True
+        decision = await resolve_resource_access(
+            db_session, current_user.id, lab_id, **scope
+        )
+        return "resource_manager" in decision.role_keys
+
+    manageable_resource_type_ids = [
+        item.id
+        for item in resource_types
+        if await can_manage_resource_scope(resource_type_id=item.id)
+    ]
+    manageable_resource_ids = [
+        item.id
+        for item in resources
+        if await can_manage_resource_scope(
+            resource_type_id=item.resource_type_id,
+            resource_id=item.id,
+        )
+    ]
+    manageable_location_ids = [
+        item.id
+        for item in locations
+        if await can_manage_resource_scope(location_id=item.id)
+    ]
     return {
         "lab": lab_access,
         "project_ids": [str(item) for item in project_ids],
         "protocol_ids": [str(item) for item in protocol_ids],
+        "resource_type_ids": [
+            str(item) for item in manageable_resource_type_ids
+        ],
+        "resource_ids": [str(item) for item in manageable_resource_ids],
+        "location_ids": [str(item) for item in manageable_location_ids],
     }
 
 
@@ -680,6 +846,9 @@ async def create_grant(
         (AccessGrant.group_id, params.group_id),
         (AccessGrant.project_id, params.project_id),
         (AccessGrant.protocol_id, params.protocol_id),
+        (AccessGrant.resource_type_id, params.resource_type_id),
+        (AccessGrant.resource_id, params.resource_id),
+        (AccessGrant.location_id, params.location_id),
     ):
         duplicate_conditions.append(column == value if value is not None else column.is_(None))
     if await AccessGrant.exists(db_session, duplicate_conditions):
@@ -808,12 +977,47 @@ async def get_effective_access(
     db_session: DBSession,
     project_id: UUID | None = None,
     protocol_id: UUID | None = None,
+    resource_type_id: UUID | None = None,
+    resource_id: UUID | None = None,
+    location_id: UUID | None = None,
 ):
     ensure_structured_mode()
     caller = await get_lab_membership(db_session, lab_id, current_user.id)
     if current_user.id != user_id and (caller is None or caller.role > LabRole.MANAGER):
         raise HTTPException(status_code=403, detail="Permission denied")
     await require_lab_member(db_session, lab_id, user_id)
+    resource_scope_count = sum(
+        item is not None
+        for item in (resource_type_id, resource_id, location_id)
+    )
+    if resource_scope_count:
+        if project_id is not None or protocol_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="Resource scopes cannot be combined with Project or Protocol",
+            )
+        if resource_scope_count > 1 and resource_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Select one resource scope",
+            )
+        if resource_id is not None:
+            resource = await Resource.find(db_session, resource_id)
+            if resource.lab_id != lab_id:
+                raise HTTPException(
+                    status_code=400, detail="Resource is not in this Lab"
+                )
+            resource_type_id = resource.resource_type_id
+        decision = await resolve_resource_access(
+            db_session,
+            user_id,
+            lab_id,
+            resource_type_id=resource_type_id,
+            resource_id=resource_id,
+            location_id=location_id,
+        )
+        return decision.as_dict()
+
     protocol = await Protocol.find(db_session, protocol_id) if protocol_id else None
     if protocol is not None:
         project_id = protocol.project_id

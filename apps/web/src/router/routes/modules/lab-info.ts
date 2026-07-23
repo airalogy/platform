@@ -26,6 +26,15 @@ export const labInfoRoute: CustomRoute<LabInfoNameKey> = {
       component: () => import("@/views/record-diary/index.vue"),
     },
     {
+      path: "resources/:section?",
+      name: "lab-resources",
+      meta: {
+        title: "Lab Resource Library",
+        breadcrumbI18nKey: "page.resourceLibrary.title",
+      },
+      component: () => import("@/views/resources/index.vue"),
+    },
+    {
       path: "members",
       name: "lab-members",
       meta: {

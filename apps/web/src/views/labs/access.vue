@@ -141,6 +141,15 @@
             :options="grantProtocolOptions"
           />
         </n-form-item>
+        <n-form-item v-if="grantForm.scopeType === 'resource_type'" :label="$t('page.resourceLibrary.resourceType')" path="resourceId">
+          <n-select v-model:value="grantForm.resourceId" filterable :disabled="Boolean(editingGrant)" :options="grantResourceTypeOptions" />
+        </n-form-item>
+        <n-form-item v-if="grantForm.scopeType === 'resource'" :label="$t('page.resourceLibrary.resource')" path="resourceId">
+          <n-select v-model:value="grantForm.resourceId" filterable :disabled="Boolean(editingGrant)" :options="grantResourceOptions" />
+        </n-form-item>
+        <n-form-item v-if="grantForm.scopeType === 'location'" :label="$t('page.resourceLibrary.location')" path="resourceId">
+          <n-select v-model:value="grantForm.resourceId" filterable :disabled="Boolean(editingGrant)" :options="grantLocationOptions" />
+        </n-form-item>
         <n-form-item :label="$t('common.role')" path="roleKey">
           <n-select v-model:value="grantForm.roleKey" :options="roleOptions" />
         </n-form-item>
@@ -199,6 +208,7 @@ import {
 import { fetchLabMemberList } from "@/service/api/labs"
 import { fetchProjectList } from "@/service/api/projects"
 import { getProtocols } from "@/service/api/protocol"
+import { fetchResourceLocations, fetchResources, fetchResourceTypes } from "@/service/api/resources"
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NPopconfirm, NTag, NTooltip } from "naive-ui"
 import { useLabInfoStore } from "./hooks/useLabsInfoStore"
@@ -216,6 +226,9 @@ const organizationalUnits = ref<LabOrganizationalUnit[]>([])
 const members = ref<Api.Lab.MemberListItem[]>([])
 const projects = ref<ResourceItem[]>([])
 const protocols = ref<ResourceItem[]>([])
+const resourceTypes = ref<ResourceItem[]>([])
+const labResources = ref<ResourceItem[]>([])
+const resourceLocations = ref<ResourceItem[]>([])
 const loadedProtocolProjectIds = new Set<string>()
 const grants = ref<AccessGrant[]>([])
 const audits = ref<AccessAudit[]>([])
@@ -223,8 +236,23 @@ const effectiveAccess = ref<EffectiveAccess | null>(null)
 const loading = reactive({ grants: false, effective: false, audit: false, inheritance: false })
 const saving = ref(false)
 const grantFilters = reactive({ subject: null as string | number | null, resource: null as string | null, includeRevoked: false })
-const manageableScopes = ref<ManageableScopes>({ lab: false, project_ids: [], protocol_ids: [] })
-const canManageAny = computed(() => manageableScopes.value.lab || manageableScopes.value.project_ids.length > 0 || manageableScopes.value.protocol_ids.length > 0)
+function emptyManageableScopes(): ManageableScopes {
+  return {
+    lab: false,
+    project_ids: [],
+    protocol_ids: [],
+    resource_type_ids: [],
+    resource_ids: [],
+    location_ids: [],
+  }
+}
+const manageableScopes = ref<ManageableScopes>(emptyManageableScopes())
+const canManageAny = computed(() => manageableScopes.value.lab
+  || manageableScopes.value.project_ids.length > 0
+  || manageableScopes.value.protocol_ids.length > 0
+  || manageableScopes.value.resource_type_ids.length > 0
+  || manageableScopes.value.resource_ids.length > 0
+  || manageableScopes.value.location_ids.length > 0)
 
 const memberOptions = computed<SelectOption[]>(() => members.value.map(member => ({
   label: `${member.name || member.username} (@${member.username})`,
@@ -234,7 +262,30 @@ const orgUnitOptions = computed<SelectOption[]>(() => organizationalUnits.value.
 const projectOptions = computed<SelectOption[]>(() => projects.value.map(project => ({ label: `${project.name} (${project.uid})`, value: project.id })))
 const allProtocolOptions = computed<SelectOption[]>(() => protocols.value.map(protocol => ({ label: protocol.name, value: protocol.id })))
 const grantProjectOptions = computed(() => projectOptions.value.filter(option => manageableScopes.value.project_ids.includes(String(option.value))))
-const roleOptions = computed<SelectOption[]>(() => roles.value.filter(role => role.grantable).map(role => ({ label: role.label, value: role.key })))
+const resourceTypeOptions = computed<SelectOption[]>(() => resourceTypes.value.map(item => ({ label: item.name, value: item.id })))
+const resourceOptions = computed<SelectOption[]>(() => labResources.value.map(item => ({ label: `${item.name}${item.uid ? ` (${item.uid})` : ""}`, value: item.id })))
+const resourceLocationOptions = computed<SelectOption[]>(() => resourceLocations.value.map(item => ({ label: item.name, value: item.id })))
+const grantResourceTypeOptions = computed(() => resourceTypeOptions.value.filter(option => manageableScopes.value.resource_type_ids.includes(String(option.value))))
+const grantResourceOptions = computed(() => resourceOptions.value.filter(option => manageableScopes.value.resource_ids.includes(String(option.value))))
+const grantLocationOptions = computed(() => resourceLocationOptions.value.filter(option => manageableScopes.value.location_ids.includes(String(option.value))))
+const grantModalVisible = ref(false)
+const editingGrant = ref<AccessGrant | null>(null)
+const grantFormRef = ref<FormInst | null>(null)
+const grantForm = reactive({
+  subjectType: "user" as AccessSubjectType,
+  subjectId: null as string | number | null,
+  scopeType: "lab" as AccessScopeType,
+  projectId: null as string | null,
+  resourceId: null as string | null,
+  roleKey: "viewer",
+  inheritToChildren: true,
+  expiresAt: null as number | null,
+  reason: "",
+})
+const resourceScope = computed(() => ["resource_type", "resource", "location"].includes(grantForm.scopeType))
+const roleOptions = computed<SelectOption[]>(() => roles.value
+  .filter(role => role.grantable && (resourceScope.value ? role.key.startsWith("resource_") : !role.key.startsWith("resource_")))
+  .map(role => ({ label: role.label, value: role.key })))
 const subjectTypeOptions = computed(() => [
   { label: $t("page.labs.access.user"), value: "user" },
   { label: $t("page.labs.access.orgUnit"), value: "org_unit" },
@@ -243,24 +294,33 @@ const scopeTypeOptions = computed(() => [
   manageableScopes.value.lab ? { label: "Lab", value: "lab" } : null,
   grantProjectOptions.value.length ? { label: $t("page.labs.access.project"), value: "project" } : null,
   manageableScopes.value.protocol_ids.length ? { label: $t("page.labs.access.protocol"), value: "protocol" } : null,
+  manageableScopes.value.resource_type_ids.length ? { label: $t("page.resourceLibrary.resourceType"), value: "resource_type" } : null,
+  manageableScopes.value.resource_ids.length ? { label: $t("page.resourceLibrary.resource"), value: "resource" } : null,
+  manageableScopes.value.location_ids.length ? { label: $t("page.resourceLibrary.location"), value: "location" } : null,
 ].filter(Boolean) as Array<{ label: string, value: AccessScopeType }>)
 
 async function loadReferenceData() {
   if (!labInfo.value?.id)
     return
   const labId = String(labInfo.value.id)
-  const [roleResult, unitResult, memberResult, projectResult, scopesResult] = await Promise.all([
+  const [roleResult, unitResult, memberResult, projectResult, scopesResult, resourceTypeResult, resourceResult, locationResult] = await Promise.all([
     fetchAccessRoles(),
     fetchLabOrganizationalUnits(labId),
     fetchLabMemberList(labId, { page: 1, pageSize: 1000 }),
     fetchProjectList({ labId, page: 1, pageSize: 1000 }),
     fetchManageableScopes(labId),
+    fetchResourceTypes(labId),
+    fetchResources(labId, { page_size: 200 }),
+    fetchResourceLocations(labId),
   ])
   roles.value = roleResult.data?.roles || []
   organizationalUnits.value = unitResult.data?.organizational_units || []
   members.value = memberResult?.users || []
   projects.value = (projectResult?.projects || []) as ResourceItem[]
-  manageableScopes.value = scopesResult.data || { lab: false, project_ids: [], protocol_ids: [] }
+  manageableScopes.value = scopesResult.data || emptyManageableScopes()
+  resourceTypes.value = resourceTypeResult.items.map(item => ({ id: item.id, name: item.name, uid: item.code }))
+  labResources.value = resourceResult.items.map(item => ({ id: item.id, name: item.name, uid: item.code }))
+  resourceLocations.value = locationResult.items.map(item => ({ id: item.id, name: item.path, uid: item.code }))
 }
 
 async function loadProtocols(projectId: string | null) {
@@ -294,10 +354,13 @@ const resourceFilterOptions = computed<SelectOption[]>(() => [
   { label: labInfo.value?.name || "Lab", value: `lab:${labInfo.value?.id}` },
   ...projectOptions.value.map(option => ({ ...option, value: `project:${option.value}` })),
   ...allProtocolOptions.value.map(option => ({ ...option, value: `protocol:${option.value}` })),
+  ...resourceTypeOptions.value.map(option => ({ ...option, value: `resource_type:${option.value}` })),
+  ...resourceOptions.value.map(option => ({ ...option, value: `resource:${option.value}` })),
+  ...resourceLocationOptions.value.map(option => ({ ...option, value: `location:${option.value}` })),
 ])
 const filteredGrants = computed(() => grants.value.filter((grant) => {
   const subject = grant.subject_type === "user" ? `user:${grant.user_id}` : `org_unit:${grant.org_unit_id || grant.group_id}`
-  const resourceId = grant.scope_type === "lab" ? grant.lab_id : grant.scope_type === "project" ? grant.project_id : grant.protocol_id
+  const resourceId = grantResourceId(grant)
   const resource = `${grant.scope_type}:${resourceId}`
   return (!grantFilters.subject || subject === grantFilters.subject) && (!grantFilters.resource || resource === grantFilters.resource)
 }))
@@ -320,10 +383,26 @@ function resourceLabel(scopeType: AccessScopeType, scopeId: string | number | nu
     return labInfo.value?.name || "Lab"
   if (scopeType === "project")
     return projects.value.find(item => item.id === scopeId)?.name || String(scopeId || "-")
-  return protocols.value.find(item => item.id === scopeId)?.name || String(scopeId || "-")
+  if (scopeType === "protocol")
+    return protocols.value.find(item => item.id === scopeId)?.name || String(scopeId || "-")
+  if (scopeType === "resource_type")
+    return resourceTypes.value.find(item => item.id === scopeId)?.name || String(scopeId || "-")
+  if (scopeType === "resource")
+    return labResources.value.find(item => item.id === scopeId)?.name || String(scopeId || "-")
+  return resourceLocations.value.find(item => item.id === scopeId)?.name || String(scopeId || "-")
 }
 function grantResourceId(grant: AccessGrant) {
-  return grant.scope_type === "lab" ? grant.lab_id : grant.scope_type === "project" ? grant.project_id : grant.protocol_id
+  if (grant.scope_type === "lab")
+    return grant.lab_id
+  if (grant.scope_type === "project")
+    return grant.project_id
+  if (grant.scope_type === "protocol")
+    return grant.protocol_id
+  if (grant.scope_type === "resource_type")
+    return grant.resource_type_id
+  if (grant.scope_type === "resource")
+    return grant.resource_id
+  return grant.location_id
 }
 function canManageGrant(grant: AccessGrant) {
   if (grant.scope_type === "lab")
@@ -332,6 +411,12 @@ function canManageGrant(grant: AccessGrant) {
     return manageableScopes.value.project_ids.includes(String(grant.project_id))
   if (grant.scope_type === "protocol")
     return manageableScopes.value.protocol_ids.includes(String(grant.protocol_id))
+  if (grant.scope_type === "resource_type")
+    return manageableScopes.value.resource_type_ids.includes(String(grant.resource_type_id))
+  if (grant.scope_type === "resource")
+    return manageableScopes.value.resource_ids.includes(String(grant.resource_id))
+  if (grant.scope_type === "location")
+    return manageableScopes.value.location_ids.includes(String(grant.location_id))
   return false
 }
 function formatDate(value: string | null) {
@@ -356,20 +441,6 @@ const grantColumns = computed<DataTableColumns<AccessGrant>>(() => [
     : null },
 ])
 
-const grantModalVisible = ref(false)
-const editingGrant = ref<AccessGrant | null>(null)
-const grantFormRef = ref<FormInst | null>(null)
-const grantForm = reactive({
-  subjectType: "user" as AccessSubjectType,
-  subjectId: null as string | number | null,
-  scopeType: "lab" as AccessScopeType,
-  projectId: null as string | null,
-  resourceId: null as string | null,
-  roleKey: "viewer",
-  inheritToChildren: true,
-  expiresAt: null as number | null,
-  reason: "",
-})
 const grantProtocolOptions = computed(() => allProtocolOptions.value.filter((option) => {
   const protocol = protocols.value.find(item => item.id === option.value)
   return protocol?.project_id === grantForm.projectId
@@ -391,7 +462,7 @@ function openGrantModal(grant?: AccessGrant) {
         subjectId: grant.user_id || grant.org_unit_id || grant.group_id,
         scopeType: grant.scope_type,
         projectId: grant.scope_type === "protocol" ? grant.project_id : null,
-        resourceId: grant.scope_type === "project" ? grant.project_id : grant.scope_type === "protocol" ? grant.protocol_id : null,
+        resourceId: grantResourceId(grant),
         roleKey: grant.role_key,
         inheritToChildren: grant.inherit_to_children,
         expiresAt: grant.expires_at ? new Date(grant.expires_at).getTime() : null,
@@ -403,7 +474,7 @@ function openGrantModal(grant?: AccessGrant) {
         scopeType: defaultScope,
         projectId: null,
         resourceId: null,
-        roleKey: "viewer",
+        roleKey: ["resource_type", "resource", "location"].includes(defaultScope) ? "resource_viewer" : "viewer",
         inheritToChildren: true,
         expiresAt: null,
         reason: "",
@@ -413,6 +484,7 @@ function openGrantModal(grant?: AccessGrant) {
 function resetGrantResource() {
   grantForm.projectId = null
   grantForm.resourceId = null
+  grantForm.roleKey = resourceScope.value ? "resource_viewer" : "viewer"
 }
 async function handleGrantProject(projectId: string | null) {
   grantForm.resourceId = null
@@ -445,6 +517,9 @@ async function saveGrant() {
         scopeType: grantForm.scopeType,
         projectId: grantForm.scopeType === "project" ? grantForm.resourceId : grantForm.scopeType === "protocol" ? grantForm.projectId : null,
         protocolId: grantForm.scopeType === "protocol" ? grantForm.resourceId : null,
+        resourceTypeId: grantForm.scopeType === "resource_type" ? grantForm.resourceId : null,
+        resourceId: grantForm.scopeType === "resource" ? grantForm.resourceId : null,
+        locationId: grantForm.scopeType === "location" ? grantForm.resourceId : null,
         roleKey: grantForm.roleKey,
         inheritToChildren: grantForm.inheritToChildren,
         expiresAt: grantForm.expiresAt ? new Date(grantForm.expiresAt).toISOString() : null,

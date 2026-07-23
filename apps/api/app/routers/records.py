@@ -26,6 +26,14 @@ from app.models.user import User
 from app.routers.aira_imports import AiraArchiveImporter
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
+from app.services.resource_bindings import (
+    ResourceBindingError,
+    extract_resource_bindings,
+)
+from app.services.resource_inventory import (
+    InventoryError,
+    commit_record_resources,
+)
 
 from .depends import CurrentUser, OptionalCurrentUser
 
@@ -128,6 +136,7 @@ async def protocol_var_assign(
 
 class RecordValidateParams(BaseModel):
     var: Dict[str, Any] | None = None
+    protocol_version: str | None = None
 
 
 @router.post("/validate")
@@ -149,7 +158,8 @@ async def protocol_record_validate(
         db_session,
         [
             ProtocolVersion.protocol_id == protocol_id,
-            ProtocolVersion.version == protocol.latest_version,
+            ProtocolVersion.version
+            == (data.protocol_version or protocol.latest_version),
         ],
     )
     if protocol_version is None:
@@ -303,6 +313,7 @@ class RecordCreateParams(BaseModel):
     var: Dict[str, Any]
     check: Dict[str, Any]
     report: str
+    revision_reason: str = ""
 
 
 def _serialize_import_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -565,11 +576,28 @@ async def import_protocol_records(
             number=next_number + offset,
             version=1,
             hash=get_data_sha1({"data": data}),
+            revision_kind="import",
         )
         db_session.add(record)
         created_records.append(record)
 
-    await db_session.commit()
+    await db_session.flush()
+    try:
+        for record in created_records:
+            bindings = extract_resource_bindings(
+                protocol_version.fields or {}, record.data
+            )
+            await commit_record_resources(
+                db_session,
+                lab_id=project.lab_id,
+                record=record,
+                actor_user_id=current_user.id,
+                bindings=bindings,
+            )
+        await db_session.commit()
+    except (ResourceBindingError, InventoryError) as error:
+        await db_session.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return {
         "imported_count": len(created_records),
         "record_ids": [str(record.id) for record in created_records],
@@ -632,6 +660,7 @@ async def create_protocol_record(
             data["var"][k] = ""
 
     record = Record(
+        id=uuid.uuid4(),
         protocol_id=protocol_id,
         protocol_version=protocol_version.version,
         user_id=current_user.id,
@@ -640,9 +669,23 @@ async def create_protocol_record(
         number=number,
         version=1,
         hash=get_data_sha1({"data": data}),
+        revision_kind="initial",
     )
     db_session.add(record)
-    await db_session.commit()
+    await db_session.flush()
+    try:
+        bindings = extract_resource_bindings(protocol_version.fields or {}, data)
+        await commit_record_resources(
+            db_session,
+            lab_id=project.lab_id,
+            record=record,
+            actor_user_id=current_user.id,
+            bindings=bindings,
+        )
+        await db_session.commit()
+    except (ResourceBindingError, InventoryError) as error:
+        await db_session.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return record
 
 
@@ -654,6 +697,11 @@ async def update_protocol_record(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    if not params.revision_reason.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="A correction revision requires a reason",
+        )
     _stmt = (
         select(Record)
         .where(Record.id == id, Record.protocol_id == protocol_id)
@@ -681,7 +729,7 @@ async def update_protocol_record(
         db_session,
         [
             ProtocolVersion.protocol_id == protocol_id,
-            ProtocolVersion.version == protocol.latest_version,
+            ProtocolVersion.version == record.protocol_version,
         ],
     )
     if protocol_version is None:
@@ -717,9 +765,26 @@ async def update_protocol_record(
         number=record.number,
         version=record.version + 1,
         hash=get_data_sha1({"data": data}),
+        revision_kind="correction",
+        revision_reason=params.revision_reason.strip(),
+        source_protocol_version=record.protocol_version,
     )
     db_session.add(new_record)
-    await db_session.commit()
+    await db_session.flush()
+    try:
+        bindings = extract_resource_bindings(protocol_version.fields or {}, data)
+        await commit_record_resources(
+            db_session,
+            lab_id=project.lab_id,
+            record=new_record,
+            actor_user_id=current_user.id,
+            bindings=bindings,
+            apply_inventory=False,
+        )
+        await db_session.commit()
+    except (ResourceBindingError, InventoryError) as error:
+        await db_session.rollback()
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return new_record
 
 
@@ -776,6 +841,10 @@ async def get_record(
             "protocol_id": protocol.uid,
             "protocol_uuid": record.protocol_id,
             "protocol_version": record.protocol_version,
+            "revision_kind": record.revision_kind,
+            "revision_reason": record.revision_reason,
+            "source_protocol_version": record.source_protocol_version,
+            "migration_run_id": record.migration_run_id,
             "record_current_version_submission_time": record.created_at,
             "record_current_version_submission_user_id": user.username,
             "record_initial_version_submission_time": init_record.created_at,

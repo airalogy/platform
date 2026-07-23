@@ -12,7 +12,7 @@ from app.libs.text_splitter import text_to_vectors, text_to_words
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.lab import Lab
 from app.models.project import PermissionType, Project, ProjectType
-from app.models.protocol import Protocol
+from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
 from app.models.user import User
@@ -38,7 +38,10 @@ async def get_protocols(
     if config.is_single_lab:
         raise HTTPException(status_code=404, detail="Not found")
     # Build conditions
-    conditions = [Protocol.deleted_at.is_(None)]
+    conditions = [
+        Protocol.deleted_at.is_(None),
+        Protocol.kind == ProtocolKind.EXPERIMENT,
+    ]
 
     if name is not None:
         conditions.append(Protocol.name.ilike(f"%{name}%"))

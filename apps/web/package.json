@@ -28,10 +28,10 @@
     "nanoid": "catalog:"
   },
   "dependencies": {
-    "@airalogy/aimd-core": "^2.14.0",
+    "@airalogy/aimd-core": "^2.15.0",
     "@airalogy/aimd-editor": "^1.10.0",
-    "@airalogy/aimd-recorder": "^1.24.5",
-    "@airalogy/aimd-renderer": "2.11.1",
+    "@airalogy/aimd-recorder": "^1.25.1",
+    "@airalogy/aimd-renderer": "2.12.0",
     "@airalogy/components": "workspace:*",
     "@airalogy/composables": "workspace:*",
     "@airalogy/shared": "workspace:*",

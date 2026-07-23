@@ -28,7 +28,7 @@ from app.models.project_group import (
     ProjectGroupUser,
     ProtocolUser,
 )
-from app.models.protocol import Protocol
+from app.models.protocol import Protocol, ProtocolKind
 from app.models.user import User
 from app.models.user_alias import UserAlias
 from app.routers.utils import UidStr
@@ -157,6 +157,7 @@ async def lab_response(
             [
                 Protocol.project_id.in_(project_ids),
                 Protocol.deleted_at.is_(None),
+                Protocol.kind == ProtocolKind.EXPERIMENT,
             ],
         )
 
@@ -164,7 +165,10 @@ async def lab_response(
     if default_project_ids:
         default_projects_protocols_count = await Protocol.count(
             db_session,
-            [Protocol.project_id.in_(default_project_ids)],
+            [
+                Protocol.project_id.in_(default_project_ids),
+                Protocol.kind == ProtocolKind.EXPERIMENT,
+            ],
         )
 
     await lab.load_logo_attachment(db_session)

@@ -12,6 +12,9 @@ class AccessScopeType(StrEnum):
     LAB = "lab"
     PROJECT = "project"
     PROTOCOL = "protocol"
+    RESOURCE_TYPE = "resource_type"
+    RESOURCE = "resource"
+    LOCATION = "location"
 
 
 class AccessSubjectType(StrEnum):
@@ -34,9 +37,21 @@ class AccessGrant(Base):
             name="ck_access_grants_subject",
         ),
         CheckConstraint(
-            "(scope_type = 'lab' AND project_id IS NULL AND protocol_id IS NULL) "
-            "OR (scope_type = 'project' AND project_id IS NOT NULL AND protocol_id IS NULL) "
-            "OR (scope_type = 'protocol' AND protocol_id IS NOT NULL)",
+            "(scope_type = 'lab' AND project_id IS NULL AND protocol_id IS NULL "
+            "AND resource_type_id IS NULL AND resource_id IS NULL AND location_id IS NULL) "
+            "OR (scope_type = 'project' AND project_id IS NOT NULL AND protocol_id IS NULL "
+            "AND resource_type_id IS NULL AND resource_id IS NULL AND location_id IS NULL) "
+            "OR (scope_type = 'protocol' AND protocol_id IS NOT NULL "
+            "AND resource_type_id IS NULL AND resource_id IS NULL AND location_id IS NULL) "
+            "OR (scope_type = 'resource_type' AND resource_type_id IS NOT NULL "
+            "AND project_id IS NULL AND protocol_id IS NULL "
+            "AND resource_id IS NULL AND location_id IS NULL) "
+            "OR (scope_type = 'resource' AND resource_id IS NOT NULL "
+            "AND project_id IS NULL AND protocol_id IS NULL "
+            "AND resource_type_id IS NULL AND location_id IS NULL) "
+            "OR (scope_type = 'location' AND location_id IS NOT NULL "
+            "AND project_id IS NULL AND protocol_id IS NULL "
+            "AND resource_type_id IS NULL AND resource_id IS NULL)",
             name="ck_access_grants_scope",
         ),
         Index("ix_access_grants_lab_active", "lab_id", "revoked_at", "expires_at"),
@@ -63,6 +78,17 @@ class AccessGrant(Base):
     )
     protocol_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("protocols.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    resource_type_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resource_types.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    resource_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resources.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    location_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resource_locations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     role_key: Mapped[str] = mapped_column(nullable=False)
     inherit_to_children: Mapped[bool] = mapped_column(nullable=False, default=True)

@@ -96,7 +96,7 @@ wheels = [
 
 [[package]]
 name = "airalogy"
-version = "0.14.1"
+version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -106,9 +106,9 @@ dependencies = [
     { name = "tree-sitter" },
     { name = "tree-sitter-javascript" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/04/02/0fd4c48952938256fda68a365bcb8f685e46fd17fd490f986035e8fb2ef9/airalogy-0.14.1.tar.gz", hash = "sha256:7715b7c202aa9f27a9f7aa88eb56f1bf0c5d6a37d6f99598eca9e949f8b14ec4", size = 173978, upload-time = "2026-07-01T13:03:49.529Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/33/54aa4f0b9eb7fa88f03e1c24d01e8f77f9042c81adc9378e493f81daa5c8/airalogy-0.16.0.tar.gz", hash = "sha256:32b63d6e30069cfb4cb86bba638f060d8f3821932b8a55546dbf0250c3a86b07", size = 195042, upload-time = "2026-07-23T08:59:31.193Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a2/de/50a998506009bf2c232ac415eda0b5efbb297ff0b28443814f38bd4bf1dc/airalogy-0.14.1-py3-none-any.whl", hash = "sha256:9928b7d4136c75549d87fcef8ab0dd2aacc003d08a042f7ff69192bb04f0b433", size = 229062, upload-time = "2026-07-01T13:03:47.066Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/14/38c29d8025c5c3ac94be03c963bd2c23f7ca306182fca6b1883f653d1da5/airalogy-0.16.0-py3-none-any.whl", hash = "sha256:31ccbf9af3b8038f01a3ab5267a294245dc652eba22f85cc799ad35bb5d8cc78", size = 256764, upload-time = "2026-07-23T08:59:29.779Z" },
 ]
 
 [package.optional-dependencies]
@@ -118,15 +118,15 @@ markitdown = [
 
 [[package]]
 name = "airalogy-engine"
-version = "0.0.6"
+version = "0.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "airalogy" },
     { name = "boxlite" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/6c/3a8c501fcab0296d42d00cf557848fc64a31a32e6a04e254ca395f66f7cc/airalogy_engine-0.0.6.tar.gz", hash = "sha256:06ec6dce88de5a627316736d88deec08ab22987abaf0e1df000a6874dd9c8d04", size = 18688, upload-time = "2026-07-01T13:03:50.526Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/95/ff/d621106b26217d58014f01ea95ee7bd0b2f5f4b99255c7a19f4d180ebddf/airalogy_engine-0.0.8.tar.gz", hash = "sha256:b1589d4d5c7b6627d167563e5aeaa2567458f4204cfc37d6b005d7515c9f4643", size = 19657, upload-time = "2026-07-23T09:11:44.524Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/40/6ecc9098912cee83cf186e0d5d285a8cd66d60037e3ec0913f06b6eceb7e/airalogy_engine-0.0.6-py3-none-any.whl", hash = "sha256:8397b73524f2fb2d3c42afee46afa0d57e20b13e9342f105cde8708dee72c87d", size = 21823, upload-time = "2026-07-01T13:03:48.376Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/eb/d6530fda972f805f42390408a891f6cdfbdfa0c919e13393478da9305a4b/airalogy_engine-0.0.8-py3-none-any.whl", hash = "sha256:7998e233e5b0ed2fcef2b871855e6db26514e62ef1860b36979828c38dab7975", size = 22820, upload-time = "2026-07-23T09:11:43.247Z" },
 ]
 
 [[package]]
@@ -145,6 +145,7 @@ dependencies = [
     { name = "cutword" },
     { name = "fastapi", extra = ["standard"] },
     { name = "httpx" },
+    { name = "jsonschema" },
     { name = "markitdown", extra = ["docx", "pdf"] },
     { name = "masterbrain" },
     { name = "miniopy-async" },
@@ -177,8 +178,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "airalogy", extras = ["markitdown"], specifier = "==0.14.1" },
-    { name = "airalogy-engine", specifier = "==0.0.6" },
+    { name = "airalogy", extras = ["markitdown"], specifier = "==0.16.0" },
+    { name = "airalogy-engine", specifier = "==0.0.8" },
     { name = "alembic", specifier = "==1.18.1" },
     { name = "alibabacloud-dysmsapi20170525", specifier = "==4.2.0" },
     { name = "alibabacloud-dysmsapi20180501", specifier = "==1.0.9" },
@@ -188,6 +189,7 @@ requires-dist = [
     { name = "cutword", specifier = "==0.1.1" },
     { name = "fastapi", extras = ["standard"], specifier = "==0.128.0" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "jsonschema", specifier = ">=4.25.1,<5" },
     { name = "markitdown", extras = ["pdf", "docx"], specifier = ">=0.1.4" },
     { name = "masterbrain", specifier = "==0.10.0" },
     { name = "miniopy-async", specifier = "==1.22.1" },

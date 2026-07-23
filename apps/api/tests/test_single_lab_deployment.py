@@ -23,6 +23,9 @@ def test_deployment_validator_reports_profile_mismatch(monkeypatch):
 
 def test_initial_revision_excludes_tables_owned_by_later_revisions():
     initial_revision = import_module("migrations.versions.0001_initial_schema")
+    resource_revision = import_module(
+        "migrations.versions.0007_resources_and_schema_governance"
+    )
     import_models()
 
     later_tables = {
@@ -32,6 +35,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
         "access_grant_audits",
         "model_usage_events",
     }
+    later_tables.update(resource_revision.RESOURCE_TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

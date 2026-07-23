@@ -546,17 +546,17 @@ importers:
   apps/web:
     dependencies:
       '@airalogy/aimd-core':
-        specifier: ^2.14.0
-        version: 2.14.0
+        specifier: ^2.15.0
+        version: 2.15.0
       '@airalogy/aimd-editor':
         specifier: ^1.10.0
         version: 1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-recorder':
-        specifier: ^1.24.5
-        version: 1.24.5(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+        specifier: ^1.25.1
+        version: 1.25.1(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer':
-        specifier: 2.11.1
-        version: 2.11.1(vue@3.5.17(typescript@5.8.3))
+        specifier: 2.12.0
+        version: 2.12.0(vue@3.5.17(typescript@5.8.3))
       '@airalogy/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -977,7 +977,7 @@ importers:
         version: 2.13.0
       '@airalogy/aimd-recorder':
         specifier: ^1.24.5
-        version: 1.24.5(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+        version: 1.24.5(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer':
         specifier: 2.11.1
         version: 2.11.1(vue@3.5.17(typescript@5.8.3))
@@ -1528,6 +1528,9 @@ packages:
   '@airalogy/aimd-core@2.14.0':
     resolution: {integrity: sha512-0OSHbQAVIJSqegTYKdeSCQ2YGNpVLUHhxY2i3U0HjFg+GiHQXrbdawZun0PnmUm1gog0KaKWKOf5frwhck8l5w==}
 
+  '@airalogy/aimd-core@2.15.0':
+    resolution: {integrity: sha512-/DcTuf01ffLCx3ze3C/y45xKalYUyXUoYgvM4AspKNhieVGqW65zNghayl5UuPAv7pVmkiEEWyc4Is+Cydychg==}
+
   '@airalogy/aimd-editor@1.10.0':
     resolution: {integrity: sha512-yvGN43bNlNYRbDBx9igfxG6Ph0/kMyPo/Rm2T8Zyc2M2cDBQJaH9+344zFvuZxGK2nFCle8L1KzzOevcmqX/aw==}
     peerDependencies:
@@ -1553,8 +1556,20 @@ packages:
       naive-ui: 2.41.0
       vue: ^3.5.17
 
+  '@airalogy/aimd-recorder@1.25.1':
+    resolution: {integrity: sha512-pPA/0HyrPdqdQ6oFng3la0oyc6otWEM6pQ3xmZ5gMvmnBSX22y7cWJe2IqYLAQMMIpnf2/bj27N6AFQaOIK/aQ==}
+    peerDependencies:
+      '@vueuse/core': ^13.5.0
+      naive-ui: 2.41.0
+      vue: ^3.5.17
+
   '@airalogy/aimd-renderer@2.11.1':
     resolution: {integrity: sha512-+Jw5pkwCaKRJ2QfzGSVIVnImzv+wH+W0JIorXxRI7QRxDTlwAUCOo0x+cHOaWXdd4M21Nl/VfhoBPwfGmfDL6w==}
+    peerDependencies:
+      vue: ^3.5.17
+
+  '@airalogy/aimd-renderer@2.12.0':
+    resolution: {integrity: sha512-/3PQjCwR/SMZOh2HymmqVZSu951A9FvqF1BGFo6Hj/LeXU4e1HuSdyT5bXR3ebgIJkZWcGiVTz6VLRWN8mCk+Q==}
     peerDependencies:
       vue: ^3.5.17
 
@@ -9919,10 +9934,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@airalogy/aimd-core@2.15.0':
+    dependencies:
+      '@types/hast': 3.0.4
+      '@types/mdast': 4.0.4
+      '@types/unist': 3.0.3
+      acorn: 8.16.0
+      big.js: 6.2.1
+      remark-breaks: 4.0.0
+      remark-gfm: 4.0.1
+      remark-math: 6.0.0
+      remark-parse: 11.0.0
+      remark-rehype: 11.1.2
+      unified: 11.0.5
+      unist-util-visit: 5.0.0
+      vfile: 6.0.3
+      yaml: 2.5.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.15.0
+      '@airalogy/aimd-renderer': 2.12.0(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9943,8 +9977,8 @@ snapshots:
 
   '@airalogy/aimd-editor@1.10.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.15.0
+      '@airalogy/aimd-renderer': 2.12.0(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9965,8 +9999,8 @@ snapshots:
 
   '@airalogy/aimd-editor@1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.15.0
+      '@airalogy/aimd-renderer': 2.12.0(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
@@ -9985,15 +10019,15 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-editor@1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-editor@1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.15.0
+      '@airalogy/aimd-renderer': 2.12.0(vue@3.5.17(typescript@5.8.3))
       '@codingame/monaco-vscode-editor-api': 20.5.0
       '@codingame/monaco-vscode-standalone-languages': 20.5.0
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@milkdown/theme-nord': 7.18.0
-      '@milkdown/vue': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+      '@milkdown/vue': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       vue: 3.5.17(typescript@5.8.3)
     optionalDependencies:
       monaco-editor: 0.52.2
@@ -10007,10 +10041,10 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-recorder@1.24.5(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-recorder@1.24.5(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-editor': 1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-editor': 1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@types/react': 19.2.17
@@ -10036,11 +10070,11 @@ snapshots:
       - supports-color
       - typescript
 
-  '@airalogy/aimd-recorder@1.24.5(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/aimd-recorder@1.25.1(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(@vueuse/core@13.5.0(vue@3.5.17(typescript@5.8.3)))(naive-ui@2.41.0(patch_hash=49bf3c64798ecec75e2db2083f9545519a457918d4ab337d74a86205f2c9d660)(vue@3.5.17(typescript@5.8.3)))(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
-      '@airalogy/aimd-core': 2.14.0
-      '@airalogy/aimd-editor': 1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
-      '@airalogy/aimd-renderer': 2.11.1(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-core': 2.15.0
+      '@airalogy/aimd-editor': 1.11.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(monaco-editor@0.52.2)(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))
+      '@airalogy/aimd-renderer': 2.12.0(vue@3.5.17(typescript@5.8.3))
       '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
       '@types/react': 19.2.17
       '@types/react-dom': 19.2.3(@types/react@19.2.17)
@@ -10102,6 +10136,26 @@ snapshots:
       unified: 11.0.5
       vfile: 6.0.3
       vue: 3.5.17(typescript@5.9.2)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@airalogy/aimd-renderer@2.12.0(vue@3.5.17(typescript@5.8.3))':
+    dependencies:
+      '@airalogy/aimd-core': 2.15.0
+      '@types/hast': 3.0.4
+      hast-util-to-html: 9.0.5
+      katex: 0.16.45
+      rehype-katex: 7.0.1
+      rehype-raw: 7.0.0
+      remark-breaks: 4.0.0
+      remark-gfm: 4.0.1
+      remark-math: 6.0.0
+      remark-parse: 11.0.0
+      remark-rehype: 11.1.2
+      shiki: 2.5.0
+      unified: 11.0.5
+      vfile: 6.0.3
+      vue: 3.5.17(typescript@5.8.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -12399,6 +12453,31 @@ snapshots:
       - supports-color
       - typescript
 
+  '@milkdown/crepe@7.18.0(typescript@5.8.3)':
+    dependencies:
+      '@codemirror/commands': 6.10.2
+      '@codemirror/language': 6.12.1
+      '@codemirror/language-data': 6.5.2
+      '@codemirror/state': 6.5.4
+      '@codemirror/theme-one-dark': 6.1.3
+      '@codemirror/view': 6.39.13
+      '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
+      '@types/lodash-es': 4.17.12
+      clsx: 2.1.1
+      codemirror: 6.0.2
+      katex: 0.16.45
+      lodash-es: 4.17.21
+      prosemirror-virtual-cursor: 0.4.2(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)
+      remark-math: 6.0.0
+      unist-util-visit: 5.0.0
+      vue: 3.5.28(typescript@5.8.3)
+    transitivePeerDependencies:
+      - prosemirror-model
+      - prosemirror-state
+      - prosemirror-view
+      - supports-color
+      - typescript
+
   '@milkdown/ctx@7.18.0':
     dependencies:
       '@milkdown/exception': 7.18.0
@@ -12633,6 +12712,21 @@ snapshots:
       - supports-color
       - typescript
 
+  '@milkdown/vue@7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)(vue@3.5.17(typescript@5.8.3))':
+    dependencies:
+      '@milkdown/crepe': 7.18.0(typescript@5.8.3)
+      '@milkdown/kit': 7.18.0(@codemirror/language@6.12.1)(@codemirror/state@6.5.4)(@codemirror/view@6.39.13)(typescript@5.8.3)
+      vue: 3.5.17(typescript@5.8.3)
+    transitivePeerDependencies:
+      - '@codemirror/language'
+      - '@codemirror/state'
+      - '@codemirror/view'
+      - prosemirror-model
+      - prosemirror-state
+      - prosemirror-view
+      - supports-color
+      - typescript
+
   '@monaco-editor/loader@1.4.0(monaco-editor@0.52.2)':
     dependencies:
       monaco-editor: 0.52.2
@@ -12825,7 +12919,7 @@ snapshots:
       express: 4.21.2
       fast-glob: 3.3.2
       openpgp: 5.11.3
-      webpack-dev-server: 5.2.2(debug@4.3.7)(webpack@5.94.0(esbuild@0.25.6))
+      webpack-dev-server: 5.2.2(debug@4.3.7)(webpack@5.94.0)
     transitivePeerDependencies:
       - '@rspack/core'
       - '@swc/core'
@@ -20467,7 +20561,7 @@ snapshots:
 
   webidl-conversions@7.0.0: {}
 
-  webpack-dev-middleware@7.4.2(webpack@5.94.0(esbuild@0.25.6)):
+  webpack-dev-middleware@7.4.2(webpack@5.94.0):
     dependencies:
       colorette: 2.0.20
       memfs: 4.17.2
@@ -20478,7 +20572,7 @@ snapshots:
     optionalDependencies:
       webpack: 5.94.0(esbuild@0.25.6)
 
-  webpack-dev-server@5.2.2(debug@4.3.7)(webpack@5.94.0(esbuild@0.25.6)):
+  webpack-dev-server@5.2.2(debug@4.3.7)(webpack@5.94.0):
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4
@@ -20506,7 +20600,7 @@ snapshots:
       serve-index: 1.9.1
       sockjs: 0.3.24
       spdy: 4.0.2
-      webpack-dev-middleware: 7.4.2(webpack@5.94.0(esbuild@0.25.6))
+      webpack-dev-middleware: 7.4.2(webpack@5.94.0)
       ws: 8.18.3
     optionalDependencies:
       webpack: 5.94.0(esbuild@0.25.6)

@@ -1,6 +1,6 @@
 import { request } from "../request"
 
-export type AccessScopeType = "lab" | "project" | "protocol"
+export type AccessScopeType = "lab" | "project" | "protocol" | "resource_type" | "resource" | "location"
 export type AccessSubjectType = "user" | "org_unit"
 export type OrganizationalUnitMembershipRole = "manager" | "member"
 export type OrganizationalUnitType = "department" | "research_group" | "core_facility" | "project_team" | "committee" | "other"
@@ -42,6 +42,9 @@ export interface AccessGrant {
   scope_type: AccessScopeType
   project_id: string | null
   protocol_id: string | null
+  resource_type_id: string | null
+  resource_id: string | null
+  location_id: string | null
   role_key: string
   inherit_to_children: boolean
   expires_at: string | null
@@ -73,6 +76,9 @@ export interface ManageableScopes {
   lab: boolean
   project_ids: string[]
   protocol_ids: string[]
+  resource_type_ids: string[]
+  resource_ids: string[]
+  location_ids: string[]
 }
 
 export interface AccessAudit {
@@ -95,6 +101,9 @@ export interface GrantPayload {
   scopeType: AccessScopeType
   projectId?: string | null
   protocolId?: string | null
+  resourceTypeId?: string | null
+  resourceId?: string | null
+  locationId?: string | null
   roleKey: string
   inheritToChildren: boolean
   expiresAt?: string | null
@@ -110,6 +119,9 @@ function grantData(payload: GrantPayload) {
     scope_type: payload.scopeType,
     project_id: payload.scopeType === "project" || payload.scopeType === "protocol" ? payload.projectId : null,
     protocol_id: payload.scopeType === "protocol" ? payload.protocolId : null,
+    resource_type_id: payload.scopeType === "resource_type" ? payload.resourceTypeId : null,
+    resource_id: payload.scopeType === "resource" ? payload.resourceId : null,
+    location_id: payload.scopeType === "location" ? payload.locationId : null,
     role_key: payload.roleKey,
     inherit_to_children: payload.inheritToChildren,
     expires_at: payload.expiresAt || null,
@@ -194,6 +206,9 @@ export async function fetchAccessGrants(labId: string, filters: Partial<{
   orgUnitId: number
   projectId: string
   protocolId: string
+  resourceTypeId: string
+  resourceId: string
+  locationId: string
   includeRevoked: boolean
 }> = {}) {
   return request<{ grants: AccessGrant[] }>({
@@ -203,6 +218,9 @@ export async function fetchAccessGrants(labId: string, filters: Partial<{
       org_unit_id: filters.orgUnitId,
       project_id: filters.projectId,
       protocol_id: filters.protocolId,
+      resource_type_id: filters.resourceTypeId,
+      resource_id: filters.resourceId,
+      location_id: filters.locationId,
       include_revoked: filters.includeRevoked,
     },
   })
@@ -254,6 +272,9 @@ export async function fetchEffectiveAccess(labId: string, payload: {
   userId: string
   projectId?: string | null
   protocolId?: string | null
+  resourceTypeId?: string | null
+  resourceId?: string | null
+  locationId?: string | null
 }) {
   return request<EffectiveAccess>({
     url: `/access/labs/${labId}/effective`,
@@ -261,6 +282,9 @@ export async function fetchEffectiveAccess(labId: string, payload: {
       user_id: payload.userId,
       project_id: payload.projectId,
       protocol_id: payload.protocolId,
+      resource_type_id: payload.resourceTypeId,
+      resource_id: payload.resourceId,
+      location_id: payload.locationId,
     },
   })
 }

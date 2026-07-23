@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, Text, func
+from sqlalchemy import JSON, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -28,6 +28,14 @@ class Record(Base):
     number: Mapped[int] = mapped_column(nullable=False, default=1)
     hash: Mapped[str] = mapped_column(nullable=False)
     deleted_at: Mapped[datetime] = mapped_column(nullable=True)
+    revision_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="initial", server_default="initial"
+    )
+    revision_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_protocol_version: Mapped[str | None] = mapped_column(String(64))
+    # The FK is installed by revision 0007. Keeping the model column free of
+    # the future-table dependency lets the frozen 0001 schema bootstrap cleanly.
+    migration_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
 
     json_include_fields = ["airalogy_id"]
 

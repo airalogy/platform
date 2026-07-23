@@ -143,6 +143,107 @@
         </template>
       </settings-card>
 
+      <div class="mb-4 mt-6 border-t border-gray-200" />
+      <settings-card
+        :title="$t('page.protocol.schemaGovernance.releaseTitle')"
+        :description="$t('page.protocol.schemaGovernance.releaseDescription')"
+      >
+        <n-spin :show="governanceLoading">
+          <template v-if="governance">
+            <div class="grid gap-3 md:grid-cols-4">
+              <n-statistic :label="$t('page.protocol.schemaGovernance.targetVersion')">
+                v{{ governance.target_version }}
+              </n-statistic>
+              <n-statistic :label="$t('page.protocol.schemaGovernance.compatibility')">
+                <n-tag
+                  v-if="governance.compatibility_report"
+                  size="small"
+                  :type="compatibilityTagType"
+                >
+                  {{ governance.compatibility_report.status }}
+                </n-tag>
+                <span v-else class="text-sm text-gray-500">
+                  {{ $t("page.protocol.schemaGovernance.firstVersion") }}
+                </span>
+              </n-statistic>
+              <n-statistic :label="$t('page.protocol.schemaGovernance.affectedRecords')">
+                {{ governance.affected_records }}
+              </n-statistic>
+              <n-statistic :label="$t('page.protocol.schemaGovernance.affectedResources')">
+                {{ governance.affected_resource_type_revisions }}
+              </n-statistic>
+            </div>
+
+            <n-alert
+              v-if="governance.compatibility_report"
+              class="mt-4"
+              :type="governance.compatibility_report.semver_valid ? 'success' : 'error'"
+              :title="$t('page.protocol.schemaGovernance.semverResult')"
+            >
+              {{
+                $t("page.protocol.schemaGovernance.semverDetail", {
+                  actual: governance.compatibility_report.actual_bump,
+                  recommended: governance.compatibility_report.recommended_bump,
+                })
+              }}
+            </n-alert>
+
+            <n-collapse
+              v-if="governance.compatibility_report?.changes.length || migrationManifests.length"
+              class="mt-4"
+            >
+              <n-collapse-item
+                v-if="governance.compatibility_report?.changes.length"
+                :title="$t('page.protocol.schemaGovernance.schemaChanges', { count: governance.compatibility_report.changes.length })"
+                name="changes"
+              >
+                <div class="space-y-2">
+                  <div
+                    v-for="(change, index) in governance.compatibility_report.changes"
+                    :key="`${change.path}-${index}`"
+                    class="flex items-start gap-2 rounded-lg border border-gray-100 p-3 dark:border-gray-700"
+                  >
+                    <n-tag
+                      size="small"
+                      :type="change.classification === 'breaking' ? 'error' : change.classification === 'compatible' ? 'success' : 'warning'"
+                    >
+                      {{ change.classification }}
+                    </n-tag>
+                    <div class="min-w-0">
+                      <div class="break-all font-mono text-xs">
+                        {{ change.path || "schema" }}
+                      </div>
+                      <div class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                        {{ change.message }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </n-collapse-item>
+              <n-collapse-item
+                v-if="migrationManifests.length"
+                :title="$t('page.protocol.schemaGovernance.migrationPath')"
+                name="migrations"
+              >
+                <n-timeline>
+                  <n-timeline-item
+                    v-for="(manifest, index) in migrationManifests"
+                    :key="index"
+                    type="info"
+                    :title="`v${manifest.from || '?'} → v${manifest.to || '?'}`"
+                    :content="String(manifest.version || 'airalogy.migration.v1')"
+                  />
+                </n-timeline>
+              </n-collapse-item>
+            </n-collapse>
+          </template>
+          <n-empty
+            v-else-if="!governanceLoading"
+            :description="$t('page.protocol.schemaGovernance.unavailable')"
+          />
+        </n-spin>
+      </settings-card>
+
       <!-- Danger Zone -->
       <div class="mb-4 mt-6 border-t border-gray-200" />
       <settings-card
@@ -336,6 +437,7 @@
 </template>
 
 <script setup lang="ts">
+import type { ProtocolVersionGovernance } from "@/service/api/schema-governance"
 import {
   type BaseFormModel,
   DeleteConfirmationModal,
@@ -347,6 +449,7 @@ import { useBoolean, useProjectPermissions } from "@/composables"
 import { LAB_OWNER_AND_MANAGER } from "@/composables/useLabPermissions"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { deleteProtocol, getResearchEnvVariables, putProtocolInfo } from "@/service/api/project-protocols"
+import { fetchProtocolVersionGovernance } from "@/service/api/schema-governance"
 import { useAuthStore } from "@/store/modules/auth"
 import { useClosableMessage, useLoading } from "@airalogy/composables"
 import { getRealAiralogyId } from "@airalogy/shared"
@@ -380,6 +483,8 @@ const showEnvValues = ref(false)
 const isEnvEditing = ref(false)
 const { bool: isEnvCopied, setTrue: setEnvCopied, setFalse: setEnvNotCopied } = useBoolean(false)
 const { loading: envSaving, startLoading: startEnvSaving, endLoading: endEnvSaving } = useLoading()
+const governance = ref<ProtocolVersionGovernance | null>(null)
+const governanceLoading = ref(false)
 
 const initValue = computed(
   (): FormModel => {
@@ -417,6 +522,22 @@ const protocolVersionDisplay = computed(() => {
     return ""
 
   return `${protocolInfo.value.latest_version || protocolInfo.value.metadata?.version || ""}`
+})
+
+const compatibilityTagType = computed(() => {
+  const status = governance.value?.compatibility_report?.status
+  if (status === "compatible")
+    return "success"
+  if (status === "breaking")
+    return "error"
+  return "warning"
+})
+
+const migrationManifests = computed<Array<Record<string, unknown>>>(() => {
+  const value = governance.value?.migration_manifest
+  if (Array.isArray(value))
+    return value
+  return value ? [value] : []
 })
 
 // Permission checks
@@ -643,6 +764,27 @@ watch(() => protocolInfo.value?.id, async (id) => {
     }
   }
 }, { immediate: true })
+
+watch(
+  [() => protocolInfo.value?.id, protocolVersionDisplay],
+  async ([id, version]) => {
+    if (!id || !version) {
+      governance.value = null
+      return
+    }
+    governanceLoading.value = true
+    try {
+      governance.value = await fetchProtocolVersionGovernance(String(id), version)
+    }
+    catch {
+      governance.value = null
+    }
+    finally {
+      governanceLoading.value = false
+    }
+  },
+  { immediate: true },
+)
 
 // Load environment variables on mount
 onMounted(async () => {

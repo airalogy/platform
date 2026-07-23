@@ -876,6 +876,7 @@ class AiraArchiveImporter:
                 number=number,
                 version=pending_record.record_version,
                 hash=get_data_sha1({"data": pending_record.data}),
+                revision_kind="import",
             )
             self.db_session.add(record)
             created_by_key[(record.id, record.version)] = record

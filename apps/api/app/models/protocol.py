@@ -21,6 +21,11 @@ class ProtocolStatus(IntEnum):
     ACTIVE = 1
 
 
+class ProtocolKind:
+    EXPERIMENT = "experiment"
+    RESOURCE_DEFINITION = "resource_definition"
+
+
 class Protocol(Base):
     __tablename__ = "protocols"
 
@@ -38,6 +43,13 @@ class Protocol(Base):
     )
     uid: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
+    kind: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ProtocolKind.EXPERIMENT,
+        server_default=ProtocolKind.EXPERIMENT,
+        index=True,
+    )
     latest_version: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.now)

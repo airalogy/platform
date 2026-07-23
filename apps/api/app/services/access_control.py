@@ -34,6 +34,14 @@ ALL_CAPABILITIES = frozenset(
         "record.create",
         "record.delete",
         "record.read",
+        "resource.read",
+        "resource.operate",
+        "resource.custody",
+        "resource.manage",
+        "inventory.read",
+        "inventory.operate",
+        "equipment.book",
+        "equipment.service",
     }
 )
 
@@ -68,6 +76,39 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
         {"protocol.create", "protocol.read", "assigner.execute", "record.create", "record.read"}
     ),
     "viewer": frozenset({"protocol.read", "record.read"}),
+    "resource_manager": frozenset(
+        {
+            "resource.read",
+            "resource.operate",
+            "resource.custody",
+            "resource.manage",
+            "inventory.read",
+            "inventory.operate",
+            "equipment.book",
+            "equipment.service",
+        }
+    ),
+    "resource_custodian": frozenset(
+        {
+            "resource.read",
+            "resource.operate",
+            "resource.custody",
+            "inventory.read",
+            "inventory.operate",
+            "equipment.book",
+            "equipment.service",
+        }
+    ),
+    "resource_operator": frozenset(
+        {
+            "resource.read",
+            "resource.operate",
+            "inventory.read",
+            "inventory.operate",
+            "equipment.book",
+        }
+    ),
+    "resource_viewer": frozenset({"resource.read", "inventory.read"}),
 }
 
 GRANTABLE_ROLE_KEYS = frozenset(ROLE_CAPABILITIES) - {"lab_owner", "lab_admin"}
@@ -80,6 +121,10 @@ ROLE_LABELS = {
     "contributor": "Contributor",
     "recorder": "Recorder",
     "viewer": "Viewer",
+    "resource_manager": "Resource manager",
+    "resource_custodian": "Resource custodian",
+    "resource_operator": "Resource operator",
+    "resource_viewer": "Resource viewer",
 }
 
 ROLE_LEGACY_PROJECT_ROLE = {
@@ -126,6 +171,13 @@ ACTION_CAPABILITY = {
     "create_record": "record.create",
     "delete_record": "record.delete",
     "read_record": "record.read",
+    "read_resource": "resource.read",
+    "operate_resource": "resource.operate",
+    "manage_resource": "resource.manage",
+    "read_inventory": "inventory.read",
+    "operate_inventory": "inventory.operate",
+    "book_equipment": "equipment.book",
+    "service_equipment": "equipment.service",
 }
 
 
@@ -173,7 +225,11 @@ class AccessDecision:
 
     @property
     def strongest_project_role(self) -> ProjectRole | None:
-        roles = [ROLE_LEGACY_PROJECT_ROLE[key] for key in self.role_keys]
+        roles = [
+            ROLE_LEGACY_PROJECT_ROLE[key]
+            for key in self.role_keys
+            if key in ROLE_LEGACY_PROJECT_ROLE
+        ]
         return min(roles) if roles else None
 
     def as_dict(self) -> dict[str, Any]:
@@ -276,7 +332,113 @@ def _grant_scope_id(grant: AccessGrant) -> str:
         return str(grant.protocol_id)
     if grant.scope_type == AccessScopeType.PROJECT:
         return str(grant.project_id)
+    if grant.scope_type == AccessScopeType.RESOURCE_TYPE:
+        return str(grant.resource_type_id)
+    if grant.scope_type == AccessScopeType.RESOURCE:
+        return str(grant.resource_id)
+    if grant.scope_type == AccessScopeType.LOCATION:
+        return str(grant.location_id)
     return str(grant.lab_id)
+
+
+async def resolve_resource_access(
+    db_session: AsyncSession,
+    user_id: UUID,
+    lab_id: UUID,
+    *,
+    resource_type_id: UUID | None = None,
+    resource_id: UUID | None = None,
+    location_id: UUID | None = None,
+) -> AccessDecision:
+    """Resolve Lab and resource-scoped grants without requiring a Project."""
+
+    decision = AccessDecision()
+    membership = await LabUser.find_by(
+        db_session, [LabUser.lab_id == lab_id, LabUser.user_id == user_id]
+    )
+    if membership is None:
+        return decision
+    if membership.role <= LabRole.MANAGER:
+        role_key = (
+            "lab_owner"
+            if membership.role == LabRole.OWNER
+            else "lab_admin"
+        )
+        decision.add(
+            role_key,
+            AccessSource(
+                source_type="lab_membership",
+                role_key=role_key,
+                scope_type=AccessScopeType.LAB,
+                scope_id=str(lab_id),
+                subject_type="user",
+                subject_id=str(user_id),
+            ),
+        )
+    else:
+        decision.add(
+            "resource_viewer",
+            AccessSource(
+                source_type="lab_membership",
+                role_key="resource_viewer",
+                scope_type=AccessScopeType.LAB,
+                scope_id=str(lab_id),
+                subject_type="user",
+                subject_id=str(user_id),
+            ),
+        )
+
+    chain = [(AccessScopeType.LAB, str(lab_id))]
+    if resource_type_id is not None:
+        chain.insert(0, (AccessScopeType.RESOURCE_TYPE, str(resource_type_id)))
+    if location_id is not None:
+        chain.insert(0, (AccessScopeType.LOCATION, str(location_id)))
+    if resource_id is not None:
+        chain.insert(0, (AccessScopeType.RESOURCE, str(resource_id)))
+    positions = {scope: index for index, scope in enumerate(chain)}
+    org_unit_ids = await organizational_unit_ids_for_user(
+        db_session, user_id, lab_id
+    )
+    subject_condition = AccessGrant.user_id == user_id
+    if org_unit_ids:
+        subject_condition = or_(
+            subject_condition, AccessGrant.group_id.in_(org_unit_ids)
+        )
+    grants = (
+        await db_session.scalars(
+            select(AccessGrant).where(
+                AccessGrant.lab_id == lab_id,
+                AccessGrant.revoked_at.is_(None),
+                or_(
+                    AccessGrant.expires_at.is_(None),
+                    AccessGrant.expires_at > utcnow_naive(),
+                ),
+                subject_condition,
+            )
+        )
+    ).all()
+    for grant in grants:
+        scope = (grant.scope_type, _grant_scope_id(grant))
+        position = positions.get(scope)
+        if position is None or (position > 0 and not grant.inherit_to_children):
+            continue
+        subject_id = (
+            grant.user_id if grant.user_id is not None else grant.group_id
+        )
+        decision.add(
+            grant.role_key,
+            AccessSource(
+                source_type="grant",
+                role_key=grant.role_key,
+                scope_type=grant.scope_type,
+                scope_id=scope[1],
+                inherited=position > 0,
+                grant_id=str(grant.id),
+                subject_type=grant.subject_type,
+                subject_id=str(subject_id),
+            ),
+        )
+    return decision
 
 
 async def resolve_structured_access(

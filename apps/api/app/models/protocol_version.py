@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, BinaryIO
+from typing import Annotated, BinaryIO, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, StringConstraints
@@ -40,6 +40,7 @@ class ProtocolMetadata(BaseModel):
         ),
     ] = "0.0.1"
     name: str = ""
+    kind: Literal["experiment", "resource_definition"] = "experiment"
     authors: list[ProtocolMetadataUser] | None = None
     maintainers: list[ProtocolMetadataUser] | None = None
     disciplines: list[str] | None = None
@@ -69,6 +70,8 @@ class ProtocolVersion(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.now)
     version: Mapped[str] = mapped_column(nullable=False, default="0.0.1")
     assigner_graph: Mapped[dict] = mapped_column(JSON)
+    compatibility_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    migration_manifest: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     protocol: Mapped[any] = relationship("Protocol", overlaps="protocol_versions")
 

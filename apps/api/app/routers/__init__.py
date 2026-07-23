@@ -1,5 +1,6 @@
 import logging
 import logging.config
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +24,7 @@ from app.services.model_usage import (
     clear_platform_usage_tracking,
     configure_platform_usage_tracking,
 )
+from app.services.resource_job_worker import run_persistent_job_worker
 
 from .airalogy_api import router as airalogy_router
 from .access import router as access_router
@@ -48,7 +50,9 @@ from .protocol_versions import router as protocol_versions_router
 from .protocols import router as protocols_router
 from .questions import router as questions_router
 from .records import router as records_router
+from .resources import router as resources_router
 from .search import router as search_router
+from .schema_governance import router as schema_governance_router
 from .seo import router as seo_router
 from .stars import router as stars_router
 from .user_aliases import router as user_aliases_router
@@ -65,9 +69,16 @@ log_path.parent.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_platform_usage_tracking()
+    resource_job_stop = asyncio.Event()
+    resource_job_task = asyncio.create_task(
+        run_persistent_job_worker(resource_job_stop),
+        name="resource-governance-jobs",
+    )
     try:
         yield
     finally:
+        resource_job_stop.set()
+        await resource_job_task
         clear_platform_usage_tracking()
         await close_protocol_engine_pool()
 
@@ -241,12 +252,14 @@ app.include_router(groups_router)
 app.include_router(protocols_router)
 app.include_router(protocol_versions_router)
 app.include_router(records_router)
+app.include_router(resources_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)
 app.include_router(aira_imports_router)
 app.include_router(questions_router)
 app.include_router(answers_router)
 app.include_router(search_router)
+app.include_router(schema_governance_router)
 app.include_router(seo_router)
 app.include_router(chats_router)
 app.include_router(editor_router)

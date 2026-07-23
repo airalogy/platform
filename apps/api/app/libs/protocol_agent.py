@@ -28,6 +28,8 @@ SUPPORTED_PROTOCOL_ACTIONS = {
     "var_assign",
     "var_validate",
     "import_records",
+    "migrate_schema",
+    "schema_migrate",
 }
 
 _FIELD_KEY_MAP = {
@@ -410,6 +412,22 @@ async def protocol_exec_in_engine(
                 log_file=PROTOCOL_ENGINE_DEBUG_LOG_FILE,
             )
 
+        elif action == "migrate_schema":
+            result = await entry.engine.migrate_schema(
+                data=params["data"],
+                manifest=params["manifest"],
+                debug=config.AIRALOGY_ENGINE_DEBUG,
+                log_file=PROTOCOL_ENGINE_DEBUG_LOG_FILE,
+            )
+
+        elif action == "schema_migrate":
+            result = await entry.engine.migrate_schema(
+                data=params.get("data", {}),
+                manifest=params.get("manifest", {}),
+                debug=config.AIRALOGY_ENGINE_DEBUG,
+                log_file=PROTOCOL_ENGINE_DEBUG_LOG_FILE,
+            )
+
         else:
             result = {
                 "success": False,
@@ -442,6 +460,10 @@ async def protocol_exec_in_engine(
 
 
 async def protocol_exec(action: str, package_name: str, params: dict = {}) -> dict:
+    # Migration transforms are never executed in the host process because they
+    # are user-packaged code. AiralogyEngine injects no secrets for this action.
+    if action == "migrate_schema":
+        return await protocol_exec_in_engine(action, package_name, params)
     # 创建子进程
     if config.PROTOCOL_RUN_ENV == "engine":
         return await protocol_exec_in_engine(action, package_name, params)

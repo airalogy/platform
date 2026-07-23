@@ -8,6 +8,7 @@ export interface IAIMDInputProps {
   model: IFieldItem
   id: string
   disabled?: boolean
+  required?: boolean
   scope: Protocol.ScopeFieldKey
   info: Record<string, any>
   placeholder?: string

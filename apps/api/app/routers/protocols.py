@@ -45,6 +45,7 @@ async def get_protocols(
     sorted_by: Literal["stars_count", "forks_count", "updated_at"] | None = None,
     folder_id: int | None = None,
     folder_empty: bool | None = None,
+    kind: Literal["experiment", "resource_definition", "all"] = "experiment",
     page: int = 1,
     page_size: int = 10,
 ):
@@ -56,6 +57,8 @@ async def get_protocols(
 
     # Build conditions
     conditions = [Protocol.deleted_at.is_(None)]
+    if kind != "all":
+        conditions.append(Protocol.kind == kind)
     # project = None
 
     if project_id is not None:

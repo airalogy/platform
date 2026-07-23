@@ -21,7 +21,7 @@ from app.models.project import (
     ProjectType,
     ProjectUser,
 )
-from app.models.protocol import Protocol
+from app.models.protocol import Protocol, ProtocolKind
 from app.models.user import User
 from app.models.user_alias import UserAlias
 from app.routers.permission import (
@@ -315,6 +315,7 @@ async def get_projects(
             and_(
                 Protocol.project_id == Project.id,
                 Protocol.deleted_at.is_(None),
+                Protocol.kind == ProtocolKind.EXPERIMENT,
             ),
         )
         .group_by(
@@ -400,7 +401,11 @@ async def project_response(
     users_count += group_users_count
     protocols_count = await Protocol.count(
         db_session,
-        [Protocol.project_id == project.id, Protocol.deleted_at.is_(None)],
+        [
+            Protocol.project_id == project.id,
+            Protocol.deleted_at.is_(None),
+            Protocol.kind == ProtocolKind.EXPERIMENT,
+        ],
     )
     children_count = await Project.count(
         db_session,

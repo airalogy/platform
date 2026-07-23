@@ -251,7 +251,11 @@ interface IValidateRecordResult {
   errors: PydanticError[]
 }
 
-export async function postValidateRecord(protocolId: string, payload: Record<string, any>) {
+export async function postValidateRecord(
+  protocolId: string,
+  payload: Record<string, any>,
+  protocolVersion?: string,
+) {
   if (!protocolId) {
     throw new Error("protocolId is required")
   }
@@ -261,6 +265,7 @@ export async function postValidateRecord(protocolId: string, payload: Record<str
     method: "POST",
     data: {
       var: payload,
+      protocol_version: protocolVersion,
     },
   })
 
@@ -478,6 +483,7 @@ export async function postNewResearchRecord(
     >
   > & {
     report?: string
+    revision_reason?: string
   },
 ) {
   if (!protocolId) {
@@ -634,6 +640,7 @@ export async function putUpdateResearchRecord(
     >
   > & {
     report?: string
+    revision_reason?: string
   },
 ) {
   if (!protocolId) {
@@ -643,7 +650,7 @@ export async function putUpdateResearchRecord(
     throw new Error("recordId is required")
   }
 
-  const { research_check, research_step, research_variable } = payload
+  const { research_check, research_step, research_variable, revision_reason } = payload
   return await request({
     url: `/protocols/${protocolId}/records/${recordId}`,
     method: "PUT",
@@ -652,6 +659,7 @@ export async function putUpdateResearchRecord(
       step: research_step || {},
       var: research_variable || {},
       report: "",
+      revision_reason: revision_reason || "",
     },
   })
 }
@@ -888,7 +896,7 @@ export async function postReuseProtocol(payload: {
 export async function getProtocolRecordReport(payload: {
   recordId: string | number
   protocolId: string | number
-  version?: string
+  version?: string | number
 }) {
   const { recordId, protocolId, version = 1 } = payload
 

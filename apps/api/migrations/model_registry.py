@@ -22,6 +22,7 @@ MODEL_MODULES = [
     "app.models.protocol_version",
     "app.models.question",
     "app.models.record",
+    "app.models.resource",
     "app.models.star",
     "app.models.upvote",
     "app.models.user",

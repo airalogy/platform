@@ -168,6 +168,7 @@
 <script setup lang="ts">
 import type { IEmits as AIMDEmits, IAIMDWrapperProps } from "@/components/custom/aimd/types/aimd-types"
 import type { AimdTemplateEnv, IRecordData, IRecordDataKey, ScopeFieldKey } from "@airalogy/aimd-core/types"
+import type { AimdResourceResolverMap } from "@airalogy/aimd-recorder"
 import type { ContextItemWithId } from "@airalogy/components/chat/providers/types"
 import type { CurrentRecorderRecordFieldSummary } from "@airalogy/components/chat/providers/useChatProvider"
 
@@ -183,9 +184,17 @@ import ChatComponent from "@/components/chat/index.vue"
 import AddRecordLayout from "@/components/custom/add-record-layout.vue"
 import { createPlatformAimdFormRenderers } from "@/components/custom/aimd/composables/createPlatformAimdFormRenderers"
 import { useAIMDProvide } from "@/components/custom/aimd/composables/useAIMDHelpers"
+import { platformResourceResolverKey } from "@/components/custom/aimd/resourceResolver"
 import { useNaiveForm } from "@/composables"
 
 import { getCachedAttachment } from "@/service/api/attachments"
+import {
+  fetchResource,
+  fetchResourceAvailability,
+  fetchResourceTypes,
+  prepareResourceOutput,
+  searchResourceRefs,
+} from "@/service/api/resources"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
 import { themeSettings } from "@/theme/settings"
@@ -263,6 +272,125 @@ const chatRef = ref<{ setDocked: (val: boolean) => void } | null>(null)
 
 const { airalogyId } = useProtocolInfoStore()!
 const { currentRecorderRecordContext } = useChatProvider()
+
+const resourceLabId = computed(() => String(props.protocol?.lab_id || ""))
+const resourceTypeCache = shallowRef<Awaited<ReturnType<typeof fetchResourceTypes>>["items"]>([])
+
+async function ensureResourceTypes() {
+  if (resourceLabId.value && resourceTypeCache.value.length === 0) {
+    resourceTypeCache.value = (await fetchResourceTypes(resourceLabId.value)).items
+  }
+  return resourceTypeCache.value
+}
+
+const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
+  if (!resourceLabId.value)
+    return undefined
+
+  const resolver = {
+    async search(query: string, context: any) {
+      const response = await searchResourceRefs(resourceLabId.value, {
+        q: query,
+        resource_type: context.entity,
+        role: context.role || "reference",
+      })
+      return response.items.map(item => ({
+        ...item,
+        source: "platform-resource-library",
+      }))
+    },
+    async resolve(id: string) {
+      const item = await fetchResource(resourceLabId.value, id)
+      return {
+        id: item.id,
+        entity: "resource",
+        source: "platform-resource-library",
+        label: item.name,
+        snapshot: { name: item.name, code: item.code, status: item.status },
+      }
+    },
+    async getAvailability(resource: { id: string }, context: any) {
+      const response = await fetchResourceAvailability(resourceLabId.value, resource.id)
+      if (context.role === "equipment") {
+        return {
+          equipment_slots: response.equipment_bookings.map(item => ({
+            id: item.id,
+            starts_at: item.starts_at,
+            ends_at: item.ends_at,
+            label: item.label,
+            available: item.available,
+          })),
+        }
+      }
+      const lots = new Map<string, { id: string, label: string, available: string, unit: string }>()
+      let available = new Big(0)
+      let unit = ""
+      const containers = response.containers.map((raw: any) => {
+        const balance = raw.balance || {}
+        const lot = raw.lot
+        if (balance.available !== undefined) {
+          available = available.plus(String(balance.available))
+          unit ||= String(balance.unit || raw.unit || "")
+        }
+        if (lot?.id && !lots.has(String(lot.id))) {
+          lots.set(String(lot.id), {
+            id: String(lot.id),
+            label: String(lot.code || lot.id),
+            available: "0",
+            unit: String(balance.unit || raw.unit || ""),
+          })
+        }
+        if (lot?.id && balance.available !== undefined) {
+          const current = lots.get(String(lot.id))!
+          current.available = new Big(current.available).plus(String(balance.available)).toString()
+        }
+        return {
+          id: String(raw.id),
+          lot_id: raw.lot_id ? String(raw.lot_id) : undefined,
+          label: String(raw.code || raw.id),
+          location: raw.location?.path,
+          available: balance.available !== undefined ? String(balance.available) : undefined,
+          unit: String(balance.unit || raw.unit || ""),
+        }
+      })
+      return {
+        available: available.toString(),
+        unit,
+        lots: [...lots.values()],
+        containers,
+      }
+    },
+    async prepareOutput(draft: any, context: any) {
+      const types = await ensureResourceTypes()
+      const type = types.find(item =>
+        item.code.toLowerCase() === String(context.entity || "").toLowerCase(),
+      )
+      if (!type)
+        throw new Error(`Resource type ${context.entity || ""} is not registered`)
+      const id = crypto.randomUUID()
+      const name = String(draft.label || draft.snapshot?.name || context.fieldKey)
+      const code = String(draft.snapshot?.code || `OUT-${id.slice(0, 8).toUpperCase()}`)
+      const response = await prepareResourceOutput(resourceLabId.value, {
+        id,
+        resource_type_id: type.id,
+        name,
+        code,
+        data: (draft.snapshot?.data && typeof draft.snapshot.data === "object") ? draft.snapshot.data : {},
+      })
+      const value = response.resource_ref as any
+      return {
+        id,
+        value,
+        payload: value.prepared_output,
+      }
+    },
+  }
+  return new Proxy({ resource: resolver } as AimdResourceResolverMap, {
+    get(target, key) {
+      return typeof key === "string" ? (target[key] || resolver) : undefined
+    },
+  })
+})
 
 // Resolve file paths for protocol assets
 function resolveProtocolFile(src: string) {
@@ -435,6 +563,27 @@ const {
   // Restore Field Record
   restoreFieldRecord,
 } = useFieldState(props, templateRef)
+
+function recordScopeValues(scope: Record<string, { value?: unknown }> | undefined) {
+  return Object.fromEntries(
+    Object.entries(scope || {})
+      .filter(([key]) => key !== "__SCOPE__")
+      .map(([key, item]) => [key, item?.value]),
+  )
+}
+
+const resourceRecord = computed(() => ({
+  var: recordScopeValues((fieldModel as any).research_variable),
+  step: recordScopeValues((fieldModel as any).research_step) as any,
+  check: recordScopeValues((fieldModel as any).research_check) as any,
+  quiz: recordScopeValues((fieldModel as any).quiz),
+}))
+
+provide(platformResourceResolverKey, {
+  resolvers: resourceResolvers,
+  record: resourceRecord,
+  labId: resourceLabId,
+})
 
 const {
   rules: validationRules,

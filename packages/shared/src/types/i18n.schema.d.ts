@@ -167,6 +167,14 @@ declare namespace I18n {
       preview: string
       download: string
       csvPreview: string
+      viewAll: string
+      import: string
+      export: string
+      updateTime: string
+      time: string
+      search: string
+      approve: string
+      reject: string
       pdfPreview: string
       readOnly: string
       info: string
@@ -1141,6 +1149,36 @@ declare namespace I18n {
           exportSuccess: string
           exportFailed: string
         }
+        schemaGovernance: {
+          originalVersion: string
+          recordRevision: string
+          targetVersion: string
+          project: string
+          migrate: string
+          help: string
+          currentOnly: string
+          projectionPreview: string
+          migrationPreview: string
+          notCollectedCount: string
+          notCollectedTitle: string
+          issuesTitle: string
+          previewData: string
+          migrationPath: string
+          reason: string
+          reasonPlaceholder: string
+          confirmMigration: string
+          migrationSuccess: string
+          releaseTitle: string
+          releaseDescription: string
+          compatibility: string
+          firstVersion: string
+          affectedRecords: string
+          affectedResources: string
+          semverResult: string
+          semverDetail: string
+          schemaChanges: string
+          unavailable: string
+        }
         draft: {
           restoreButton: string
           saveButton: string
@@ -1167,6 +1205,12 @@ declare namespace I18n {
           uploadError: string
           uploadSuccess: string
           uploadFailed: string
+          resourceCommitTitle: string
+          resourceCommitDescription: string
+          resourceContainer: string
+          resourceBooking: string
+          confirmResourceCommit: string
+          correctionReason: string
           workflowContinueTitle: string
           workflowContinueContent: string
           workflowStay: string
@@ -1567,6 +1611,157 @@ declare namespace I18n {
           contentPlaceholder: string
           includeLabel: string
           excludeLabel: string
+        }
+      }
+      resourceLibrary: {
+        labWorkspace: string
+        title: string
+        description: string
+        overview: string
+        resources: string
+        inventory: string
+        locations: string
+        bookings: string
+        reminders: string
+        events: string
+        types: string
+        scan: string
+        scanHint: string
+        scanPlaceholder: string
+        addResource: string
+        recentResources: string
+        recentResourcesHint: string
+        searchPlaceholder: string
+        resourceType: string
+        noResources: string
+        appendOnlyHint: string
+        locationsHint: string
+        addLocation: string
+        bookingsHint: string
+        newBooking: string
+        remindersHint: string
+        noReminders: string
+        typesHint: string
+        registerType: string
+        builtinTemplates: string
+        viewTemplate: string
+        downloadTemplate: string
+        stableCode: string
+        visibility: string
+        labVisible: string
+        restricted: string
+        schemaData: string
+        parentLocation: string
+        equipment: string
+        bookingRange: string
+        purpose: string
+        registerTypeHint: string
+        protocolVersionId: string
+        selectResourceDefinition: string
+        registered: string
+        upgradeType: string
+        resourceMigrationPreview: string
+        resourceMigrationSummary: string
+        migrateReadyResources: string
+        resourceMigrationQueued: string
+        capabilities: string
+        bookingPolicy: string
+        bookingNone: string
+        bookingAuto: string
+        bookingApproval: string
+        bookingAuthorized: string
+        importResources: string
+        importHint: string
+        resourceDetail: string
+        reviseResource: string
+        revisionReason: string
+        resourceRevised: string
+        revisionHistory: string
+        relatedRecords: string
+        noRelatedRecords: string
+        lineage: string
+        noLineage: string
+        resourceAudit: string
+        noInventoryEvents: string
+        schemaVersion: string
+        customFields: string
+        resourcesHint: string
+        depleted: string
+        depletedHint: string
+        expiring: string
+        expiringHint: string
+        activeBookings: string
+        activeBookingsHint: string
+        unreadReminders: string
+        unreadRemindersHint: string
+        operation: string
+        resource: string
+        quantity: string
+        beforeAfter: string
+        reason: string
+        path: string
+        locationKind: string
+        start: string
+        end: string
+        protocolVersion: string
+        invalidJson: string
+        resourceCreated: string
+        recordInventory: string
+        container: string
+        location: string
+        available: string
+        unit: string
+        countedBalance: string
+        receipt: string
+        consumption: string
+        adjustment: string
+        physicalCount: string
+        disposal: string
+        inventoryRecorded: string
+        transferInventory: string
+        fromContainer: string
+        toContainer: string
+        inventoryTransferred: string
+        reserveInventory: string
+        reservations: string
+        inventoryReserved: string
+        release: string
+        expiresAt: string
+        inventoryContainers: string
+        addLot: string
+        addContainer: string
+        lot: string
+        supplier: string
+        createLabel: string
+        resourceLabel: string
+        printLabel: string
+        serviceHistory: string
+        addServiceEvent: string
+        noServiceEvents: string
+        serviceKind: string
+        dueAt: string
+        notes: string
+        revision: string
+        useCamera: string
+        stopCamera: string
+        openScannedItem: string
+        cameraUnavailable: string
+        nameColumn: string
+        codeColumn: string
+        fieldMapping: string
+        invalidFieldMapping: string
+        importPreviewSummary: string
+        importIssues: string
+        confirmImport: string
+        importCompleted: string
+        valid: string
+        invalid: string
+        status: {
+          active: string
+          quarantined: string
+          depleted: string
+          retired: string
+          archived: string
         }
       }
     }
