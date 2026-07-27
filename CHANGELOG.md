@@ -32,3 +32,7 @@ Target initial version: `0.1.0`.
 - Renamed the persisted workflow domain model from `ResearchWorkflow` to `ProtocolWorkflow`, including the public initial schema table name `protocol_workflows`.
 - Consolidated database setup into a single initial schema migration.
 - Excluded generated API artifacts, local caches, logs, certificates, environment files, and database dump files from the public source tree.
+
+### Fixed
+
+- Fixed the Lab resource library failing to render on first client-side navigation because its modal roots were incompatible with route transitions.

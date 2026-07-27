@@ -277,616 +277,628 @@
         </section>
       </template>
     </n-spin>
-  </div>
 
-  <n-modal v-model:show="resourceModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addResource')" :show-icon="false" class="resource-dialog">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.resourceType')" required>
-        <n-select v-model:value="resourceDraft.resource_type_id" :options="resourceTypeOptions" data-testid="resource-type-select" />
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="$t('common.name')" required>
-          <n-input v-model:value="resourceDraft.name" data-testid="resource-name-input" />
+    <n-modal v-model:show="resourceModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addResource')" :show-icon="false" class="resource-dialog">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.resourceType')" required>
+          <n-select v-model:value="resourceDraft.resource_type_id" :options="resourceTypeOptions" data-testid="resource-type-select" />
         </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
-          <n-input v-model:value="resourceDraft.code" data-testid="resource-code-input" />
+        <div class="form-grid">
+          <n-form-item :label="$t('common.name')" required>
+            <n-input v-model:value="resourceDraft.name" data-testid="resource-name-input" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
+            <n-input v-model:value="resourceDraft.code" data-testid="resource-code-input" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.visibility')">
+          <n-radio-group v-model:value="resourceDraft.visibility">
+            <n-radio-button value="lab">
+              {{ $t("page.resourceLibrary.labVisible") }}
+            </n-radio-button>
+            <n-radio-button value="restricted">
+              {{ $t("page.resourceLibrary.restricted") }}
+            </n-radio-button>
+          </n-radio-group>
         </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.visibility')">
-        <n-radio-group v-model:value="resourceDraft.visibility">
-          <n-radio-button value="lab">
-            {{ $t("page.resourceLibrary.labVisible") }}
-          </n-radio-button>
-          <n-radio-button value="restricted">
-            {{ $t("page.resourceLibrary.restricted") }}
-          </n-radio-button>
-        </n-radio-group>
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.schemaData')" :feedback="resourceJsonError" :validation-status="resourceJsonError ? 'error' : undefined">
-        <n-input v-model:value="resourceDraft.data" type="textarea" :rows="8" placeholder="{ }" data-testid="resource-data-input" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="resourceModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" data-testid="resource-save-button" @click="saveResource">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="locationModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addLocation')" :show-icon="false">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('common.name')" required>
-        <n-input v-model:value="locationDraft.name" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
-        <n-input v-model:value="locationDraft.code" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.parentLocation')">
-        <n-select v-model:value="locationDraft.parent_id" clearable :options="locationOptions" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="locationModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" @click="saveLocation">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="bookingModalVisible" preset="dialog" :title="$t('page.resourceLibrary.newBooking')" :show-icon="false">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.equipment')" required>
-        <n-select v-model:value="bookingDraft.resource_id" filterable :options="equipmentOptions" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.bookingRange')" required>
-        <n-date-picker v-model:value="bookingDraft.range" type="datetimerange" class="w-full" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.purpose')">
-        <n-input v-model:value="bookingDraft.purpose" type="textarea" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="bookingModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" @click="saveBooking">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal
-    v-model:show="typeModalVisible"
-    preset="dialog"
-    :title="editingResourceType ? $t('page.resourceLibrary.upgradeType') : $t('page.resourceLibrary.registerType')"
-    :show-icon="false"
-    class="resource-dialog"
-  >
-    <n-alert type="info" class="mb-4">
-      {{ $t("page.resourceLibrary.registerTypeHint") }}
-    </n-alert>
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.protocolVersionId')" required>
-        <n-select
-          v-model:value="typeDraft.protocol_version_id"
-          filterable
-          :options="resourceDefinitionOptions"
-          :placeholder="$t('page.resourceLibrary.selectResourceDefinition')"
-        />
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="$t('common.name')" required>
-          <n-input v-model:value="typeDraft.name" />
+        <n-form-item :label="$t('page.resourceLibrary.schemaData')" :feedback="resourceJsonError" :validation-status="resourceJsonError ? 'error' : undefined">
+          <n-input v-model:value="resourceDraft.data" type="textarea" :rows="8" placeholder="{ }" data-testid="resource-data-input" />
         </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
-          <n-input v-model:value="typeDraft.code" :disabled="!!editingResourceType" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.capabilities')">
-        <n-checkbox-group v-model:value="typeDraft.capabilities">
-          <n-space>
-            <n-checkbox v-for="item in capabilityOptions" :key="item" :value="item">
-              {{ item }}
-            </n-checkbox>
-          </n-space>
-        </n-checkbox-group>
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.bookingPolicy')">
-        <n-select v-model:value="typeDraft.booking_policy" :options="bookingPolicyOptions" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="typeModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" @click="saveResourceType">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal
-    v-model:show="migrationModalVisible"
-    preset="card"
-    class="resource-migration-modal"
-    :title="$t('page.resourceLibrary.resourceMigrationPreview')"
-    :mask-closable="false"
-  >
-    <n-spin :show="migrationLoading">
-      <template v-if="migrationPreview">
-        <n-alert
-          :type="migrationPreview.needs_review ? 'warning' : 'success'"
-          class="mb-4"
-        >
-          {{
-            $t("page.resourceLibrary.resourceMigrationSummary", {
-              ready: migrationPreview.ready,
-              review: migrationPreview.needs_review,
-            })
-          }}
-        </n-alert>
-        <n-data-table
-          :columns="migrationPreviewColumns"
-          :data="migrationPreview.items"
-          :bordered="false"
-          :max-height="420"
-        />
+      </n-form>
+      <template #action>
+        <n-button @click="resourceModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" data-testid="resource-save-button" @click="saveResource">
+          {{ $t("common.confirm") }}
+        </n-button>
       </template>
-    </n-spin>
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <n-button @click="migrationModalVisible = false">
-          {{ $t("common.close") }}
+    </n-modal>
+
+    <n-modal v-model:show="locationModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addLocation')" :show-icon="false">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('common.name')" required>
+          <n-input v-model:value="locationDraft.name" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
+          <n-input v-model:value="locationDraft.code" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.parentLocation')">
+          <n-select v-model:value="locationDraft.parent_id" clearable :options="locationOptions" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="locationModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveLocation">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="bookingModalVisible" preset="dialog" :title="$t('page.resourceLibrary.newBooking')" :show-icon="false">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.equipment')" required>
+          <n-select v-model:value="bookingDraft.resource_id" filterable :options="equipmentOptions" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.bookingRange')" required>
+          <n-date-picker v-model:value="bookingDraft.range" type="datetimerange" class="w-full" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.purpose')">
+          <n-input v-model:value="bookingDraft.purpose" type="textarea" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="bookingModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveBooking">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="typeModalVisible"
+      preset="dialog"
+      :title="editingResourceType ? $t('page.resourceLibrary.upgradeType') : $t('page.resourceLibrary.registerType')"
+      :show-icon="false"
+      class="resource-dialog"
+    >
+      <n-alert type="info" class="mb-4">
+        {{ $t("page.resourceLibrary.registerTypeHint") }}
+      </n-alert>
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.protocolVersionId')" required>
+          <n-select
+            v-model:value="typeDraft.protocol_version_id"
+            filterable
+            :options="resourceDefinitionOptions"
+            :placeholder="$t('page.resourceLibrary.selectResourceDefinition')"
+          />
+        </n-form-item>
+        <div class="form-grid">
+          <n-form-item :label="$t('common.name')" required>
+            <n-input v-model:value="typeDraft.name" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
+            <n-input v-model:value="typeDraft.code" :disabled="!!editingResourceType" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.capabilities')">
+          <n-checkbox-group v-model:value="typeDraft.capabilities">
+            <n-space>
+              <n-checkbox v-for="item in capabilityOptions" :key="item" :value="item">
+                {{ item }}
+              </n-checkbox>
+            </n-space>
+          </n-checkbox-group>
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.bookingPolicy')">
+          <n-select v-model:value="typeDraft.booking_policy" :options="bookingPolicyOptions" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="typeModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveResourceType">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="migrationModalVisible"
+      preset="card"
+      class="resource-migration-modal"
+      :title="$t('page.resourceLibrary.resourceMigrationPreview')"
+      :mask-closable="false"
+    >
+      <n-spin :show="migrationLoading">
+        <template v-if="migrationPreview">
+          <n-alert
+            :type="migrationPreview.needs_review ? 'warning' : 'success'"
+            class="mb-4"
+          >
+            {{
+              $t("page.resourceLibrary.resourceMigrationSummary", {
+                ready: migrationPreview.ready,
+                review: migrationPreview.needs_review,
+              })
+            }}
+          </n-alert>
+          <n-data-table
+            :columns="migrationPreviewColumns"
+            :data="migrationPreview.items"
+            :bordered="false"
+            :max-height="420"
+          />
+        </template>
+      </n-spin>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <n-button @click="migrationModalVisible = false">
+            {{ $t("common.close") }}
+          </n-button>
+          <n-button
+            type="primary"
+            :disabled="!migrationPreview?.ready"
+            :loading="migrationLoading"
+            @click="runResourceMigration"
+          >
+            {{ $t("page.resourceLibrary.migrateReadyResources") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="scanModalVisible" preset="dialog" :title="$t('page.resourceLibrary.scan')" :show-icon="false">
+      <n-alert type="info" class="mb-4">
+        {{ $t("page.resourceLibrary.scanHint") }}
+      </n-alert>
+      <n-input v-model:value="scanCode" :placeholder="$t('page.resourceLibrary.scanPlaceholder')" />
+      <video v-show="cameraActive" ref="cameraVideo" class="scanner-video mt-3" autoplay muted playsinline />
+      <template #action>
+        <n-button v-if="!cameraActive" secondary @click="startCameraScan">
+          {{ $t("page.resourceLibrary.useCamera") }}
+        </n-button>
+        <n-button v-else secondary @click="stopCameraScan">
+          {{ $t("page.resourceLibrary.stopCamera") }}
+        </n-button>
+        <n-button type="primary" :loading="scanLoading" @click="resolveScanCode">
+          {{ $t("page.resourceLibrary.openScannedItem") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="importModalVisible" preset="dialog" :title="$t('page.resourceLibrary.importResources')" :show-icon="false" class="resource-dialog">
+      <n-alert type="info" class="mb-4">
+        {{ $t("page.resourceLibrary.importHint") }}
+      </n-alert>
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.resourceType')" required>
+          <n-select v-model:value="importDraft.resource_type_id" :options="resourceTypeOptions" />
+        </n-form-item>
+        <n-form-item :label="$t('common.file')" required>
+          <input type="file" accept=".csv,.tsv,.json,text/csv,text/tab-separated-values,application/json" @change="selectImportFile">
+        </n-form-item>
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.nameColumn')">
+            <n-input v-model:value="importDraft.name_field" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.codeColumn')">
+            <n-input v-model:value="importDraft.code_field" />
+          </n-form-item>
+        </div>
+        <n-form-item
+          :label="$t('page.resourceLibrary.fieldMapping')"
+          :feedback="importMappingError"
+          :validation-status="importMappingError ? 'error' : undefined"
+        >
+          <n-input v-model:value="importDraft.field_mapping" type="textarea" :rows="4" placeholder="{&quot;CSV column&quot;: &quot;var.field&quot;}" />
+        </n-form-item>
+      </n-form>
+      <n-alert v-if="importPreview" :type="importPreview.invalid ? 'warning' : 'success'" class="mb-3">
+        {{ $t("page.resourceLibrary.importPreviewSummary", { valid: importPreview.valid, invalid: importPreview.invalid }) }}
+      </n-alert>
+      <n-data-table
+        v-if="importPreview"
+        :columns="importPreviewColumns"
+        :data="importPreview.rows"
+        :bordered="false"
+        :max-height="260"
+      />
+      <template #action>
+        <n-button :disabled="!importDraft.file || !importDraft.resource_type_id" :loading="importLoading" @click="previewImport">
+          {{ $t("common.preview") }}
         </n-button>
         <n-button
           type="primary"
-          :disabled="!migrationPreview?.ready"
-          :loading="migrationLoading"
-          @click="runResourceMigration"
+          :disabled="!importPreview || importPreview.invalid > 0"
+          :loading="importLoading"
+          @click="commitImport"
         >
-          {{ $t("page.resourceLibrary.migrateReadyResources") }}
+          {{ $t("page.resourceLibrary.confirmImport") }}
         </n-button>
-      </div>
-    </template>
-  </n-modal>
+      </template>
+    </n-modal>
 
-  <n-modal v-model:show="scanModalVisible" preset="dialog" :title="$t('page.resourceLibrary.scan')" :show-icon="false">
-    <n-alert type="info" class="mb-4">
-      {{ $t("page.resourceLibrary.scanHint") }}
-    </n-alert>
-    <n-input v-model:value="scanCode" :placeholder="$t('page.resourceLibrary.scanPlaceholder')" />
-    <video v-show="cameraActive" ref="cameraVideo" class="scanner-video mt-3" autoplay muted playsinline />
-    <template #action>
-      <n-button v-if="!cameraActive" secondary @click="startCameraScan">
-        {{ $t("page.resourceLibrary.useCamera") }}
-      </n-button>
-      <n-button v-else secondary @click="stopCameraScan">
-        {{ $t("page.resourceLibrary.stopCamera") }}
-      </n-button>
-      <n-button type="primary" :loading="scanLoading" @click="resolveScanCode">
-        {{ $t("page.resourceLibrary.openScannedItem") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="importModalVisible" preset="dialog" :title="$t('page.resourceLibrary.importResources')" :show-icon="false" class="resource-dialog">
-    <n-alert type="info" class="mb-4">
-      {{ $t("page.resourceLibrary.importHint") }}
-    </n-alert>
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.resourceType')" required>
-        <n-select v-model:value="importDraft.resource_type_id" :options="resourceTypeOptions" />
-      </n-form-item>
-      <n-form-item :label="$t('common.file')" required>
-        <input type="file" accept=".csv,.tsv,.json,text/csv,text/tab-separated-values,application/json" @change="selectImportFile">
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.nameColumn')">
-          <n-input v-model:value="importDraft.name_field" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.codeColumn')">
-          <n-input v-model:value="importDraft.code_field" />
-        </n-form-item>
-      </div>
-      <n-form-item
-        :label="$t('page.resourceLibrary.fieldMapping')"
-        :feedback="importMappingError"
-        :validation-status="importMappingError ? 'error' : undefined"
-      >
-        <n-input v-model:value="importDraft.field_mapping" type="textarea" :rows="4" placeholder="{&quot;CSV column&quot;: &quot;var.field&quot;}" />
-      </n-form-item>
-    </n-form>
-    <n-alert v-if="importPreview" :type="importPreview.invalid ? 'warning' : 'success'" class="mb-3">
-      {{ $t("page.resourceLibrary.importPreviewSummary", { valid: importPreview.valid, invalid: importPreview.invalid }) }}
-    </n-alert>
-    <n-data-table
-      v-if="importPreview"
-      :columns="importPreviewColumns"
-      :data="importPreview.rows"
-      :bordered="false"
-      :max-height="260"
-    />
-    <template #action>
-      <n-button :disabled="!importDraft.file || !importDraft.resource_type_id" :loading="importLoading" @click="previewImport">
-        {{ $t("common.preview") }}
-      </n-button>
-      <n-button
-        type="primary"
-        :disabled="!importPreview || importPreview.invalid > 0"
-        :loading="importLoading"
-        @click="commitImport"
-      >
-        {{ $t("page.resourceLibrary.confirmImport") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="inventoryModalVisible" preset="dialog" :title="$t('page.resourceLibrary.recordInventory')" :show-icon="false" class="resource-dialog">
-    <n-form label-placement="top">
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.operation')" required>
-          <n-select v-model:value="inventoryDraft.kind" :options="inventoryOperationOptions" data-testid="inventory-operation-select" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.resource')" required>
-          <n-select v-model:value="inventoryDraft.resource_id" filterable :options="resourceOptions" data-testid="inventory-resource-select" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.container')" required>
-        <n-select v-model:value="inventoryDraft.container_id" :options="inventoryContainerOptions" data-testid="inventory-container-select" />
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="inventoryDraft.kind === 'count' ? $t('page.resourceLibrary.countedBalance') : $t('page.resourceLibrary.quantity')" required>
-          <n-input v-model:value="inventoryDraft.quantity" data-testid="inventory-quantity-input" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.unit')" required>
-          <n-input v-model:value="inventoryDraft.unit" placeholder="mL" data-testid="inventory-unit-input" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.reason')">
-        <n-input v-model:value="inventoryDraft.reason" type="textarea" data-testid="inventory-reason-input" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="inventoryModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" data-testid="inventory-save-button" @click="saveInventoryOperation">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="transferModalVisible" preset="dialog" :title="$t('page.resourceLibrary.transferInventory')" :show-icon="false" class="resource-dialog">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.resource')" required>
-        <n-select v-model:value="transferDraft.resource_id" filterable :options="resourceOptions" />
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.fromContainer')" required>
-          <n-select v-model:value="transferDraft.from_container_id" :options="transferContainerOptions" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.toContainer')" required>
-          <n-select v-model:value="transferDraft.to_container_id" :options="transferContainerOptions" />
-        </n-form-item>
-      </div>
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.quantity')" required>
-          <n-input v-model:value="transferDraft.quantity" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.unit')" required>
-          <n-input v-model:value="transferDraft.unit" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.reason')">
-        <n-input v-model:value="transferDraft.reason" type="textarea" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="transferModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" @click="saveTransfer">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="reservationModalVisible" preset="dialog" :title="$t('page.resourceLibrary.reserveInventory')" :show-icon="false" class="resource-dialog">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.resource')" required>
-        <n-select v-model:value="reservationDraft.resource_id" filterable :options="resourceOptions" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.container')" required>
-        <n-select v-model:value="reservationDraft.container_id" :options="reservationContainerOptions" />
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.quantity')" required>
-          <n-input v-model:value="reservationDraft.quantity" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.unit')" required>
-          <n-input v-model:value="reservationDraft.unit" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.expiresAt')">
-        <n-date-picker v-model:value="reservationDraft.expires_at" type="datetime" class="w-full" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.reason')">
-        <n-input v-model:value="reservationDraft.reason" type="textarea" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="reservationModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" @click="saveReservation">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-drawer v-model:show="detailVisible" :width="560" data-testid="resource-detail">
-    <n-drawer-content :title="selectedResource?.name || $t('page.resourceLibrary.resourceDetail')" closable>
-      <template v-if="selectedResource">
-        <div v-if="canOperateResource" class="mb-4 flex justify-end">
-          <n-button secondary @click="openResourceRevision">
-            {{ $t("page.resourceLibrary.reviseResource") }}
-          </n-button>
+    <n-modal v-model:show="inventoryModalVisible" preset="dialog" :title="$t('page.resourceLibrary.recordInventory')" :show-icon="false" class="resource-dialog">
+      <n-form label-placement="top">
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.operation')" required>
+            <n-select v-model:value="inventoryDraft.kind" :options="inventoryOperationOptions" data-testid="inventory-operation-select" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.resource')" required>
+            <n-select v-model:value="inventoryDraft.resource_id" filterable :options="resourceOptions" data-testid="inventory-resource-select" />
+          </n-form-item>
         </div>
-        <n-descriptions label-placement="left" :column="1" bordered>
-          <n-descriptions-item :label="$t('page.resourceLibrary.stableCode')">
-            {{ selectedResource.code }}
-          </n-descriptions-item>
-          <n-descriptions-item :label="$t('common.status')">
-            {{ statusLabel(selectedResource.status) }}
-          </n-descriptions-item>
-          <n-descriptions-item :label="$t('page.resourceLibrary.visibility')">
-            {{ selectedResource.visibility }}
-          </n-descriptions-item>
-          <n-descriptions-item :label="$t('page.resourceLibrary.schemaVersion')">
-            {{ selectedResource.revision || "-" }}
-          </n-descriptions-item>
-        </n-descriptions>
-        <h3 class="mt-6">
-          {{ $t("page.resourceLibrary.customFields") }}
-        </h3>
-        <pre class="data-preview">{{ JSON.stringify(selectedResource.data || {}, null, 2) }}</pre>
-        <n-collapse class="mt-5">
-          <n-collapse-item :title="$t('page.resourceLibrary.revisionHistory')" name="revisions">
-            <n-timeline>
-              <n-timeline-item
-                v-for="revision in selectedResource.revisions"
-                :key="String(revision.id)"
-                :title="`#${revision.revision} · ${revision.revision_kind}`"
-                :content="String(revision.reason || '')"
-                :time="formatDate(String(revision.created_at))"
+        <n-form-item :label="$t('page.resourceLibrary.container')" required>
+          <n-select v-model:value="inventoryDraft.container_id" :options="inventoryContainerOptions" data-testid="inventory-container-select" />
+        </n-form-item>
+        <div class="form-grid">
+          <n-form-item :label="inventoryDraft.kind === 'count' ? $t('page.resourceLibrary.countedBalance') : $t('page.resourceLibrary.quantity')" required>
+            <n-input v-model:value="inventoryDraft.quantity" data-testid="inventory-quantity-input" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.unit')" required>
+            <n-input v-model:value="inventoryDraft.unit" placeholder="mL" data-testid="inventory-unit-input" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.reason')">
+          <n-input v-model:value="inventoryDraft.reason" type="textarea" data-testid="inventory-reason-input" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="inventoryModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" data-testid="inventory-save-button" @click="saveInventoryOperation">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="transferModalVisible" preset="dialog" :title="$t('page.resourceLibrary.transferInventory')" :show-icon="false" class="resource-dialog">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.resource')" required>
+          <n-select v-model:value="transferDraft.resource_id" filterable :options="resourceOptions" />
+        </n-form-item>
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.fromContainer')" required>
+            <n-select v-model:value="transferDraft.from_container_id" :options="transferContainerOptions" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.toContainer')" required>
+            <n-select v-model:value="transferDraft.to_container_id" :options="transferContainerOptions" />
+          </n-form-item>
+        </div>
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.quantity')" required>
+            <n-input v-model:value="transferDraft.quantity" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.unit')" required>
+            <n-input v-model:value="transferDraft.unit" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.reason')">
+          <n-input v-model:value="transferDraft.reason" type="textarea" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="transferModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveTransfer">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="reservationModalVisible" preset="dialog" :title="$t('page.resourceLibrary.reserveInventory')" :show-icon="false" class="resource-dialog">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.resource')" required>
+          <n-select v-model:value="reservationDraft.resource_id" filterable :options="resourceOptions" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.container')" required>
+          <n-select v-model:value="reservationDraft.container_id" :options="reservationContainerOptions" />
+        </n-form-item>
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.quantity')" required>
+            <n-input v-model:value="reservationDraft.quantity" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.unit')" required>
+            <n-input v-model:value="reservationDraft.unit" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.expiresAt')">
+          <n-date-picker v-model:value="reservationDraft.expires_at" type="datetime" class="w-full" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.reason')">
+          <n-input v-model:value="reservationDraft.reason" type="textarea" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="reservationModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveReservation">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-drawer v-model:show="detailVisible" :width="560" data-testid="resource-detail">
+      <n-drawer-content :title="selectedResource?.name || $t('page.resourceLibrary.resourceDetail')" closable>
+        <template v-if="selectedResource">
+          <div v-if="canOperateResource" class="mb-4 flex justify-end">
+            <n-button secondary @click="openResourceRevision">
+              {{ $t("page.resourceLibrary.reviseResource") }}
+            </n-button>
+          </div>
+          <n-descriptions label-placement="left" :column="1" bordered>
+            <n-descriptions-item :label="$t('page.resourceLibrary.stableCode')">
+              {{ selectedResource.code }}
+            </n-descriptions-item>
+            <n-descriptions-item :label="$t('common.status')">
+              {{ statusLabel(selectedResource.status) }}
+            </n-descriptions-item>
+            <n-descriptions-item :label="$t('page.resourceLibrary.visibility')">
+              {{ selectedResource.visibility }}
+            </n-descriptions-item>
+            <n-descriptions-item :label="$t('page.resourceLibrary.schemaVersion')">
+              {{ selectedResource.revision || "-" }}
+            </n-descriptions-item>
+          </n-descriptions>
+          <h3 class="mt-6">
+            {{ $t("page.resourceLibrary.customFields") }}
+          </h3>
+          <pre class="data-preview">{{ JSON.stringify(selectedResource.data || {}, null, 2) }}</pre>
+          <n-collapse class="mt-5">
+            <n-collapse-item :title="$t('page.resourceLibrary.revisionHistory')" name="revisions">
+              <n-timeline>
+                <n-timeline-item
+                  v-for="revision in selectedResource.revisions"
+                  :key="String(revision.id)"
+                  :title="`#${revision.revision} · ${revision.revision_kind}`"
+                  :content="String(revision.reason || '')"
+                  :time="formatDate(String(revision.created_at))"
+                />
+              </n-timeline>
+            </n-collapse-item>
+            <n-collapse-item :title="$t('page.resourceLibrary.relatedRecords')" name="records">
+              <n-list v-if="selectedResource.record_links.length" bordered>
+                <n-list-item v-for="link in selectedResource.record_links" :key="String(link.id)">
+                  <n-thing
+                    :title="`${String(link.role || 'reference')} · Record ${String(link.record_id)}`"
+                    :description="`v${String(link.record_version)} · ${String(link.protocol_version || '-')}`"
+                  />
+                </n-list-item>
+              </n-list>
+              <n-empty v-else :description="$t('page.resourceLibrary.noRelatedRecords')" />
+            </n-collapse-item>
+            <n-collapse-item :title="$t('page.resourceLibrary.lineage')" name="lineage">
+              <n-list v-if="selectedResource.lineage.length" bordered>
+                <n-list-item v-for="edge in selectedResource.lineage" :key="String(edge.id)">
+                  <n-thing
+                    :title="`${String(edge.parent_resource_id)} → ${String(edge.child_resource_id)}`"
+                    :description="`${String(edge.relationship)} · Record ${String(edge.record_id)} v${String(edge.record_version)}`"
+                  />
+                </n-list-item>
+              </n-list>
+              <n-empty v-else :description="$t('page.resourceLibrary.noLineage')" />
+            </n-collapse-item>
+            <n-collapse-item :title="$t('page.resourceLibrary.resourceAudit')" name="inventory-events">
+              <n-timeline>
+                <n-timeline-item
+                  v-for="event in selectedResource.inventory_events"
+                  :key="event.id"
+                  :title="`${event.kind} · ${event.quantity} ${event.unit}`"
+                  :content="event.reason"
+                  :time="formatDate(event.created_at)"
+                />
+              </n-timeline>
+              <n-empty
+                v-if="!selectedResource.inventory_events.length"
+                :description="$t('page.resourceLibrary.noInventoryEvents')"
               />
-            </n-timeline>
-          </n-collapse-item>
-          <n-collapse-item :title="$t('page.resourceLibrary.relatedRecords')" name="records">
-            <n-list v-if="selectedResource.record_links.length" bordered>
-              <n-list-item v-for="link in selectedResource.record_links" :key="String(link.id)">
-                <n-thing
-                  :title="`${String(link.role || 'reference')} · Record ${String(link.record_id)}`"
-                  :description="`v${String(link.record_version)} · ${String(link.protocol_version || '-')}`"
-                />
-              </n-list-item>
-            </n-list>
-            <n-empty v-else :description="$t('page.resourceLibrary.noRelatedRecords')" />
-          </n-collapse-item>
-          <n-collapse-item :title="$t('page.resourceLibrary.lineage')" name="lineage">
-            <n-list v-if="selectedResource.lineage.length" bordered>
-              <n-list-item v-for="edge in selectedResource.lineage" :key="String(edge.id)">
-                <n-thing
-                  :title="`${String(edge.parent_resource_id)} → ${String(edge.child_resource_id)}`"
-                  :description="`${String(edge.relationship)} · Record ${String(edge.record_id)} v${String(edge.record_version)}`"
-                />
-              </n-list-item>
-            </n-list>
-            <n-empty v-else :description="$t('page.resourceLibrary.noLineage')" />
-          </n-collapse-item>
-          <n-collapse-item :title="$t('page.resourceLibrary.resourceAudit')" name="inventory-events">
+            </n-collapse-item>
+          </n-collapse>
+          <div class="drawer-heading mt-6">
+            <h3>{{ $t("page.resourceLibrary.inventoryContainers") }}</h3>
+            <n-space v-if="canOperateResource || canOperateInventory">
+              <n-button v-if="canOperateResource" secondary size="small" @click="lotModalVisible = true">
+                {{ $t("page.resourceLibrary.addLot") }}
+              </n-button>
+              <n-button v-if="canOperateResource" secondary size="small" @click="containerModalVisible = true">
+                {{ $t("page.resourceLibrary.addContainer") }}
+              </n-button>
+              <n-button v-if="canOperateInventory" secondary size="small" @click="openInventoryForResource(selectedResource)">
+                {{ $t("page.resourceLibrary.recordInventory") }}
+              </n-button>
+              <n-button v-if="canOperateResource" secondary size="small" @click="createLabelForResource">
+                {{ $t("page.resourceLibrary.createLabel") }}
+              </n-button>
+            </n-space>
+          </div>
+          <n-data-table
+            :columns="containerColumns"
+            :data="selectedResource.containers || []"
+            :bordered="false"
+            :single-line="false"
+            :max-height="260"
+          />
+          <div class="mt-6">
+            <div class="drawer-heading">
+              <h3>{{ $t("page.resourceLibrary.serviceHistory") }}</h3>
+              <n-button v-if="canServiceEquipment" secondary size="small" @click="serviceModalVisible = true">
+                {{ $t("page.resourceLibrary.addServiceEvent") }}
+              </n-button>
+            </div>
             <n-timeline>
               <n-timeline-item
-                v-for="event in selectedResource.inventory_events"
-                :key="event.id"
-                :title="`${event.kind} · ${event.quantity} ${event.unit}`"
-                :content="event.reason"
-                :time="formatDate(event.created_at)"
+                v-for="event in selectedResource.equipment_service_events"
+                :key="String(event.id)"
+                :title="String(event.kind)"
+                :content="String(event.notes || event.status || '')"
+                :time="formatDate(String(event.starts_at))"
               />
             </n-timeline>
             <n-empty
-              v-if="!selectedResource.inventory_events.length"
-              :description="$t('page.resourceLibrary.noInventoryEvents')"
+              v-if="!selectedResource.equipment_service_events?.length"
+              :description="$t('page.resourceLibrary.noServiceEvents')"
             />
-          </n-collapse-item>
-        </n-collapse>
-        <div class="drawer-heading mt-6">
-          <h3>{{ $t("page.resourceLibrary.inventoryContainers") }}</h3>
-          <n-space v-if="canOperateResource || canOperateInventory">
-            <n-button v-if="canOperateResource" secondary size="small" @click="lotModalVisible = true">
-              {{ $t("page.resourceLibrary.addLot") }}
-            </n-button>
-            <n-button v-if="canOperateResource" secondary size="small" @click="containerModalVisible = true">
-              {{ $t("page.resourceLibrary.addContainer") }}
-            </n-button>
-            <n-button v-if="canOperateInventory" secondary size="small" @click="openInventoryForResource(selectedResource)">
-              {{ $t("page.resourceLibrary.recordInventory") }}
-            </n-button>
-            <n-button v-if="canOperateResource" secondary size="small" @click="createLabelForResource">
-              {{ $t("page.resourceLibrary.createLabel") }}
-            </n-button>
-          </n-space>
-        </div>
-        <n-data-table
-          :columns="containerColumns"
-          :data="selectedResource.containers || []"
-          :bordered="false"
-          :single-line="false"
-          :max-height="260"
-        />
-        <div class="mt-6">
-          <div class="drawer-heading">
-            <h3>{{ $t("page.resourceLibrary.serviceHistory") }}</h3>
-            <n-button v-if="canServiceEquipment" secondary size="small" @click="serviceModalVisible = true">
-              {{ $t("page.resourceLibrary.addServiceEvent") }}
-            </n-button>
           </div>
-          <n-timeline>
-            <n-timeline-item
-              v-for="event in selectedResource.equipment_service_events"
-              :key="String(event.id)"
-              :title="String(event.kind)"
-              :content="String(event.notes || event.status || '')"
-              :time="formatDate(String(event.starts_at))"
+        </template>
+      </n-drawer-content>
+    </n-drawer>
+
+    <n-modal
+      v-model:show="resourceRevisionModalVisible"
+      preset="dialog"
+      :title="$t('page.resourceLibrary.reviseResource')"
+      :show-icon="false"
+    >
+      <n-form label-placement="top">
+        <n-form-item :label="$t('common.name')" required>
+          <n-input v-model:value="resourceRevisionDraft.name" />
+        </n-form-item>
+        <div class="grid grid-cols-2 gap-4">
+          <n-form-item :label="$t('common.status')" required>
+            <n-select v-model:value="resourceRevisionDraft.status" :options="statusOptions" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.visibility')" required>
+            <n-select
+              v-model:value="resourceRevisionDraft.visibility"
+              :options="[
+                { label: $t('page.resourceLibrary.labVisible'), value: 'lab' },
+                { label: $t('page.resourceLibrary.restricted'), value: 'restricted' },
+              ]"
             />
-          </n-timeline>
-          <n-empty
-            v-if="!selectedResource.equipment_service_events?.length"
-            :description="$t('page.resourceLibrary.noServiceEvents')"
-          />
+          </n-form-item>
         </div>
+        <n-form-item
+          :label="$t('page.resourceLibrary.schemaData')"
+          :validation-status="resourceRevisionJsonError ? 'error' : undefined"
+          :feedback="resourceRevisionJsonError"
+          required
+        >
+          <n-input v-model:value="resourceRevisionDraft.data" type="textarea" :rows="9" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.revisionReason')" required>
+          <n-input v-model:value="resourceRevisionDraft.reason" type="textarea" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="resourceRevisionModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveResourceRevision">
+          {{ $t("common.confirm") }}
+        </n-button>
       </template>
-    </n-drawer-content>
-  </n-drawer>
+    </n-modal>
 
-  <n-modal
-    v-model:show="resourceRevisionModalVisible"
-    preset="dialog"
-    :title="$t('page.resourceLibrary.reviseResource')"
-    :show-icon="false"
-  >
-    <n-form label-placement="top">
-      <n-form-item :label="$t('common.name')" required>
-        <n-input v-model:value="resourceRevisionDraft.name" />
-      </n-form-item>
-      <div class="grid grid-cols-2 gap-4">
-        <n-form-item :label="$t('common.status')" required>
-          <n-select v-model:value="resourceRevisionDraft.status" :options="statusOptions" />
+    <n-modal v-model:show="lotModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addLot')" :show-icon="false">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
+          <n-input v-model:value="lotDraft.code" />
         </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.visibility')" required>
-          <n-select
-            v-model:value="resourceRevisionDraft.visibility"
-            :options="[
-              { label: $t('page.resourceLibrary.labVisible'), value: 'lab' },
-              { label: $t('page.resourceLibrary.restricted'), value: 'restricted' },
-            ]"
-          />
+        <n-form-item :label="$t('page.resourceLibrary.supplier')">
+          <n-input v-model:value="lotDraft.supplier" />
         </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.expiresAt')">
+          <n-date-picker v-model:value="lotDraft.expires_at" type="datetime" class="w-full" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="lotModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveLot">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="containerModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addContainer')" :show-icon="false">
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
+          <n-input v-model:value="containerDraft.code" />
+        </n-form-item>
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.lot')">
+            <n-select v-model:value="containerDraft.lot_id" clearable :options="selectedResourceLotOptions" />
+          </n-form-item>
+          <n-form-item :label="$t('page.resourceLibrary.location')">
+            <n-select v-model:value="containerDraft.location_id" clearable :options="locationOptions" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.unit')" required>
+          <n-input v-model:value="containerDraft.unit" placeholder="mL" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="containerModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveContainer">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="serviceModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addServiceEvent')" :show-icon="false">
+      <n-form label-placement="top">
+        <div class="form-grid">
+          <n-form-item :label="$t('page.resourceLibrary.serviceKind')" required>
+            <n-select v-model:value="serviceDraft.kind" :options="serviceKindOptions" />
+          </n-form-item>
+          <n-form-item :label="$t('common.status')" required>
+            <n-input v-model:value="serviceDraft.status" />
+          </n-form-item>
+        </div>
+        <n-form-item :label="$t('page.resourceLibrary.start')" required>
+          <n-date-picker v-model:value="serviceDraft.starts_at" type="datetime" class="w-full" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.dueAt')">
+          <n-date-picker v-model:value="serviceDraft.due_at" type="datetime" class="w-full" />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.notes')">
+          <n-input v-model:value="serviceDraft.notes" type="textarea" />
+        </n-form-item>
+      </n-form>
+      <template #action>
+        <n-button @click="serviceModalVisible = false">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button type="primary" :loading="saving" @click="saveServiceEvent">
+          {{ $t("common.confirm") }}
+        </n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="labelModalVisible" preset="card" class="resource-label-modal" :title="$t('page.resourceLibrary.resourceLabel')">
+      <div v-if="createdLabel" id="resource-print-label" class="resource-label">
+        <n-qr-code v-if="createdLabel.format === 'qr'" :value="createdLabel.payload" :size="190" />
+        <div v-else class="barcode-placeholder">
+          <span>{{ createdLabel.code }}</span>
+        </div>
+        <strong>{{ selectedResource?.name }}</strong>
+        <small>{{ selectedResource?.code }}</small>
+        <code>{{ createdLabel.code }}</code>
       </div>
-      <n-form-item
-        :label="$t('page.resourceLibrary.schemaData')"
-        :validation-status="resourceRevisionJsonError ? 'error' : undefined"
-        :feedback="resourceRevisionJsonError"
-        required
-      >
-        <n-input v-model:value="resourceRevisionDraft.data" type="textarea" :rows="9" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.revisionReason')" required>
-        <n-input v-model:value="resourceRevisionDraft.reason" type="textarea" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="resourceRevisionModalVisible = false">
-        {{ $t("common.cancel") }}
-      </n-button>
-      <n-button type="primary" :loading="saving" @click="saveResourceRevision">
-        {{ $t("common.confirm") }}
-      </n-button>
-    </template>
-  </n-modal>
+      <template #footer>
+        <n-button type="primary" @click="printLabel">
+          {{ $t("page.resourceLibrary.printLabel") }}
+        </n-button>
+      </template>
+    </n-modal>
 
-  <n-modal v-model:show="lotModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addLot')" :show-icon="false">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
-        <n-input v-model:value="lotDraft.code" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.supplier')">
-        <n-input v-model:value="lotDraft.supplier" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.expiresAt')">
-        <n-date-picker v-model:value="lotDraft.expires_at" type="datetime" class="w-full" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="lotModalVisible = false">{{ $t("common.cancel") }}</n-button>
-      <n-button type="primary" :loading="saving" @click="saveLot">{{ $t("common.confirm") }}</n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="containerModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addContainer')" :show-icon="false">
-    <n-form label-placement="top">
-      <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
-        <n-input v-model:value="containerDraft.code" />
-      </n-form-item>
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.lot')">
-          <n-select v-model:value="containerDraft.lot_id" clearable :options="selectedResourceLotOptions" />
-        </n-form-item>
-        <n-form-item :label="$t('page.resourceLibrary.location')">
-          <n-select v-model:value="containerDraft.location_id" clearable :options="locationOptions" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.unit')" required>
-        <n-input v-model:value="containerDraft.unit" placeholder="mL" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="containerModalVisible = false">{{ $t("common.cancel") }}</n-button>
-      <n-button type="primary" :loading="saving" @click="saveContainer">{{ $t("common.confirm") }}</n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="serviceModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addServiceEvent')" :show-icon="false">
-    <n-form label-placement="top">
-      <div class="form-grid">
-        <n-form-item :label="$t('page.resourceLibrary.serviceKind')" required>
-          <n-select v-model:value="serviceDraft.kind" :options="serviceKindOptions" />
-        </n-form-item>
-        <n-form-item :label="$t('common.status')" required>
-          <n-input v-model:value="serviceDraft.status" />
-        </n-form-item>
-      </div>
-      <n-form-item :label="$t('page.resourceLibrary.start')" required>
-        <n-date-picker v-model:value="serviceDraft.starts_at" type="datetime" class="w-full" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.dueAt')">
-        <n-date-picker v-model:value="serviceDraft.due_at" type="datetime" class="w-full" />
-      </n-form-item>
-      <n-form-item :label="$t('page.resourceLibrary.notes')">
-        <n-input v-model:value="serviceDraft.notes" type="textarea" />
-      </n-form-item>
-    </n-form>
-    <template #action>
-      <n-button @click="serviceModalVisible = false">{{ $t("common.cancel") }}</n-button>
-      <n-button type="primary" :loading="saving" @click="saveServiceEvent">{{ $t("common.confirm") }}</n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="labelModalVisible" preset="card" class="resource-label-modal" :title="$t('page.resourceLibrary.resourceLabel')">
-    <div v-if="createdLabel" class="resource-label" id="resource-print-label">
-      <n-qr-code v-if="createdLabel.format === 'qr'" :value="createdLabel.payload" :size="190" />
-      <div v-else class="barcode-placeholder">
-        <span>{{ createdLabel.code }}</span>
-      </div>
-      <strong>{{ selectedResource?.name }}</strong>
-      <small>{{ selectedResource?.code }}</small>
-      <code>{{ createdLabel.code }}</code>
-    </div>
-    <template #footer>
-      <n-button type="primary" @click="printLabel">
-        {{ $t("page.resourceLibrary.printLabel") }}
-      </n-button>
-    </template>
-  </n-modal>
-
-  <n-modal v-model:show="templateVisible" preset="card" class="resource-template-modal" :title="selectedTemplate?.name">
-    <pre class="data-preview">{{ selectedTemplate?.aimd }}</pre>
-  </n-modal>
+    <n-modal v-model:show="templateVisible" preset="card" class="resource-template-modal" :title="selectedTemplate?.name">
+      <pre class="data-preview">{{ selectedTemplate?.aimd }}</pre>
+    </n-modal>
+  </div>
 </template>
 
 <script setup lang="tsx">

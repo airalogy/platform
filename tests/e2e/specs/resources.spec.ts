@@ -1,6 +1,16 @@
 import { expect, test } from "@playwright/test"
 import { loadFixtures, selectVisibleOption } from "./fixtures"
 
+test("resource library renders on first client-side navigation", async ({ page }) => {
+  const fixtures = await loadFixtures()
+  await page.goto(`/labs/${fixtures.lab.uid}/projects`)
+
+  await page.getByText("Lab resource library", { exact: true }).click()
+
+  await expect(page).toHaveURL(`/labs/${fixtures.lab.uid}/resources`)
+  await expect(page.getByTestId("resource-library")).toBeVisible()
+})
+
 test("owner can inspect resources and inventory audit", async ({ page }) => {
   const fixtures = await loadFixtures()
   await page.goto(`/labs/${fixtures.lab.uid}/resources/resources`)

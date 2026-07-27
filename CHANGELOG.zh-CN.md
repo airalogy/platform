@@ -32,3 +32,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 将持久化 workflow 领域模型从 `ResearchWorkflow` 改名为 `ProtocolWorkflow`，公开版初始 schema 表名同步为 `protocol_workflows`。
 - 将数据库初始化整理为单一初始 schema migration。
 - 从公开源码树中排除生成的 API 产物、本地缓存、日志、证书、环境文件和数据库 dump 文件。
+
+### 修复
+
+- 修复实验室资源库因弹窗根节点与路由过渡不兼容，首次通过客户端导航进入时无法渲染的问题。
