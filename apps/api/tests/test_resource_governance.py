@@ -6,8 +6,9 @@ from pydantic import ValidationError
 
 from app.main import app
 from app.models.access_control import AccessScopeType
-from app.models.resource import ResourceRevision
+from app.models.resource import InventoryEvent, ResourceRevision
 from app.routers.access import GrantParams
+from app.routers.resources import _validation_issues
 from app.services.resource_bindings import extract_resource_bindings
 from app.services.resource_index import build_resource_indexes
 from app.services.resource_units import UnitError, convert_quantity
@@ -25,6 +26,44 @@ def test_inventory_units_use_exact_decimal_and_reject_cross_dimension():
     assert convert_quantity("0.5", "mL", "uL") == Decimal("500")
     with pytest.raises(UnitError, match="cannot convert"):
         convert_quantity("1", "mg", "mL")
+
+
+def test_model_serialization_uses_mapped_attribute_names():
+    event = InventoryEvent(
+        lab_id=uuid4(),
+        kind="receipt",
+        resource_id=uuid4(),
+        quantity=Decimal("1"),
+        unit="mL",
+        actor_user_id=uuid4(),
+        idempotency_key="serialization-test",
+        event_metadata={"source": "test"},
+    )
+
+    payload = event.as_dict()
+
+    assert payload["event_metadata"] == {"source": "test"}
+    assert "metadata" not in payload
+
+
+def test_resource_validation_uses_aimd_variable_schema():
+    schema = {
+        "steps": {},
+        "vars": {
+            "type": "object",
+            "properties": {"construct_name": {"type": "string"}},
+            "required": ["construct_name"],
+        },
+        "checks": {},
+    }
+
+    assert _validation_issues(schema, {}) == [
+        {
+            "path": "",
+            "message": "'construct_name' is a required property",
+        }
+    ]
+    assert _validation_issues(schema, {"construct_name": "pUC19"}) == []
 
 
 def test_resource_ref_bindings_keep_role_quantity_container_and_booking():
@@ -228,6 +267,7 @@ def test_resource_grant_scopes_require_exact_target(scope_type, field):
 def test_openapi_exposes_resource_and_schema_governance_contracts():
     paths = app.openapi()["paths"]
     assert "/labs/{lab_id}/resource-library/resources" in paths
+    assert "/labs/{lab_id}/resource-library/capabilities" in paths
     assert "/labs/{lab_id}/resource-library/definition-versions" in paths
     assert "/labs/{lab_id}/resource-library/inventory/reservations" in paths
     assert "/labs/{lab_id}/resource-library/inventory/transfers" in paths

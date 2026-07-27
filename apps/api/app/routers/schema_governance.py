@@ -36,6 +36,7 @@ from app.services.schema_governance import (
     run_schema_migration,
 )
 from app.services.resource_inventory import InventoryError, commit_record_resources
+from app.services.resource_schema import resource_data_schema
 
 from .depends import CurrentUser
 
@@ -470,7 +471,10 @@ async def create_resource_migration_job(
                 )
         issues = [
             *migration_issues,
-            *_schema_issues(target_version.json_schema, migrated_data),
+            *_schema_issues(
+                resource_data_schema(target_version.json_schema),
+                migrated_data,
+            ),
         ]
         preview.append(
             {

@@ -1,5 +1,5 @@
 <template>
-  <div class="resource-library">
+  <div class="resource-library" data-testid="resource-library">
     <section class="resource-library__hero">
       <div>
         <p class="resource-library__eyebrow">
@@ -15,7 +15,12 @@
           </template>
           {{ $t("page.resourceLibrary.scan") }}
         </n-button>
-        <n-button v-if="activeSection === 'resources'" type="primary" @click="resourceModalVisible = true">
+        <n-button
+          v-if="activeSection === 'resources' && canOperateResource"
+          type="primary"
+          data-testid="resource-add-header-button"
+          @click="resourceModalVisible = true"
+        >
           <template #icon>
             <icon-ion-add-outline />
           </template>
@@ -31,7 +36,12 @@
       class="resource-library__tabs"
       @update:value="navigateSection"
     >
-      <n-tab v-for="section in sections" :key="section.value" :name="section.value">
+      <n-tab
+        v-for="section in sections"
+        :key="section.value"
+        :name="section.value"
+        :data-testid="`resource-tab-${section.value}`"
+      >
         {{ section.label }}
         <n-badge
           v-if="section.value === 'reminders' && overview.unread_notifications"
@@ -106,11 +116,11 @@
             <n-button @click="loadResources">
               {{ $t("common.search") }}
             </n-button>
-            <div class="ml-auto flex gap-2">
-              <n-button secondary @click="importModalVisible = true">
+            <div v-if="canOperateResource" class="ml-auto flex gap-2">
+              <n-button secondary data-testid="resource-import-button" @click="importModalVisible = true">
                 {{ $t("common.import") }}
               </n-button>
-              <n-button type="primary" @click="resourceModalVisible = true">
+              <n-button type="primary" data-testid="resource-add-button" @click="resourceModalVisible = true">
                 {{ $t("page.resourceLibrary.addResource") }}
               </n-button>
             </div>
@@ -137,14 +147,14 @@
             <n-button secondary @click="exportInventory">
               {{ $t("common.export") }}
             </n-button>
-            <template v-if="activeSection === 'inventory'">
+            <template v-if="activeSection === 'inventory' && canOperateInventory">
               <n-button secondary @click="transferModalVisible = true">
                 {{ $t("page.resourceLibrary.transferInventory") }}
               </n-button>
               <n-button secondary @click="reservationModalVisible = true">
                 {{ $t("page.resourceLibrary.reserveInventory") }}
               </n-button>
-              <n-button type="primary" @click="inventoryModalVisible = true">
+              <n-button type="primary" data-testid="inventory-record-button" @click="inventoryModalVisible = true">
                 {{ $t("page.resourceLibrary.recordInventory") }}
               </n-button>
             </template>
@@ -178,7 +188,7 @@
               <h3>{{ $t("page.resourceLibrary.locations") }}</h3>
               <p>{{ $t("page.resourceLibrary.locationsHint") }}</p>
             </div>
-            <n-button type="primary" @click="locationModalVisible = true">
+            <n-button v-if="canManageResources" type="primary" @click="locationModalVisible = true">
               {{ $t("page.resourceLibrary.addLocation") }}
             </n-button>
           </div>
@@ -193,7 +203,7 @@
               <h3>{{ $t("page.resourceLibrary.bookings") }}</h3>
               <p>{{ $t("page.resourceLibrary.bookingsHint") }}</p>
             </div>
-            <n-button type="primary" @click="bookingModalVisible = true">
+            <n-button v-if="canBookEquipment" type="primary" @click="bookingModalVisible = true">
               {{ $t("page.resourceLibrary.newBooking") }}
             </n-button>
           </div>
@@ -237,7 +247,7 @@
               <h3>{{ $t("page.resourceLibrary.types") }}</h3>
               <p>{{ $t("page.resourceLibrary.typesHint") }}</p>
             </div>
-            <n-button type="primary" @click="openNewResourceType">
+            <n-button v-if="canManageResources" type="primary" data-testid="resource-register-type-button" @click="openNewResourceType">
               {{ $t("page.resourceLibrary.registerType") }}
             </n-button>
           </div>
@@ -272,14 +282,14 @@
   <n-modal v-model:show="resourceModalVisible" preset="dialog" :title="$t('page.resourceLibrary.addResource')" :show-icon="false" class="resource-dialog">
     <n-form label-placement="top">
       <n-form-item :label="$t('page.resourceLibrary.resourceType')" required>
-        <n-select v-model:value="resourceDraft.resource_type_id" :options="resourceTypeOptions" />
+        <n-select v-model:value="resourceDraft.resource_type_id" :options="resourceTypeOptions" data-testid="resource-type-select" />
       </n-form-item>
       <div class="form-grid">
         <n-form-item :label="$t('common.name')" required>
-          <n-input v-model:value="resourceDraft.name" />
+          <n-input v-model:value="resourceDraft.name" data-testid="resource-name-input" />
         </n-form-item>
         <n-form-item :label="$t('page.resourceLibrary.stableCode')" required>
-          <n-input v-model:value="resourceDraft.code" />
+          <n-input v-model:value="resourceDraft.code" data-testid="resource-code-input" />
         </n-form-item>
       </div>
       <n-form-item :label="$t('page.resourceLibrary.visibility')">
@@ -293,14 +303,14 @@
         </n-radio-group>
       </n-form-item>
       <n-form-item :label="$t('page.resourceLibrary.schemaData')" :feedback="resourceJsonError" :validation-status="resourceJsonError ? 'error' : undefined">
-        <n-input v-model:value="resourceDraft.data" type="textarea" :rows="8" placeholder="{ }" />
+        <n-input v-model:value="resourceDraft.data" type="textarea" :rows="8" placeholder="{ }" data-testid="resource-data-input" />
       </n-form-item>
     </n-form>
     <template #action>
       <n-button @click="resourceModalVisible = false">
         {{ $t("common.cancel") }}
       </n-button>
-      <n-button type="primary" :loading="saving" @click="saveResource">
+      <n-button type="primary" :loading="saving" data-testid="resource-save-button" @click="saveResource">
         {{ $t("common.confirm") }}
       </n-button>
     </template>
@@ -520,32 +530,32 @@
     <n-form label-placement="top">
       <div class="form-grid">
         <n-form-item :label="$t('page.resourceLibrary.operation')" required>
-          <n-select v-model:value="inventoryDraft.kind" :options="inventoryOperationOptions" />
+          <n-select v-model:value="inventoryDraft.kind" :options="inventoryOperationOptions" data-testid="inventory-operation-select" />
         </n-form-item>
         <n-form-item :label="$t('page.resourceLibrary.resource')" required>
-          <n-select v-model:value="inventoryDraft.resource_id" filterable :options="resourceOptions" />
+          <n-select v-model:value="inventoryDraft.resource_id" filterable :options="resourceOptions" data-testid="inventory-resource-select" />
         </n-form-item>
       </div>
       <n-form-item :label="$t('page.resourceLibrary.container')" required>
-        <n-select v-model:value="inventoryDraft.container_id" :options="inventoryContainerOptions" />
+        <n-select v-model:value="inventoryDraft.container_id" :options="inventoryContainerOptions" data-testid="inventory-container-select" />
       </n-form-item>
       <div class="form-grid">
         <n-form-item :label="inventoryDraft.kind === 'count' ? $t('page.resourceLibrary.countedBalance') : $t('page.resourceLibrary.quantity')" required>
-          <n-input v-model:value="inventoryDraft.quantity" />
+          <n-input v-model:value="inventoryDraft.quantity" data-testid="inventory-quantity-input" />
         </n-form-item>
         <n-form-item :label="$t('page.resourceLibrary.unit')" required>
-          <n-input v-model:value="inventoryDraft.unit" placeholder="mL" />
+          <n-input v-model:value="inventoryDraft.unit" placeholder="mL" data-testid="inventory-unit-input" />
         </n-form-item>
       </div>
       <n-form-item :label="$t('page.resourceLibrary.reason')">
-        <n-input v-model:value="inventoryDraft.reason" type="textarea" />
+        <n-input v-model:value="inventoryDraft.reason" type="textarea" data-testid="inventory-reason-input" />
       </n-form-item>
     </n-form>
     <template #action>
       <n-button @click="inventoryModalVisible = false">
         {{ $t("common.cancel") }}
       </n-button>
-      <n-button type="primary" :loading="saving" @click="saveInventoryOperation">
+      <n-button type="primary" :loading="saving" data-testid="inventory-save-button" @click="saveInventoryOperation">
         {{ $t("common.confirm") }}
       </n-button>
     </template>
@@ -619,10 +629,10 @@
     </template>
   </n-modal>
 
-  <n-drawer v-model:show="detailVisible" :width="560">
+  <n-drawer v-model:show="detailVisible" :width="560" data-testid="resource-detail">
     <n-drawer-content :title="selectedResource?.name || $t('page.resourceLibrary.resourceDetail')" closable>
       <template v-if="selectedResource">
-        <div class="mb-4 flex justify-end">
+        <div v-if="canOperateResource" class="mb-4 flex justify-end">
           <n-button secondary @click="openResourceRevision">
             {{ $t("page.resourceLibrary.reviseResource") }}
           </n-button>
@@ -697,17 +707,17 @@
         </n-collapse>
         <div class="drawer-heading mt-6">
           <h3>{{ $t("page.resourceLibrary.inventoryContainers") }}</h3>
-          <n-space>
-            <n-button secondary size="small" @click="lotModalVisible = true">
+          <n-space v-if="canOperateResource || canOperateInventory">
+            <n-button v-if="canOperateResource" secondary size="small" @click="lotModalVisible = true">
               {{ $t("page.resourceLibrary.addLot") }}
             </n-button>
-            <n-button secondary size="small" @click="containerModalVisible = true">
+            <n-button v-if="canOperateResource" secondary size="small" @click="containerModalVisible = true">
               {{ $t("page.resourceLibrary.addContainer") }}
             </n-button>
-            <n-button secondary size="small" @click="openInventoryForResource(selectedResource)">
+            <n-button v-if="canOperateInventory" secondary size="small" @click="openInventoryForResource(selectedResource)">
               {{ $t("page.resourceLibrary.recordInventory") }}
             </n-button>
-            <n-button secondary size="small" @click="createLabelForResource">
+            <n-button v-if="canOperateResource" secondary size="small" @click="createLabelForResource">
               {{ $t("page.resourceLibrary.createLabel") }}
             </n-button>
           </n-space>
@@ -722,7 +732,7 @@
         <div class="mt-6">
           <div class="drawer-heading">
             <h3>{{ $t("page.resourceLibrary.serviceHistory") }}</h3>
-            <n-button secondary size="small" @click="serviceModalVisible = true">
+            <n-button v-if="canServiceEquipment" secondary size="small" @click="serviceModalVisible = true">
               {{ $t("page.resourceLibrary.addServiceEvent") }}
             </n-button>
           </div>
@@ -884,6 +894,7 @@ import type {
   EquipmentBooking,
   InventoryEvent,
   InventoryReservation,
+  ResourceCapabilities,
   ResourceDefinitionVersion,
   ResourceDetail,
   ResourceItem,
@@ -912,6 +923,7 @@ import {
   fetchInventoryEvents,
   fetchInventoryReservations,
   fetchResource,
+  fetchResourceCapabilities,
   fetchResourceDefinitionVersions,
   fetchResourceLocations,
   fetchResourceNotifications,
@@ -974,7 +986,17 @@ const locations = ref<ResourceLocation[]>([])
 const bookings = ref<EquipmentBooking[]>([])
 const notifications = ref<ResourceNotification[]>([])
 const templates = ref<ResourceTemplate[]>([])
+const resourceAccess = ref<ResourceCapabilities | null>(null)
 const filters = reactive({ q: "", resourceTypeId: null as string | null, status: null as string | null })
+function hasResourceCapability(capability: string) {
+  return Boolean(resourceAccess.value?.capabilities.includes(capability))
+}
+const canOperateResource = computed(() => hasResourceCapability("resource.operate"))
+const canOperateInventory = computed(() => hasResourceCapability("inventory.operate"))
+const canManageResources = computed(() => hasResourceCapability("resource.manage"))
+const canBookEquipment = computed(() => hasResourceCapability("equipment.book"))
+const canCustodyResources = computed(() => hasResourceCapability("resource.custody"))
+const canServiceEquipment = computed(() => hasResourceCapability("equipment.service"))
 
 const overviewCards = computed(() => [
   { key: "resources", label: $t("page.resourceLibrary.resources"), value: overview.resources, hint: $t("page.resourceLibrary.resourcesHint") },
@@ -1059,7 +1081,7 @@ const bookingColumns: DataTableColumns<EquipmentBooking> = [
     title: $t("common.action"),
     key: "actions",
     width: 180,
-    render: row => row.status === "pending"
+    render: row => row.status === "pending" && canCustodyResources.value
       ? (
           <div class="flex gap-2">
             <NButton text type="primary" onClick={() => decideBooking(row, "approve")}>
@@ -1085,7 +1107,9 @@ const typeColumns: DataTableColumns<ResourceType> = [
     key: "actions",
     width: 110,
     fixed: "right",
-    render: row => <NButton text type="primary" onClick={() => openResourceTypeUpgrade(row)}>{$t("page.resourceLibrary.upgradeType")}</NButton>,
+    render: row => canManageResources.value
+      ? <NButton text type="primary" onClick={() => openResourceTypeUpgrade(row)}>{$t("page.resourceLibrary.upgradeType")}</NButton>
+      : null,
   },
 ]
 
@@ -1115,7 +1139,7 @@ const reservationColumns: DataTableColumns<InventoryReservation> = [
     title: $t("common.action"),
     key: "actions",
     width: 110,
-    render: row => row.status === "active"
+    render: row => row.status === "active" && canOperateInventory.value
       ? <NButton text type="primary" onClick={() => releaseReservation(row)}>{$t("page.resourceLibrary.release")}</NButton>
       : null,
   },
@@ -1183,6 +1207,8 @@ async function loadSection() {
     return
   loading.value = true
   try {
+    if (!resourceAccess.value)
+      resourceAccess.value = await fetchResourceCapabilities(labId.value)
     if (!resourceTypes.value.length)
       resourceTypes.value = (await fetchResourceTypes(labId.value)).items
     if (activeSection.value === "overview") {

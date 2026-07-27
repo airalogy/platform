@@ -5,6 +5,8 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import TypedDict
 
+from airalogy.markdown import generate_model
+from airalogy.record.hash import get_data_sha1
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,7 @@ from app.models.lab import Lab, LabRole, LabUser
 from app.models.project import Project, ProjectRole, ProjectType, ProjectUser
 from app.models.protocol import Protocol
 from app.models.protocol_version import ProtocolVersion
+from app.models.record import Record
 from app.models.user import User
 
 try:
@@ -56,6 +59,11 @@ DEFAULT_PROTOCOL_EXAMPLES: list[DefaultProtocolExample] = [
     {
         "protocol_id": "drug_response_ic50_en",
         "example_id": "drug-response-ic50",
+        "locale": "en-US",
+    },
+    {
+        "protocol_id": "plasmid_resource_definition_en",
+        "example_id": "plasmid-resource-definition",
         "locale": "en-US",
     },
 ]
@@ -334,6 +342,20 @@ def empty_protocol_fields() -> dict:
     }
 
 
+def resource_definition_json_schema(aimd: str) -> dict:
+    """Build the variable Schema shape produced by the Protocol executor."""
+    namespace: dict = {}
+    exec(
+        compile(generate_model(aimd), "<development resource fixture>", "exec"),
+        namespace,
+    )
+    return {
+        "steps": {},
+        "vars": namespace["VarModel"].model_json_schema(),
+        "checks": {},
+    }
+
+
 async def ensure_protocols(
     db_session: AsyncSession,
     project: Project,
@@ -359,6 +381,7 @@ async def ensure_protocols(
                 user_id=owner.id,
                 uid=uid,
                 name=metadata.get("name") or uid,
+                kind=metadata.get("kind", "experiment"),
                 latest_version=version,
                 description=metadata.get("description"),
                 disciplines=metadata.get("disciplines") or [],
@@ -369,6 +392,7 @@ async def ensure_protocols(
         else:
             protocol.user_id = owner.id
             protocol.name = metadata.get("name") or uid
+            protocol.kind = metadata.get("kind", "experiment")
             protocol.latest_version = version
             protocol.description = metadata.get("description")
             protocol.disciplines = metadata.get("disciplines") or []
@@ -382,7 +406,11 @@ async def ensure_protocols(
             ],
         )
         version_payload = {
-            "json_schema": empty_protocol_json_schema(),
+            "json_schema": (
+                resource_definition_json_schema(protocol_data["aimd"])
+                if protocol.kind == "resource_definition"
+                else empty_protocol_json_schema()
+            ),
             "fields": empty_protocol_fields(),
             "assigners": {},
             "assigner_graph": {},
@@ -403,6 +431,141 @@ async def ensure_protocols(
         protocols.append(protocol)
 
     return protocols, warnings
+
+
+async def ensure_schema_governance_fixture(
+    db_session: AsyncSession,
+    project: Project,
+    owner: User,
+) -> tuple[Protocol, Record]:
+    """Create an old Record plus a newer Protocol version for browser testing."""
+    uid = "schema_governance_e2e"
+    protocol = await Protocol.find_by(
+        db_session,
+        [
+            Protocol.project_id == project.id,
+            Protocol.uid == uid,
+            Protocol.deleted_at.is_(None),
+        ],
+    )
+    if protocol is None:
+        protocol = Protocol(
+            project_id=project.id,
+            user_id=owner.id,
+            uid=uid,
+            name="Schema Governance E2E",
+            kind="experiment",
+            latest_version="2.0.0",
+            description="Development fixture for cross-version Record governance.",
+        )
+        db_session.add(protocol)
+        await db_session.flush()
+    else:
+        protocol.user_id = owner.id
+        protocol.name = "Schema Governance E2E"
+        protocol.kind = "experiment"
+        protocol.latest_version = "2.0.0"
+
+    source_schema = {
+        "type": "object",
+        "properties": {
+            "var": {
+                "type": "object",
+                "properties": {"old_name": {"type": "string"}},
+            }
+        },
+    }
+    target_schema = {
+        "type": "object",
+        "properties": {
+            "var": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "new_measurement": {"type": ["number", "null"]},
+                },
+            }
+        },
+    }
+    manifest = {
+        "version": "airalogy.migration.v1",
+        "from": "1.0.0",
+        "to": "2.0.0",
+        "operations": [
+            {"op": "rename", "from": "var.old_name", "to": "var.name"}
+        ],
+    }
+    version_payloads = {
+        "1.0.0": {
+            "json_schema": source_schema,
+            "aimd": "# Schema Governance E2E\n\nLegacy sample record.",
+            "migration_manifest": None,
+        },
+        "2.0.0": {
+            "json_schema": target_schema,
+            "aimd": "# Schema Governance E2E\n\nCurrent sample record.",
+            "migration_manifest": manifest,
+        },
+    }
+    for version, payload in version_payloads.items():
+        protocol_version = await ProtocolVersion.find_by(
+            db_session,
+            [
+                ProtocolVersion.protocol_id == protocol.id,
+                ProtocolVersion.version == version,
+            ],
+        )
+        values = {
+            "meta_data": {
+                "id": uid,
+                "version": version,
+                "kind": "experiment",
+                "name": protocol.name,
+            },
+            "json_schema": payload["json_schema"],
+            "fields": empty_protocol_fields(),
+            "assigners": {},
+            "assigner_graph": {},
+            "aimd": payload["aimd"],
+            "migration_manifest": payload["migration_manifest"],
+        }
+        if protocol_version is None:
+            db_session.add(
+                ProtocolVersion(
+                    protocol_id=protocol.id,
+                    version=version,
+                    **values,
+                )
+            )
+        else:
+            for key, value in values.items():
+                setattr(protocol_version, key, value)
+
+    record = await Record.find_by(
+        db_session,
+        [
+            Record.protocol_id == protocol.id,
+            Record.version == 1,
+            Record.deleted_at.is_(None),
+        ],
+    )
+    data = {"var": {"old_name": "Legacy E2E sample"}, "step": {}, "check": {}}
+    if record is None:
+        record = Record(
+            protocol_id=protocol.id,
+            protocol_version="1.0.0",
+            user_id=owner.id,
+            data=data,
+            report="# Legacy E2E sample",
+            number=1,
+            version=1,
+            hash=get_data_sha1({"data": data}),
+            revision_kind="initial",
+            revision_reason="",
+        )
+        db_session.add(record)
+        await db_session.flush()
+    return protocol, record
 
 
 @router.post("/quickstart")
@@ -462,6 +625,11 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
     await ensure_project_members(db_session, project, owner, users)
 
     protocols, warnings = await ensure_protocols(db_session, project, owner)
+    governance_protocol, governance_record = await ensure_schema_governance_fixture(
+        db_session,
+        project,
+        owner,
+    )
     lab.projects_count = await Project.count(
         db_session,
         [Project.lab_id == lab.id, Project.deleted_at.is_(None)],
@@ -496,9 +664,18 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
                 "id": str(protocol.id),
                 "uid": protocol.uid,
                 "name": protocol.name,
+                "kind": protocol.kind,
                 "latest_version": protocol.latest_version,
             }
             for protocol in protocols
         ],
+        "schema_governance": {
+            "protocol_id": str(governance_protocol.id),
+            "protocol_uid": governance_protocol.uid,
+            "source_version": governance_record.protocol_version,
+            "target_version": governance_protocol.latest_version,
+            "record_id": str(governance_record.id),
+            "record_version": governance_record.version,
+        },
         "warnings": warnings,
     }

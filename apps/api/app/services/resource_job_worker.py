@@ -29,6 +29,7 @@ from app.services.resource_index import build_resource_indexes
 from app.services.resource_inventory import (
     release_expired_inventory_reservations,
 )
+from app.services.resource_schema import resource_data_schema
 from app.services.schema_governance import (
     find_migration_path,
     get_or_create_projection,
@@ -189,7 +190,7 @@ async def _migrate_resources(
                 "message": issue.message,
             }
             for issue in Draft202012Validator(
-                target_version.json_schema
+                resource_data_schema(target_version.json_schema)
             ).iter_errors(preview["data"])
         ]
         if preview["status"] != "completed" or schema_issues:

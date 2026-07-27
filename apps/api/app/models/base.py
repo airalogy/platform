@@ -14,7 +14,7 @@ class Base(DeclarativeBase):
     json_computed_fields: list[str] | None = None
 
     def __iter__(self):
-        columns = self.__table__.columns.keys()
+        columns = (attribute.key for attribute in self.__mapper__.column_attrs)
         for key in columns:
             if not self.json_exclude_fields or key not in self.json_exclude_fields:
                 yield key, getattr(self, key)
@@ -37,7 +37,7 @@ class Base(DeclarativeBase):
         excludes = excludes if excludes else self.json_exclude_fields
         computed = computed if computed else self.json_computed_fields
         includes = includes if includes else self.json_include_fields
-        columns = self.__table__.columns.keys()
+        columns = (attribute.key for attribute in self.__mapper__.column_attrs)
         data = {}
         if only:
             if includes:

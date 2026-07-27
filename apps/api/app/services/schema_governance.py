@@ -390,7 +390,7 @@ async def run_schema_migration(
         data=migrated_data,
         report=record.report,
         number=record.number,
-        hash=get_data_sha1(migrated_data),
+        hash=get_data_sha1({"data": migrated_data}),
         revision_kind="schema_migration",
         revision_reason=reason,
         source_protocol_version=record.protocol_version,

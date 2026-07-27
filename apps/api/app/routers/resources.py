@@ -54,6 +54,7 @@ from app.services.resource_inventory import (
     set_inventory_on_hand,
     transfer_inventory,
 )
+from app.services.resource_schema import resource_data_schema
 from app.services.resource_units import UnitError, normalize_ucum_unit
 
 from .depends import CurrentUser
@@ -186,7 +187,7 @@ def _model_data(model, **extra) -> dict[str, Any]:
 
 def _validation_issues(schema: dict, data: dict) -> list[dict[str, str]]:
     try:
-        validator = Draft202012Validator(schema)
+        validator = Draft202012Validator(resource_data_schema(schema))
     except Exception as error:
         raise HTTPException(
             status_code=409,
@@ -610,6 +611,20 @@ async def resource_templates(
         capability="resource.read",
     )
     return {"templates": BUILTIN_TEMPLATES}
+
+
+@router.get("/capabilities")
+async def resource_capabilities(
+    lab_id: UUID, current_user: CurrentUser, db_session: DBSession
+):
+    """Expose the current user's Lab-level resource permissions to the UI."""
+    decision = await _require(
+        db_session,
+        user_id=current_user.id,
+        lab_id=lab_id,
+        capability="resource.read",
+    )
+    return decision.as_dict()
 
 
 @router.get("/definition-versions")
@@ -1061,6 +1076,7 @@ async def create_resource(
             )
         )
         await db_session.commit()
+        await db_session.refresh(resource)
     except IntegrityError as error:
         await db_session.rollback()
         raise HTTPException(
@@ -1232,6 +1248,7 @@ async def revise_resource(
         )
     )
     await db_session.commit()
+    await db_session.refresh(resource)
     return _model_data(resource, current_revision=_model_data(revision))
 
 

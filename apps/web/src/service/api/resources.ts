@@ -137,6 +137,12 @@ export interface ResourceOverview {
   active_bookings: number
 }
 
+export interface ResourceCapabilities {
+  capabilities: string[]
+  role_keys: string[]
+  sources: Array<Record<string, unknown>>
+}
+
 export interface ResourceTemplate {
   id: string
   name: string
@@ -160,6 +166,10 @@ async function getData<T>(options: Parameters<typeof request<T>>[0]): Promise<T>
 
 export function fetchResourceOverview(labId: string) {
   return getData<ResourceOverview>({ url: libraryUrl(labId, "/overview") })
+}
+
+export function fetchResourceCapabilities(labId: string) {
+  return getData<ResourceCapabilities>({ url: libraryUrl(labId, "/capabilities") })
 }
 
 export function fetchResourceDefinitionVersions(labId: string) {

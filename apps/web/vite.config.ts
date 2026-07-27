@@ -2,7 +2,7 @@ import type { FileImporter } from "sass"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import importMetaUrlPlugin from "@codingame/esbuild-import-meta-url-plugin"
-import { defineConfig } from "vite"
+import { defineConfig, loadEnv } from "vite"
 import { createViteProxy } from "./build/config"
 import { setupVitePlugins } from "./build/plugins"
 
@@ -24,11 +24,13 @@ const sassFileImporter: FileImporter<"sync"> = {
 
 // https://vitejs.dev/config/
 export default defineConfig((configEnv) => {
-  // Get environment variables from process.env (set via npm scripts)
-  const viteEnv: Env.ImportMeta = {
+  const loadedEnv = loadEnv(configEnv.mode, process.cwd(), "")
+  const viteEnv = {
+    ...loadedEnv,
+    ...process.env,
     VITE_SERVICE_ENV: (process.env.VITE_SERVICE_ENV as Env.ServiceEnv) || "dev",
     VITE_HTTP_PROXY: (process.env.VITE_HTTP_PROXY as CommonType.YesOrNo) || "N",
-  }
+  } as Env.ImportMeta
 
   console.log(`[Vite Config] Mode: ${configEnv.mode}`)
   console.log(`[Vite Config] VITE_SERVICE_ENV: ${viteEnv.VITE_SERVICE_ENV}`)
@@ -58,7 +60,7 @@ export default defineConfig((configEnv) => {
     server: {
       host: "0.0.0.0",
       port: 3000,
-      open: true,
+      open: !process.env.CI,
       proxy: createViteProxy(viteEnv),
       strictPort: true,
       // Remove CORS restrictions in development for external images

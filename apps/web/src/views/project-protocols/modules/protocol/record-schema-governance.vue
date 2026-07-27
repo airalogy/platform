@@ -1,6 +1,6 @@
 <template>
-  <div class="flex flex-wrap items-center gap-2">
-    <n-tag type="info" size="small" :bordered="false">
+  <div class="flex flex-wrap items-center gap-2" data-testid="record-schema-governance">
+    <n-tag type="info" size="small" :bordered="false" data-testid="record-source-version">
       {{ t("page.protocol.schemaGovernance.originalVersion", { version: sourceVersion }) }}
     </n-tag>
     <template v-if="targetOptions.length > 0">
@@ -10,12 +10,14 @@
         class="w-34"
         :options="targetOptions"
         :placeholder="t('page.protocol.schemaGovernance.targetVersion')"
+        data-testid="record-target-version"
       />
       <n-button
         size="small"
         secondary
         :loading="loadingAction === 'projection'"
         :disabled="!targetVersion || !!loadingAction"
+        data-testid="record-project-version"
         @click="openProjection"
       >
         {{ t("page.protocol.schemaGovernance.project") }}
@@ -27,6 +29,7 @@
         secondary
         :loading="loadingAction === 'migration'"
         :disabled="!targetVersion || !!loadingAction"
+        data-testid="record-migrate-version"
         @click="openMigration"
       >
         {{ t("page.protocol.schemaGovernance.migrate") }}
@@ -50,6 +53,7 @@
       class="max-w-4xl w-[calc(100vw-2rem)]"
       :title="modalTitle"
       :mask-closable="false"
+      data-testid="record-governance-modal"
     >
       <n-spin :show="!!loadingAction">
         <template v-if="preview">
@@ -94,8 +98,12 @@
           </n-alert>
 
           <n-collapse class="mb-4">
-            <n-collapse-item :title="t('page.protocol.schemaGovernance.previewData')" name="data">
-              <pre class="max-h-96 overflow-auto rounded-lg bg-gray-50 p-4 text-xs dark:bg-gray-900">{{ formattedPreview }}</pre>
+            <n-collapse-item
+              :title="t('page.protocol.schemaGovernance.previewData')"
+              name="data"
+              data-testid="record-migration-data-toggle"
+            >
+              <pre class="max-h-96 overflow-auto rounded-lg bg-gray-50 p-4 text-xs dark:bg-gray-900" data-testid="record-migration-data">{{ formattedPreview }}</pre>
             </n-collapse-item>
             <n-collapse-item
               v-if="preview.steps.length"
@@ -124,6 +132,7 @@
               type="textarea"
               :autosize="{ minRows: 2, maxRows: 4 }"
               :placeholder="t('page.protocol.schemaGovernance.reasonPlaceholder')"
+              data-testid="record-migration-reason"
             />
           </n-form-item>
         </template>
@@ -148,13 +157,13 @@
           >
             {{ projection.not_collected.join(", ") }}
           </n-alert>
-          <pre class="max-h-[55vh] overflow-auto rounded-lg bg-gray-50 p-4 text-xs dark:bg-gray-900">{{ formattedProjection }}</pre>
+          <pre class="max-h-[55vh] overflow-auto rounded-lg bg-gray-50 p-4 text-xs dark:bg-gray-900" data-testid="record-projection-data">{{ formattedProjection }}</pre>
         </template>
       </n-spin>
 
       <template #footer>
         <div class="flex justify-end gap-2">
-          <n-button @click="showModal = false">
+          <n-button data-testid="record-governance-close" @click="showModal = false">
             {{ t("common.close") }}
           </n-button>
           <n-button
@@ -162,6 +171,7 @@
             type="primary"
             :loading="loadingAction === 'confirm'"
             :disabled="!canConfirmMigration"
+            data-testid="record-migration-confirm"
             @click="confirmMigration"
           >
             {{ t("page.protocol.schemaGovernance.confirmMigration") }}

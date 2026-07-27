@@ -12,13 +12,13 @@
     <n-form-item path="email">
       <n-input
         v-model:value="model.email" class="form__input" required
-        :placeholder="$t('page.login.common.emailPlaceholder')" @keyup.enter="handleSubmit"
+        :placeholder="$t('page.login.common.emailPlaceholder')" data-testid="login-email" @keyup.enter="handleSubmit"
       />
     </n-form-item>
     <n-form-item path="password">
       <n-input
         v-model:value="model.password" class="form__input" show-password-on="click" type="password" required
-        :maxlength="30" :placeholder="$t('page.login.common.passwordPlaceholder')" @keyup.enter="handleSubmit"
+        :maxlength="30" :placeholder="$t('page.login.common.passwordPlaceholder')" data-testid="login-password" @keyup.enter="handleSubmit"
       >
         <template #password-visible-icon>
           <n-icon :size="16" :component="EyeOutline" />
@@ -30,7 +30,7 @@
     </n-form-item>
     <n-button
       type="primary" size="large" strong block :loading="authStore.loginLoading" class="mt-10"
-      @click="handleSubmit"
+      data-testid="login-submit" @click="handleSubmit"
     >
       {{ $t("page.login.emailLogin.confirm") }}
     </n-button>
