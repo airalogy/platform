@@ -1,6 +1,6 @@
 # airalogy protocol executor dependencies
 
-airalogy[markitdown]==0.10.0
+airalogy[markitdown]==0.16.0
 biopython==1.85
 pillow==11.1.0
 openai==1.102.0

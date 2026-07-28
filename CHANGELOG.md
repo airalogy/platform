@@ -36,3 +36,4 @@ Target initial version: `0.1.0`.
 ### Fixed
 
 - Fixed the Lab resource library failing to render on first client-side navigation because its modal roots were incompatible with route transitions.
+- Kept the isolated Protocol executor's Airalogy dependency aligned with the backend to prevent `.aira` imports from failing when executor modules change.

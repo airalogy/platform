@@ -36,3 +36,4 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 ### 修复
 
 - 修复实验室资源库因弹窗根节点与路由过渡不兼容，首次通过客户端导航进入时无法渲染的问题。
+- 保持隔离 Protocol 执行器与后端的 Airalogy 依赖版本一致，避免执行器模块变化后 `.aira` 导入失败。
