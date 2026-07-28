@@ -9,10 +9,19 @@
           {{ $t("page.recordDiary.heatmapHint") }}
         </p>
       </div>
-      <n-spin :show="loading" size="small" />
+      <n-spin
+        v-if="loading"
+        size="small"
+        data-testid="record-diary-heatmap-loading"
+      />
     </div>
     <div class="record-diary-heatmap__scroll">
-      <div :id="heatmapId" ref="heatmapRef" class="record-diary-heatmap__chart" />
+      <div
+        :id="heatmapId"
+        ref="heatmapRef"
+        class="record-diary-heatmap__chart"
+        data-testid="record-diary-heatmap-chart"
+      />
     </div>
   </section>
 </template>
@@ -106,12 +115,11 @@ async function paintHeatmap() {
   heatmapRef.value.innerHTML = ""
 
   const nextCalendar = new CalHeatmap()
-  const onCalendarEvent = nextCalendar.on as unknown as (
-    name: string,
-    callback: (_event: PointerEvent, timestamp: number, value: number | null) => void,
-  ) => void
-  onCalendarEvent("click", (_event, timestamp) => {
-    emit("update:selectedDate", toDateKey(new Date(timestamp)))
+  nextCalendar.on("click", (...args: unknown[]) => {
+    const timestamp = args[1]
+    if (typeof timestamp === "number") {
+      emit("update:selectedDate", toDateKey(new Date(timestamp)))
+    }
   })
   calendar = nextCalendar
 
