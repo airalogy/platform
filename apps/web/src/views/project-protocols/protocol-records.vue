@@ -48,6 +48,19 @@
               @imported="handleRecordsImported"
             />
 
+            <record-export-modal
+              v-if="canBulkExport && protocolInfo.lab.id && protocolInfo.project.id"
+              scope-type="protocol"
+              :lab-id="protocolInfo.lab.id"
+              :project-id="protocolInfo.project.id"
+              :protocol-id="protocolInfo.id"
+              :protocol-version="protocolVersionOption !== 'all' ? protocolVersionOption : undefined"
+              :submitter-user-id="selectedUserId || undefined"
+              :record-number="recordNumberInput || undefined"
+              :record-version="recordVersionInput || undefined"
+              :query="searchInputVal.trim() || undefined"
+            />
+
             <add-log-modal
               v-if="canSubmitDataToOthers"
               :lab-uid="protocolInfo.lab.uid"
@@ -158,9 +171,11 @@ import type { SelectOption } from "naive-ui"
 import type { ITimelineItem } from "./types"
 import GlobalAddMember from "@/components/common/global-add-member.vue"
 import GlobalSortSelector from "@/components/common/global-sort-selector.vue"
+import RecordExportModal from "@/components/common/record-export-modal.vue"
 import SearchInput from "@/components/common/search-input.vue"
 import { useProjectPermissions } from "@/composables"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { LabRole, ProjectRole } from "@/enum"
 import { getProtocolVersions } from "@/service/api/protocol"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
@@ -190,6 +205,11 @@ const authStore = useAuthStore()
 
 const { fetchProtocolRecords } = useFetchProtocolRecords()
 const { canSubmitDataToOthers } = useProjectPermissions(projectInfo)
+const canBulkExport = computed(() => Boolean(projectInfo.value) && (
+  projectInfo.value?.user_lab_role === LabRole.OWNER
+  || projectInfo.value?.user_role === ProjectRole.OWNER
+  || projectInfo.value?.user_role === ProjectRole.MANAGER
+))
 const { reloadPage } = useAppStore()
 
 // Initialize loading states for different operations

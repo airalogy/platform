@@ -14,7 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import sessionmanager
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
+from app.models.record_export import RecordExport, RecordExportStatus
 from app.models.resource import (
+    JobStatus,
     PersistentJob,
     Resource,
     ResourceRevision,
@@ -24,6 +26,12 @@ from app.services.persistent_jobs import (
     claim_job,
     complete_job,
     fail_job,
+    renew_job_lease,
+)
+from app.services.record_exports import (
+    expire_record_exports,
+    mark_record_export_failed,
+    process_record_export,
 )
 from app.services.resource_index import build_resource_indexes
 from app.services.resource_inventory import (
@@ -37,6 +45,44 @@ from app.services.schema_governance import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _maintain_job_lease(
+    job_id: UUID,
+    worker_id: str,
+    stop_event: asyncio.Event,
+    *,
+    lease_seconds: int,
+) -> None:
+    """Renew long-running jobs from an independent transaction."""
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(
+                stop_event.wait(), timeout=max(lease_seconds // 3, 10)
+            )
+            return
+        except TimeoutError:
+            pass
+        try:
+            async with sessionmanager.session() as lease_session:
+                lease_job = await lease_session.get(PersistentJob, job_id)
+                if (
+                    lease_job is None
+                    or lease_job.status != JobStatus.RUNNING.value
+                    or lease_job.lease_owner != worker_id
+                ):
+                    return
+                await renew_job_lease(
+                    lease_session,
+                    job=lease_job,
+                    worker_id=worker_id,
+                    lease_seconds=lease_seconds,
+                )
+                await lease_session.commit()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Persistent job lease renewal failed")
 
 
 async def _protocol_versions(
@@ -235,6 +281,10 @@ async def _migrate_resources(
 async def process_persistent_job(
     db_session: AsyncSession, job: PersistentJob
 ) -> dict:
+    if job.kind == "record_export":
+        return await process_record_export(
+            db_session, UUID(str(job.payload["export_id"]))
+        )
     if job.kind == "record_projection":
         return await _project_records(db_session, job)
     if job.kind == "resource_schema_migration":
@@ -248,24 +298,42 @@ async def run_persistent_job_worker(
     poll_seconds: float = 2.0,
 ) -> None:
     worker_id = f"{socket.gethostname()}:{id(stop_event)}"
+    lease_seconds = 120
     while not stop_event.is_set():
         try:
             async with sessionmanager.session() as db_session:
                 async with db_session.begin():
                     await release_expired_inventory_reservations(db_session)
+                    await expire_record_exports(db_session)
                     job = await claim_job(
                         db_session,
                         worker_id=worker_id,
-                        kinds={"record_projection", "resource_schema_migration"},
-                        lease_seconds=120,
+                        kinds={
+                            "record_export",
+                            "record_projection",
+                            "resource_schema_migration",
+                        },
+                        lease_seconds=lease_seconds,
                     )
                 if job is None:
                     await asyncio.wait_for(
                         stop_event.wait(), timeout=poll_seconds
                     )
                     continue
+                lease_stop = asyncio.Event()
+                lease_task = asyncio.create_task(
+                    _maintain_job_lease(
+                        job.id,
+                        worker_id,
+                        lease_stop,
+                        lease_seconds=lease_seconds,
+                    ),
+                    name=f"persistent-job-lease-{job.id}",
+                )
                 try:
                     result = await process_persistent_job(db_session, job)
+                    lease_stop.set()
+                    await lease_task
                     await complete_job(
                         db_session,
                         job=job,
@@ -273,7 +341,9 @@ async def run_persistent_job_worker(
                         result=result,
                     )
                     await db_session.commit()
-                except Exception as error:
+                except Exception as error:  # noqa: BLE001 - job failures are persisted
+                    lease_stop.set()
+                    await lease_task
                     await db_session.rollback()
                     job = await db_session.get(PersistentJob, job.id)
                     if job is not None:
@@ -283,6 +353,24 @@ async def run_persistent_job_worker(
                             worker_id=worker_id,
                             error=str(error),
                         )
+                        if job.kind == "record_export":
+                            export_id = UUID(str(job.payload["export_id"]))
+                            if job.status == JobStatus.FAILED.value:
+                                await mark_record_export_failed(
+                                    db_session,
+                                    export_id,
+                                    str(error),
+                                )
+                            else:
+                                record_export = await db_session.get(
+                                    RecordExport,
+                                    export_id,
+                                )
+                                if record_export is not None:
+                                    record_export.status = (
+                                        RecordExportStatus.PENDING.value
+                                    )
+                                    record_export.error = str(error)
                         await db_session.commit()
         except TimeoutError:
             continue

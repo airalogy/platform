@@ -4,6 +4,7 @@
       <n-notification-provider>
         <n-message-provider>
           <context-holder />
+          <record-export-notifier />
           <slot />
         </n-message-provider>
       </n-notification-provider>
@@ -16,6 +17,7 @@ import { useProvideChatConfigStore } from "@/composables"
 import { useProvideChatProvider } from "@airalogy/components/chat/providers/useChatProvider"
 import { useDialog, useLoadingBar, useMessage, useNotification } from "naive-ui"
 import { createTextVNode, defineComponent } from "vue"
+import RecordExportNotifier from "./record-export-notifier.vue"
 
 defineOptions({
   name: "AppProvider",

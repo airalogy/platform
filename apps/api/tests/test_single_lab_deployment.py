@@ -26,6 +26,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     resource_revision = import_module(
         "migrations.versions.0007_resources_and_schema_governance"
     )
+    export_revision = import_module("migrations.versions.0008_record_exports")
     import_models()
 
     later_tables = {
@@ -36,6 +37,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
         "model_usage_events",
     }
     later_tables.update(resource_revision.RESOURCE_TABLE_NAMES)
+    later_tables.update(export_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

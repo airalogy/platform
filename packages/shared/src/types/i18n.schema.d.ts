@@ -670,6 +670,59 @@ declare namespace I18n {
         calendarMonth: string
         selectedDate: string
       }
+      recordExport: {
+        trigger: string
+        title: string
+        newExport: string
+        history: string
+        records: string
+        protocols: string
+        attachments: string
+        attachmentSize: string
+        format: string
+        protocolVersion: string
+        selectProtocolVersion: string
+        revisionHistory: string
+        revisionHistoryHint: string
+        includeAttachments: string
+        includeAttachmentsHint: string
+        previewWarnings: string
+        previewFailed: string
+        historyFailed: string
+        warningCount: string
+        noFilters: string
+        dateFilter: string
+        submitterFilter: string
+        protocolVersionFilter: string
+        recordNumberFilter: string
+        recordVersionFilter: string
+        queryFilter: string
+        start: string
+        started: string
+        regenerate: string
+        regenerated: string
+        expiresAt: string
+        noHistory: string
+        deleteConfirm: string
+        labScopeHint: string
+        projectScopeHint: string
+        protocolScopeHint: string
+        airaHint: string
+        jsonlHint: string
+        csvHint: string
+        completedTitle: string
+        completedMessage: string
+        failedTitle: string
+        failedMessage: string
+        status: {
+          pending: string
+          running: string
+          succeeded: string
+          failed: string
+          cancelled: string
+          expired: string
+        }
+      }
       function: {
         tab: {
           tabOperate: {

@@ -25,10 +25,20 @@ class OssStorage(StorageBackend):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
-    async def get_presigned_url(self, object_key: str, expires: int = 24) -> str:
+    async def get_presigned_url(
+        self,
+        object_key: str,
+        expires: int = 24,
+        download_name: str | None = None,
+    ) -> str:
         request = oss.GetObjectRequest(
             bucket=self.bucket,
             key=object_key,
+            response_content_disposition=(
+                f'attachment; filename="{download_name}"'
+                if download_name
+                else None
+            ),
         )
         res = await self._run_sync(
             self.client.presign,

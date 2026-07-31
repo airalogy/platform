@@ -55,10 +55,16 @@ def is_managed_storage_backend(backend: str | None = None) -> bool:
     return _normalize_backend(backend) in MANAGED_STORAGE_BACKENDS
 
 
-async def file_object_url(object_key, expires=24, backend: str | None = None):
+async def file_object_url(
+    object_key,
+    expires=24,
+    backend: str | None = None,
+    download_name: str | None = None,
+):
     return await get_storage_backend(backend).get_presigned_url(
         object_key,
         expires=expires,
+        download_name=download_name,
     )
 
 

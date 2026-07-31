@@ -49,6 +49,7 @@ from .protocol_users import router as protocol_users_router
 from .protocol_versions import router as protocol_versions_router
 from .protocols import router as protocols_router
 from .questions import router as questions_router
+from .record_exports import router as record_exports_router
 from .records import router as records_router
 from .resources import router as resources_router
 from .search import router as search_router
@@ -252,6 +253,7 @@ app.include_router(groups_router)
 app.include_router(protocols_router)
 app.include_router(protocol_versions_router)
 app.include_router(records_router)
+app.include_router(record_exports_router)
 app.include_router(resources_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)

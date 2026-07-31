@@ -26,12 +26,23 @@ class MinioStorage(StorageBackend):
         )
         self.bucket = bucket
 
-    async def get_presigned_url(self, object_key: str, expires: int = 24) -> str:
+    async def get_presigned_url(
+        self,
+        object_key: str,
+        expires: int = 24,
+        download_name: str | None = None,
+    ) -> str:
+        response_headers = (
+            {"response-content-disposition": f'attachment; filename="{download_name}"'}
+            if download_name
+            else None
+        )
         return await self.client.get_presigned_url(
             "GET",
             self.bucket,
             object_key,
             expires=timedelta(hours=expires),
+            response_headers=response_headers,
         )
 
     async def upload_file(

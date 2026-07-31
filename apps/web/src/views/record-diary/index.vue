@@ -46,6 +46,15 @@
           </n-tag>
           <span v-else />
           <div class="flex flex-wrap items-center gap-3">
+            <record-export-modal
+              v-if="canBulkExport && exportLabId"
+              :scope-type="exportScopeType"
+              :lab-id="exportLabId"
+              :project-id="exportProjectId"
+              :date-from="selectedDate"
+              :date-to="selectedDate"
+              :submitter-user-id="submitterFilter === 'me' ? authStore.userInfo.id : undefined"
+            />
             <n-select
               v-if="showLabFilter"
               v-model:value="selectedLabUid"
@@ -230,11 +239,15 @@ import type { SelectOption } from "naive-ui"
 import type { RouteLocationRaw } from "vue-router"
 import LoadingListWrapper from "@/components/common/loading-list-wrapper.vue"
 import TimelineListItem from "@/components/common/protocol-timeline/timeline-list-item.vue"
+import RecordExportModal from "@/components/common/record-export-modal.vue"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { LabRole, ProjectRole } from "@/enum"
 import { fetchProjectList } from "@/service/api/projects"
 import { fetchAccessibleRecordDiary, fetchUserLabs, fetchUserProjects, fetchUserRecordDiary } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
+import { useOrProvideLabInfoStore } from "@/views/labs/hooks/useLabsInfoStore"
 import { useProfileStore } from "@/views/profile/hooks/useProfileStore"
+import { useOrProvideProjectInfoStore } from "@/views/project-protocols/hooks/useProjectInfoStore"
 import { createProtocolRecordData } from "@/views/project-protocols/utils"
 import { $t } from "@airalogy/shared/locales"
 import { formatDate } from "@airalogy/shared/utils"
@@ -250,6 +263,8 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const profileStore = useProfileStore()
+const { labInfo, userLabRole } = useOrProvideLabInfoStore(null)
+const { projectInfo } = useOrProvideProjectInfoStore(null)
 const { routerPushByKey } = useRouterPush()
 
 const routeName = computed(() => String(route.name || ""))
@@ -268,6 +283,7 @@ const labLoading = ref(false)
 const projectLoading = ref(false)
 const labOptions = ref<SelectOption[]>([])
 const projectOptions = ref<SelectOption[]>([])
+const projectIdByUid = ref<Record<string, string>>({})
 const expandedRecordMap = ref<Record<string, boolean>>({})
 const activeExpandedRecordKey = ref<string>()
 const timelineItemCache = new Map<string, ITimelineItem>()
@@ -330,6 +346,33 @@ const effectiveProjectUid = computed(() => {
     return selectedProjectUid.value
   }
   return undefined
+})
+
+const exportProjectId = computed(() => {
+  if (isProjectScope.value)
+    return projectInfo.value?.id
+  if (isLabScope.value && effectiveProjectUid.value)
+    return projectIdByUid.value[effectiveProjectUid.value]
+  return undefined
+})
+const exportLabId = computed(() => {
+  if (isLabScope.value)
+    return labInfo.value?.id
+  if (isProjectScope.value)
+    return projectInfo.value?.lab_id
+  return undefined
+})
+const exportScopeType = computed<"lab" | "project">(() =>
+  exportProjectId.value ? "project" : "lab",
+)
+const canBulkExport = computed(() => {
+  if (isLabScope.value)
+    return userLabRole.value === LabRole.OWNER
+  if (!isProjectScope.value || !projectInfo.value)
+    return false
+  return projectInfo.value.user_lab_role === LabRole.OWNER
+    || projectInfo.value.user_role === ProjectRole.OWNER
+    || projectInfo.value.user_role === ProjectRole.MANAGER
 })
 
 const targetUserId = computed(() => {
@@ -420,6 +463,9 @@ async function loadProjectOptions() {
       return
     }
 
+    projectIdByUid.value = Object.fromEntries(
+      (data?.projects || []).map(project => [project.uid, project.id]),
+    )
     projectOptions.value = (data?.projects || []).map(project => ({
       label: project.name || project.uid,
       value: project.uid,

@@ -6,7 +6,12 @@ class StorageBackend(ABC):
     """存储后端的抽象基类"""
 
     @abstractmethod
-    async def get_presigned_url(self, object_key: str, expires: int = 24) -> str:
+    async def get_presigned_url(
+        self,
+        object_key: str,
+        expires: int = 24,
+        download_name: str | None = None,
+    ) -> str:
         """获取预签名URL"""
         pass
 

@@ -3,6 +3,10 @@ import { loadFixtures } from "./fixtures"
 
 test("viewer sees Lab resources but no restricted data or mutation controls", async ({ page }) => {
   const fixtures = await loadFixtures()
+
+  await page.goto(`/labs/${fixtures.lab.uid}/records`)
+  await expect(page.getByTestId("record-export-trigger")).toHaveCount(0)
+
   await page.goto(`/labs/${fixtures.lab.uid}/resources/resources`)
   await expect(page.getByText("E2E Plasmid pUC19")).toBeVisible()
   await expect(page.getByText("E2E Restricted Plasmid")).toHaveCount(0)
