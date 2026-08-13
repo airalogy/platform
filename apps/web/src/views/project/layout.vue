@@ -56,14 +56,7 @@
           </template>
           <n-skeleton v-else width="20rem" class="mx-4" />
         </div>
-        <n-card v-if="Boolean(description)" bordered class="mt-5 w-full md:w-70%" content-class="!text-4">
-          <div :class="{ 'line-clamp-3': !showFullContent }">
-            {{ description }}
-          </div>
-          <n-button v-if="showButton" inline @click="toggle">
-            {{ showFullContent ? "Show Less" : "Read More" }}
-          </n-button>
-        </n-card>
+        <global-description v-if="description" :description="description" class="md:w-70%" />
       </template>
     </content-layout>
   </global-layout>
@@ -71,7 +64,7 @@
 
 <script setup lang="ts">
 import type { TabPaneProps } from "naive-ui/es/tabs"
-import { useBoolean, useProjectPermissions } from "@/composables"
+import { useProjectPermissions } from "@/composables"
 import { useProjectVisibility } from "@/composables/useProjectVisibility"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { useSeoMeta } from "@/composables/useSeoMeta"
@@ -196,10 +189,6 @@ const publicProjectSeo = computed(() => {
 })
 
 useSeoMeta(publicProjectSeo)
-
-const showButton = computed(() => description.value.length > 1000)
-
-const { bool: showFullContent, toggle } = useBoolean(!showButton.value)
 
 const { reloadPage } = useAppStore()
 

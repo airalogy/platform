@@ -39,6 +39,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Fixed Protocol, Project, Lab, and Group descriptions showing a non-functional “Read more” action when the full text already fit within the three-line preview.
 - Fixed the AI Protocol review Diff editor collapsing into a thin strip, and reorganized the Aira sidebar guidance into a clearer assistant card.
 - Fixed the Protocol Editor's post-generation handoff opening the Aira conversation pane at the generic narrow sidebar width instead of its intended readable width.
 - Fixed the Lab resource library failing to render on first client-side navigation because its modal roots were incompatible with route transitions.

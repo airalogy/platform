@@ -30,13 +30,7 @@
           <n-skeleton v-else width="20rem" class="mx-4" />
           <!-- <edit-group-modal :item="groupInfo" @modal:edit-group="handleEditGroup" /> -->
         </div>
-        <global-description
-          v-if="description"
-          :description="description"
-          :show-button="showButton"
-          :show-full-content="showFullContent"
-          @toggle="toggle"
-        />
+        <global-description v-if="description" :description="description" />
       </template>
     </content-layout>
     <div v-else class="w-full flex-center">
@@ -49,8 +43,6 @@
 import type { SelectOption } from "naive-ui"
 import GlobalAddMemberTableModal from "@/components/common/global-add-member-table-modal.vue"
 import GlobalDescription from "@/components/common/global-description.vue"
-import { useBoolean } from "@/composables"
-
 import { useRouterPush } from "@/composables/useRouterPush"
 import ContentLayout from "@/layouts/content-layout/index.vue"
 import GlobalLayout from "@/layouts/global-layout/index.vue"
@@ -120,10 +112,6 @@ const title = computed(() => {
 const description = computed(() => {
   return labInfo.value?.description ?? ""
 })
-const showButton = computed(() => description.value.length > 1000)
-
-const { bool: showFullContent, toggle } = useBoolean(!showButton.value)
-
 const { reloadPage } = useAppStore()
 
 async function handleNewMember() {
