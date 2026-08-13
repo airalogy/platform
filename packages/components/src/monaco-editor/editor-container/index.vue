@@ -1,5 +1,5 @@
 <template>
-  <n-spin :show="!isEditorReady" content-class="size-full">
+  <n-spin :show="!isEditorReady" content-class="size-full" :style="editorSizeStyle">
     <template #description>
       {{ loading }}
     </template>
@@ -59,6 +59,10 @@ const emit = defineEmits<{
 // Refs
 const isEditorReady = ref(false)
 const editorRef = shallowRef<Raw<Monaco.editor.IStandaloneCodeEditor | Monaco.editor.IStandaloneDiffEditor> | null>(null)
+const editorSizeStyle = computed(() => ({
+  width: toCssSize(props.width),
+  height: toCssSize(props.height),
+}))
 
 const containerRef = ref<HTMLElement | null>(null)
 const preventTriggerChangeEvent = ref(false)
@@ -70,6 +74,10 @@ const viewStates = ref(new Map())
 
 const { mode, value, language, path, theme, line, loading, defaultValue, defaultLanguage, defaultPath, options, overrideServices, saveViewState, keepCurrentModel, diffOptions } = toRefs(props)
 const monacoRef = injectLocal<ShallowRef<typeof Monaco | null>>("monaco", shallowRef(null))
+
+function toCssSize(size: string | number) {
+  return typeof size === "number" ? `${size}px` : size
+}
 
 // Editor creation and initialization
 async function createEditor() {

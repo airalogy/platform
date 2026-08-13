@@ -25,7 +25,7 @@ Target initial version: `0.1.0`.
 - Added end-to-end Airalogy Protocol Workflow support with persisted workflow state, backend `/workflow` and `/workflow/step` APIs, Masterbrain AIRA integration, protocol context assembly, and record-data injection for multi-protocol runs.
 - Added a File Storage Bridge for stable FileId references, explicit `airalogy_files` storage mappings, external file registration, and resolver-based file access.
 - Added scoped raw Record exports for Lab Owners and Project Owners/Managers, with snapshot-consistent background jobs, `.aira`, JSONL and single-Schema CSV formats, optional revision history, deduplicated attachments, immutable Lab audit events, seven-day downloads, in-app completion notifications, and export history/regeneration controls.
-- Added a no-code Aira workflow in Protocol Editor: users can describe an experiment in natural language, generate and preview a structured Protocol, then request further edits conversationally and review changes before applying them.
+- Added a no-code Aira workflow in Protocol Editor: users can describe an experiment in natural language, generate and preview a structured Protocol, then discuss or refine it conversationally. Questions receive answers without changing files, while safe requested changes apply immediately with plain-language summaries, inline or side-by-side visual diffs, and undo controls; validation warnings and file deletions remain gated for review.
 
 ### Changed
 
@@ -38,6 +38,8 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Fixed the AI Protocol review Diff editor collapsing into a thin strip, and reorganized the Aira sidebar guidance into a clearer assistant card.
+- Fixed the Protocol Editor's post-generation handoff opening the Aira conversation pane at the generic narrow sidebar width instead of its intended readable width.
 - Fixed the Lab resource library failing to render on first client-side navigation because its modal roots were incompatible with route transitions.
 - Fixed the Record diary submission heatmap failing to finish rendering and leaving its loading indicator visible.
 - Kept the isolated Protocol executor's Airalogy dependency aligned with the backend to prevent `.aira` imports from failing when executor modules change.

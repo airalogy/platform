@@ -48,6 +48,7 @@
           </n-icon>
         </template>
       </tooltip-button>
+      <slot name="input-prefix" />
       <chat-input :placeholder="inputPlaceholder" :source="props.source" :submit-handler="props.submitHandler" />
       <p class="py-2 text-center text-xs text-gray-500">
         {{ $t("chat.airaDisclaimer") }}

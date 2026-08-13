@@ -25,7 +25,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增端到端 Airalogy Protocol Workflow 支持，包括 workflow 状态持久化、后端 `/workflow` 与 `/workflow/step` API、Masterbrain AIRA 集成、Protocol 上下文组装，以及多 Protocol 运行时的 Record 数据注入。
 - 新增 File Storage Bridge，支持稳定 FileId 引用、`airalogy_files` 显式存储映射、外部文件注册和基于 resolver 的文件访问。
 - 新增按权限范围导出原始 Records：Lab Owner 可导出实验室，Project Owner/Manager 可导出项目或 Protocol；支持固定快照的后台任务、`.aira`、JSONL、单 Schema CSV、可选修订历史、附件去重、实验室级不可变审计、7 天下载、站内完成通知以及导出历史与重新生成。
-- Protocol Editor 新增无代码 Aira 工作流：用户可用自然语言描述实验需求，生成并预览结构化 Protocol，随后继续通过对话提出修改，并在应用前审核变更。
+- Protocol Editor 新增无代码 Aira 工作流：用户可用自然语言描述实验需求，生成并预览结构化 Protocol，再通过对话继续讨论或修改。普通问题只返回回答而不改动文件；安全修改会立即应用，并提供自然语言摘要、行内或左右可视化差异与撤销；校验警告和文件删除仍需人工确认。
 
 ### 变更
 
@@ -38,6 +38,8 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 修复
 
+- 修复 AI Protocol 变更审查中的 Diff 编辑器塌缩成一条细缝的问题，并将 Aira 侧栏说明整理为更清晰的助手卡片。
+- 修复 Protocol 生成后进入 Aira 对话时错用通用窄侧边栏宽度、导致标题、消息和输入区被过度挤压的问题。
 - 修复实验室资源库因弹窗根节点与路由过渡不兼容，首次通过客户端导航进入时无法渲染的问题。
 - 修复记录日记提交热图无法完成绘制且加载指示器持续显示的问题。
 - 保持隔离 Protocol 执行器与后端的 Airalogy 依赖版本一致，避免执行器模块变化后 `.aira` 导入失败。

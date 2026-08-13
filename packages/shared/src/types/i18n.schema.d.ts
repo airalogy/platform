@@ -2113,15 +2113,35 @@ declare namespace I18n {
         tooltip: string
         panelTitle: string
         panelDescription: string
+        panelSafetyHint: string
         emptyPrompt: string
         noFiles: string
         running: string
         changedSummary: string
+        autoAppliedSummary: string
+        reviewRequiredSummary: string
         noChanges: string
         failed: string
+        appliedStatus: string
+        viewChanges: string
+        undo: string
+        undoSuccess: string
+        undoConflict: string
         reviewTitle: string
         reviewDescription: string
+        reviewRequiredDescription: string
+        summaryTitle: string
+        summaryFallback: string
+        filesChanged: string
         details: string
+        diffModeHint: string
+        inlineDiff: string
+        sideBySideDiff: string
+        fileSummary: {
+          created: string
+          modified: string
+          deleted: string
+        }
         fileLabels: {
           aimd: string
           model: string
@@ -2132,6 +2152,7 @@ declare namespace I18n {
         executionLog: string
         apply: string
         applyAll: string
+        applyAnyway: string
         close: string
         diffFallback: string
         applySuccess: string

@@ -1,13 +1,22 @@
 <template>
   <div class="relative h-full flex flex-col" data-testid="editor-ai-edit-panel">
-    <div>
-      <h3 class="min-h-10 pr-22 text-xl font-semibold leading-7">
+    <div class="px-4 pt-1">
+      <h3 class="mb-2 min-h-8 pr-22 text-xl font-semibold leading-7">
         {{ props.codeEdit ? $t("chat.editorCodeEdit.panelTitle") : $t("chat.askAira") }}
       </h3>
 
-      <p v-if="props.codeEdit" class="mb-3 pr-2 text-sm text-gray-500 leading-5">
-        {{ $t("chat.editorCodeEdit.panelDescription") }}
-      </p>
+      <div
+        v-if="props.codeEdit"
+        class="mb-3 border border-blue-100 rounded-xl bg-blue-50/70 px-3 py-2.5"
+      >
+        <p class="m-0 text-sm text-slate-700 leading-5">
+          {{ $t("chat.editorCodeEdit.panelDescription") }}
+        </p>
+        <p class="mb-0 mt-1.5 flex items-center gap-1.5 text-xs text-blue-700 leading-5">
+          <span class="size-1.5 shrink-0 rounded-full bg-blue-500" aria-hidden="true" />
+          {{ $t("chat.editorCodeEdit.panelSafetyHint") }}
+        </p>
+      </div>
 
       <chat-wrapper-actions v-bind="chatWrapperActionProps" v-on="chatWrapperActionEventHandlers" />
     </div>
@@ -21,7 +30,38 @@
       :submit-handler="props.codeEdit ? handleEditorSubmit : undefined"
       :show-scroll-button="arrivedState.bottom"
       @scroll-to-bottom="handleScrollToBottom"
-    />
+    >
+      <template #input-prefix>
+        <div
+          v-if="latestAppliedEdit"
+          data-testid="editor-ai-change-status"
+          class="mb-2 flex items-center gap-2 border border-emerald-200 rounded-xl bg-emerald-50 px-3 py-2 text-sm"
+        >
+          <span class="min-w-0 flex-1 text-emerald-800">
+            {{ $t("chat.editorCodeEdit.appliedStatus", { count: latestAppliedEdit.result.changed_files.length }) }}
+          </span>
+          <n-button
+            data-testid="editor-ai-view-changes"
+            size="tiny"
+            text
+            type="primary"
+            @click="openLatestChangeDetails"
+          >
+            {{ $t("chat.editorCodeEdit.viewChanges") }}
+          </n-button>
+          <n-button
+            data-testid="editor-ai-undo"
+            size="tiny"
+            secondary
+            type="primary"
+            :loading="undoing"
+            @click="undoLatestEdit"
+          >
+            {{ $t("chat.editorCodeEdit.undo") }}
+          </n-button>
+        </div>
+      </template>
+    </chat-component>
 
     <n-modal
       v-model:show="reviewModalVisible"
@@ -32,9 +72,28 @@
       content-class="max-h-70vh overflow-y-auto"
     >
       <div v-if="codeEditResult" class="space-y-4">
-        <n-alert type="info" :bordered="false">
-          {{ $t("chat.editorCodeEdit.reviewDescription") }}
+        <n-alert :type="reviewRequiresApproval ? 'warning' : 'info'" :bordered="false">
+          {{ reviewRequiresApproval
+            ? $t("chat.editorCodeEdit.reviewRequiredDescription")
+            : $t("chat.editorCodeEdit.reviewDescription") }}
         </n-alert>
+
+        <section
+          data-testid="editor-ai-change-summary"
+          class="border border-blue-100 rounded-xl bg-blue-50 px-4 py-3"
+        >
+          <div class="mb-1 flex items-center justify-between gap-3">
+            <h4 class="m-0 text-sm text-blue-900 font-semibold">
+              {{ $t("chat.editorCodeEdit.summaryTitle") }}
+            </h4>
+            <n-tag size="small" round type="info">
+              {{ $t("chat.editorCodeEdit.filesChanged", { count: codeEditResult.changed_files.length }) }}
+            </n-tag>
+          </div>
+          <p class="m-0 whitespace-pre-wrap text-sm text-blue-800 leading-6">
+            {{ codeEditResult.message || $t("chat.editorCodeEdit.summaryFallback") }}
+          </p>
+        </section>
 
         <n-alert v-if="codeEditResult.warnings.length" type="warning" :title="$t('chat.editorCodeEdit.warnings')">
           <ul class="m-0 pl-5">
@@ -63,13 +122,42 @@
                 </div>
               </div>
             </div>
-            <n-button size="small" type="primary" secondary @click="applyChangedFile(change)">
-              {{ $t("chat.editorCodeEdit.apply") }}
-            </n-button>
           </div>
+          <p class="mb-3 mt-0 text-sm text-gray-600 leading-5">
+            {{ getChangedFileSummary(change) }}
+          </p>
           <n-collapse arrow-placement="right">
             <n-collapse-item :title="$t('chat.editorCodeEdit.details')" :name="`diff-${change.path}`">
-              <pre class="code-edit-diff">{{ change.diff || $t("chat.editorCodeEdit.diffFallback") }}</pre>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <span class="text-xs text-gray-500">
+                  {{ $t("chat.editorCodeEdit.diffModeHint") }}
+                </span>
+                <n-radio-group
+                  :value="getDiffViewMode(change.path)"
+                  size="small"
+                  @update:value="setDiffViewMode(change.path, $event)"
+                >
+                  <n-radio-button
+                    value="inline"
+                    :data-testid="`editor-ai-diff-inline-${change.path}`"
+                  >
+                    {{ $t("chat.editorCodeEdit.inlineDiff") }}
+                  </n-radio-button>
+                  <n-radio-button
+                    value="side-by-side"
+                    :data-testid="`editor-ai-diff-side-by-side-${change.path}`"
+                  >
+                    {{ $t("chat.editorCodeEdit.sideBySideDiff") }}
+                  </n-radio-button>
+                </n-radio-group>
+              </div>
+              <code-edit-diff-view
+                :data-testid="`editor-ai-diff-${change.path}`"
+                :original="getOriginalContent(change)"
+                :modified="getModifiedContent(change)"
+                :language="getChangedFileLanguage(change)"
+                :side-by-side="getDiffViewMode(change.path) === 'side-by-side'"
+              />
             </n-collapse-item>
           </n-collapse>
         </div>
@@ -88,13 +176,14 @@
             {{ $t("chat.editorCodeEdit.close") }}
           </n-button>
           <n-button
+            v-if="reviewRequiresApproval"
             type="primary"
             data-testid="editor-ai-apply-all"
             :loading="applyingAll"
             :disabled="!codeEditResult?.changed_files.length"
             @click="applyAllChangedFiles"
           >
-            {{ $t("chat.editorCodeEdit.applyAll") }}
+            {{ $t("chat.editorCodeEdit.applyAnyway") }}
           </n-button>
         </div>
       </template>
@@ -114,8 +203,10 @@ import { useUploadFileDataStore } from "@airalogy/components/monaco-editor/store
 import { useClosableMessage, useScrollTrap } from "@airalogy/composables"
 import { DEFAULT_FILE_ID_MAP } from "@airalogy/shared/constants/protocol"
 import { $t } from "@airalogy/shared/locales"
+import { getFileLanguage } from "@airalogy/shared/utils"
 import { nanoid } from "nanoid"
 import { useOrProvideChatInfoStore } from "../../../chat/composables/useChatInfoStore"
+import CodeEditDiffView from "./code-edit-diff-view.vue"
 
 type EditorCodeEditFileType = "aimd" | "py" | "toml" | "other"
 type EditorCodeEditChangedFileStatus = "created" | "modified" | "deleted"
@@ -171,6 +262,17 @@ interface CodeEditFileDef {
   type: Exclude<EditorCodeEditFileType, "other">
 }
 
+interface EditorCodeEditFileSnapshot {
+  fileDef: CodeEditFileDef
+  content: string
+}
+
+interface AppliedCodeEdit {
+  id: string
+  result: EditorCodeEditResponse
+  before: EditorCodeEditFileSnapshot[]
+}
+
 const props = withDefaults(defineProps<{
   protocolId?: string | null
   airalogyId?: string | null
@@ -194,8 +296,14 @@ const uploadFileDataStore = useUploadFileDataStore()
 const message = useClosableMessage()
 const codeEditLoading = ref(false)
 const applyingAll = ref(false)
+const undoing = ref(false)
 const reviewModalVisible = ref(false)
+const reviewRequiresApproval = ref(false)
 const codeEditResult = ref<EditorCodeEditResponse | null>(null)
+const codeEditOriginalContents = ref<Record<string, string>>({})
+const diffViewModes = ref<Record<string, "inline" | "side-by-side">>({})
+const appliedEditHistory = ref<AppliedCodeEdit[]>([])
+const latestAppliedEdit = computed(() => appliedEditHistory.value[appliedEditHistory.value.length - 1] || null)
 
 // Add scroll trapping to prevent parent scrolling
 const { measure, scrollToBottom, scrollRef, arrivedState } = useScroll()
@@ -372,16 +480,19 @@ function buildCodeEditModelConfig(): ChatModelConfig {
   }
 }
 
-function summarizeCodeEditResult(result: EditorCodeEditResponse) {
+function summarizeCodeEditResult(result: EditorCodeEditResponse, autoApplied: boolean) {
   const statusSummary = result.changed_files.length
-    ? $t("chat.editorCodeEdit.changedSummary", { count: result.changed_files.length })
-    : $t("chat.editorCodeEdit.noChanges")
+    ? autoApplied
+      ? $t("chat.editorCodeEdit.autoAppliedSummary", { count: result.changed_files.length })
+      : $t("chat.editorCodeEdit.reviewRequiredSummary", { count: result.changed_files.length })
+    : result.message.trim()
+      ? ""
+      : $t("chat.editorCodeEdit.noChanges")
   const warningSummary = result.warnings.length
-    ? `\n\n${$t("chat.editorCodeEdit.warnings")}:\n${result.warnings.map(warning => `- ${warning}`).join("\n")}`
+    ? `${$t("chat.editorCodeEdit.warnings")}:\n${result.warnings.map(warning => `- ${warning}`).join("\n")}`
     : ""
-  const modelMessage = result.message ? `${result.message}\n\n` : ""
 
-  return `${modelMessage}${statusSummary}${warningSummary}`.trim()
+  return [result.message.trim(), statusSummary, warningSummary].filter(Boolean).join("\n\n")
 }
 
 async function handleEditorSubmit(instruction: string) {
@@ -440,10 +551,22 @@ async function handleEditorSubmit(instruction: string) {
       throw new Error($t("chat.editorCodeEdit.emptyResult"))
     }
 
+    const reviewSnapshots = captureSnapshots(data.changed_files)
     codeEditResult.value = data
-    reviewModalVisible.value = data.changed_files.length > 0
+    codeEditOriginalContents.value = snapshotsToOriginalContents(reviewSnapshots)
+    diffViewModes.value = {}
+    const requiresApproval = shouldRequireReview(data)
+    reviewRequiresApproval.value = requiresApproval
+    let autoApplied = false
+    if (data.changed_files.length && requiresApproval) {
+      reviewModalVisible.value = true
+    }
+    else if (data.changed_files.length) {
+      await applyCodeEditResult(data)
+      autoApplied = true
+    }
     chatStore.updateMessageByUUID(uuid, assistantIndex, {
-      text: summarizeCodeEditResult(data),
+      text: summarizeCodeEditResult(data, autoApplied),
       loading: false,
       error: false,
     })
@@ -480,11 +603,42 @@ function getStoreFilePath(fileDef: CodeEditFileDef) {
 async function applyChangedFile(change: EditorCodeEditChangedFile) {
   const fileDef = findFileDefForChange(change)
   if (!fileDef) {
-    message.error($t("chat.editorCodeEdit.unsupportedFile"))
-    return
+    throw new Error($t("chat.editorCodeEdit.unsupportedFile"))
   }
 
   const content = change.status === "deleted" ? "" : change.content
+  await writeFileContent(fileDef, content)
+}
+
+function shouldRequireReview(result: EditorCodeEditResponse) {
+  return result.warnings.length > 0
+    || result.changed_files.some(change => change.status === "deleted")
+}
+
+function captureSnapshots(changes: EditorCodeEditChangedFile[]): EditorCodeEditFileSnapshot[] {
+  return changes.map((change) => {
+    const fileDef = findFileDefForChange(change)
+    if (!fileDef) {
+      throw new Error($t("chat.editorCodeEdit.unsupportedFile"))
+    }
+    return {
+      fileDef,
+      content: readFileContent(fileDef),
+    }
+  })
+}
+
+function snapshotsToOriginalContents(snapshots: EditorCodeEditFileSnapshot[]) {
+  return Object.fromEntries(snapshots.map(snapshot => [snapshot.fileDef.path, snapshot.content]))
+}
+
+async function restoreSnapshots(snapshots: EditorCodeEditFileSnapshot[]) {
+  for (const snapshot of snapshots) {
+    await writeFileContent(snapshot.fileDef, snapshot.content)
+  }
+}
+
+async function writeFileContent(fileDef: CodeEditFileDef, content: string) {
   const modelInfo = findModelInfoForFile(fileDef)
   if (modelInfo?.model && !modelInfo.model.isDisposed()) {
     modelInfo.model.setValue(content)
@@ -501,8 +655,69 @@ async function applyChangedFile(change: EditorCodeEditChangedFile) {
     content,
     isEditable: true,
   }, false)
+}
 
-  message.success($t("chat.editorCodeEdit.applySuccess"))
+async function applyCodeEditResult(result: EditorCodeEditResponse) {
+  const before = captureSnapshots(result.changed_files)
+  try {
+    for (const change of result.changed_files) {
+      await applyChangedFile(change)
+    }
+  }
+  catch (error) {
+    await restoreSnapshots(before)
+    throw error
+  }
+
+  appliedEditHistory.value.push({
+    id: nanoid(),
+    result,
+    before,
+  })
+}
+
+function openLatestChangeDetails() {
+  if (!latestAppliedEdit.value) {
+    return
+  }
+  codeEditResult.value = latestAppliedEdit.value.result
+  codeEditOriginalContents.value = snapshotsToOriginalContents(latestAppliedEdit.value.before)
+  diffViewModes.value = {}
+  reviewRequiresApproval.value = false
+  reviewModalVisible.value = true
+}
+
+function canSafelyUndo(edit: AppliedCodeEdit) {
+  return edit.result.changed_files.every((change) => {
+    const fileDef = findFileDefForChange(change)
+    if (!fileDef) {
+      return false
+    }
+    const expectedContent = change.status === "deleted" ? "" : change.content
+    return readFileContent(fileDef) === expectedContent
+  })
+}
+
+async function undoLatestEdit() {
+  const edit = latestAppliedEdit.value
+  if (!edit) {
+    return
+  }
+  if (!canSafelyUndo(edit)) {
+    message.warning($t("chat.editorCodeEdit.undoConflict"))
+    return
+  }
+
+  undoing.value = true
+  try {
+    await restoreSnapshots(edit.before)
+    appliedEditHistory.value.pop()
+    reviewModalVisible.value = false
+    message.success($t("chat.editorCodeEdit.undoSuccess"))
+  }
+  finally {
+    undoing.value = false
+  }
 }
 
 async function applyAllChangedFiles() {
@@ -513,10 +728,9 @@ async function applyAllChangedFiles() {
 
   applyingAll.value = true
   try {
-    for (const change of codeEditResult.value.changed_files) {
-      await applyChangedFile(change)
-    }
+    await applyCodeEditResult(codeEditResult.value)
     reviewModalVisible.value = false
+    reviewRequiresApproval.value = false
     message.success($t("chat.editorCodeEdit.applyAllSuccess"))
   }
   finally {
@@ -549,10 +763,52 @@ function getChangedFileLabel(change: EditorCodeEditChangedFile) {
   }
   return change.name || change.path
 }
+
+function getDiffStats(change: EditorCodeEditChangedFile) {
+  const lines = change.diff.split("\n")
+  return {
+    added: lines.filter(line => line.startsWith("+") && !line.startsWith("+++")).length,
+    removed: lines.filter(line => line.startsWith("-") && !line.startsWith("---")).length,
+  }
+}
+
+function getChangedFileSummary(change: EditorCodeEditChangedFile) {
+  const file = getChangedFileLabel(change)
+  const { added, removed } = getDiffStats(change)
+  if (change.status === "created") {
+    return $t("chat.editorCodeEdit.fileSummary.created", { file, added })
+  }
+  if (change.status === "deleted") {
+    return $t("chat.editorCodeEdit.fileSummary.deleted", { file, removed })
+  }
+  return $t("chat.editorCodeEdit.fileSummary.modified", { file, added, removed })
+}
+
+function getOriginalContent(change: EditorCodeEditChangedFile) {
+  return codeEditOriginalContents.value[change.path] || ""
+}
+
+function getModifiedContent(change: EditorCodeEditChangedFile) {
+  return change.status === "deleted" ? "" : change.content
+}
+
+function getChangedFileLanguage(change: EditorCodeEditChangedFile) {
+  return getFileLanguage(change.path)
+}
+
+function getDiffViewMode(path: string) {
+  return diffViewModes.value[path] || "inline"
+}
+
+function setDiffViewMode(path: string, mode: string | number) {
+  if (mode !== "inline" && mode !== "side-by-side") {
+    return
+  }
+  diffViewModes.value[path] = mode
+}
 </script>
 
 <style scoped>
-.code-edit-diff,
 .code-edit-log {
   max-height: 36vh;
   margin: 0;

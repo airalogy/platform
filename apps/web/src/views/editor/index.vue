@@ -288,6 +288,7 @@ const editorRef = ref<ExposeState | null>(null)
 const packageId = useRouteQuery<string>("package_id")
 const activeEditorStore = useActiveEditorStore()
 const splitStore = useSplitStore()
+const { openMenu } = splitStore
 const uploadFileDataStore = useUploadFileDataStore()
 const { createInitialFileData, getFileById, getFileByPath } = uploadFileDataStore
 const { processZipFile, compressFiles } = useFileUpload()
@@ -384,7 +385,8 @@ const sideMenus = computed(() => defaultSideMenus.map((it): ISideMenuItem => {
 const message = useClosableMessage()
 
 async function showAiEditPanel(removeRouteFlag = false) {
-  activeMenu.value = "airalogy"
+  const aiMenu = sideMenus.value.find(menu => menu.key === "airalogy")
+  openMenu("airalogy", aiMenu?.panelSize || null)
   message.info($t("editor.aiCreate.continueHint"))
 
   if (removeRouteFlag && route.query.ai_created === "true") {

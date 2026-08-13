@@ -552,6 +552,13 @@ export const useSplitStore = defineStore("editor-split", () => {
   const minSplitSize = computed(() => customMenuSizeState.value?.minSplitSize || MIN_MENU_SPLIT_SIZE)
   const collapseThreshold = computed(() => customMenuSizeState.value?.collapseThreshold || START_COLLAPSED_SIZE)
 
+  function openMenu(menu: string, panelSize: Record<"minSplitSize" | "collapseThreshold", number> | null = null) {
+    customMenuSizeState.value = panelSize
+    activeMenu.value = menu
+    menuSplitSize.value = `${minSplitSize.value}${UNIT}`
+    isMenuCollapsed.value = false
+  }
+
   function addSplit() {
     const index = splitState.value.findIndex(s => s === false)
     if (index === -1) {
@@ -698,6 +705,7 @@ export const useSplitStore = defineStore("editor-split", () => {
     removeSplit,
     clearSplit,
     handleUpdateSize,
+    openMenu,
     currentSplitSize,
     customMenuSizeState,
   }
