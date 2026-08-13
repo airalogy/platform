@@ -276,7 +276,7 @@ async def protocol_generate_aimd(
     chat: Chat, *, usage_context: UsageContext | None = None
 ):
     async for chunk in stream_request(
-        "endpoints/protocol_generation/aimd",
+        "endpoints/single_protocol_file_generation",
         {
             "use_model": build_masterbrain_model(chat.model),
             "instruction": chat.context["instruction"],

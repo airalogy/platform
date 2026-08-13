@@ -2011,6 +2011,7 @@ declare namespace I18n {
       airaIntroSubtitle: string
       airaDisclaimer: string
       inputPlaceholder: string
+      editorInputPlaceholder: string
       loadMoreMessages: string
       scrollToBottom: string
       dock: string
@@ -2025,6 +2026,12 @@ declare namespace I18n {
           criticalPoints: string
           optimize: string
           safety: string
+        }
+        editor: {
+          addField: string
+          changeStep: string
+          addTable: string
+          fix: string
         }
         hub: {
           tumorInhibition: string
@@ -2104,6 +2111,8 @@ declare namespace I18n {
       }
       editorCodeEdit: {
         tooltip: string
+        panelTitle: string
+        panelDescription: string
         emptyPrompt: string
         noFiles: string
         running: string
@@ -2111,6 +2120,14 @@ declare namespace I18n {
         noChanges: string
         failed: string
         reviewTitle: string
+        reviewDescription: string
+        details: string
+        fileLabels: {
+          aimd: string
+          model: string
+          assigner: string
+          toml: string
+        }
         warnings: string
         executionLog: string
         apply: string
@@ -2158,6 +2175,52 @@ declare namespace I18n {
       }
     }
     editor: {
+      sideMenus: {
+        files: string
+        aiEdit: string
+        aiCreate: string
+        search: string
+        settings: string
+      }
+      protocolGenerator: {
+        title: string
+        stepTitle: string
+        description: string
+        replaceHint: string
+        instructionLabel: string
+        instructionCaption: string
+        addFromFile: string
+        trimmed: string
+        placeholder: string
+        generate: string
+        enterInstruction: string
+        extractFailed: string
+        limitReached: string
+        importedOne: string
+        importedMany: string
+        trimmedFiles: string
+        shortenedFiles: string
+        generated: string
+        generateFailed: string
+        extractError: string
+      }
+      aiCreate: {
+        eyebrow: string
+        title: string
+        description: string
+        action: string
+        dialogTitle: string
+        dialogDescription: string
+        nameLabel: string
+        namePlaceholder: string
+        defaultName: string
+        nameRequired: string
+        creating: string
+        createSuccess: string
+        createFailed: string
+        continueHint: string
+        otherWays: string
+      }
       landing: {
         eyebrow: string
         title: string

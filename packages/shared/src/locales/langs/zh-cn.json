@@ -2007,6 +2007,7 @@
     "airaIntroSubtitle": "你可以询问任何研究相关问题，或试试下面的示例快速开始：",
     "airaDisclaimer": "Aira 可能会出错，请谨慎使用。",
     "inputPlaceholder": "可以提问任何内容",
+    "editorInputPlaceholder": "直接描述你希望如何修改当前 Protocol...",
     "loadMoreMessages": "再加载 {count} 条消息",
     "scrollToBottom": "滚动到底部",
     "dock": "停靠",
@@ -2021,6 +2022,12 @@
         "criticalPoints": "该协议有哪些关键要点？",
         "optimize": "请给出优化该协议的建议。",
         "safety": "需要注意哪些安全事项？"
+      },
+      "editor": {
+        "addField": "新增一个必填的试剂批号字段。",
+        "changeStep": "把孵育时间改为 30 分钟，并说明温度要求。",
+        "addTable": "增加一个用于记录样品编号和检测结果的表格。",
+        "fix": "检查当前 Protocol，并修复格式或字段定义问题。"
       },
       "hub": {
         "tumorInhibition": "查找用于抑制肿瘤细胞的药物处理实验协议。",
@@ -2100,13 +2107,23 @@
     },
     "editorCodeEdit": {
       "tooltip": "让 Aira 修改当前 Protocol 文件，并在应用前查看 diff。",
+      "panelTitle": "让 Aira 修改 Protocol",
+      "panelDescription": "直接说出要增加、删除或调整的内容。Aira 会先准备修改，只有你确认后才会应用。",
       "emptyPrompt": "请先输入要修改的内容。",
       "noFiles": "当前编辑器没有可编辑的 Protocol 文件。",
       "running": "Aira 正在准备代码修改...",
       "changedSummary": "Aira 已准备 {count} 个文件修改。请在审核窗口中确认后应用。",
       "noChanges": "Aira 没有返回需要应用的文件修改。",
-      "failed": "代码编辑失败",
+      "failed": "修改 Protocol 失败",
       "reviewTitle": "审核 Protocol 修改",
+      "reviewDescription": "Aira 已准备好以下修改。你可以逐项应用，也可以全部应用。",
+      "details": "查看详细差异",
+      "fileLabels": {
+        "aimd": "实验流程与记录字段",
+        "model": "数据模型与校验",
+        "assigner": "自动计算规则",
+        "toml": "Protocol 基本信息"
+      },
       "warnings": "警告",
       "executionLog": "执行日志",
       "apply": "应用",
@@ -2154,6 +2171,52 @@
     }
   },
   "editor": {
+    "sideMenus": {
+      "files": "Protocol 文件",
+      "aiEdit": "让 Aira 修改 Protocol",
+      "aiCreate": "AI 草拟 Protocol",
+      "search": "搜索",
+      "settings": "设置"
+    },
+    "protocolGenerator": {
+      "title": "AI Protocol 草拟",
+      "stepTitle": "描述实验需求",
+      "description": "用自然语言说明实验目标、步骤、需要记录的数据和限制条件，Aira 会生成可直接预览和继续修改的 Protocol 草稿。",
+      "replaceHint": "生成的新草稿会替换当前 Protocol 内容；你仍需确认保存。",
+      "instructionLabel": "实验需求",
+      "instructionCaption": "可以直接输入，也可以导入 txt、Markdown、PDF 或 Word 参考文件。",
+      "addFromFile": "从文件导入",
+      "trimmed": "已截取",
+      "placeholder": "例如：创建一个细胞药物处理实验 Protocol。需要记录细胞系、药物名称、批号、浓度、处理时长、操作人和结果；药物浓度必须大于 0，并提供三次重复结果表格。",
+      "generate": "生成 Protocol 草稿",
+      "enterInstruction": "请先描述实验需求。",
+      "extractFailed": "无法读取 {filename}",
+      "limitReached": "需求内容已达到长度上限。",
+      "importedOne": "已导入 {filename}",
+      "importedMany": "已导入 {count} 个文件",
+      "trimmedFiles": "有 {count} 个文件在提取时被截取。",
+      "shortenedFiles": "部分导入内容已缩短，以符合长度限制。",
+      "generated": "Protocol 草稿已生成。",
+      "generateFailed": "生成 Protocol 草稿失败。",
+      "extractError": "读取参考文件失败。"
+    },
+    "aiCreate": {
+      "eyebrow": "推荐",
+      "title": "用 AI 创建 Protocol",
+      "description": "说清楚实验需求，Aira 自动生成结构化流程和记录字段；不需要编写 AIMD 或 Python。",
+      "action": "描述需求并生成",
+      "dialogTitle": "用 AI 创建 Protocol",
+      "dialogDescription": "先给草稿命名，再用自然语言描述实验。生成后可以直接预览，并继续通过对话修改。",
+      "nameLabel": "Protocol 名称",
+      "namePlaceholder": "例如：细胞药物处理实验",
+      "defaultName": "AI 生成的 Protocol",
+      "nameRequired": "请先填写 Protocol 名称。",
+      "creating": "正在创建并打开 Protocol...",
+      "createSuccess": "Protocol“{name}”已由 Aira 创建。",
+      "createFailed": "AI Protocol 创建失败。",
+      "continueHint": "草稿已生成。你可以在左侧继续告诉 Aira 要怎样修改。",
+      "otherWays": "其他创建方式"
+    },
     "landing": {
       "eyebrow": "协议编辑器",
       "title": "选择一个适合的协议起点",

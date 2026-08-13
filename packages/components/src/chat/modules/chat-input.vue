@@ -1,6 +1,6 @@
 <template>
   <div
-    ref="dropZoneRef" class="tiptap-dropzone tiptap-container tiptap-input-container relative cursor-text rounded-xl p-2"
+    ref="dropZoneRef" data-testid="chat-input" class="tiptap-dropzone tiptap-container tiptap-input-container relative cursor-text rounded-xl p-2"
     :class="{
       'tiptap-container--focus': focusedRef,
       'tiptap-container--empty': editor?.isEmpty,
@@ -46,7 +46,7 @@
 
       <!-- Default submit button -->
       <slot name="suffix">
-        <n-button type="primary" :disabled="buttonDisabled" class="px-3" @click="handleClick">
+        <n-button data-testid="chat-submit" type="primary" :disabled="buttonDisabled" class="px-3" @click="handleClick">
           <template #icon>
             <n-icon :size="16">
               <icon-shared-stop-message v-if="loading" />

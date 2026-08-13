@@ -2007,6 +2007,7 @@
     "airaIntroSubtitle": "Ask me anything about research, or try one of these examples for a quick start:",
     "airaDisclaimer": "Aira may make mistakes. Please use with discretion.",
     "inputPlaceholder": "Ask anything",
+    "editorInputPlaceholder": "Describe how you want to change the current Protocol...",
     "loadMoreMessages": "Load {count} more messages",
     "scrollToBottom": "Scroll to bottom",
     "dock": "Dock",
@@ -2021,6 +2022,12 @@
         "criticalPoints": "What are the critical points in this protocol?",
         "optimize": "Give me some suggestions for optimizing this protocol.",
         "safety": "What safety precautions should I take?"
+      },
+      "editor": {
+        "addField": "Add a required reagent lot number field.",
+        "changeStep": "Change the incubation time to 30 minutes and specify the temperature.",
+        "addTable": "Add a table for sample IDs and assay results.",
+        "fix": "Check the current Protocol and fix any formatting or field-definition problems."
       },
       "hub": {
         "tumorInhibition": "Find protocols for drug treatment experiments that inhibit tumor cells.",
@@ -2100,13 +2107,23 @@
     },
     "editorCodeEdit": {
       "tooltip": "Ask Aira to edit the current Protocol files and review the diff before applying.",
+      "panelTitle": "Edit with Aira",
+      "panelDescription": "Describe what to add, remove, or adjust. Aira prepares the changes first and applies nothing until you confirm.",
       "emptyPrompt": "Enter the change you want first.",
       "noFiles": "No editable Protocol files are available in the current editor.",
       "running": "Aira is preparing code edits...",
       "changedSummary": "Aira prepared changes for {count} file(s). Review them before applying.",
       "noChanges": "Aira did not return any file changes to apply.",
-      "failed": "Code edit failed",
+      "failed": "Protocol edit failed",
       "reviewTitle": "Review Protocol Changes",
+      "reviewDescription": "Aira prepared the changes below. Apply them one by one or apply all of them together.",
+      "details": "View detailed differences",
+      "fileLabels": {
+        "aimd": "Experimental flow and record fields",
+        "model": "Data model and validation",
+        "assigner": "Automatic calculation rules",
+        "toml": "Protocol information"
+      },
       "warnings": "Warnings",
       "executionLog": "Execution Log",
       "apply": "Apply",
@@ -2154,6 +2171,52 @@
     }
   },
   "editor": {
+    "sideMenus": {
+      "files": "Protocol files",
+      "aiEdit": "Ask Aira to edit the Protocol",
+      "aiCreate": "Draft with AI",
+      "search": "Search",
+      "settings": "Settings"
+    },
+    "protocolGenerator": {
+      "title": "AI Protocol draft",
+      "stepTitle": "Describe the experiment",
+      "description": "Describe the goal, steps, data to capture, and constraints in plain language. Aira will create a Protocol draft you can preview and refine.",
+      "replaceHint": "The new draft replaces the current Protocol content; it is not saved until you confirm.",
+      "instructionLabel": "Experiment requirements",
+      "instructionCaption": "Type directly or import txt, Markdown, PDF, or Word reference files.",
+      "addFromFile": "Import from file",
+      "trimmed": "trimmed",
+      "placeholder": "For example: Create a cell drug-treatment Protocol that records the cell line, drug name, lot number, concentration, duration, operator, and results. Concentration must be greater than zero, with a table for three replicates.",
+      "generate": "Generate Protocol draft",
+      "enterInstruction": "Describe the experiment first.",
+      "extractFailed": "Could not read {filename}",
+      "limitReached": "The requirements have reached the length limit.",
+      "importedOne": "Imported {filename}",
+      "importedMany": "Imported {count} files",
+      "trimmedFiles": "{count} imported file(s) were trimmed during extraction.",
+      "shortenedFiles": "Some imported content was shortened to fit the length limit.",
+      "generated": "Protocol draft generated.",
+      "generateFailed": "Failed to generate the Protocol draft.",
+      "extractError": "Failed to read the reference file."
+    },
+    "aiCreate": {
+      "eyebrow": "Recommended",
+      "title": "Create a Protocol with AI",
+      "description": "Describe the experiment and let Aira generate the structured workflow and record fields—no AIMD or Python required.",
+      "action": "Describe and generate",
+      "dialogTitle": "Create a Protocol with AI",
+      "dialogDescription": "Name the draft, then describe the experiment in plain language. You can preview it immediately and keep refining it through conversation.",
+      "nameLabel": "Protocol name",
+      "namePlaceholder": "For example: Cell drug-treatment assay",
+      "defaultName": "AI-generated Protocol",
+      "nameRequired": "Enter a Protocol name first.",
+      "creating": "Creating and opening the Protocol...",
+      "createSuccess": "Aira created “{name}”.",
+      "createFailed": "Failed to create the AI Protocol.",
+      "continueHint": "The draft is ready. Continue telling Aira what to change from the left panel.",
+      "otherWays": "Other ways to start"
+    },
     "landing": {
       "eyebrow": "Protocol Editor",
       "title": "Start with the protocol you need",

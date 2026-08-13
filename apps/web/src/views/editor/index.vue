@@ -46,7 +46,7 @@
       </protocol-title-section>
     </template>
     <template #landing>
-      <landing-page class="size-full flex-center" />
+      <landing-page class="size-full flex-center" @created="handleLandingProtocolCreated" />
     </template>
     <template #raw>
       <n-spin :show="false" class="size-full" content-class="size-full !p-0">
@@ -292,7 +292,7 @@ const uploadFileDataStore = useUploadFileDataStore()
 const { createInitialFileData, getFileById, getFileByPath } = uploadFileDataStore
 const { processZipFile, compressFiles } = useFileUpload()
 const { activeEditorId } = storeToRefs(activeEditorStore)
-const { splitState } = storeToRefs(splitStore)
+const { activeMenu, splitState } = storeToRefs(splitStore)
 const { rootPath } = storeToRefs(uploadFileDataStore)
 
 function normalizeProtocolAssetPath(src: string) {
@@ -382,6 +382,40 @@ const sideMenus = computed(() => defaultSideMenus.map((it): ISideMenuItem => {
 }))
 
 const message = useClosableMessage()
+
+async function showAiEditPanel(removeRouteFlag = false) {
+  activeMenu.value = "airalogy"
+  message.info($t("editor.aiCreate.continueHint"))
+
+  if (removeRouteFlag && route.query.ai_created === "true") {
+    const remainingQuery = { ...route.query }
+    delete remainingQuery.ai_created
+    await router.replace({
+      ...route,
+      query: remainingQuery,
+    })
+  }
+}
+
+async function handleLandingProtocolCreated(payload: { packageId: string, aiCreated: boolean }) {
+  if (!editorRef.value) {
+    return
+  }
+
+  startLoading()
+  try {
+    await editorRef.value.handleInit(payload.packageId)
+    if (payload.aiCreated) {
+      await showAiEditPanel(true)
+    }
+  }
+  catch (error) {
+    message.error((error as Error)?.message)
+  }
+  finally {
+    endLoading()
+  }
+}
 
 const { isShown, showModal, hideModal } = useShowModal()
 const { applyProtocol, uploadModel, protocolData, packageContent } = useProvideApplyProtocol("reuse", false, "upload-zip", 2)
@@ -761,6 +795,10 @@ onMounted(async () => {
       }
 
       await handleInit(currPackageId)
+
+      if (route.query.ai_created === "true") {
+        await showAiEditPanel(true)
+      }
     }
     catch (e) {
       message.error((e as Error)?.message)

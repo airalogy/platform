@@ -3,7 +3,7 @@
     <div class="mx-auto max-w-6xl p-6">
       <!-- Welcome Section -->
       <div class="mb-8">
-        <div class="mb-2 text-sm font-medium uppercase text-gray-500">
+        <div class="mb-2 text-sm text-gray-500 font-medium uppercase">
           {{ $t("editor.landing.eyebrow") }}
         </div>
         <div class="flex items-center space-x-3">
@@ -14,7 +14,7 @@
             {{ $t("editor.landing.title") }}
           </h1>
         </div>
-        <p class="mt-3 max-w-3xl text-sm leading-6 text-gray-500">
+        <p class="mt-3 max-w-3xl text-sm text-gray-500 leading-6">
           {{ $t("editor.landing.description") }}
         </p>
       </div>
@@ -24,6 +24,38 @@
         <section class="space-y-4">
           <h2 class="text-sm text-gray-500 font-medium tracking-wide uppercase">
             {{ $t("editor.landing.startLabel") }}
+          </h2>
+          <button
+            type="button"
+            data-testid="ai-protocol-create"
+            class="ai-create-card w-full flex items-center gap-5 border border-primary/25 rounded-4 from-primary/10 to-sky-50 bg-gradient-to-r p-5 text-left transition hover:border-primary/50 hover:shadow-md"
+            @click="showAiCreateDialog = true"
+          >
+            <span class="size-13 flex-center shrink-0 rounded-3 bg-primary text-white shadow-sm">
+              <n-icon size="28">
+                <sparkles-icon />
+              </n-icon>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="mb-1 block text-xs text-primary font-semibold tracking-wide uppercase">
+                {{ $t("editor.aiCreate.eyebrow") }}
+              </span>
+              <span class="block text-lg font-semibold">
+                {{ $t("editor.aiCreate.title") }}
+              </span>
+              <span class="mt-1 block text-sm text-gray-600 leading-6">
+                {{ $t("editor.aiCreate.description") }}
+              </span>
+            </span>
+            <span class="shrink-0 rounded-2 bg-primary px-4 py-2 text-sm text-white font-medium">
+              {{ $t("editor.aiCreate.action") }}
+            </span>
+          </button>
+        </section>
+
+        <section class="space-y-4">
+          <h2 class="text-sm text-gray-500 font-medium tracking-wide uppercase">
+            {{ $t("editor.aiCreate.otherWays") }}
           </h2>
           <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <!-- Define a reusable template for action cards -->
@@ -83,6 +115,14 @@
         </section>
       </div>
     </div>
+
+    <ai-protocol-create-dialog
+      v-model:show="showAiCreateDialog"
+      :loading="isAiCreating"
+      :generate-aimd="generateProtocolAimd"
+      :extract-instruction-file="extractProtocolInstructionFile"
+      :create-protocol="handleCreateAiProtocol"
+    />
 
     <!-- Protocol Template Dialog -->
     <protocol-template-dialog
@@ -151,9 +191,11 @@ import ProjectSelector from "@/components/apply-steps/project-selector.vue"
 import ProtocolUploadForm from "@/components/hub/protocol-upload-form.vue"
 import { useRouterPush } from "@/composables"
 import { postReuseProtocol } from "@/service/api/project-protocols"
+import { extractProtocolInstructionFile, generateProtocolAimd } from "@/service/api/protocol-generate"
 import { useFileUpload } from "@airalogy/components/monaco-editor/composables/useFileUpload"
 import { handleContentLoaded as handleProtocolContentLoaded, processProtocolZipWorkflow } from "@airalogy/components/monaco-editor/utils/protocolContentLoader"
 import { useThemeStore } from "@airalogy/composables/theme"
+import { DEFAULT_FILE_ID_MAP } from "@airalogy/shared/constants/protocol"
 import { $t } from "@airalogy/shared/locales"
 
 // Composables
@@ -174,6 +216,7 @@ import { nanoid } from "nanoid"
 import { storeToRefs } from "pinia"
 import { onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
+import AiProtocolCreateDialog from "./ai-protocol-create-dialog.vue"
 import ProtocolTemplateDialog from "./protocol-template-dialog.vue"
 
 // Icons
@@ -182,14 +225,20 @@ import CodeIcon from "~icons/tabler/code"
 import FilePlusIcon from "~icons/tabler/file-plus"
 import FolderPlusIcon from "~icons/tabler/folder-plus"
 import GitForkIcon from "~icons/tabler/git-fork"
+import SparklesIcon from "~icons/tabler/sparkles"
 
 const props = withDefaults(defineProps<IProps>(), {
   uploadPackage: () => Promise.resolve(),
 })
 
+const emit = defineEmits<{
+  (e: "created", payload: { packageId: string, aiCreated: boolean }): void
+}>()
+
 interface IProps {
   uploadPackage?: () => Promise<void>
 }
+
 // Create reusable ActionCard template
 const [DefineActionCard, ReuseActionCard] = createReusableTemplate<{
   icon: "file-plus" | "folder-plus" | "git-fork" | "hub"
@@ -237,6 +286,7 @@ const { processZipFile, isUploading } = useFileUpload()
 
 // UI state
 const showTemplateDialog = ref(false)
+const showAiCreateDialog = ref(false)
 const uploadModalVisible = ref(false)
 const reuseModalVisible = ref(false)
 const message = useMessage()
@@ -246,6 +296,7 @@ const selectedSourceLab = ref<Lab | null>(null)
 const selectedSourceProject = ref<Project | null>(null)
 const selectedSourceNode = ref<ProtocolModels.ProjectProtocolInfo | null>(null)
 const isCloning = ref(false)
+const isAiCreating = ref(false)
 
 // Form refs
 const uploadFormRef = ref<InstanceType<typeof ProtocolUploadForm> | null>(null)
@@ -256,6 +307,39 @@ const formRef = ref<FormInst | null>(null)
 // Modal handlers
 function handleNewProtocol() {
   showTemplateDialog.value = true
+}
+
+async function handleCreateAiProtocol(payload: { name: string, content: string }) {
+  isAiCreating.value = true
+  try {
+    uploadFileDataStore.packageId = projectId.value
+    await createFromTemplate({
+      type: "basic",
+      name: payload.name,
+      version: "0.1.0",
+    })
+
+    const updated = await uploadFileDataStore.updateFileItem(
+      DEFAULT_FILE_ID_MAP.protocol,
+      { content: payload.content },
+      true,
+    )
+    if (!updated) {
+      throw new Error("Generated Protocol file could not be saved")
+    }
+
+    await initWebContainer(projectId.value, fileData, rootPath.value, props.uploadPackage)
+    await navigateToEditor({ aiCreated: true })
+    message.success($t("editor.aiCreate.createSuccess", { name: payload.name }))
+  }
+  catch (error) {
+    console.error("Error creating AI Protocol:", error)
+    message.error($t("editor.aiCreate.createFailed"))
+    throw error
+  }
+  finally {
+    isAiCreating.value = false
+  }
 }
 
 function handleOpenFolder() {
@@ -440,7 +524,7 @@ async function processUploadForm() {
 }
 
 // Helper navigation function
-function navigateToEditor() {
+async function navigateToEditor(options: { aiCreated?: boolean } = {}) {
   // Get lab and project info from current route params (if available)
   const { labUid, projectUid } = route.params as {
     labUid?: string
@@ -451,12 +535,13 @@ function navigateToEditor() {
     package_id: projectId.value,
     from_landing: "true",
     open_file: "protocol/protocol.aimd",
+    ...(options.aiCreated ? { ai_created: "true" } : {}),
   }
 
   // For new protocols, we use a placeholder protocolUid to match the route pattern
   // The actual route will use query params (package_id) to identify the draft
   if (labUid && projectUid) {
-    return routerPushByKey("protocol-editor", {
+    await routerPushByKey("protocol-editor", {
       params: {
         labUid,
         projectUid,
@@ -466,8 +551,14 @@ function navigateToEditor() {
       query,
     })
   }
+  else {
+    await routerPushByKey("protocol-editor-playground", { query })
+  }
 
-  return routerPushByKey("protocol-editor-playground", { query })
+  emit("created", {
+    packageId: projectId.value,
+    aiCreated: Boolean(options.aiCreated),
+  })
 }
 
 // Initialization

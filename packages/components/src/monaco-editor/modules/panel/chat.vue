@@ -1,9 +1,13 @@
 <template>
-  <div class="relative h-full flex flex-col">
+  <div class="relative h-full flex flex-col" data-testid="editor-ai-edit-panel">
     <div>
-      <h3 class="leading-10 !text-6">
-        {{ $t("chat.askAira") }}
+      <h3 class="min-h-10 pr-22 text-xl font-semibold leading-7">
+        {{ props.codeEdit ? $t("chat.editorCodeEdit.panelTitle") : $t("chat.askAira") }}
       </h3>
+
+      <p v-if="props.codeEdit" class="mb-3 pr-2 text-sm text-gray-500 leading-5">
+        {{ $t("chat.editorCodeEdit.panelDescription") }}
+      </p>
 
       <chat-wrapper-actions v-bind="chatWrapperActionProps" v-on="chatWrapperActionEventHandlers" />
     </div>
@@ -21,12 +25,17 @@
 
     <n-modal
       v-model:show="reviewModalVisible"
+      data-testid="editor-ai-review"
       preset="card"
       :title="$t('chat.editorCodeEdit.reviewTitle')"
       class="max-w-5xl w-85vw"
       content-class="max-h-70vh overflow-y-auto"
     >
       <div v-if="codeEditResult" class="space-y-4">
+        <n-alert type="info" :bordered="false">
+          {{ $t("chat.editorCodeEdit.reviewDescription") }}
+        </n-alert>
+
         <n-alert v-if="codeEditResult.warnings.length" type="warning" :title="$t('chat.editorCodeEdit.warnings')">
           <ul class="m-0 pl-5">
             <li v-for="warning in codeEditResult.warnings" :key="warning">
@@ -45,13 +54,24 @@
               <n-tag size="small" :type="getStatusTagType(change.status)">
                 {{ $t(`chat.editorCodeEdit.status.${change.status}`) }}
               </n-tag>
-              <span class="truncate font-mono text-sm">{{ change.path }}</span>
+              <div class="min-w-0">
+                <div class="truncate text-sm font-medium">
+                  {{ getChangedFileLabel(change) }}
+                </div>
+                <div class="truncate text-xs text-gray-400 font-mono">
+                  {{ change.path }}
+                </div>
+              </div>
             </div>
             <n-button size="small" type="primary" secondary @click="applyChangedFile(change)">
               {{ $t("chat.editorCodeEdit.apply") }}
             </n-button>
           </div>
-          <pre class="code-edit-diff">{{ change.diff || $t("chat.editorCodeEdit.diffFallback") }}</pre>
+          <n-collapse arrow-placement="right">
+            <n-collapse-item :title="$t('chat.editorCodeEdit.details')" :name="`diff-${change.path}`">
+              <pre class="code-edit-diff">{{ change.diff || $t("chat.editorCodeEdit.diffFallback") }}</pre>
+            </n-collapse-item>
+          </n-collapse>
         </div>
 
         <n-collapse v-if="codeEditResult.execution_log.length" arrow-placement="right">
@@ -69,6 +89,7 @@
           </n-button>
           <n-button
             type="primary"
+            data-testid="editor-ai-apply-all"
             :loading="applyingAll"
             :disabled="!codeEditResult?.changed_files.length"
             @click="applyAllChangedFiles"
@@ -82,16 +103,15 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatModelConfig } from "@airalogy/shared"
 import type { ModelInfo } from "@airalogy/components/monaco-editor/store/editorStore"
+import type { ChatModelConfig } from "@airalogy/shared"
 import { useScroll } from "@airalogy/components/chat/composables"
 import { createThinkingMessage, createUserMessage, formatErrorMessage } from "@airalogy/components/chat/composables/utils"
 import ChatComponent from "@airalogy/components/chat/index.vue"
 import ChatWrapperActions from "@airalogy/components/chat/modules/chat-wrapper-actions.vue"
 import { isNormalModelInfo, useActiveEditorStore, useModelsStore } from "@airalogy/components/monaco-editor/store/editorStore"
 import { useUploadFileDataStore } from "@airalogy/components/monaco-editor/store/uploadFileDataStore"
-import { useClosableMessage } from "@airalogy/composables"
-import { useScrollTrap } from "@airalogy/composables"
+import { useClosableMessage, useScrollTrap } from "@airalogy/composables"
 import { DEFAULT_FILE_ID_MAP } from "@airalogy/shared/constants/protocol"
 import { $t } from "@airalogy/shared/locales"
 import { nanoid } from "nanoid"
@@ -151,13 +171,6 @@ interface CodeEditFileDef {
   type: Exclude<EditorCodeEditFileType, "other">
 }
 
-const CODE_EDIT_FILES: CodeEditFileDef[] = [
-  { id: DEFAULT_FILE_ID_MAP.protocol, path: "protocol.aimd", type: "aimd" },
-  { id: DEFAULT_FILE_ID_MAP.model, path: "model.py", type: "py" },
-  { id: DEFAULT_FILE_ID_MAP.assigner, path: "assigner.py", type: "py" },
-  { id: DEFAULT_FILE_ID_MAP.toml_config, path: "protocol.toml", type: "toml" },
-]
-
 const props = withDefaults(defineProps<{
   protocolId?: string | null
   airalogyId?: string | null
@@ -167,6 +180,13 @@ const props = withDefaults(defineProps<{
   airalogyId: null,
   codeEdit: undefined,
 })
+
+const CODE_EDIT_FILES: CodeEditFileDef[] = [
+  { id: DEFAULT_FILE_ID_MAP.protocol, path: "protocol.aimd", type: "aimd" },
+  { id: DEFAULT_FILE_ID_MAP.model, path: "model.py", type: "py" },
+  { id: DEFAULT_FILE_ID_MAP.assigner, path: "assigner.py", type: "py" },
+  { id: DEFAULT_FILE_ID_MAP.toml_config, path: "protocol.toml", type: "toml" },
+]
 
 const modelsStore = useModelsStore()
 const activeEditorStore = useActiveEditorStore()
@@ -512,6 +532,22 @@ function getStatusTagType(status: EditorCodeEditChangedFileStatus) {
     return "error"
   }
   return "info"
+}
+
+function getChangedFileLabel(change: EditorCodeEditChangedFile) {
+  if (change.path === "protocol.aimd") {
+    return $t("chat.editorCodeEdit.fileLabels.aimd")
+  }
+  if (change.path === "model.py") {
+    return $t("chat.editorCodeEdit.fileLabels.model")
+  }
+  if (change.path === "assigner.py") {
+    return $t("chat.editorCodeEdit.fileLabels.assigner")
+  }
+  if (change.path === "protocol.toml") {
+    return $t("chat.editorCodeEdit.fileLabels.toml")
+  }
+  return change.name || change.path
 }
 </script>
 

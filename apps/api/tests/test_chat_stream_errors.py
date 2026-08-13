@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.libs import masterbrain
+from app.models.chat import Chat, ChatType
 from app.routers.chats.utils import build_chat_stream_error_data
 
 
@@ -58,6 +59,32 @@ def test_model_connection_failure_is_retryable(monkeypatch):
 
     assert data["code"] == "MODEL_UNAVAILABLE"
     assert data["retryable"] is True
+
+
+def test_protocol_generation_uses_masterbrain_single_file_endpoint(monkeypatch):
+    captured: dict[str, object] = {}
+
+    async def mock_stream_request(path, json_body, **_):
+        captured["path"] = path
+        captured["json"] = json_body
+        yield "# Generated Protocol"
+
+    chat = Chat(
+        user_id=uuid.uuid4(),
+        context={"instruction": "Create a sample protocol"},
+        messages=[],
+        type=ChatType.PROTOCOL_GENERATE,
+        model={"name": "qwen3.5-flash"},
+        model_type=1,
+    )
+
+    async def consume_stream():
+        return [chunk async for chunk in masterbrain.protocol_generate_aimd(chat)]
+
+    monkeypatch.setattr(masterbrain, "stream_request", mock_stream_request)
+
+    assert asyncio.run(consume_stream()) == ["# Generated Protocol"]
+    assert captured["path"] == "endpoints/single_protocol_file_generation"
 
 
 def test_stream_request_preserves_upstream_http_error(monkeypatch):

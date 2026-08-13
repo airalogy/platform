@@ -51,6 +51,9 @@
                   <n-button
                     quaternary :type="menu.key === activeMenu ? 'primary' : 'default'"
                     :class="{ 'opacity-60 hover:opacity-100': menu.key !== activeMenu }"
+                    :title="getSideMenuLabel(menu)"
+                    :aria-label="getSideMenuLabel(menu)"
+                    :data-testid="`editor-side-menu-${menu.key}`"
                     @click="handleSideMenuClick(menu)"
                   >
                     <template #icon>
@@ -138,6 +141,7 @@ import { defaultSideMenus, type ISideMenuItem } from "./utils/sideMenus"
 // import Preview from "./preview/index.vue"
 import { useDragIconStore } from "@airalogy/components/monaco-editor/store/dragIconStore"
 import { arrayBufferToString, DEFAULT_FILE_ID_MAP } from "@airalogy/shared"
+import { $t } from "@airalogy/shared/locales"
 import { assert } from "@airalogy/shared/utils"
 import { useLanguageClient } from "./composables/useLanguageClient"
 import {
@@ -245,6 +249,10 @@ const protocolContent = computed(() => {
 })
 
 const menusRef = ref<(InstanceType<typeof NTab> & { barElRef: HTMLDivElement }) | null>(null)
+
+function getSideMenuLabel(menu: ISideMenuItem) {
+  return menu.labelKey ? $t(menu.labelKey as any) : menu.label
+}
 
 // const dragIconRef = ref<HTMLDivElement>()
 const { dragIconRef } = storeToRefs(useDragIconStore())

@@ -107,7 +107,9 @@ const {
   currentMessagePath,
 } = useOrProvideChatInfoStore(toRefs(props), emit)
 
-const inputPlaceholder = computed(() => $t("chat.inputPlaceholder"))
+const inputPlaceholder = computed(() => props.source === "editor"
+  ? $t("chat.editorInputPlaceholder")
+  : $t("chat.inputPlaceholder"))
 function handleUpdateEditing(branchMessage: Chat.ChatMessage, value: boolean) {
   branchMessage.editing = value
 }
@@ -183,9 +185,10 @@ const chatExamples = computed(() => {
 
   if (source === "editor") {
     return [
-      "Analyze my protocol and suggest improvements",
-      "Help me fix the errors in my protocol",
-      "Briefly explain the Airalogy Markdown syntax to me",
+      $t("chat.examples.editor.addField"),
+      $t("chat.examples.editor.changeStep"),
+      $t("chat.examples.editor.addTable"),
+      $t("chat.examples.editor.fix"),
     ]
   }
 

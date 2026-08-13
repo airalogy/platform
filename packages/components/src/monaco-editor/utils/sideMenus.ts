@@ -14,6 +14,7 @@ export interface ISideMenuItem {
   icon: Component
   key: string
   label: string
+  labelKey?: string
   component: Component | null
   componentProps?: Record<string, any>
   componentEvents?: Record<string, any>
@@ -24,6 +25,7 @@ export const fileSideMenu: ISideMenuItem = {
   icon: FilesIcon,
   key: "file",
   label: "file",
+  labelKey: "editor.sideMenus.files",
   component: FileExplorer,
 }
 
@@ -31,6 +33,7 @@ export const chatSideMenu: ISideMenuItem = {
   icon: AiralogyIcon,
   key: "airalogy",
   label: "airalogy",
+  labelKey: "editor.sideMenus.aiEdit",
   component: ChatPanel,
   panelSize: {
     minSplitSize: 500,
@@ -41,6 +44,7 @@ export const documentSideMenu: ISideMenuItem = {
   icon: ProtocolIcon,
   key: "protocol-documents",
   label: "Protocol Documents",
+  labelKey: "editor.sideMenus.aiCreate",
   component: ProtocolDocumentsPanel,
   panelSize: {
     minSplitSize: 500,
@@ -52,12 +56,14 @@ export const searchSideMenu: ISideMenuItem = {
   icon: SearchIcon,
   key: "search",
   label: "search",
+  labelKey: "editor.sideMenus.search",
   component: null,
 }
 export const settingSideMenu: ISideMenuItem = {
   icon: SettingsIcon,
   key: "settings",
   label: "settings",
+  labelKey: "editor.sideMenus.settings",
   component: SettingsPanel,
   componentProps: {
     protocolInfo: null,

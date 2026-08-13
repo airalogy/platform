@@ -2,7 +2,7 @@
   <div class="protocol-generator size-full flex flex-col gap-4 p-4">
     <div class="generator-toolbar">
       <h3 class="text-base font-semibold">
-        Protocol Generator
+        {{ $t("editor.protocolGenerator.title") }}
       </h3>
       <n-select v-model:value="selectedModel" :options="modelOptions" class="w-32" size="small" />
     </div>
@@ -11,26 +11,26 @@
       <div class="step-header">
         <div class="step-info">
           <div class="step-title">
-            Generate `protocol.aimd`
+            {{ $t("editor.protocolGenerator.stepTitle") }}
           </div>
           <div class="step-description">
-            Paste requirements here, or import text from reference files. The generator will produce one single AIMD file with inline types and embedded assigner blocks.
+            {{ $t("editor.protocolGenerator.description") }}
           </div>
         </div>
       </div>
 
       <div class="step-content">
         <div v-if="hasExistingAimd" class="step-hint mb-3">
-          Generating will replace the current `protocol.aimd` content in the editor.
+          {{ $t("editor.protocolGenerator.replaceHint") }}
         </div>
 
         <div class="instruction-toolbar">
           <div class="instruction-meta">
             <div class="instruction-label">
-              Generation Instructions
+              {{ $t("editor.protocolGenerator.instructionLabel") }}
             </div>
             <div class="instruction-caption">
-              Write requirements directly, or import `.txt`, `.md`, `.pdf`, `.doc`, or `.docx` files and append their extracted text here.
+              {{ $t("editor.protocolGenerator.instructionCaption") }}
             </div>
           </div>
 
@@ -56,7 +56,7 @@
                   <icon-tabler-upload />
                 </n-icon>
               </template>
-              Add From File
+              {{ $t("editor.protocolGenerator.addFromFile") }}
             </n-button>
           </div>
         </div>
@@ -68,12 +68,13 @@
             class="source-pill"
           >
             {{ source.filename }}
-            <span v-if="source.wasTrimmed" class="source-pill__flag">trimmed</span>
+            <span v-if="source.wasTrimmed" class="source-pill__flag">{{ $t("editor.protocolGenerator.trimmed") }}</span>
           </span>
         </div>
 
         <n-input
           v-model:value="instruction"
+          data-testid="ai-protocol-requirements"
           class="generator-textarea"
           type="textarea"
           :placeholder="placeholderText"
@@ -85,8 +86,9 @@
 
         <n-button
           type="primary"
+          data-testid="ai-protocol-generate"
           :loading="isGenerating"
-          :disabled="!instruction.trim() || isBusy"
+          :disabled="!instruction.trim() || isBusy || props.disabled"
           class="mt-2 w-full"
           @click="handleGenerateProtocol"
         >
@@ -95,7 +97,7 @@
               <icon-tabler-sparkles />
             </n-icon>
           </template>
-          Generate Protocol File
+          {{ $t("editor.protocolGenerator.generate") }}
         </n-button>
       </div>
     </div>
@@ -105,6 +107,7 @@
 <script setup lang="ts">
 import type { ChatModelConfig } from "@airalogy/shared"
 import { ChatModel } from "@airalogy/shared"
+import { $t } from "@airalogy/shared/locales"
 import IconTablerSparkles from "~icons/tabler/sparkles"
 import IconTablerUpload from "~icons/tabler/upload"
 import { NButton, NIcon, NInput, NSelect, useMessage } from "naive-ui"
@@ -139,9 +142,10 @@ interface IProps {
   extractInstructionFile?: (
     file: File,
   ) => Promise<{ data: ExtractedInstructionFile | null, error: any }>
-  onSaveFile?: (content: string, filename: string, language: string) => void
+  onSaveFile?: (content: string, filename: string, language: string) => void | Promise<void>
   currentAimdContent?: string
   currentModelContent?: string
+  disabled?: boolean
 }
 
 const props = withDefaults(defineProps<IProps>(), {
@@ -149,6 +153,7 @@ const props = withDefaults(defineProps<IProps>(), {
   generateModel: () => Promise.reject(new Error("generateModel not provided")),
   generateAssigner: () => Promise.reject(new Error("generateAssigner not provided")),
   extractInstructionFile: undefined,
+  disabled: false,
 })
 
 const MAX_INSTRUCTION_LENGTH = 20000
@@ -168,10 +173,7 @@ const isExtractingFile = ref(false)
 const instruction = ref("")
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const importedSources = ref<ImportedSource[]>([])
-const placeholderText = [
-  "Describe the protocol you want to create, or paste / import source material.",
-  "Include key steps, variables, formulas, and any constraints the AIMD file should preserve.",
-].join(" ")
+const placeholderText = computed(() => $t("editor.protocolGenerator.placeholder"))
 
 const generatedAimd = ref<string | null>(null)
 const aimdGenerated = computed(() => generatedAimd.value !== null)
@@ -264,7 +266,7 @@ async function handleFileInputChange(event: Event) {
     for (const file of files) {
       const { data, error } = await props.extractInstructionFile(file)
       if (error || !data?.text) {
-        throw new Error(error?.message || `Failed to extract text from ${file.name}`)
+        throw new Error(error?.message || $t("editor.protocolGenerator.extractFailed", { filename: file.name }))
       }
 
       const { appended, truncatedByLimit } = appendInstructionBlock(
@@ -272,7 +274,7 @@ async function handleFileInputChange(event: Event) {
       )
 
       if (!appended) {
-        throw new Error("Instruction text is already at the maximum length.")
+        throw new Error($t("editor.protocolGenerator.limitReached"))
       }
 
       upsertImportedSource(data)
@@ -288,22 +290,22 @@ async function handleFileInputChange(event: Event) {
     }
 
     if (importedCount === 1) {
-      message.success(`Imported ${files[0]?.name} into the instruction box`)
+      message.success($t("editor.protocolGenerator.importedOne", { filename: files[0]?.name || "" }))
     }
     else if (importedCount > 1) {
-      message.success(`Imported ${importedCount} files into the instruction box`)
+      message.success($t("editor.protocolGenerator.importedMany", { count: importedCount }))
     }
 
     if (trimmedCount > 0) {
-      message.info(`${trimmedCount} imported file${trimmedCount > 1 ? "s were" : " was"} trimmed during text extraction`)
+      message.info($t("editor.protocolGenerator.trimmedFiles", { count: trimmedCount }))
     }
 
     if (truncatedByLimitCount > 0) {
-      message.warning("Some imported content was shortened to fit the instruction limit")
+      message.warning($t("editor.protocolGenerator.shortenedFiles"))
     }
   }
   catch (error: any) {
-    message.error(error.message || "Error extracting text from uploaded file")
+    message.error(error.message || $t("editor.protocolGenerator.extractError"))
   }
   finally {
     isExtractingFile.value = false
@@ -312,7 +314,7 @@ async function handleFileInputChange(event: Event) {
 
 async function handleGenerateProtocol() {
   if (!instruction.value.trim()) {
-    message.warning("Please enter instruction")
+    message.warning($t("editor.protocolGenerator.enterInstruction"))
     return
   }
 
@@ -325,18 +327,17 @@ async function handleGenerateProtocol() {
     })
 
     if (error || !data) {
-      throw new Error(error?.message || "Failed to generate AIMD")
+      throw new Error(error?.message || $t("editor.protocolGenerator.generateFailed"))
     }
 
     generatedAimd.value = data
-    message.success("protocol.aimd generated successfully")
-
     if (props.onSaveFile) {
-      props.onSaveFile(data, "protocol.aimd", "aimd")
+      await props.onSaveFile(data, "protocol.aimd", "aimd")
     }
+    message.success($t("editor.protocolGenerator.generated"))
   }
   catch (error: any) {
-    message.error(error.message || "Error generating AIMD")
+    message.error(error.message || $t("editor.protocolGenerator.generateFailed"))
   }
 
   isGenerating.value = false

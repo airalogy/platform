@@ -25,6 +25,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增端到端 Airalogy Protocol Workflow 支持，包括 workflow 状态持久化、后端 `/workflow` 与 `/workflow/step` API、Masterbrain AIRA 集成、Protocol 上下文组装，以及多 Protocol 运行时的 Record 数据注入。
 - 新增 File Storage Bridge，支持稳定 FileId 引用、`airalogy_files` 显式存储映射、外部文件注册和基于 resolver 的文件访问。
 - 新增按权限范围导出原始 Records：Lab Owner 可导出实验室，Project Owner/Manager 可导出项目或 Protocol；支持固定快照的后台任务、`.aira`、JSONL、单 Schema CSV、可选修订历史、附件去重、实验室级不可变审计、7 天下载、站内完成通知以及导出历史与重新生成。
+- Protocol Editor 新增无代码 Aira 工作流：用户可用自然语言描述实验需求，生成并预览结构化 Protocol，随后继续通过对话提出修改，并在应用前审核变更。
 
 ### 变更
 
@@ -33,6 +34,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 将持久化 workflow 领域模型从 `ResearchWorkflow` 改名为 `ProtocolWorkflow`，公开版初始 schema 表名同步为 `protocol_workflows`。
 - 将数据库初始化整理为单一初始 schema migration。
 - 从公开源码树中排除生成的 API 产物、本地缓存、日志、证书、环境文件和数据库 dump 文件。
+- 后端更新为正式发布的 `masterbrain==0.10.1`，Protocol 草稿通过 Masterbrain 的单文件生成契约完成，Platform 不再自行维护生成智能。
 
 ### 修复
 
