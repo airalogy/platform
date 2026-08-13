@@ -28,6 +28,29 @@ const UPDATED_PROTOCOL = `# 细胞药物处理实验
 {{step|prepare_cells}} 准备细胞并加入药物。
 `
 
+test("project creation menu opens the existing Aira drafting workflow", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("lang", JSON.stringify({ data: "zh-CN", expire: null }))
+  })
+
+  await page.goto("/labs/dev_lab/projects/quickstart/protocols")
+  await page.getByRole("button", { name: "新建协议", exact: true }).click()
+
+  const aiEntry = page.getByTestId("protocol-create-ai")
+  await expect(aiEntry).toBeVisible()
+  await expect(aiEntry).toContainText("AI 帮助撰写 Protocol")
+  await expect(aiEntry).toContainText("推荐")
+  await aiEntry.click()
+
+  await expect(page).toHaveURL((url) => {
+    return url.pathname.startsWith("/labs/dev_lab/projects/quickstart/")
+      && url.pathname.includes("/editor/")
+      && url.searchParams.get("show_ai_create") === "true"
+  })
+  await expect(page.getByRole("heading", { name: "用 AI 创建 Protocol", exact: true })).toBeVisible()
+  await expect(page.getByTestId("ai-protocol-name").locator("input")).toHaveValue("AI 生成的 Protocol")
+})
+
 test("non-technical user can create and refine a Protocol with Aira", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("lang", JSON.stringify({ data: "zh-CN", expire: null }))

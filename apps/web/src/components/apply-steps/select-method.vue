@@ -6,12 +6,22 @@
       v-for="option in applyOptions"
       :key="option.type"
       hoverable
-      class="transform cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
+      role="button"
+      tabindex="0"
+      :aria-label="option.title"
+      :data-testid="option.type === 'ai' ? 'protocol-create-ai' : undefined"
+      class="create-option-card relative transform cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
+      :class="{ 'create-option-card--featured': option.featured }"
       content-class="flex flex-col items-center"
       @click="handleSelectOption(option.type)"
+      @keydown.enter.prevent="handleSelectOption(option.type)"
+      @keydown.space.prevent="handleSelectOption(option.type)"
     >
-      <div class="rounded-full bg-primary-50 p-4">
-        <n-icon size="48" class="text-primary">
+      <n-tag v-if="option.featured" type="info" size="small" round class="absolute right-4 top-4">
+        {{ $t("page.protocol.apply.options.ai.recommended") }}
+      </n-tag>
+      <div class="create-option-icon" :class="{ 'create-option-icon--featured': option.featured }">
+        <n-icon :size="option.featured ? 30 : 36">
           <component :is="option.icon" />
         </n-icon>
       </div>
@@ -43,6 +53,7 @@ import IconFile from "~icons/tabler/file"
 import IconFileImport from "~icons/tabler/file-import"
 import IconFileZip from "~icons/tabler/file-zip"
 import IconReportSearch from "~icons/tabler/report-search"
+import IconWand from "~icons/tabler/wand"
 import { nanoid } from "nanoid"
 import { useRouterPush } from "../../composables/useRouterPush"
 import { useApplyProtocol } from "./composables/useApplyProtocolState"
@@ -60,10 +71,11 @@ const props = withDefaults(defineProps<IProps>(), {
 const { selectedOption, currentStep } = useApplyProtocol()
 
 interface ApplyOptionConfig {
-  type: ApplyOption & {}
+  type: NonNullable<ApplyOption> | "ai"
   icon: Component
   title: string
   description: string
+  featured?: boolean
 }
 
 const defaultApplyOptions = computed<ApplyOptionConfig[]>(() => ([
@@ -92,6 +104,13 @@ const applyOptions = computed<ApplyOptionConfig[]>(() => {
     return defaultApplyOptions.value
   }
   return [
+    {
+      type: "ai",
+      icon: IconWand,
+      title: $t("page.protocol.apply.options.ai.title"),
+      description: $t("page.protocol.apply.options.ai.description"),
+      featured: true,
+    },
     defaultApplyOptions.value[0]!,
     {
       type: "upload-aira",
@@ -113,14 +132,16 @@ const applyOptions = computed<ApplyOptionConfig[]>(() => {
 const { routerPushByKey, routerReplaceByKey, route } = useRouterPush()
 const airaImportModalRef = ref<InstanceType<typeof ImportAiraArchiveModal> | null>(null)
 
-function navigateToEditorWithContext(protocolUid?: string) {
-  const { labUid, projectUid } = route.value.params as {
+function navigateToEditorWithContext(protocolUid?: string, query?: Record<string, string>) {
+  const routeParams = route.value.params as {
     labUid?: string
     projectUid?: string
   }
+  const labUid = routeParams.labUid || props.projectInfo?.lab_uid
+  const projectUid = routeParams.projectUid || props.projectInfo?.uid
 
   if (!labUid || !projectUid) {
-    return routerReplaceByKey("protocol-editor-playground")
+    return routerReplaceByKey("protocol-editor-playground", { query })
   }
 
   return routerReplaceByKey("protocol-editor", {
@@ -129,10 +150,19 @@ function navigateToEditorWithContext(protocolUid?: string) {
       projectUid,
       protocolUid: protocolUid || `protocol-${nanoid()}`,
     },
+    query,
   })
 }
 
-function handleSelectOption(option: ApplyOption) {
+function handleSelectOption(option: NonNullable<ApplyOption> | "ai") {
+  if (option === "ai") {
+    const { protocolUid } = route.value.params as { protocolUid?: string }
+    return navigateToEditorWithContext(protocolUid, {
+      package_id: `ai-draft-${nanoid()}`,
+      show_ai_create: "true",
+    })
+  }
+
   if (option === "scratch") {
     if (props.protocolInfo) {
       const { lab, project, uid } = props.protocolInfo!
@@ -182,11 +212,34 @@ async function handleImportArchive(result: ImportAiraArchiveResponse) {
 </script>
 
 <style scoped>
-.text-primary {
-  color: var(--primary-color);
+.create-option-icon {
+  display: flex;
+  width: 3.5rem;
+  height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+  border: 1px solid rgba(107, 114, 128, 0.12);
+  border-radius: 0.875rem;
+  color: #4b5563;
+  background: #f8fafc;
 }
 
-.bg-primary-50 {
-  background-color: rgba(var(--primary-color-rgb), 0.1);
+.create-option-icon--featured {
+  border-color: rgb(var(--primary-color) / 22%);
+  color: rgb(var(--primary-color));
+  background: linear-gradient(145deg, rgb(var(--primary-color) / 12%), rgb(14 165 233 / 6%));
+  box-shadow: 0 6px 16px rgb(var(--primary-color) / 8%);
+}
+
+.create-option-card--featured {
+  border-color: rgb(var(--primary-color) / 45%);
+  background: linear-gradient(135deg, rgb(var(--primary-color) / 10%), rgb(14 165 233 / 6%));
+  box-shadow: 0 10px 28px rgb(var(--primary-color) / 8%);
+}
+
+.create-option-card:focus-visible {
+  outline: 2px solid rgb(var(--primary-color));
+  outline-offset: 3px;
 }
 </style>

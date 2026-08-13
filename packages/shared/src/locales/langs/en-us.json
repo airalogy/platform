@@ -998,6 +998,11 @@
           "allSetDescription": "Your protocol is ready"
         },
         "options": {
+          "ai": {
+            "title": "Write a Protocol with AI",
+            "description": "Describe the experiment in plain language, then let Aira draft it and keep refining it conversationally in the editor",
+            "recommended": "Recommended"
+          },
           "existing": {
             "title": "Reuse a protocol from another project",
             "description": "Pick a protocol from another project to reuse"

@@ -566,9 +566,11 @@ onMounted(() => {
   // Set up protocol state
   selectedOption.value = "upload-zip"
 
-  // Check for template dialog query param
-  const showDialog = route.query.show_template === "true"
-  if (showDialog) {
+  // Open the requested guided creation flow when arriving from a creation entry.
+  if (route.query.show_ai_create === "true") {
+    showAiCreateDialog.value = true
+  }
+  else if (route.query.show_template === "true") {
     showTemplateDialog.value = true
   }
 })

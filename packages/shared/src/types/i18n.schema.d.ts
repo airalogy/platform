@@ -1002,6 +1002,11 @@ declare namespace I18n {
             allSetDescription: string
           }
           options: {
+            ai: {
+              title: string
+              description: string
+              recommended: string
+            }
             existing: {
               title: string
               description: string

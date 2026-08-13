@@ -998,6 +998,11 @@
           "allSetDescription": "协议已准备就绪"
         },
         "options": {
+          "ai": {
+            "title": "AI 帮助撰写 Protocol",
+            "description": "用自然语言描述实验需求，由 Aira 生成草稿并在编辑器中继续对话修改",
+            "recommended": "推荐"
+          },
           "existing": {
             "title": "复用其他项目的协议",
             "description": "从其他项目中选择协议进行复用"
