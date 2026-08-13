@@ -34,7 +34,7 @@ Target initial version: `0.1.0`.
 - Renamed the persisted workflow domain model from `ResearchWorkflow` to `ProtocolWorkflow`, including the public initial schema table name `protocol_workflows`.
 - Consolidated database setup into a single initial schema migration.
 - Excluded generated API artifacts, local caches, logs, certificates, environment files, and database dump files from the public source tree.
-- Updated the backend to the released `masterbrain==0.10.1` package and routed Protocol drafting through Masterbrain's single-file generation contract instead of maintaining generation intelligence in Platform.
+- Updated Platform to `masterbrain==0.11.0` and the released `@airalogy/masterbrain-client` / `@airalogy/masterbrain-vue` packages. Protocol drafting now uses Masterbrain's single-file generation contract, while shared packages own AI edit contracts, risk handling, safe apply/undo logic, and Diff rendering instead of Platform maintaining duplicate intelligence and UI infrastructure.
 
 ### Fixed
 

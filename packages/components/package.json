@@ -30,6 +30,8 @@
     "@airalogy/aimd-recorder": "^1.24.5",
     "@airalogy/aimd-renderer": "2.11.1",
     "@airalogy/composables": "workspace:*",
+    "@airalogy/masterbrain-client": "0.1.0",
+    "@airalogy/masterbrain-vue": "0.1.0",
     "@airalogy/shared": "workspace:*",
     "@tiptap/core": "catalog:",
     "@tiptap/extension-blockquote": "catalog:",

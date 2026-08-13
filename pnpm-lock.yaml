@@ -566,6 +566,9 @@ importers:
       '@airalogy/composables':
         specifier: workspace:*
         version: link:../../packages/composables
+      '@airalogy/masterbrain-client':
+        specifier: 0.1.0
+        version: 0.1.0
       '@airalogy/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -987,6 +990,12 @@ importers:
       '@airalogy/composables':
         specifier: workspace:*
         version: link:../composables
+      '@airalogy/masterbrain-client':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@airalogy/masterbrain-vue':
+        specifier: 0.1.0
+        version: 0.1.0(monaco-editor@0.52.2)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1575,6 +1584,18 @@ packages:
     resolution: {integrity: sha512-/3PQjCwR/SMZOh2HymmqVZSu951A9FvqF1BGFo6Hj/LeXU4e1HuSdyT5bXR3ebgIJkZWcGiVTz6VLRWN8mCk+Q==}
     peerDependencies:
       vue: ^3.5.17
+
+  '@airalogy/masterbrain-client@0.1.0':
+    resolution: {integrity: sha512-Rzhud4eLUB+AMw8NlUn9h/um5ZRG1NDUT8SnxI6NFPWL7yQghhl0CIauUKDQCxrGaG4m1zUAOd6rrJcToXk74Q==}
+
+  '@airalogy/masterbrain-vue@0.1.0':
+    resolution: {integrity: sha512-XgV4SlsjqCb94mGWnwYmMrsGCF7UEP8lGNogDQllLKXaU2T+K2UpO0MyOz9q6vd6cvO+aH/8iH63bEHAJmJc5g==}
+    peerDependencies:
+      monaco-editor: '>=0.52.0'
+      vue: '>=3.4.0'
+    peerDependenciesMeta:
+      monaco-editor:
+        optional: true
 
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
@@ -10159,6 +10180,15 @@ snapshots:
       vue: 3.5.17(typescript@5.8.3)
     transitivePeerDependencies:
       - supports-color
+
+  '@airalogy/masterbrain-client@0.1.0': {}
+
+  '@airalogy/masterbrain-vue@0.1.0(monaco-editor@0.52.2)(vue@3.5.17(typescript@5.8.3))':
+    dependencies:
+      '@airalogy/masterbrain-client': 0.1.0
+      vue: 3.5.17(typescript@5.8.3)
+    optionalDependencies:
+      monaco-editor: 0.52.2
 
   '@ampproject/remapping@2.3.0':
     dependencies:

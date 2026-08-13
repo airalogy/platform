@@ -34,7 +34,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 将持久化 workflow 领域模型从 `ResearchWorkflow` 改名为 `ProtocolWorkflow`，公开版初始 schema 表名同步为 `protocol_workflows`。
 - 将数据库初始化整理为单一初始 schema migration。
 - 从公开源码树中排除生成的 API 产物、本地缓存、日志、证书、环境文件和数据库 dump 文件。
-- 后端更新为正式发布的 `masterbrain==0.10.1`，Protocol 草稿通过 Masterbrain 的单文件生成契约完成，Platform 不再自行维护生成智能。
+- Platform 更新为 `masterbrain==0.11.0` 以及正式发布的 `@airalogy/masterbrain-client` / `@airalogy/masterbrain-vue` 包。Protocol 草稿使用 Masterbrain 单文件生成契约，AI 编辑契约、风险处理、安全应用与撤销逻辑和 Diff 渲染则统一由 Masterbrain 共享包提供，Platform 不再维护重复的智能与 UI 基础设施。
 
 ### 修复
 

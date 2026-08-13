@@ -1,3 +1,4 @@
+import type { CodeEditRequest, CodeEditResponse } from "@airalogy/masterbrain-client"
 import type { ChatModelConfig } from "@airalogy/shared"
 import { request } from "../request"
 
@@ -8,48 +9,7 @@ export interface ExtractedProtocolInstructionFile {
   content_type: string
 }
 
-export interface EditorCodeEditWorkspaceFile {
-  path: string
-  content: string
-  type: "aimd" | "py" | "toml" | "other"
-}
-
-export interface EditorCodeEditSelection {
-  text: string
-  start_offset: number
-  end_offset: number
-}
-
-export interface EditorCodeEditHistoryMessage {
-  role: "user" | "assistant"
-  content: string
-}
-
-export interface EditorCodeEditChangedFile {
-  path: string
-  name: string
-  type: "aimd" | "py" | "toml"
-  status: "created" | "modified" | "deleted"
-  content: string
-  diff: string
-}
-
-export interface EditorCodeEditResponse {
-  runtime: "opencode"
-  message: string
-  edit_status: "changed" | "no_changes"
-  changed_files: EditorCodeEditChangedFile[]
-  warnings: string[]
-  execution_log: string[]
-}
-
-export interface EditorCodeEditPayload {
-  prompt: string
-  workspace_id?: string
-  files: EditorCodeEditWorkspaceFile[]
-  active_file_path?: string
-  selection?: EditorCodeEditSelection
-  chat_history?: EditorCodeEditHistoryMessage[]
+export interface EditorCodeEditPayload extends Omit<CodeEditRequest, "model"> {
   model: ChatModelConfig
 }
 
@@ -155,7 +115,7 @@ export async function generateProtocolAssigner(payload: {
 }
 
 export async function postEditorCodeEdit(payload: EditorCodeEditPayload, requestId?: string) {
-  const { data, error } = await request<EditorCodeEditResponse>({
+  const { data, error } = await request<CodeEditResponse>({
     url: "/editor/code_edit",
     method: "POST",
     data: payload,

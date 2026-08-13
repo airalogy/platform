@@ -63,11 +63,19 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
       contentType: "application/json",
       body: JSON.stringify({
         runtime: "opencode",
+        contract_version: "1",
+        outcome: "answer",
+        change_set_id: null,
         message: "药物浓度会直接影响细胞响应，记录它有助于复现实验并比较不同处理组。",
         edit_status: "no_changes",
         changed_files: [],
         warnings: [],
         execution_log: [],
+        risk: {
+          level: "safe",
+          reasons: [],
+          recommended_action: "auto_apply",
+        },
       }),
     })
   })
@@ -90,6 +98,9 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
       contentType: "application/json",
       body: JSON.stringify({
         runtime: "opencode",
+        contract_version: "1",
+        outcome: "changed",
+        change_set_id: `sha256:${"a".repeat(64)}`,
         message: "已新增试剂批号字段。",
         edit_status: "changed",
         changed_files: [{
@@ -102,6 +113,11 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
         }],
         warnings: [],
         execution_log: [],
+        risk: {
+          level: "safe",
+          reasons: [],
+          recommended_action: "auto_apply",
+        },
       }),
     })
   })
@@ -117,7 +133,7 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
   await expect(changeStatus).toContainText(/已自动应用|Applied/)
   await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("试剂批号")
 
-  await aiEditPanel.getByTestId("editor-ai-view-changes").click()
+  await changeStatus.getByRole("button", { name: /查看变更|View changes/ }).click()
   await expect(review).toBeVisible()
   await expect(review.getByTestId("editor-ai-change-summary")).toContainText("已新增试剂批号字段")
   await expect(review.getByText(/实验流程与记录字段|Experimental flow and record fields/).first()).toBeVisible()
@@ -133,7 +149,7 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
   await review.getByRole("button", { name: /关闭|Close/, exact: true }).click()
   await expect(review).toBeHidden()
 
-  await aiEditPanel.getByTestId("editor-ai-undo").click()
+  await changeStatus.getByRole("button", { name: /^撤销$|^Undo$/ }).click()
   await expect(changeStatus).toBeHidden()
   await expect(page.locator(".monaco-editor .view-lines").first()).not.toContainText("试剂批号")
 
@@ -144,6 +160,9 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
       contentType: "application/json",
       body: JSON.stringify({
         runtime: "opencode",
+        contract_version: "1",
+        outcome: "changed",
+        change_set_id: `sha256:${"b".repeat(64)}`,
         message: "这个修改需要确认。",
         edit_status: "changed",
         changed_files: [{
@@ -156,6 +175,11 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
         }],
         warnings: ["请确认新字段是否需要兼容历史记录。"],
         execution_log: [],
+        risk: {
+          level: "warning",
+          reasons: ["请确认新字段是否需要兼容历史记录。"],
+          recommended_action: "review",
+        },
       }),
     })
   })
@@ -165,4 +189,110 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
   await expect(review).toBeVisible()
   await expect(review.getByTestId("editor-ai-apply-all")).toBeVisible()
   await expect(page.locator(".monaco-editor .view-lines").first()).not.toContainText("试剂批号")
+
+  await review.getByTestId("editor-ai-apply-all").click()
+  await expect(review).toBeHidden()
+  await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("试剂批号")
+  await changeStatus.getByRole("button", { name: /^撤销$|^Undo$/ }).click()
+  await expect(page.locator(".monaco-editor .view-lines").first()).not.toContainText("试剂批号")
+
+  await page.unroute("**/api/editor/code_edit")
+  await page.route("**/api/editor/code_edit", async (route) => {
+    const body = route.request().postDataJSON() as { files: Array<{ path: string }> }
+    expect(body.files.some(file => file.path === "protocol.toml")).toBe(true)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        runtime: "opencode",
+        contract_version: "1",
+        outcome: "changed",
+        change_set_id: `sha256:${"c".repeat(64)}`,
+        message: "已准备删除 Protocol 配置。",
+        edit_status: "changed",
+        changed_files: [{
+          path: "protocol.toml",
+          name: "protocol.toml",
+          type: "toml",
+          status: "deleted",
+          content: "",
+          diff: "--- protocol.toml\n+++ /dev/null",
+        }],
+        warnings: [],
+        execution_log: [],
+        risk: {
+          level: "destructive",
+          reasons: ["Deletes workspace file: protocol.toml"],
+          recommended_action: "review",
+        },
+      }),
+    })
+  })
+
+  await input.fill("删除 protocol.toml。")
+  await aiEditPanel.getByTestId("chat-submit").click()
+  await expect(review).toBeVisible()
+  await review.getByTestId("editor-ai-apply-all").click()
+  await expect(review).toBeHidden()
+
+  await page.unroute("**/api/editor/code_edit")
+  await page.route("**/api/editor/code_edit", async (route) => {
+    const body = route.request().postDataJSON() as { files: Array<{ path: string }> }
+    expect(body.files.some(file => file.path === "protocol.toml")).toBe(false)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        runtime: "opencode",
+        contract_version: "1",
+        outcome: "answer",
+        change_set_id: null,
+        message: "protocol.toml 已从当前工作区删除。",
+        edit_status: "no_changes",
+        changed_files: [],
+        warnings: [],
+        execution_log: [],
+        risk: {
+          level: "safe",
+          reasons: [],
+          recommended_action: "auto_apply",
+        },
+      }),
+    })
+  })
+
+  await input.fill("protocol.toml 现在还在吗？")
+  await aiEditPanel.getByTestId("chat-submit").click()
+  await expect(aiEditPanel.getByText("protocol.toml 已从当前工作区删除。", { exact: true })).toBeVisible()
+  await changeStatus.getByRole("button", { name: /^撤销$|^Undo$/ }).click()
+
+  await page.unroute("**/api/editor/code_edit")
+  await page.route("**/api/editor/code_edit", async (route) => {
+    const body = route.request().postDataJSON() as { files: Array<{ path: string }> }
+    expect(body.files.some(file => file.path === "protocol.toml")).toBe(true)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        runtime: "opencode",
+        contract_version: "1",
+        outcome: "answer",
+        change_set_id: null,
+        message: "protocol.toml 已恢复。",
+        edit_status: "no_changes",
+        changed_files: [],
+        warnings: [],
+        execution_log: [],
+        risk: {
+          level: "safe",
+          reasons: [],
+          recommended_action: "auto_apply",
+        },
+      }),
+    })
+  })
+
+  await input.fill("再确认 protocol.toml 是否已恢复。")
+  await aiEditPanel.getByTestId("chat-submit").click()
+  await expect(aiEditPanel.getByText("protocol.toml 已恢复。", { exact: true })).toBeVisible()
 })
