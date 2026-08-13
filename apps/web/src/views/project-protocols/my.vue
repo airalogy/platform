@@ -3,6 +3,7 @@
     <template #default="{ data }">
       <project-protocol-list
         :list="data"
+        show-context
         :pinned-map="pinnedMap"
         :pinning-keys="pinningKeys"
         @togglePin="handleTogglePin"

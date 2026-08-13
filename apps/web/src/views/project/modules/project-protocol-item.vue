@@ -6,6 +6,20 @@
           {{ display.name }}
         </router-link>
       </n-ellipsis>
+      <div
+        v-if="props.showContext && researchRoute"
+        data-testid="protocol-ownership-path"
+        class="mt-1 flex min-w-0 flex-wrap items-center gap-x-1 text-xs text-gray-500"
+      >
+        <span class="shrink-0">{{ $t("common.from") }}</span>
+        <router-link :to="researchRoute.lab" class="break-all !hover:router-link">
+          {{ display.lab }}
+        </router-link>
+        <span aria-hidden="true">/</span>
+        <router-link :to="researchRoute.project" class="break-all !hover:router-link">
+          {{ display.project }}
+        </router-link>
+      </div>
       <div class="-mb-1">
         <router-link v-if="props.item.user" class="align-top no-underline hover:router-link" :to="userRoute">
           {{ props.item.user.name || props.item.user.username || $t("common.unknown") }}
@@ -25,6 +39,7 @@ import { useI18n } from "vue-i18n"
 export interface IProps {
   item: ProtocolModels.ProjectProtocolInfo
   isCompact?: boolean
+  showContext?: boolean
 }
 
 interface IDisplay {
@@ -35,6 +50,7 @@ interface IDisplay {
 
 const props = withDefaults(defineProps<IProps>(), {
   isCompact: true,
+  showContext: false,
 })
 const { t, locale } = useI18n()
 
@@ -77,6 +93,7 @@ const researchRoute = computed<Record<
     project: {
       name: "project-protocols",
       params: {
+        labUid: lab.uid,
         projectUid: project.uid,
       },
     },

@@ -36,6 +36,7 @@
           :list="airalogyEduProtocols"
           :show-actions="false"
           :show-private="showPrivate"
+          show-context
         />
       </wrapper-item>
 
@@ -49,6 +50,7 @@
             :list="userProtocolList"
             :show-actions="false"
             :show-private="showPrivate"
+            show-context
           />
         </div>
 

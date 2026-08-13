@@ -39,6 +39,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 修复
 
+- 为聚合 Protocol 列表补充所属 Lab 与 Project 路径，使“我的协议”和用户资料页保留工作空间上下文。
 - 修复 Protocol、Project、Lab 与 Group 描述已在三行预览中完整显示时，仍出现无实际展开内容的“展开”操作。
 - 修复 AI Protocol 变更审查中的 Diff 编辑器塌缩成一条细缝的问题，并将 Aira 侧栏说明整理为更清晰的助手卡片。
 - 修复 Protocol 生成后进入 Aira 对话时错用通用窄侧边栏宽度、导致标题、消息和输入区被过度挤压的问题。

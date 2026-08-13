@@ -78,7 +78,7 @@
         :handle-view-all="handleViewAllProtocols"
         :show-view-all="viewAllState.protocol === true"
       >
-        <project-protocol-list :list="viewAllState.protocol ? userProtocolList.slice(0, 5) : userProtocolList" :show-actions="false" :show-private="showPrivate" />
+        <project-protocol-list :list="viewAllState.protocol ? userProtocolList.slice(0, 5) : userProtocolList" :show-actions="false" :show-private="showPrivate" show-context />
       </wrapper-item>
     </div>
   </div>

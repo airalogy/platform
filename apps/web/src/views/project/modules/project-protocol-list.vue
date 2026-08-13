@@ -8,7 +8,11 @@
           </n-icon>
         </template>
         <div class="min-w-0 flex-1">
-          <project-protocol-item :item="item" :is-compact="false" />
+          <project-protocol-item
+            :item="item"
+            :is-compact="false"
+            :show-context="props.showContext"
+          />
           <div v-if="hasFolders && getFolderNames(item).length" class="mt-1 flex flex-wrap gap-1">
             <n-tag
               v-for="name in getFolderNames(item).slice(0, 3)"
@@ -140,6 +144,7 @@ defineOptions({ name: "LabProjectList" })
 const props = withDefaults(defineProps<IProps>(), {
   list: () => [],
   showActions: true,
+  showContext: false,
 })
 
 const emits = defineEmits<{
@@ -153,6 +158,7 @@ interface IProps {
   pinningKeys?: Set<string>
   folders?: Api.ProtocolFolder.Folder[]
   showActions?: boolean
+  showContext?: boolean
 }
 
 const { routerPushByKey } = useRouterPush()
