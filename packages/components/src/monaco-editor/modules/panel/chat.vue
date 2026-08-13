@@ -37,11 +37,8 @@
           data-testid="editor-ai-change-status"
           class="mb-2"
           :applied="latestAppliedEdit"
+          :locale="locale"
           :undoing="undoing"
-          :changed-label="$t('chat.editorCodeEdit.appliedLabel')"
-          :view-label="$t('chat.editorCodeEdit.viewChanges')"
-          :undo-label="$t('chat.editorCodeEdit.undo')"
-          :undoing-label="$t('chat.editorCodeEdit.undoing')"
           @view="openLatestChangeDetails"
           @undo="undoLatestEdit"
         />
@@ -66,16 +63,12 @@
         <masterbrain-change-review
           :result="codeEditResult"
           :applying="applyingAll"
+          :locale="locale"
           :show-header="false"
           :show-footer="false"
           :show-apply="false"
           :title="$t('chat.editorCodeEdit.reviewTitle')"
           :aria-label="$t('chat.editorCodeEdit.reviewTitle')"
-          :summary-label="$t('chat.editorCodeEdit.summaryTitle')"
-          :details-label="$t('chat.editorCodeEdit.details')"
-          :created-label="$t('chat.editorCodeEdit.status.created')"
-          :modified-label="$t('chat.editorCodeEdit.status.modified')"
-          :deleted-label="$t('chat.editorCodeEdit.status.deleted')"
           class="platform-masterbrain-review"
         >
           <template #summary>
@@ -88,7 +81,7 @@
                   {{ $t("chat.editorCodeEdit.summaryTitle") }}
                 </h4>
                 <n-tag size="small" round type="info">
-                  {{ $t("chat.editorCodeEdit.filesChanged", { count: codeEditResult.changed_files.length }) }}
+                  {{ masterbrainI18n.t("changeReview.fileCount", { count: codeEditResult.changed_files.length }) }}
                 </n-tag>
               </div>
               <p class="m-0 whitespace-pre-wrap text-sm text-blue-800 leading-6">
@@ -101,7 +94,7 @@
             <n-alert
               v-if="reviewWarnings.length"
               type="warning"
-              :title="$t('chat.editorCodeEdit.warnings')"
+              :title="masterbrainI18n.t('common.warnings')"
             >
               <ul class="m-0 pl-5">
                 <li v-for="warning in reviewWarnings" :key="warning">
@@ -115,7 +108,7 @@
             <div class="flex items-center justify-between gap-3 p-3">
               <div class="min-w-0 flex items-center gap-2">
                 <n-tag size="small" :type="getStatusTagType(change.status)">
-                  {{ $t(`chat.editorCodeEdit.status.${change.status}`) }}
+                  {{ getChangedFileStatusLabel(change) }}
                 </n-tag>
                 <div class="min-w-0">
                   <div class="truncate text-sm font-medium">
@@ -134,10 +127,10 @@
 
           <template #diff="{ change }">
             <n-collapse arrow-placement="right" class="border-t border-[var(--n-border-color)] px-3 py-2">
-              <n-collapse-item :title="$t('chat.editorCodeEdit.details')" :name="`diff-${change.path}`">
+              <n-collapse-item :title="masterbrainI18n.t('diff.details')" :name="`diff-${change.path}`">
                 <div class="mb-2 flex items-center justify-between gap-3">
                   <span class="text-xs text-gray-500">
-                    {{ $t("chat.editorCodeEdit.diffModeHint") }}
+                    {{ masterbrainI18n.t("diff.modeHint") }}
                   </span>
                   <n-radio-group
                     :value="getDiffViewMode(change.path)"
@@ -148,13 +141,13 @@
                       value="inline"
                       :data-testid="`editor-ai-diff-inline-${change.path}`"
                     >
-                      {{ $t("chat.editorCodeEdit.inlineDiff") }}
+                      {{ masterbrainI18n.t("diff.inline") }}
                     </n-radio-button>
                     <n-radio-button
                       value="side-by-side"
                       :data-testid="`editor-ai-diff-side-by-side-${change.path}`"
                     >
-                      {{ $t("chat.editorCodeEdit.sideBySideDiff") }}
+                      {{ masterbrainI18n.t("diff.sideBySide") }}
                     </n-radio-button>
                   </n-radio-group>
                 </div>
@@ -172,7 +165,7 @@
         </masterbrain-change-review>
 
         <n-collapse v-if="codeEditResult.execution_log.length" arrow-placement="right" class="mt-4">
-          <n-collapse-item :title="$t('chat.editorCodeEdit.executionLog')" name="execution-log">
+          <n-collapse-item :title="masterbrainI18n.t('common.executionLog')" name="execution-log">
             <pre class="code-edit-log">{{ codeEditResult.execution_log.join("\n") }}</pre>
           </n-collapse-item>
         </n-collapse>
@@ -218,13 +211,19 @@ import { isNormalModelInfo, useActiveEditorStore, useModelsStore } from "@airalo
 import { useUploadFileDataStore } from "@airalogy/components/monaco-editor/store/uploadFileDataStore"
 import { useClosableMessage, useScrollTrap } from "@airalogy/composables"
 import { normalizeCodeEditResponse, sha256Hex, WorkspaceConflictError } from "@airalogy/masterbrain-client"
-import { MasterbrainChangeReview, MasterbrainChangeStatus, useCodeEditAssistant } from "@airalogy/masterbrain-vue"
+import {
+  MasterbrainChangeReview,
+  MasterbrainChangeStatus,
+  useCodeEditAssistant,
+  useMasterbrainI18n,
+} from "@airalogy/masterbrain-vue"
 import { MasterbrainMonacoDiff } from "@airalogy/masterbrain-vue/monaco"
 import { DEFAULT_FILE_ID_MAP } from "@airalogy/shared/constants/protocol"
 import { ChatModel } from "@airalogy/shared/enum/chat"
 import { $t } from "@airalogy/shared/locales"
 import { getFileLanguage } from "@airalogy/shared/utils"
 import { nanoid } from "nanoid"
+import { useI18n } from "vue-i18n"
 import { useOrProvideChatInfoStore } from "../../../chat/composables/useChatInfoStore"
 import "@airalogy/masterbrain-vue/style.css"
 
@@ -268,6 +267,8 @@ const modelsStore = useModelsStore()
 const activeEditorStore = useActiveEditorStore()
 const uploadFileDataStore = useUploadFileDataStore()
 const message = useClosableMessage()
+const { locale } = useI18n()
+const masterbrainI18n = useMasterbrainI18n({ locale })
 const reviewModalVisible = ref(false)
 const reviewRequiresApproval = ref(false)
 const codeEditResult = ref<CodeEditResponse | null>(null)
@@ -637,7 +638,7 @@ function summarizeCodeEditResult(result: CodeEditResponse, applicationStatus: st
       ? ""
       : $t("chat.editorCodeEdit.noChanges")
   const warningSummary = result.warnings.length
-    ? `${$t("chat.editorCodeEdit.warnings")}:\n${result.warnings.map(warning => `- ${warning}`).join("\n")}`
+    ? `${masterbrainI18n.t("common.warnings")}:\n${result.warnings.map(warning => `- ${warning}`).join("\n")}`
     : ""
 
   return [result.message.trim(), statusSummary, warningSummary].filter(Boolean).join("\n\n")
@@ -775,18 +776,28 @@ function getStatusTagType(status: CodeEditChangedFile["status"]) {
   return "info"
 }
 
+function getChangedFileStatusLabel(change: CodeEditChangedFile) {
+  if (change.status === "created") {
+    return masterbrainI18n.t("changeReview.created")
+  }
+  if (change.status === "deleted") {
+    return masterbrainI18n.t("changeReview.deleted")
+  }
+  return masterbrainI18n.t("changeReview.modified")
+}
+
 function getChangedFileLabel(change: CodeEditChangedFile) {
   if (change.path === "protocol.aimd") {
-    return $t("chat.editorCodeEdit.fileLabels.aimd")
+    return masterbrainI18n.t("files.aimd")
   }
   if (change.path === "model.py") {
-    return $t("chat.editorCodeEdit.fileLabels.model")
+    return masterbrainI18n.t("files.model")
   }
   if (change.path === "assigner.py") {
-    return $t("chat.editorCodeEdit.fileLabels.assigner")
+    return masterbrainI18n.t("files.assigner")
   }
   if (change.path === "protocol.toml") {
-    return $t("chat.editorCodeEdit.fileLabels.toml")
+    return masterbrainI18n.t("files.toml")
   }
   return change.name || change.path
 }
@@ -803,12 +814,12 @@ function getChangedFileSummary(change: CodeEditChangedFile) {
   const file = getChangedFileLabel(change)
   const { added, removed } = getDiffStats(change)
   if (change.status === "created") {
-    return $t("chat.editorCodeEdit.fileSummary.created", { file, added })
+    return masterbrainI18n.t("fileSummary.created", { file, added })
   }
   if (change.status === "deleted") {
-    return $t("chat.editorCodeEdit.fileSummary.deleted", { file, removed })
+    return masterbrainI18n.t("fileSummary.deleted", { file, removed })
   }
-  return $t("chat.editorCodeEdit.fileSummary.modified", { file, added, removed })
+  return masterbrainI18n.t("fileSummary.modified", { file, added, removed })
 }
 
 function getOriginalContent(change: CodeEditChangedFile) {

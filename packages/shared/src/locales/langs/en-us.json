@@ -2112,17 +2112,10 @@
       "panelSafetyHint": "Safe changes apply automatically, with Diff review and one-click undo.",
       "emptyPrompt": "Enter a question or change request.",
       "noFiles": "No editable Protocol files are available in the current editor.",
-      "running": "Aira is analyzing the current Protocol...",
-      "changedSummary": "Aira prepared changes for {count} file(s).",
       "autoAppliedSummary": "Aira applied changes to {count} file(s). You can review or undo the latest change below.",
       "reviewRequiredSummary": "Aira prepared {count} file change(s), but did not apply them because they need review.",
       "noChanges": "Aira did not change the current Protocol.",
       "failed": "Aira could not respond",
-      "appliedLabel": "Applied",
-      "appliedStatus": "Applied {count} file change(s)",
-      "viewChanges": "View changes",
-      "undo": "Undo",
-      "undoing": "Undoing…",
       "undoSuccess": "AI changes undone",
       "undoConflict": "The Protocol changed after this AI edit, so it cannot be safely undone.",
       "reviewTitle": "Protocol Changes",
@@ -2130,38 +2123,11 @@
       "reviewRequiredDescription": "Aira found validation warnings or a file deletion, so these changes were not applied automatically. Review them before continuing.",
       "summaryTitle": "What Aira changed",
       "summaryFallback": "Aira updated the Protocol according to your request.",
-      "filesChanged": "{count} file(s)",
-      "details": "View detailed differences",
-      "diffModeHint": "Line changes are highlighted below",
-      "inlineDiff": "Inline",
-      "sideBySideDiff": "Side by side",
-      "fileSummary": {
-        "created": "Created {file} with {added} added line(s).",
-        "modified": "Updated {file}: {added} line(s) added and {removed} line(s) removed.",
-        "deleted": "Deleted {file}, removing {removed} line(s)."
-      },
-      "fileLabels": {
-        "aimd": "Experimental flow and record fields",
-        "model": "Data model and validation",
-        "assigner": "Automatic calculation rules",
-        "toml": "Protocol information"
-      },
-      "warnings": "Warnings",
-      "executionLog": "Execution Log",
-      "apply": "Apply",
-      "applyAll": "Apply All",
       "applyAnyway": "Apply anyway",
       "close": "Close",
-      "diffFallback": "No diff is available.",
-      "applySuccess": "Change applied",
       "applyAllSuccess": "All changes applied",
       "unsupportedFile": "This file change cannot be applied.",
-      "emptyResult": "There are no changes to apply.",
-      "status": {
-        "created": "Created",
-        "modified": "Modified",
-        "deleted": "Deleted"
-      }
+      "emptyResult": "There are no changes to apply."
     },
     "common": {
       "add": "Add",

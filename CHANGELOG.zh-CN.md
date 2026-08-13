@@ -35,6 +35,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 将数据库初始化整理为单一初始 schema migration。
 - 从公开源码树中排除生成的 API 产物、本地缓存、日志、证书、环境文件和数据库 dump 文件。
 - Platform 更新为 `masterbrain==0.11.0` 以及正式发布的 `@airalogy/masterbrain-client` / `@airalogy/masterbrain-vue` 包。Protocol 草稿使用 Masterbrain 单文件生成契约，AI 编辑契约、风险处理、安全应用与撤销逻辑和 Diff 渲染则统一由 Masterbrain 共享包提供，Platform 不再维护重复的智能与 UI 基础设施。
+- 将 `@airalogy/masterbrain-vue` 更新到 `0.2.0`，变更状态、审核、Diff、文件与风险等共享 UI 文案改由包内置的响应式中英文国际化提供。Platform 只传入当前语言，并保留 Aira 产品文案和弹窗外壳文案。
 
 ### 修复
 

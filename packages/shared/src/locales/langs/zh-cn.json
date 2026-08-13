@@ -2112,17 +2112,10 @@
       "panelSafetyHint": "安全修改自动应用，并支持查看 Diff 和一键撤销。",
       "emptyPrompt": "请输入问题或修改要求。",
       "noFiles": "当前编辑器没有可编辑的 Protocol 文件。",
-      "running": "Aira 正在分析当前 Protocol...",
-      "changedSummary": "Aira 已准备 {count} 个文件修改。",
       "autoAppliedSummary": "Aira 已自动应用 {count} 个文件修改。你可以在下方查看或撤销最近一次修改。",
       "reviewRequiredSummary": "Aira 准备了 {count} 个文件修改，但这些修改需要审核，尚未应用。",
       "noChanges": "Aira 没有修改当前 Protocol。",
       "failed": "Aira 响应失败",
-      "appliedLabel": "已自动应用",
-      "appliedStatus": "已自动应用 {count} 个文件修改",
-      "viewChanges": "查看变更",
-      "undo": "撤销",
-      "undoing": "正在撤销…",
       "undoSuccess": "已撤销本次 AI 修改",
       "undoConflict": "AI 修改后 Protocol 又发生了变化，无法安全撤销，避免覆盖后续内容。",
       "reviewTitle": "Protocol 变更",
@@ -2130,38 +2123,11 @@
       "reviewRequiredDescription": "Aira 检测到校验警告或文件删除，因此没有自动应用。请确认后再继续。",
       "summaryTitle": "Aira 修改了什么",
       "summaryFallback": "Aira 已按照你的要求更新 Protocol。",
-      "filesChanged": "{count} 个文件",
-      "details": "查看详细差异",
-      "diffModeHint": "下方已高亮具体行变更",
-      "inlineDiff": "行内对比",
-      "sideBySideDiff": "左右对比",
-      "fileSummary": {
-        "created": "新建 {file}，新增 {added} 行内容。",
-        "modified": "更新 {file}：新增 {added} 行，删除 {removed} 行。",
-        "deleted": "删除 {file}，共移除 {removed} 行内容。"
-      },
-      "fileLabels": {
-        "aimd": "实验流程与记录字段",
-        "model": "数据模型与校验",
-        "assigner": "自动计算规则",
-        "toml": "Protocol 基本信息"
-      },
-      "warnings": "警告",
-      "executionLog": "执行日志",
-      "apply": "应用",
-      "applyAll": "全部应用",
       "applyAnyway": "仍然应用",
       "close": "关闭",
-      "diffFallback": "无 diff 可显示。",
-      "applySuccess": "修改已应用",
       "applyAllSuccess": "全部修改已应用",
       "unsupportedFile": "无法应用该文件修改。",
-      "emptyResult": "没有可应用的修改。",
-      "status": {
-        "created": "新增",
-        "modified": "修改",
-        "deleted": "删除"
-      }
+      "emptyResult": "没有可应用的修改。"
     },
     "common": {
       "add": "添加",

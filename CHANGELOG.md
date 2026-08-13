@@ -35,6 +35,7 @@ Target initial version: `0.1.0`.
 - Consolidated database setup into a single initial schema migration.
 - Excluded generated API artifacts, local caches, logs, certificates, environment files, and database dump files from the public source tree.
 - Updated Platform to `masterbrain==0.11.0` and the released `@airalogy/masterbrain-client` / `@airalogy/masterbrain-vue` packages. Protocol drafting now uses Masterbrain's single-file generation contract, while shared packages own AI edit contracts, risk handling, safe apply/undo logic, and Diff rendering instead of Platform maintaining duplicate intelligence and UI infrastructure.
+- Updated `@airalogy/masterbrain-vue` to `0.2.0` and delegated its change status, review, Diff, file, and risk labels to the package's reactive built-in English/Chinese localization. Platform now passes only its active locale and retains product-specific Aira and modal-shell copy.
 
 ### Fixed
 

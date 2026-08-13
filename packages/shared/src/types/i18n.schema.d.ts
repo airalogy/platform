@@ -2116,15 +2116,10 @@ declare namespace I18n {
         panelSafetyHint: string
         emptyPrompt: string
         noFiles: string
-        running: string
-        changedSummary: string
         autoAppliedSummary: string
         reviewRequiredSummary: string
         noChanges: string
         failed: string
-        appliedStatus: string
-        viewChanges: string
-        undo: string
         undoSuccess: string
         undoConflict: string
         reviewTitle: string
@@ -2132,38 +2127,11 @@ declare namespace I18n {
         reviewRequiredDescription: string
         summaryTitle: string
         summaryFallback: string
-        filesChanged: string
-        details: string
-        diffModeHint: string
-        inlineDiff: string
-        sideBySideDiff: string
-        fileSummary: {
-          created: string
-          modified: string
-          deleted: string
-        }
-        fileLabels: {
-          aimd: string
-          model: string
-          assigner: string
-          toml: string
-        }
-        warnings: string
-        executionLog: string
-        apply: string
-        applyAll: string
         applyAnyway: string
         close: string
-        diffFallback: string
-        applySuccess: string
         applyAllSuccess: string
         unsupportedFile: string
         emptyResult: string
-        status: {
-          created: string
-          modified: string
-          deleted: string
-        }
       }
       common: {
         add: string

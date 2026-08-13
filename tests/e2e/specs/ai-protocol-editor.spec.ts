@@ -29,6 +29,10 @@ const UPDATED_PROTOCOL = `# 细胞药物处理实验
 `
 
 test("non-technical user can create and refine a Protocol with Aira", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("lang", JSON.stringify({ data: "zh-CN", expire: null }))
+  })
+
   await page.route("**/api/editor/protocol_generate_aimd", async (route) => {
     const request = route.request()
     const body = request.postDataJSON() as { instruction: string }
@@ -130,15 +134,17 @@ test("non-technical user can create and refine a Protocol with Aira", async ({ p
 
   const changeStatus = aiEditPanel.getByTestId("editor-ai-change-status")
   await expect(changeStatus).toBeVisible()
-  await expect(changeStatus).toContainText(/已自动应用|Applied/)
+  await expect(changeStatus).toContainText("已自动应用 AI 修改")
   await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("试剂批号")
 
-  await changeStatus.getByRole("button", { name: /查看变更|View changes/ }).click()
+  await expect(changeStatus.getByRole("button", { name: "查看变更", exact: true })).toBeVisible()
+
+  await changeStatus.getByRole("button", { name: "查看变更", exact: true }).click()
   await expect(review).toBeVisible()
   await expect(review.getByTestId("editor-ai-change-summary")).toContainText("已新增试剂批号字段")
-  await expect(review.getByText(/实验流程与记录字段|Experimental flow and record fields/).first()).toBeVisible()
+  await expect(review.getByText("实验流程与记录字段", { exact: true }).first()).toBeVisible()
   await expect(review.getByTestId("editor-ai-apply-all")).toHaveCount(0)
-  await review.getByText(/查看详细差异|View detailed differences/).click()
+  await review.getByText("查看详细差异", { exact: true }).click()
   const diffView = review.getByTestId("editor-ai-diff-protocol.aimd")
   await expect(diffView).toBeVisible()
   await expect(diffView.locator(".monaco-diff-editor")).toHaveCount(1)

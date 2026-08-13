@@ -994,8 +994,8 @@ importers:
         specifier: 0.1.0
         version: 0.1.0
       '@airalogy/masterbrain-vue':
-        specifier: 0.1.0
-        version: 0.1.0(monaco-editor@0.52.2)(vue@3.5.17(typescript@5.8.3))
+        specifier: 0.2.0
+        version: 0.2.0(monaco-editor@0.52.2)(vue@3.5.17(typescript@5.8.3))
       '@airalogy/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1588,8 +1588,8 @@ packages:
   '@airalogy/masterbrain-client@0.1.0':
     resolution: {integrity: sha512-Rzhud4eLUB+AMw8NlUn9h/um5ZRG1NDUT8SnxI6NFPWL7yQghhl0CIauUKDQCxrGaG4m1zUAOd6rrJcToXk74Q==}
 
-  '@airalogy/masterbrain-vue@0.1.0':
-    resolution: {integrity: sha512-XgV4SlsjqCb94mGWnwYmMrsGCF7UEP8lGNogDQllLKXaU2T+K2UpO0MyOz9q6vd6cvO+aH/8iH63bEHAJmJc5g==}
+  '@airalogy/masterbrain-vue@0.2.0':
+    resolution: {integrity: sha512-qSNh3YUqBD9fsc6WPX0inJ2PBRT6BIXCDC3a10zjXqDjSQMaNBZNJM4y+DtCbtLGjbo9RlX4Cb3r/rNKZ5Dkrw==}
     peerDependencies:
       monaco-editor: '>=0.52.0'
       vue: '>=3.4.0'
@@ -10183,7 +10183,7 @@ snapshots:
 
   '@airalogy/masterbrain-client@0.1.0': {}
 
-  '@airalogy/masterbrain-vue@0.1.0(monaco-editor@0.52.2)(vue@3.5.17(typescript@5.8.3))':
+  '@airalogy/masterbrain-vue@0.2.0(monaco-editor@0.52.2)(vue@3.5.17(typescript@5.8.3))':
     dependencies:
       '@airalogy/masterbrain-client': 0.1.0
       vue: 3.5.17(typescript@5.8.3)
