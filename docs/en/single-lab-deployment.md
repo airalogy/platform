@@ -4,6 +4,8 @@ The `single_lab` profile packages Airalogy Platform as one private laboratory wo
 
 The profile creates one configured Lab, a default private Project, an initial owner account, invite-only membership, administrator-issued recovery links, and a reduced navigation surface. The production stack includes the web application, API, PostgreSQL, Redis, MinIO, Caddy reverse proxy, automatic TLS, configuration validation, and lifecycle scripts.
 
+Commercial and long-running installations should use the complete package from a GitHub Release rather than a Git worktree on the server. See [Release and Deployment Identity](./release-and-deployment-identity.md) for product versions, image digests, database revisions, opaque deployment IDs, and the boundary around private customer records.
+
 ## Intended Scope
 
 This profile is suitable for a laboratory that can operate one Linux server and accepts short maintenance windows. A practical runtime starting point is 4 CPU cores and 8 GB RAM. A host that builds the web image from source should have 16 GB RAM, with at least 8 GB available to Docker. Size SSD storage for the laboratory's records, file payloads, images, build cache, and backups. Keep backups on a different host or storage system.
@@ -106,6 +108,10 @@ AI features are optional. Set the provider keys in `.env`; protocol and record w
 Check status and logs:
 
 ```bash
+./platformctl status
+./platformctl logs
+
+# Docker Compose remains available for lower-level inspection.
 docker compose --env-file .env -f compose.yml ps
 docker compose --env-file .env -f compose.yml logs -f api-server web
 ```
@@ -151,7 +157,7 @@ The script performs preflight checks, creates a consistent pre-upgrade backup, t
 ./scripts/rollback.sh
 ```
 
-Rollback uses the previous application image tags and restores the pre-upgrade database and object backup. It is intentionally confirmation-gated because post-upgrade writes are replaced.
+Rollback uses the previous API/Web/PostgreSQL images and Protocol Executor configuration, restores the pre-upgrade database and object backup, and persistently restores the previous release manifest and image identity. It is intentionally confirmation-gated because post-upgrade writes are replaced.
 
 ## Verification
 
@@ -167,6 +173,9 @@ The health endpoints are:
 
 - `/api/health/live`: process liveness
 - `/api/health/ready`: PostgreSQL, Redis, and object-storage readiness
+- `/api/system/version`: product, source, release-manifest, database-revision, and opaque deployment identity
+
+Run `./platformctl support-bundle` when an authorized service provider needs diagnostic evidence. The bundle excludes secrets, logs, research data, users, and customer names.
 
 ## Security Checklist
 

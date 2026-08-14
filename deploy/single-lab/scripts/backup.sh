@@ -29,8 +29,10 @@ wait_for_service minio 60
 
 api_was_running=false
 api_container="$(compose ps -q api-server)"
+runtime_payload=""
 if [[ -n "$api_container" && "$(docker inspect --format '{{.State.Running}}' "$api_container")" == "true" ]]; then
   api_was_running=true
+  runtime_payload="$(running_version_payload 2>/dev/null || true)"
   info "Pausing API writes for a consistent backup..."
   compose stop api-server >/dev/null
 fi
@@ -71,13 +73,19 @@ rm -rf "$backup_dir/objects"
 cp "$ENV_FILE" "$backup_dir/secrets.env"
 chmod 600 "$backup_dir/secrets.env"
 
-platform_version="$(tr -d '\r\n' <"$REPO_ROOT/VERSION")"
-git_commit="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf unknown)"
+platform_version="$(printf '%s\n' "$runtime_payload" | json_string_field version)"
+platform_version="${platform_version:-$(env_value PLATFORM_VERSION)}"
+git_commit="$(printf '%s\n' "$runtime_payload" | json_string_field commit)"
+git_commit="${git_commit:-$(env_value GIT_COMMIT)}"
 cat >"$backup_dir/manifest.env" <<EOF
 BACKUP_FORMAT_VERSION=1
 CREATED_AT=$timestamp
 PLATFORM_VERSION=$platform_version
 GIT_COMMIT=$git_commit
+DATABASE_REVISION=$(printf '%s\n' "$runtime_payload" | json_string_field database_revision)
+AIRALOGY_DEPLOYMENT_ID=$(env_value AIRALOGY_DEPLOYMENT_ID)
+AIRALOGY_RELEASE_MANIFEST_SHA256=$(env_value AIRALOGY_RELEASE_MANIFEST_SHA256)
+CONFIGURATION_REVISION=$(configuration_revision)
 COMPOSE_PROJECT_NAME=$(env_value COMPOSE_PROJECT_NAME)
 POSTGRES_DB=$postgres_db
 MINIO_BUCKET=$minio_bucket

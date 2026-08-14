@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     PROTOCOL_DIR: str = f"{os.getcwd()}/protocols"
     REDIS_URL: str
     PROTOCOL_RUN_ENV: str = "local"
+    AIRALOGY_PROTOCOL_EXECUTOR_IMAGE: str = "airalogy-platform-protocol-executor:local"
     # Record delete safety buffer (days). Non-admins cannot delete records older than this.
     RECORD_DELETE_GRACE_DAYS: int = 7
     # Lab creation limit per user. Set to 0 or a negative value to disable the limit.
@@ -34,6 +35,8 @@ class Settings(BaseSettings):
     LAB_STRUCTURE_MODE: Literal["flat", "structured"] | None = None
     SIGNUP_MODE: Literal["open", "invite_only", "disabled"] | None = None
     SITE_URL: str = "http://localhost"
+    # Opaque support identifier. It carries no customer or institution name.
+    AIRALOGY_DEPLOYMENT_ID: str = ""
     SINGLE_LAB_UID: str = "main"
     SINGLE_LAB_NAME: str = "Airalogy Lab"
     SINGLE_LAB_DESCRIPTION: str = ""
@@ -69,7 +72,10 @@ class Settings(BaseSettings):
     CHAT_MODEL_ACCURATE: str = "qwen3.5-plus"
     CHAT_MODEL_DEEP: str = "qwen-max"
 
-    AIRALOGY_ENGINE_IMAGE: str = "numbcoder/airalogy-engine:latest"
+    AIRALOGY_ENGINE_IMAGE: str = (
+        "ghcr.io/airalogy/airalogy-engine:0.16.0@"
+        "sha256:5d26af0a28fc42f042cf079ac6e00b1a4435ff2d1fd02631c5d356bfdd0e08b7"
+    )
     AIRALOGY_ENGINE_DEBUG: bool = False
     AIRALOGY_ENGINE_BOXLITE_HOME: str | None = None
 
@@ -142,6 +148,12 @@ class Settings(BaseSettings):
             )
         if self.is_single_lab and not self.SINGLE_LAB_NAME.strip():
             raise ValueError("SINGLE_LAB_NAME must not be empty")
+        if self.AIRALOGY_DEPLOYMENT_ID and not re.fullmatch(
+            r"dep_[0-9a-f]{32}", self.AIRALOGY_DEPLOYMENT_ID
+        ):
+            raise ValueError(
+                "AIRALOGY_DEPLOYMENT_ID must be an opaque dep_ identifier"
+            )
 
         if self.INVITATION_TTL_HOURS <= 0:
             raise ValueError("INVITATION_TTL_HOURS must be positive")

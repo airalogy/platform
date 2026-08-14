@@ -2,6 +2,11 @@
 __pycache__/
 .venv/
 **/.venv/
+.uv-cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
 
 *.log
 log/
@@ -10,3 +15,4 @@ protocols/
 .env
 .env.*
 !.env.example
+app/build-info.json

@@ -12,7 +12,7 @@
     "dev:prepare": "pnpm --filter @airalogy/components prepare",
     "dev": "pnpm --filter @airalogy/web dev",
     "build:prepare": "pnpm --filter @airalogy/components build",
-    "build": "pnpm run build:prepare && pnpm --filter @airalogy/web build",
+    "build": "pnpm run build:prepare && NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @airalogy/web build",
     "build:no-check": "pnpm run build:prepare && pnpm --filter @airalogy/web build:no-check",
     "preview": "pnpm --filter @airalogy/web preview",
     "lint": "pnpm --recursive --parallel lint",
@@ -28,7 +28,12 @@
     "install:all": "pnpm install",
     "prepare": "husky",
     "lint-staged": "lint-staged",
-    "i18n:generate": "node scripts/generate-i18n-types.mjs"
+    "i18n:generate": "node scripts/generate-i18n-types.mjs",
+    "version:check": "node scripts/check-version.mjs",
+    "build:info": "node scripts/write-build-info.mjs apps/api/app/build-info.json",
+    "release:metadata:test": "node --test scripts/release-metadata.test.mjs",
+    "deployment:identity:test": "bash scripts/deployment-identity.test.sh",
+    "release:check": "pnpm version:check && node scripts/check-release.mjs"
   },
   "dependencies": {
     "lodash-es": "catalog:",

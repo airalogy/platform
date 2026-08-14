@@ -4,6 +4,8 @@
 
 该 profile 提供唯一 Lab、默认私有 Project、首位 owner 初始化、邀请制成员准入、管理员签发的密码恢复链接和精简导航。生产 stack 包含 Web、API、PostgreSQL、Redis、MinIO、Caddy 反向代理、自动 TLS、配置校验以及完整运维脚本。
 
+正式商业或长期运行的实例应使用 GitHub Release 中的完整发布包，而不是服务器上的 Git 工作区。版本、镜像摘要、数据库 revision、部署 ID 和私有客户台账的边界见 [发布与部署身份](./release-and-deployment-identity.md)。
+
 ## 适用边界
 
 它适合能够维护一台 Linux 服务器、可以接受短时维护窗口的实验室。运行环境建议从 4 核 CPU 和 8 GB 内存起步；如果在部署主机上从源码构建 Web 镜像，建议主机配置 16 GB 内存，并为 Docker 保留至少 8 GB。SSD 需同时容纳实验记录、文件、镜像、构建缓存和备份；备份应保存到异机或独立存储中。
@@ -106,6 +108,10 @@ AI 功能是可选项。需要时在 `.env` 中配置模型供应商 key；不�
 查看状态和日志：
 
 ```bash
+./platformctl status
+./platformctl logs
+
+# 仍可直接使用 Docker Compose 查看底层状态
 docker compose --env-file .env -f compose.yml ps
 docker compose --env-file .env -f compose.yml logs -f api-server web
 ```
@@ -151,7 +157,7 @@ echo "$backup_path"
 ./scripts/rollback.sh
 ```
 
-回滚会使用上一个 API/Web 镜像，并恢复升级前的数据库和对象存储备份。由于升级后产生的新写入会被替换，脚本要求人工输入确认。
+回滚会使用上一个 API/Web/PostgreSQL 镜像和 Protocol Executor 配置，恢复升级前的数据库与对象存储备份，并持久恢复上一版的发布清单与镜像身份。由于升级后产生的新写入会被替换，脚本要求人工输入确认。
 
 ## 验收
 
@@ -167,6 +173,9 @@ echo "$backup_path"
 
 - `/api/health/live`：进程存活
 - `/api/health/ready`：PostgreSQL、Redis 和对象存储可用
+- `/api/system/version`：产品、源码、发布清单、数据库 revision 和不透明部署身份
+
+需要向授权服务方提供诊断资料时，执行 `./platformctl support-bundle`。支持包不包含密钥、日志、科研数据、用户或客户名称。
 
 ## 安全检查表
 

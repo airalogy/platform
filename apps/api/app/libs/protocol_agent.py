@@ -481,7 +481,7 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
             f"{os.getcwd()}/protocols/{package_name}/:/home/deploy/app/protocols/{package_name}/",
             "-v",
             f"{os.getcwd()}/protocol_executor.log:/home/deploy/app/protocol_executor.log",
-            "airalogy-protocol-executor:latest",
+            config.AIRALOGY_PROTOCOL_EXECUTOR_IMAGE,
             "python",
             "protocol_executor.py",
             action,

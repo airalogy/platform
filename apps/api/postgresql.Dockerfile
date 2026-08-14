@@ -53,6 +53,16 @@ RUN git clone --branch master --single-branch --depth 1 https://github.com/amutu
 # Final stage for the PostgreSQL image
 FROM postgres:${POSTGRES_IMAGE_VERSION}-bookworm
 ARG PG_MAJOR
+ARG PLATFORM_VERSION=development
+ARG GIT_COMMIT=unknown
+ARG GIT_TAG=
+ARG BUILD_TIME=
+ARG BUILD_DIRTY=false
+
+LABEL org.opencontainers.image.title="Airalogy Platform PostgreSQL" \
+      org.opencontainers.image.source="https://github.com/airalogy/platform" \
+      org.opencontainers.image.version="$PLATFORM_VERSION" \
+      org.opencontainers.image.revision="$GIT_COMMIT"
 
 
 # Copy files from the builder stage

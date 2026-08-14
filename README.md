@@ -20,6 +20,8 @@ Enterprise extensions should stay outside this repository unless they are genera
 
 For a user-facing capability overview, see [Community Edition Overview](docs/en/community-edition.md). For a production-ready deployment serving one laboratory, see [Single-Lab Deployment](docs/en/single-lab-deployment.md).
 
+Formal releases, immutable image identity, support diagnostics, and the boundary between public product metadata and private customer deployment records are documented in [Release and Deployment Identity](docs/en/release-and-deployment-identity.md). Airalogy names and logos are governed separately from the Apache-2.0 source license; see [Trademark Policy](TRADEMARKS.md).
+
 ## Repository Layout
 
 ```txt

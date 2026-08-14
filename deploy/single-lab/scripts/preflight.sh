@@ -14,8 +14,13 @@ require_command docker
 require_env_file
 
 required=(
-  COMPOSE_PROJECT_NAME SITE_URL SITE_ADDRESS TLS_EMAIL BACKUP_DIR
-  AIRALOGY_API_IMAGE AIRALOGY_WEB_IMAGE SECRET_KEY AES_KEY INNER_API_KEY
+  COMPOSE_PROJECT_NAME PLATFORM_VERSION AIRALOGY_DEPLOYMENT_ID
+  SITE_URL SITE_ADDRESS TLS_EMAIL BACKUP_DIR
+  AIRALOGY_API_IMAGE AIRALOGY_WEB_IMAGE AIRALOGY_PROTOCOL_EXECUTOR_IMAGE
+  AIRALOGY_POSTGRES_IMAGE AIRALOGY_ENGINE_IMAGE
+  AIRALOGY_RELEASE_METADATA_REQUIRED AIRALOGY_RELEASE_MANIFEST_FILE
+  AIRALOGY_RELEASE_METADATA_FILE AIRALOGY_STATE_DIR
+  SECRET_KEY AES_KEY INNER_API_KEY
   INITIAL_ADMIN_TOKEN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
   MINIO_ROOT_USER MINIO_ROOT_PASSWORD MINIO_BUCKET
 )
@@ -29,6 +34,13 @@ for key in SECRET_KEY AES_KEY INNER_API_KEY INITIAL_ADMIN_TOKEN POSTGRES_PASSWOR
 done
 
 [[ "$(env_value DEPLOYMENT_MODE)" == "single_lab" ]] || die "DEPLOYMENT_MODE must be single_lab"
+repository_version="$(tr -d '\r\n' <"$REPO_ROOT/VERSION")"
+[[ "$(env_value PLATFORM_VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]] || die "PLATFORM_VERSION must be a semantic version"
+if ! release_metadata_required; then
+  [[ "$(env_value PLATFORM_VERSION)" == "$repository_version" ]] || die "PLATFORM_VERSION must match VERSION ($repository_version)"
+fi
+[[ "$(env_value AIRALOGY_DEPLOYMENT_ID)" =~ ^dep_[0-9a-f]{32}$ ]] || die "AIRALOGY_DEPLOYMENT_ID must be an opaque dep_ identifier"
+[[ "$(env_value AIRALOGY_DEPLOYMENT_ID)" != "dep_00000000000000000000000000000000" ]] || die "AIRALOGY_DEPLOYMENT_ID still uses the example placeholder"
 [[ "$(env_value LAB_STRUCTURE_MODE)" == "structured" ]] || die "LAB_STRUCTURE_MODE must be structured"
 [[ "$(env_value APP_ENV)" == "production" ]] || die "APP_ENV must be production"
 [[ "$(env_value SECRET_KEY)" =~ ^.{32,}$ ]] || die "SECRET_KEY must contain at least 32 characters"
@@ -46,9 +58,9 @@ component_build_memory_mb="${component_build_memory_mb:-3072}"
 (( component_build_memory_mb >= 3072 )) || die "COMPONENT_BUILD_MEMORY_MB must be at least 3072"
 
 web_build_memory_mb="$(env_value WEB_BUILD_MEMORY_MB)"
-web_build_memory_mb="${web_build_memory_mb:-4096}"
+web_build_memory_mb="${web_build_memory_mb:-6144}"
 [[ "$web_build_memory_mb" =~ ^[0-9]+$ ]] || die "WEB_BUILD_MEMORY_MB must be an integer"
-(( web_build_memory_mb >= 4096 )) || die "WEB_BUILD_MEMORY_MB must be at least 4096"
+(( web_build_memory_mb >= 6144 )) || die "WEB_BUILD_MEMORY_MB must be at least 6144"
 
 mode="$(file_mode "$ENV_FILE")"
 if (( 8#$mode & 077 )); then
@@ -56,6 +68,11 @@ if (( 8#$mode & 077 )); then
 fi
 
 compose config --quiet
+verify_release_metadata
+
+for key in AIRALOGY_API_IMAGE AIRALOGY_WEB_IMAGE AIRALOGY_PROTOCOL_EXECUTOR_IMAGE AIRALOGY_POSTGRES_IMAGE AIRALOGY_ENGINE_IMAGE; do
+  [[ "$(env_value "$key")" != *:latest ]] || die "$key must not use a floating latest tag"
+done
 
 if [[ "$config_only" != true ]]; then
   docker info >/dev/null 2>&1 || die "Docker daemon is not available"

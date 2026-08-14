@@ -59,6 +59,13 @@ def test_gpt_model_is_disabled_by_default():
     assert settings().ENABLE_GPT_MODEL is False
 
 
+def test_engine_image_uses_official_multiarch_immutable_release():
+    assert Settings.model_fields["AIRALOGY_ENGINE_IMAGE"].default == (
+        "ghcr.io/airalogy/airalogy-engine:0.16.0@"
+        "sha256:5d26af0a28fc42f042cf079ac6e00b1a4435ff2d1fd02631c5d356bfdd0e08b7"
+    )
+
+
 def test_gpt_model_requires_an_openai_or_external_provider():
     with pytest.raises(ValidationError, match="ENABLE_GPT_MODEL"):
         settings(ENABLE_GPT_MODEL=True)
@@ -85,6 +92,14 @@ def test_single_lab_default_project_uid_must_be_stable_route_identifier():
             DEPLOYMENT_MODE="single_lab",
             SINGLE_LAB_DEFAULT_PROJECT_UID="Invalid Project",
         )
+
+
+def test_deployment_id_is_opaque_and_contains_no_customer_label():
+    value = settings(AIRALOGY_DEPLOYMENT_ID="dep_0123456789abcdef0123456789abcdef")
+    assert value.AIRALOGY_DEPLOYMENT_ID.startswith("dep_")
+
+    with pytest.raises(ValidationError, match="AIRALOGY_DEPLOYMENT_ID"):
+        settings(AIRALOGY_DEPLOYMENT_ID="customer-lab-production")
 
 
 @pytest.mark.parametrize("field", ["LOG_MAX_BYTES", "LOG_BACKUP_COUNT"])

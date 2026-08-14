@@ -552,6 +552,20 @@
     "about": {
       "title": "About",
       "introduction": "Airalogy: The world's first universal platform for research digitization, automation, and acceleration",
+      "systemInfo": {
+        "title": "System information",
+        "description": "Release identity for support, upgrades, and reproducible diagnostics.",
+        "productVersion": "Product version",
+        "sourceRevision": "Source revision",
+        "databaseRevision": "Database revision",
+        "deploymentId": "Deployment ID",
+        "releaseManifest": "Release manifest",
+        "buildTime": "Build time",
+        "dirtyBuild": "Uncommitted build",
+        "copyDiagnostics": "Copy diagnostics",
+        "copied": "System diagnostics copied",
+        "unavailable": "System identity is temporarily unavailable."
+      },
       "projectInfo": {
         "title": "Project info",
         "version": "Version",

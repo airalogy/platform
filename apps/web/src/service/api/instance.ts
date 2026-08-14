@@ -22,6 +22,24 @@ export interface InstanceStatus {
   lab: InstanceLabInfo | null
 }
 
+export interface SystemVersion {
+  version: string
+  tag: string | null
+  commit: string
+  build_time: string | null
+  dirty: boolean
+  release_manifest_sha256: string | null
+  database_revision: string
+  deployment_id: string | null
+}
+
+export async function fetchSystemVersion() {
+  return request<SystemVersion>({
+    url: "/system/version",
+    metadata: { showError: false },
+  })
+}
+
 export interface BootstrapPayload {
   setupToken: string
   username: string
@@ -111,10 +129,13 @@ export async function fetchPasswordReset(token: string) {
   })
 }
 
-export async function postPasswordReset(token: string, payload: {
-  password: string
-  confirmPassword: string
-}) {
+export async function postPasswordReset(
+  token: string,
+  payload: {
+    password: string
+    confirmPassword: string
+  },
+) {
   return request<{ success: boolean }>({
     url: `/instance/password-resets/${encodeURIComponent(token)}`,
     method: "POST",

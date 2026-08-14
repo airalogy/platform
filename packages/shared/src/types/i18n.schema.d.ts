@@ -556,6 +556,20 @@ declare namespace I18n {
       about: {
         title: string
         introduction: string
+        systemInfo: {
+          title: string
+          description: string
+          productVersion: string
+          sourceRevision: string
+          databaseRevision: string
+          deploymentId: string
+          releaseManifest: string
+          buildTime: string
+          dirtyBuild: string
+          copyDiagnostics: string
+          copied: string
+          unavailable: string
+        }
         projectInfo: {
           title: string
           version: string

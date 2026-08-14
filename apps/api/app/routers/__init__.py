@@ -56,6 +56,7 @@ from .search import router as search_router
 from .schema_governance import router as schema_governance_router
 from .seo import router as seo_router
 from .stars import router as stars_router
+from .system import router as system_router
 from .user_aliases import router as user_aliases_router
 from .users import router as users_router
 from .workflow import router as workflow_router
@@ -244,6 +245,7 @@ app.include_router(login_router)
 app.include_router(access_router)
 app.include_router(instance_router)
 app.include_router(health_router)
+app.include_router(system_router)
 app.include_router(oauth_router)
 app.include_router(attachments_router)
 app.include_router(users_router)

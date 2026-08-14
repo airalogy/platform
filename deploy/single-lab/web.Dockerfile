@@ -27,7 +27,12 @@ ARG VITE_APP_DESC="Private laboratory protocols, records, and research workflows
 ARG VITE_SITE_ORIGIN="http://localhost:8080"
 ARG VITE_DOCS_URL="https://github.com/airalogy/platform/tree/main/docs"
 ARG NODE_COMPONENT_BUILD_MEMORY_MB=3072
-ARG NODE_BUILD_MEMORY_MB=4096
+ARG NODE_BUILD_MEMORY_MB=6144
+ARG PLATFORM_VERSION=development
+ARG GIT_COMMIT=unknown
+ARG GIT_TAG=
+ARG BUILD_TIME=
+ARG BUILD_DIRTY=false
 
 ENV VITE_APP_TITLE=$VITE_APP_TITLE
 ENV VITE_APP_DESC=$VITE_APP_DESC
@@ -40,7 +45,6 @@ ENV VITE_API_BASE_URL=/api
 ENV VITE_MINIO_BASE_URL=/minio
 ENV VITE_BASE_URL=/
 ENV VITE_ROUTER_HISTORY_MODE=history
-ENV VITE_AUTH_ROUTE_MODE=static
 ENV VITE_ROUTE_HOME=home
 ENV VITE_ICON_PREFIX=icon
 ENV VITE_ICON_LOCAL_PREFIX=icon-local
@@ -58,10 +62,22 @@ ENV VITE_GA_ID=
 RUN NODE_OPTIONS="--max-old-space-size=${NODE_COMPONENT_BUILD_MEMORY_MB}" \
     corepack pnpm run build:prepare
 COPY apps/web ./apps/web
-RUN NODE_OPTIONS="--max-old-space-size=${NODE_BUILD_MEMORY_MB}" \
+RUN VITE_AUTH_ROUTE_MODE=static \
+    NODE_OPTIONS="--max-old-space-size=${NODE_BUILD_MEMORY_MB}" \
     corepack pnpm --filter @airalogy/web build:no-check
 
 FROM caddy:2.10.2-alpine
+
+ARG PLATFORM_VERSION=development
+ARG GIT_COMMIT=unknown
+ARG GIT_TAG=
+ARG BUILD_TIME=
+ARG BUILD_DIRTY=false
+
+LABEL org.opencontainers.image.title="Airalogy Platform Web" \
+      org.opencontainers.image.source="https://github.com/airalogy/platform" \
+      org.opencontainers.image.version="$PLATFORM_VERSION" \
+      org.opencontainers.image.revision="$GIT_COMMIT"
 
 COPY deploy/single-lab/Caddyfile /etc/caddy/Caddyfile
 COPY --from=builder /workspace/apps/web/dist /srv

@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$DEPLOY_DIR/../.." && pwd)"
 ENV_FILE="${AIRALOGY_ENV_FILE:-$DEPLOY_DIR/.env}"
 
 site_url="http://localhost:8080"
@@ -98,16 +99,41 @@ inner_api_key="$(openssl rand -hex 32)"
 initial_admin_token="$(openssl rand -hex 24)"
 postgres_password="$(openssl rand -hex 24)"
 minio_password="$(openssl rand -hex 24)"
+platform_version="$(tr -d '\r\n' <"$REPO_ROOT/VERSION")"
+deployment_id="dep_$(openssl rand -hex 16)"
+git_commit="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+git_tag="$(git -C "$REPO_ROOT" describe --tags --exact-match 2>/dev/null || true)"
+build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)" ]]; then
+  build_dirty=true
+else
+  build_dirty=false
+fi
 
 umask 077
 mkdir -p "$(dirname "$ENV_FILE")"
 cat >"$ENV_FILE" <<EOF
 COMPOSE_PROJECT_NAME=airalogy-single-lab
-AIRALOGY_API_IMAGE=airalogy-platform-api:local
-AIRALOGY_WEB_IMAGE=airalogy-platform-web:local
-AIRALOGY_POSTGRES_IMAGE=airalogy-platform-postgresql:16
+PLATFORM_VERSION=$platform_version
+AIRALOGY_DEPLOYMENT_ID=$deployment_id
+GIT_TAG=$git_tag
+GIT_COMMIT=$git_commit
+BUILD_TIME=$build_time
+BUILD_DIRTY=$build_dirty
+AIRALOGY_RELEASE_MANIFEST_SHA256=
+AIRALOGY_API_IMAGE=airalogy-platform-api:$platform_version
+AIRALOGY_WEB_IMAGE=airalogy-platform-web:$platform_version
+AIRALOGY_PROTOCOL_EXECUTOR_IMAGE=airalogy-platform-protocol-executor:$platform_version
+AIRALOGY_POSTGRES_IMAGE=airalogy-platform-postgres:$platform_version
+AIRALOGY_RELEASE_METADATA_REQUIRED=false
+AIRALOGY_RELEASE_MANIFEST_FILE=./release-manifest.json
+AIRALOGY_RELEASE_METADATA_FILE=./release-manifest.env
+AIRALOGY_STATE_DIR=./state/$deployment_id
+REDIS_IMAGE=redis:7-alpine
+MINIO_IMAGE=quay.io/minio/minio:RELEASE.2024-03-26T22-10-45Z
+MINIO_MC_IMAGE=quay.io/minio/mc:RELEASE.2024-03-25T16-41-14Z
 COMPONENT_BUILD_MEMORY_MB=3072
-WEB_BUILD_MEMORY_MB=4096
+WEB_BUILD_MEMORY_MB=6144
 
 SITE_URL=$site_url
 SITE_ADDRESS=$site_address
@@ -173,7 +199,7 @@ CHAT_MODEL_FAST=qwen3.5-flash
 CHAT_MODEL_ACCURATE=qwen3.5-plus
 CHAT_MODEL_DEEP=qwen-max
 
-AIRALOGY_ENGINE_IMAGE=numbcoder/airalogy-engine:latest
+AIRALOGY_ENGINE_IMAGE=ghcr.io/airalogy/airalogy-engine:0.16.0@sha256:5d26af0a28fc42f042cf079ac6e00b1a4435ff2d1fd02631c5d356bfdd0e08b7
 AIRALOGY_ENGINE_DEBUG=false
 AIRALOGY_ENGINE_BOXLITE_HOME=
 

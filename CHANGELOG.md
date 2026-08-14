@@ -27,6 +27,8 @@ Target initial version: `0.1.0`.
 - Added scoped raw Record exports for Lab Owners and Project Owners/Managers, with snapshot-consistent background jobs, `.aira`, JSONL and single-Schema CSV formats, optional revision history, deduplicated attachments, immutable Lab audit events, seven-day downloads, in-app completion notifications, and export history/regeneration controls.
 - Added a no-code Aira workflow in Protocol Editor: users can describe an experiment in natural language, generate and preview a structured Protocol, then discuss or refine it conversationally. Questions receive answers without changing files, while safe requested changes apply immediately with plain-language summaries, inline or side-by-side visual diffs, and undo controls; validation warnings and file deletions remain gated for review.
 - Added a recommended “Write a Protocol with AI” creation method that opens the existing Aira drafting workflow directly in the current Lab and Project context.
+- Added end-to-end release and deployment identity: runtime version reporting, Alembic revision visibility, immutable four-image release manifests, tag-triggered verified releases, persisted deployment history, an opaque deployment ID, and sanitized operator support bundles.
+- Added an explicit trademark and customer-data boundary for public Community Edition distributions.
 
 ### Changed
 
@@ -37,6 +39,9 @@ Target initial version: `0.1.0`.
 - Excluded generated API artifacts, local caches, logs, certificates, environment files, and database dump files from the public source tree.
 - Updated Platform to `masterbrain==0.11.0` and the released `@airalogy/masterbrain-client` / `@airalogy/masterbrain-vue` packages. Protocol drafting now uses Masterbrain's single-file generation contract, while shared packages own AI edit contracts, risk handling, safe apply/undo logic, and Diff rendering instead of Platform maintaining duplicate intelligence and UI infrastructure.
 - Updated `@airalogy/masterbrain-vue` to `0.2.0` and delegated its change status, review, Diff, file, and risk labels to the package's reactive built-in English/Chinese localization. Platform now passes only its active locale and retains product-specific Aira and modal-shell copy.
+- Updated the API wrapper to `airalogy-engine==0.0.9`, replaced the floating Airalogy Engine image with the immutable official `0.16.0` multi-architecture digest for `linux/amd64` and `linux/arm64`, and made the isolated Protocol Executor image configurable and versioned with the Platform release.
+- Replaced the withdrawn `numpy==2.4.0` build dependency with compatible patch release `2.4.6` in the API environment and isolated Protocol Executor.
+- Raised the production Web build heap default to 6 GB after the complete application build exceeded the former 4 GB limit.
 
 ### Fixed
 

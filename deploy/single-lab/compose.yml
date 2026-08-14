@@ -1,8 +1,22 @@
 name: ${COMPOSE_PROJECT_NAME:-airalogy-single-lab}
 
 services:
+  protocol-executor-image:
+    image: ${AIRALOGY_PROTOCOL_EXECUTOR_IMAGE:-airalogy-platform-protocol-executor:0.1.0}
+    build:
+      context: ../../apps/api
+      dockerfile: protocol_executor.Dockerfile
+      args:
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_TAG: ${GIT_TAG:-}
+        BUILD_TIME: ${BUILD_TIME:-}
+        BUILD_DIRTY: ${BUILD_DIRTY:-true}
+    profiles: ["build-only"]
+    command: ["true"]
+
   web:
-    image: ${AIRALOGY_WEB_IMAGE:-airalogy-platform-web:local}
+    image: ${AIRALOGY_WEB_IMAGE:-airalogy-platform-web:0.1.0}
     build:
       context: ../..
       dockerfile: deploy/single-lab/web.Dockerfile
@@ -12,7 +26,12 @@ services:
         VITE_SITE_ORIGIN: ${SITE_URL:-http://localhost:8080}
         VITE_DOCS_URL: ${VITE_DOCS_URL:-https://github.com/airalogy/platform/tree/main/docs}
         NODE_COMPONENT_BUILD_MEMORY_MB: ${COMPONENT_BUILD_MEMORY_MB:-3072}
-        NODE_BUILD_MEMORY_MB: ${WEB_BUILD_MEMORY_MB:-4096}
+        NODE_BUILD_MEMORY_MB: ${WEB_BUILD_MEMORY_MB:-6144}
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_TAG: ${GIT_TAG:-}
+        BUILD_TIME: ${BUILD_TIME:-}
+        BUILD_DIRTY: ${BUILD_DIRTY:-true}
     restart: unless-stopped
     init: true
     depends_on:
@@ -40,10 +59,16 @@ services:
       - no-new-privileges:true
 
   api-server:
-    image: ${AIRALOGY_API_IMAGE:-airalogy-platform-api:local}
+    image: ${AIRALOGY_API_IMAGE:-airalogy-platform-api:0.1.0}
     build:
       context: ../../apps/api
       dockerfile: Dockerfile
+      args:
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_TAG: ${GIT_TAG:-}
+        BUILD_TIME: ${BUILD_TIME:-}
+        BUILD_DIRTY: ${BUILD_DIRTY:-true}
     command:
       - sh
       - -c
@@ -57,6 +82,11 @@ services:
       - ${AIRALOGY_ENV_FILE:-.env}
     environment:
       APP_ENV: production
+      PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      GIT_TAG: ${GIT_TAG:-}
+      BUILD_TIME: ${BUILD_TIME:-}
+      BUILD_DIRTY: ${BUILD_DIRTY:-true}
       DEPLOYMENT_MODE: single_lab
       LAB_STRUCTURE_MODE: structured
       API_ROOT_PATH: ""
@@ -96,7 +126,7 @@ services:
       - no-new-privileges:true
 
   db:
-    image: ${AIRALOGY_POSTGRES_IMAGE:-airalogy-platform-postgresql:16}
+    image: ${AIRALOGY_POSTGRES_IMAGE:-airalogy-platform-postgres:0.1.0}
     build:
       context: ../../apps/api
       dockerfile: postgresql.Dockerfile
@@ -104,6 +134,11 @@ services:
         APT_DEBIAN_MIRROR: ${APT_DEBIAN_MIRROR:-http://deb.debian.org/debian}
         APT_DEBIAN_SECURITY_MIRROR: ${APT_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         APT_POSTGRES_MIRROR: ${APT_POSTGRES_MIRROR:-http://apt.postgresql.org/pub/repos/apt}
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_TAG: ${GIT_TAG:-}
+        BUILD_TIME: ${BUILD_TIME:-}
+        BUILD_DIRTY: ${BUILD_DIRTY:-true}
     restart: unless-stopped
     shm_size: 256mb
     environment:
@@ -123,7 +158,7 @@ services:
     stop_grace_period: 1m
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     command:
       - redis-server
       - --save
@@ -146,7 +181,7 @@ services:
       - no-new-privileges:true
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-03-26T22-10-45Z
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-03-26T22-10-45Z}
     command: server /data --address ":9200" --console-address ":9201"
     restart: unless-stopped
     environment:
@@ -172,7 +207,7 @@ services:
       start_period: 10s
 
   createbuckets:
-    image: quay.io/minio/mc:RELEASE.2024-03-25T16-41-14Z
+    image: ${MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2024-03-25T16-41-14Z}
     depends_on:
       minio:
         condition: service_healthy

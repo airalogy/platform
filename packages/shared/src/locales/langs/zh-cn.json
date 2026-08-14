@@ -552,6 +552,20 @@
     "about": {
       "title": "关于",
       "introduction": "Airalogy：全球首个全学科通用的科研电子化、自动化与加速平台",
+      "systemInfo": {
+        "title": "系统信息",
+        "description": "用于支持、升级和可复现诊断的发布身份。",
+        "productVersion": "产品版本",
+        "sourceRevision": "源码修订",
+        "databaseRevision": "数据库修订",
+        "deploymentId": "部署 ID",
+        "releaseManifest": "发布清单",
+        "buildTime": "构建时间",
+        "dirtyBuild": "含未提交改动",
+        "copyDiagnostics": "复制诊断信息",
+        "copied": "已复制系统诊断信息",
+        "unavailable": "系统身份暂时不可用。"
+      },
       "projectInfo": {
         "title": "项目信息",
         "version": "版本",

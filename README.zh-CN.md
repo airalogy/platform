@@ -20,6 +20,8 @@ Enterprise 扩展不应直接混入这个仓库，除非该能力对开源版也
 
 面向用户的能力说明见 [Community Edition 功能概览](docs/zh/community-edition.md)。面向单个实验室的生产部署见 [单实验室部署说明](docs/zh/single-lab-deployment.md)。
 
+正式发布、不可变镜像身份、脱敏支持资料，以及公开产品元数据与私有客户部署台账的边界见 [发布与部署身份](docs/zh/release-and-deployment-identity.md)。Airalogy 名称与 Logo 的使用不由 Apache-2.0 源码许可自动授权，详见 [商标政策](TRADEMARKS.md)。
+
 ## 仓库结构
 
 ```txt

@@ -27,6 +27,8 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增按权限范围导出原始 Records：Lab Owner 可导出实验室，Project Owner/Manager 可导出项目或 Protocol；支持固定快照的后台任务、`.aira`、JSONL、单 Schema CSV、可选修订历史、附件去重、实验室级不可变审计、7 天下载、站内完成通知以及导出历史与重新生成。
 - Protocol Editor 新增无代码 Aira 工作流：用户可用自然语言描述实验需求，生成并预览结构化 Protocol，再通过对话继续讨论或修改。普通问题只返回回答而不改动文件；安全修改会立即应用，并提供自然语言摘要、行内或左右可视化差异与撤销；校验警告和文件删除仍需人工确认。
 - 新增推荐的“AI 帮助撰写 Protocol”创建方式，可在当前 Lab 与 Project 上下文中直接打开现有 Aira 草拟流程。
+- 新增端到端发布与部署身份机制：运行时版本自报、Alembic revision、四个核心镜像的不可变清单、Tag 触发发布、持久部署历史、不透明部署 ID 和脱敏运维支持包。
+- 新增 Community Edition 公开发行中的商标与客户数据边界说明。
 
 ### 变更
 
@@ -37,6 +39,9 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 从公开源码树中排除生成的 API 产物、本地缓存、日志、证书、环境文件和数据库 dump 文件。
 - Platform 更新为 `masterbrain==0.11.0` 以及正式发布的 `@airalogy/masterbrain-client` / `@airalogy/masterbrain-vue` 包。Protocol 草稿使用 Masterbrain 单文件生成契约，AI 编辑契约、风险处理、安全应用与撤销逻辑和 Diff 渲染则统一由 Masterbrain 共享包提供，Platform 不再维护重复的智能与 UI 基础设施。
 - 将 `@airalogy/masterbrain-vue` 更新到 `0.2.0`，变更状态、审核、Diff、文件与风险等共享 UI 文案改由包内置的响应式中英文国际化提供。Platform 只传入当前语言，并保留 Aira 产品文案和弹窗外壳文案。
+- 将 API 封装包更新为 `airalogy-engine==0.0.9`，将浮动的 Airalogy Engine 镜像替换为官方 `0.16.0` 多架构不可变摘要，同时支持 `linux/amd64` 和 `linux/arm64`；隔离 Protocol Executor 镜像也可配置并随 Platform 发布统一版本。
+- 将已被上游撤回的 `numpy==2.4.0` 构建依赖替换为兼容的补丁版本 `2.4.6`，同步用于 API 环境与隔离 Protocol Executor。
+- 完整 Web 生产构建已超出原 4 GB 限额，因此将默认构建 heap 提高到 6 GB。
 
 ### 修复
 

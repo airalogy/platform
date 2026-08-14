@@ -1,0 +1,235 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: platform-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      DATABASE_URL: postgresql+asyncpg://user:pass@localhost:5432/airalogy
+      SECRET_KEY: release-verification-secret
+      AES_KEY: "1234567890123456789012345678901234567890123456789012345678901234"
+      AIRALOGY_ENDPOINT: http://localhost:4000
+      REDIS_URL: redis://localhost:6379/0
+      MINIO_ENDPOINT: minio:9200
+      MINIO_BUCKET: airalogy
+      MINIO_ACCESS_KEY: airalogy
+      MINIO_SECRET_KEY: airalogy-minio-password
+      MINIO_PROXY_PATH: /minio
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.4"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pnpm install --frozen-lockfile
+      - run: uv --directory apps/api sync --locked --dev
+      - run: pnpm version:check
+      - run: pnpm release:metadata:test
+      - run: pnpm deployment:identity:test
+      - run: uv --directory apps/api run --with pytest python -m pytest tests
+      - run: pnpm lint
+      - run: pnpm type-check
+      - run: pnpm build
+      - run: bash -n deploy/single-lab/platformctl deploy/single-lab/scripts/*.sh
+      - run: pnpm release:check -- "$RELEASE_TAG"
+
+  images:
+    needs: verify
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            context: ./apps/api
+            dockerfile: ./apps/api/Dockerfile
+          - component: web
+            context: .
+            dockerfile: ./deploy/single-lab/web.Dockerfile
+          - component: protocol-executor
+            context: ./apps/api
+            dockerfile: ./apps/api/protocol_executor.Dockerfile
+          - component: postgres
+            context: ./apps/api
+            dockerfile: ./apps/api/postgresql.Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: source
+        name: Resolve reproducible source timestamp
+        run: git show -s --format='build-time=%cI' "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+      - id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/platform-${{ matrix.component }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+      - id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            PLATFORM_VERSION=${{ steps.metadata.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            GIT_TAG=${{ github.ref_name }}
+            BUILD_TIME=${{ steps.source.outputs.build-time }}
+            BUILD_DIRTY=false
+          cache-from: type=gha,scope=platform-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=platform-${{ matrix.component }}
+          sbom: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        if: github.event.repository.visibility == 'public'
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/platform-${{ matrix.component }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Record immutable image identity
+        env:
+          COMPONENT: ${{ matrix.component }}
+          IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/platform-${{ matrix.component }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p image-metadata
+          printf '%s\n' "$IMAGE_REPOSITORY" > "image-metadata/$COMPONENT.repository"
+          printf '%s\n' "$IMAGE_DIGEST" > "image-metadata/$COMPONENT.digest"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: platform-${{ matrix.component }}-image-metadata
+          path: image-metadata
+          if-no-files-found: error
+
+  release:
+    needs: images
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+      packages: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: platform-*-image-metadata
+          path: image-metadata
+          merge-multiple: true
+      - name: Assemble immutable Platform release
+        run: |
+          mkdir -p release-stage/deploy release-stage/docs/zh release-stage/docs/en
+          cp -R deploy/single-lab release-stage/deploy/single-lab
+          cp README.md README.zh-CN.md LICENSE NOTICE TRADEMARKS.md SECURITY.md CHANGELOG.md CHANGELOG.zh-CN.md VERSION release-stage/
+          cp docs/zh/single-lab-deployment.md docs/zh/release-and-deployment-identity.md release-stage/docs/zh/
+          cp docs/en/single-lab-deployment.md docs/en/release-and-deployment-identity.md release-stage/docs/en/
+          node scripts/create-release-metadata.mjs \
+            --metadata-directory image-metadata \
+            --output-directory release-stage/deploy/single-lab \
+            --env-template deploy/single-lab/.env.example \
+            --release-tag "$GITHUB_REF_NAME" \
+            --git-commit "$GITHUB_SHA"
+      - name: Smoke test the exact released component set
+        run: |
+          smoke_env=$PWD/release-stage/deploy/single-lab/.env
+          smoke_project=platform-release-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+          deployment_id=dep_$(openssl rand -hex 16)
+          secret_key=$(openssl rand -hex 48)
+          aes_key=$(openssl rand -hex 32)
+          inner_key=$(openssl rand -hex 32)
+          setup_code=$(openssl rand -hex 24)
+          database_password=$(openssl rand -hex 24)
+          minio_password=$(openssl rand -hex 24)
+          cp release-stage/deploy/single-lab/.env.example "$smoke_env"
+          sed -i \
+            -e "s/^COMPOSE_PROJECT_NAME=.*/COMPOSE_PROJECT_NAME=$smoke_project/" \
+            -e "s/^AIRALOGY_DEPLOYMENT_ID=.*/AIRALOGY_DEPLOYMENT_ID=$deployment_id/" \
+            -e 's|^SITE_URL=.*|SITE_URL=http://localhost:18080|' \
+            -e 's/^HTTP_PORT=.*/HTTP_PORT=18080/' \
+            -e "s/^SECRET_KEY=.*/SECRET_KEY=$secret_key/" \
+            -e "s/^AES_KEY=.*/AES_KEY=$aes_key/" \
+            -e "s/^INNER_API_KEY=.*/INNER_API_KEY=$inner_key/" \
+            -e "s/^INITIAL_ADMIN_TOKEN=.*/INITIAL_ADMIN_TOKEN=$setup_code/" \
+            -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$database_password/" \
+            -e "s/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=$minio_password/" \
+            -e "s|^AIRALOGY_STATE_DIR=.*|AIRALOGY_STATE_DIR=$RUNNER_TEMP/$smoke_project-state|" \
+            "$smoke_env"
+          chmod 600 "$smoke_env"
+          cleanup() {
+            AIRALOGY_ENV_FILE="$smoke_env" docker compose \
+              --project-directory release-stage/deploy/single-lab \
+              --env-file "$smoke_env" \
+              -f release-stage/deploy/single-lab/compose.yml \
+              down --volumes --remove-orphans
+          }
+          trap cleanup EXIT
+          AIRALOGY_ENV_FILE="$smoke_env" release-stage/deploy/single-lab/platformctl install
+          curl --fail --silent --show-error http://127.0.0.1:18080/api/health/ready
+          curl --fail --silent --show-error http://127.0.0.1:18080/api/system/version
+          cleanup
+          trap - EXIT
+      - name: Package deployment files
+        run: |
+          tar -czf "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" -C release-stage .
+          sha256sum "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" > "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256"
+          cp release-stage/deploy/single-lab/release-manifest.json "airalogy-platform-release-${GITHUB_REF_NAME}.json"
+          cp release-stage/deploy/single-lab/release-manifest.env "airalogy-platform-release-${GITHUB_REF_NAME}.env"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        if: github.event.repository.visibility == 'public'
+        with:
+          subject-path: airalogy-platform-deploy-${{ github.ref_name }}.tar.gz
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256" "airalogy-platform-release-${GITHUB_REF_NAME}.json" "airalogy-platform-release-${GITHUB_REF_NAME}.env" --generate-notes --verify-tag

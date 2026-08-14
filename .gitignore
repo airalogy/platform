@@ -63,6 +63,7 @@ deploy/single-lab/state/
 
 # Generated API snapshots
 apps/web/openapi.json
+apps/api/app/build-info.json
 
 # Docs
 docs/.vitepress/dist
