@@ -191,6 +191,7 @@ APT_DEBIAN_MIRROR=http://deb.debian.org/debian
 APT_DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 APT_POSTGRES_MIRROR=http://apt.postgresql.org/pub/repos/apt
 
+AI_ENABLED=
 DASHSCOPE_API_KEY=
 DASHSCOPE_BASE_URL=
 OPENAI_API_KEY=

@@ -1,5 +1,9 @@
 <template>
-  <section class="mx-auto h-[70px] min-w-0 w-full flex items-center" :class="isContainer ? 'container' : ''">
+  <section
+    class="mx-auto h-[70px] min-w-0 w-full flex items-center"
+    :class="isContainer ? 'container' : ''"
+    :style="containerStyle"
+  >
     <global-logo class="shrink-0 text-white" :class="isMobile ? 'mx-4' : 'mr-18'" monochrome :compact="isMobile" />
     <template v-if="authStore.isLogin">
       <global-menu />
@@ -13,7 +17,7 @@
         {{ $t("common.hub") }}
       </n-button>
       <n-button
-        v-if="!isMobile"
+        v-if="!isMobile && instanceStore.aiEnabled"
         :theme-overrides="buttonThemeOverrides"
         class="ml-4 h-[36px] rounded-2 px-3"
         @click="routerPushByKey('global-chat')"
@@ -133,7 +137,14 @@ interface IProps {
   showMenu?: boolean
   showMenuToggler?: boolean
   isContainer?: boolean
+  maxWidth?: number
 }
+
+const containerStyle = computed(() =>
+  props.isContainer && props.maxWidth
+    ? { maxWidth: `${props.maxWidth}px` }
+    : undefined,
+)
 
 const authStore = useAuthStore()
 const instanceStore = useInstanceStore()
@@ -154,7 +165,7 @@ const menuOptions = computed<DropdownOption[]>(() => {
   }
 
   return [
-    { label: $t("common.chat"), key: "chat" },
+    ...(instanceStore.aiEnabled ? [{ label: $t("common.chat"), key: "chat" }] : []),
     { label: $t("page.help.title"), key: "help" },
     { label: $t("common.profile"), key: "profile" },
     ...(authStore.userInfo.roles?.some(role => role === "R_ADMIN" || role === "R_SUPER")

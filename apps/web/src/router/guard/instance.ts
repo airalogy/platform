@@ -15,7 +15,17 @@ const SINGLE_LAB_REDIRECT_ROUTES = new Set([
 export function createInstanceGuard(router: Router) {
   router.beforeEach((to, _from, next) => {
     const instanceStore = useInstanceStore()
-    if (!instanceStore.loaded || !instanceStore.isSingleLab) {
+    if (!instanceStore.loaded) {
+      next()
+      return
+    }
+
+    if (to.name === "global-chat" && !instanceStore.aiEnabled) {
+      next({ name: "home", replace: true })
+      return
+    }
+
+    if (!instanceStore.isSingleLab) {
       next()
       return
     }

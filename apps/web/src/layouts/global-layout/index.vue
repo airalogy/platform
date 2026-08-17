@@ -29,18 +29,24 @@
     :right-footer="themeStore.footer.right"
     :float-button-props="props.floatButtonProps"
     :is-container="!route.meta.notContainer"
+    :max-width="route.meta.containerMaxWidth"
     footer-class="bg-[#2B2B38]"
     header-class="bg-[#2B2B38]"
   >
     <template #header>
-      <global-header v-bind="headerProps" :is-container="!route.meta.notContainer" :class="props.headerClass" />
+      <global-header
+        v-bind="headerProps"
+        :is-container="!route.meta.notContainer"
+        :max-width="route.meta.containerMaxWidth"
+        :class="props.headerClass"
+      />
     </template>
     <slot>
       <global-content v-if="appStore.isSpinWrapper" :container-content-class="themeStore.content.containerContentClass" :content-class="themeStore.content.contentClass" :show-spin="true" />
       <global-content v-else />
     </slot>
     <template v-if="!route.meta.hideFooter" #footer>
-      <global-footer />
+      <global-footer :max-width="route.meta.containerMaxWidth" />
     </template>
     <template v-if="$slots.floatButton" #floatButton>
       <slot name="floatButton" />

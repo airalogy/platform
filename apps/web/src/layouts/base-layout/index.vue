@@ -79,6 +79,7 @@
       <main
         :id="isContentScroll ? scrollElId : undefined"
         class="flex flex-grow flex-col"
+        :style="containerStyle"
         :class="[
           commonClass,
           contentClass,
@@ -181,6 +182,11 @@ interface Slots {
   floatButton?: SlotFn
 }
 const cssVars = computed(() => createLayoutCssVars(props))
+const containerStyle = computed(() =>
+  props.isContainer && props.maxWidth
+    ? { maxWidth: `${props.maxWidth}px` }
+    : undefined,
+)
 
 // config visible
 const showHeader = computed(() => Boolean(slots.header) && props.headerVisible)

@@ -1,9 +1,6 @@
 import { SetupStoreId } from "@/enum"
 import { fetchInstanceStatus, type InstanceStatus } from "@/service/api/instance"
-import { ChatModel } from "@airalogy/shared/enum/chat"
 import { defineStore } from "pinia"
-
-const defaultEnabledChatModels = [ChatModel.BASIC, ChatModel.PLUS, ChatModel.PRO]
 
 function fallbackStatus(): InstanceStatus {
   const singleLab = import.meta.env.VITE_DEPLOYMENT_MODE === "single_lab"
@@ -18,7 +15,8 @@ function fallbackStatus(): InstanceStatus {
     documentation_profile: singleLab ? "customer_managed" : "community",
     documentation_url: "/docs/",
     support_url: "",
-    enabled_chat_models: defaultEnabledChatModels,
+    ai_enabled: false,
+    enabled_chat_models: [],
     lab: null,
   }
 }
@@ -36,7 +34,8 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
   const documentationProfile = computed(() => status.value.documentation_profile)
   const documentationUrl = computed(() => status.value.documentation_url)
   const supportUrl = computed(() => status.value.support_url)
-  const enabledChatModels = computed(() => status.value.enabled_chat_models ?? defaultEnabledChatModels)
+  const aiEnabled = computed(() => status.value.ai_enabled)
+  const enabledChatModels = computed(() => status.value.enabled_chat_models ?? [])
 
   async function load() {
     try {
@@ -69,6 +68,7 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
     documentationProfile,
     documentationUrl,
     supportUrl,
+    aiEnabled,
     enabledChatModels,
     load,
   }

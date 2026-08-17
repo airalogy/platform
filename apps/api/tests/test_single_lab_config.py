@@ -16,6 +16,12 @@ def settings(**overrides):
         "MINIO_BUCKET": "airalogy",
         "MINIO_ACCESS_KEY": "airalogy-test",
         "MINIO_SECRET_KEY": "m" * 32,
+        "AI_ENABLED": None,
+        "DASHSCOPE_API_KEY": "",
+        "OPENAI_API_KEY": "",
+        "ENABLE_GPT_MODEL": False,
+        "MASTERBRAIN_CALL_MODE": "package",
+        "CHAT_API_ENDPOINT": "",
     }
     values.update(overrides)
     return Settings(**values)
@@ -84,6 +90,20 @@ def test_explicit_vendor_managed_documentation_overrides_deployment_default():
 
 def test_gpt_model_is_disabled_by_default():
     assert settings().ENABLE_GPT_MODEL is False
+
+
+def test_ai_capability_is_auto_detected_and_can_be_disabled():
+    assert settings().effective_ai_enabled is False
+    assert settings(DASHSCOPE_API_KEY="test-key").effective_ai_enabled is True
+    assert (
+        settings(AI_ENABLED=False, DASHSCOPE_API_KEY="test-key").effective_ai_enabled
+        is False
+    )
+
+
+def test_explicit_ai_enable_requires_a_provider():
+    with pytest.raises(ValidationError, match="AI_ENABLED"):
+        settings(AI_ENABLED=True)
 
 
 def test_engine_image_uses_official_multiarch_immutable_release():

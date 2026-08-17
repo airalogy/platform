@@ -41,6 +41,7 @@
 
               <div class="record-batch-actions">
                 <n-button
+                  v-if="instanceStore.aiEnabled"
                   secondary
                   size="small"
                   :disabled="selectedRecordsNotInChat.length === 0"
@@ -75,7 +76,7 @@
 
           <template #actions="{ record, index }">
             <div class="record-row-actions">
-              <n-tooltip v-if="isItemInChatContext(getRecordKey(record, index))" trigger="hover">
+              <n-tooltip v-if="instanceStore.aiEnabled && isItemInChatContext(getRecordKey(record, index))" trigger="hover">
                 {{ $t("page.protocol.timeline.removeFromChat") }}
                 <template #trigger>
                   <n-button
@@ -94,7 +95,7 @@
                   </n-button>
                 </template>
               </n-tooltip>
-              <n-tooltip v-else trigger="hover">
+              <n-tooltip v-else-if="instanceStore.aiEnabled" trigger="hover">
                 {{ $t("page.protocol.timeline.addToChat") }}
                 <template #trigger>
                   <n-button quaternary circle size="small" @click="emit('addToChat', toTimelineItem(record, index))">
@@ -273,6 +274,7 @@ import { DeleteConfirmationModal, useDeleteConfirmation } from "@/components/com
 import { usePagination, useProjectPermissions } from "@/composables"
 import { deleteResearchRecord } from "@/service/api/project-protocols"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { AimdRecordCompare, AimdRecordTable } from "@airalogy/aimd-renderer/vue"
 import CopyToClipComponent from "@airalogy/components/copy-to-clip.vue"
 import ShikiCodeViewer from "@airalogy/components/file-preview/code-preview/shiki-code-viewer.vue"
@@ -318,6 +320,7 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
 const message = useClosableMessage()
 const { projectInfo } = useProjectInfoStore()
 const { canDeleteOthersRecords, canDeleteOwnRecords } = useProjectPermissions(projectInfo)

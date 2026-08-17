@@ -1,6 +1,10 @@
 <template>
   <n-layout has-sider class="my-12.5 overflow-visible" :content-class="isMobile ? '!flex-col' : ''">
-    <n-layout-sider :content-class="['!overflow-visible', isMobile ? 'items-center' : ''].join(' ')" :width="isMobile ? '100%' : 398">
+    <n-layout-sider
+      :class="{ 'order-2 mt-6': isMobile }"
+      :content-class="['!overflow-visible', isMobile ? 'items-center' : ''].join(' ')"
+      :width="isMobile ? '100%' : 398"
+    >
       <div class="n-card n-card--bordered rounded-2 pt-6">
         <sider-list
           :title="$t('page.home.labs')"
@@ -30,48 +34,9 @@
         />
       </div>
     </n-layout-sider>
-    <n-layout>
+    <n-layout :class="{ 'order-1': isMobile }">
       <n-layout-content class="!overflow-visible" :content-class="isMobile ? 'px-4' : 'ml-6'">
-        <section class="mb-6 rounded-2 border border-gray-200 bg-white p-5">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div class="max-w-2xl">
-              <div class="text-xs font-medium uppercase text-gray-500">
-                {{ $t("page.home.start.eyebrow") }}
-              </div>
-              <h2 class="mb-0 mt-2 text-2xl font-semibold leading-tight">
-                {{ $t("page.home.start.title") }}
-              </h2>
-              <p class="mb-0 mt-2 text-sm leading-6 text-gray-500">
-                {{ $t("page.home.start.description") }}
-              </p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <create-project-modal
-                :button-props="{ type: 'primary' }"
-                :show-icon="false"
-                :trigger="$t('page.home.start.primaryAction')"
-                @modal:new-project="handleCreateProject"
-              />
-              <n-button v-if="!instanceStore.isSingleLab" secondary @click="handleOpenHub">
-                {{ $t("page.home.start.hubAction") }}
-              </n-button>
-            </div>
-          </div>
-          <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div
-              v-for="step in gettingStartedSteps"
-              :key="step.key"
-              class="rounded border border-gray-200 bg-gray-50 px-4 py-3"
-            >
-              <div class="text-sm font-semibold">
-                {{ step.title }}
-              </div>
-              <div class="mt-1 text-sm leading-6 text-gray-500">
-                {{ step.description }}
-              </div>
-            </div>
-          </div>
-        </section>
+        <task-workbench class="mb-6" />
         <pinned-items
           class="mb-6"
           :items="pinnedItems"
@@ -166,7 +131,6 @@ import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import TestingNotificationDialog from "@/views/auth/components/testing-notification-dialog.vue"
 import CreateLabModal from "@/views/labs/modules/lab/create-lab-modal.vue"
-import CreateProjectModal from "@/views/projects/modules/create-project-modal.vue"
 
 import { useClosableMessage, useLoading } from "@airalogy/composables"
 import { useBasicLayout } from "@airalogy/composables/useBasicLayout"
@@ -175,6 +139,7 @@ import { useWindowSize } from "@vueuse/core"
 import ActivityCard, { type IProps as ICardItem } from "./components/activity-card.vue"
 import PinnedItems from "./components/pinned-items.vue"
 import SiderList from "./components/sider-list.vue"
+import TaskWorkbench from "./components/task-workbench.vue"
 
 const authStore = useAuthStore()
 const instanceStore = useInstanceStore()
@@ -211,24 +176,6 @@ const pinnedMap = computed(() => {
   })
   return map
 })
-
-const gettingStartedSteps = computed(() => [
-  {
-    key: "workspace",
-    title: $t("page.home.start.steps.workspace.title"),
-    description: $t("page.home.start.steps.workspace.description"),
-  },
-  {
-    key: "protocol",
-    title: $t("page.home.start.steps.protocol.title"),
-    description: $t("page.home.start.steps.protocol.description"),
-  },
-  {
-    key: "record",
-    title: $t("page.home.start.steps.record.title"),
-    description: $t("page.home.start.steps.record.description"),
-  },
-])
 
 type ActivityCategory = "projects" | "labs" | "records" | "protocols" | "groups"
 
@@ -464,15 +411,6 @@ async function handleCreateLab(item: Api.Lab.LabInfo) {
   const { uid } = item
 
   await routerPushByKey("lab-projects", { params: { labUid: uid } })
-}
-
-async function handleCreateProject(item: Api.Project.MyProjectInfo) {
-  await routerPushByKey("project-protocols", {
-    params: {
-      labUid: item.lab_uid,
-      projectUid: item.uid,
-    },
-  })
 }
 
 function handleOpenHub() {

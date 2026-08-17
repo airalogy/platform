@@ -3,13 +3,12 @@ import type { ProtocolModels } from "@airalogy/shared/types"
 import type { MaybeRefOrGetter, Ref } from "vue"
 import { schemaCustomizer } from "@/service/api/project-protocols"
 import { useAuthStore } from "@/store/modules/auth"
-import { localStg } from "@/utils/storage"
+import { deleteRecordDraft, getRecordDraft, saveRecordDraft } from "@/utils/recordDrafts"
 
 import { extractAssetId } from "@/views/project-protocols/utils"
 import { useClosableMessage } from "@airalogy/composables"
 import { formatDate } from "@airalogy/shared/utils"
-import { cloneDeep as _cloneDeep, get as _get, mergeWith as _mergeWith } from "lodash-es"
-import { toRaw } from "vue"
+import { mergeWith as _mergeWith } from "lodash-es"
 
 // Draft data structure
 export interface IDraftData<T = any> {
@@ -29,55 +28,6 @@ export function useDraftManagement(
   const message = useClosableMessage()
   const authStore = useAuthStore()
 
-  type DraftStorage = Record<string, Record<string, IDraftData>>
-
-  function normalizeUserDraft(raw: unknown): Record<string, IDraftData> {
-    if (!raw || typeof raw !== "object") {
-      return {}
-    }
-
-    if (Array.isArray(raw)) {
-      const result: Record<string, IDraftData> = {}
-      for (const key of Object.keys(raw)) {
-        const value = raw[Number(key)] as IDraftData | undefined
-        if (value) {
-          result[String(key)] = value
-        }
-      }
-      return result
-    }
-
-    return raw as Record<string, IDraftData>
-  }
-
-  function normalizeDraftStorage(raw: unknown): { storage: DraftStorage, migrated: boolean } {
-    if (!raw || typeof raw !== "object") {
-      return { storage: {}, migrated: false }
-    }
-
-    let migrated = false
-
-    if (Array.isArray(raw)) {
-      migrated = true
-      const result: DraftStorage = {}
-      for (const key of Object.keys(raw)) {
-        result[String(key)] = normalizeUserDraft(raw[Number(key)])
-      }
-      return { storage: result, migrated }
-    }
-
-    const result: DraftStorage = {}
-    for (const [userKey, userDraft] of Object.entries(raw as Record<string, unknown>)) {
-      const normalizedUserDraft = normalizeUserDraft(userDraft)
-      if (normalizedUserDraft !== userDraft) {
-        migrated = true
-      }
-      result[userKey] = normalizedUserDraft
-    }
-
-    return { storage: result, migrated }
-  }
-
   /**
    * Retrieves draft data for the specified protocol
    * @param protocolId - Protocol identifier
@@ -89,18 +39,8 @@ export function useDraftManagement(
       return null
     }
 
-    const rawStorage = localStg.get("unitRecordDraft")
-    const { storage, migrated } = normalizeDraftStorage(rawStorage)
-
-    const userKey = String(userId)
-    const protocolKey = String(protocolId)
-    const draft = _get(storage, [userKey, protocolKey], null) as IDraftData<T> | null
-
-    if (migrated) {
-      localStg.set("unitRecordDraft", storage as any)
-    }
-
-    return draft
+    const draft = getRecordDraft<T>(userId, protocolId)
+    return draft ? { data: draft.data, timestamp: draft.timestamp } : null
   }
 
   /**
@@ -119,21 +59,7 @@ export function useDraftManagement(
     }
 
     try {
-      const rawStorage = localStg.get("unitRecordDraft")
-      const { storage } = normalizeDraftStorage(rawStorage)
-      const userKey = String(userId)
-      const protocolKey = String(protocolId)
-
-      const payload = _cloneDeep(toRaw(data)) as T
-      const currentDraft: IDraftData<T> = { data: payload, timestamp: Date.now() }
-
-      if (!storage[userKey]) {
-        storage[userKey] = {}
-      }
-
-      storage[userKey][protocolKey] = currentDraft
-
-      localStg.set("unitRecordDraft", storage as any)
+      saveRecordDraft(userId, protocolId, data)
       if (shouldNotify) {
         message.success("Draft saved.")
       }
@@ -178,23 +104,7 @@ export function useDraftManagement(
       return
     }
 
-    const rawStorage = localStg.get("unitRecordDraft")
-    const { storage } = normalizeDraftStorage(rawStorage)
-
-    const userKey = String(userId)
-    const protocolKey = String(protocolId)
-
-    if (!storage[userKey]) {
-      return
-    }
-
-    delete storage[userKey][protocolKey]
-
-    if (Object.keys(storage[userKey]).length === 0) {
-      delete storage[userKey]
-    }
-
-    localStg.set("unitRecordDraft", storage as any)
+    deleteRecordDraft(userId, protocolId)
   }
 
   /**

@@ -20,6 +20,7 @@ declare namespace I18n {
       confirm: string
       cancel: string
       undo: string
+      retry: string
       required: string
       pleaseCheckValue: string
       action: string
@@ -665,6 +666,41 @@ declare namespace I18n {
             }
           }
         }
+        workbench: {
+          eyebrow: string
+          title: string
+          description: string
+          aiAvailable: string
+          loadError: string
+          continueLabel: string
+          continueDraftTitle: string
+          savedOnDevice: string
+          continueAction: string
+          viewProtocolAction: string
+          nextTaskLabel: string
+          startRecordTitle: string
+          startRecordAction: string
+          createProtocolTitle: string
+          fromTemplateAction: string
+          askAiraAction: string
+          askAiraDescription: string
+          createProjectTitle: string
+          createProjectDescription: string
+          createProjectAction: string
+          openProjectTitle: string
+          openProjectDescription: string
+          openProjectAction: string
+          attentionLabel: string
+          draftsCount: string
+          draftsHint: string
+          noDraftsHint: string
+          quickActions: string
+          manageProjectAction: string
+          reviewProtocolAction: string
+          manageLabAction: string
+          operationsAction: string
+          operationsDescription: string
+        }
         empty: {
           title: string
           description: string
@@ -1030,6 +1066,8 @@ declare namespace I18n {
         }
         apply: {
           modalTitle: string
+          recommendedMethods: string
+          moreMethods: string
           method: {
             createTitle: string
             updateTitle: string
@@ -1301,6 +1339,22 @@ declare namespace I18n {
           viewWorkflowRecord: string
           addToWorkflow: string
           title: string
+          requiredProgress: string
+          requiredProgressSummary: string
+          draftSaving: string
+          draftSavedOnDevice: string
+          draftAutosaveReady: string
+          draftSavedConfirmation: string
+          draftResumed: string
+          confirmSubmitTitle: string
+          confirmRevisionTitle: string
+          confirmSubmitAction: string
+          confirmRevisionAction: string
+          saveDestination: string
+          revisionSuccessTitle: string
+          successNextStep: string
+          viewRecordsAction: string
+          addAnotherAction: string
           noProtocol: string
           uploadPackage: string
           uploadError: string

@@ -1,6 +1,6 @@
 <template>
   <n-button
-    v-if="isCollapsed"
+    v-if="instanceStore.aiEnabled && isCollapsed"
     class="absolute top-1/2 z-1000 -left-10"
     quaternary
     @click="handleToggle"
@@ -15,7 +15,7 @@
     </template>
   </n-button>
 
-  <n-split v-bind="{ ...splitProps, ...$attrs }" v-model:size="splitSize" class="pb-10" :resize-trigger-size="2">
+  <n-split v-if="instanceStore.aiEnabled" v-bind="{ ...splitProps, ...$attrs }" v-model:size="splitSize" class="pb-10" :resize-trigger-size="2">
     <template #1>
       <slot name="aside">
         <sticky-fill-wrapper
@@ -57,6 +57,9 @@
       <div v-if="!isCollapsed" class="n-split__resize-trigger h-full w-full" />
     </template>
   </n-split>
+  <div v-else v-bind="$attrs" class="pb-10">
+    <slot />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -65,6 +68,7 @@ import type { IProps as ChatProps } from "@airalogy/components/chat/composables/
 import ChatComponent from "@/components/chat/index.vue"
 import { useBoolean } from "@/composables"
 import { useAppStore } from "@/store/modules/app"
+import { useInstanceStore } from "@/store/modules/instance"
 
 defineOptions({ name: "HubSplitLayout", inheritAttrs: false })
 
@@ -89,6 +93,7 @@ const { bool: isCollapsed, setFalse: expand, toggle } = useBoolean(false)
 const docked = ref(false)
 
 const appStore = useAppStore()
+const instanceStore = useInstanceStore()
 const splitSize = ref(props.defaultSpiltSize)
 const chatProps = computed(() => ({
   hubSearchDefault: true,

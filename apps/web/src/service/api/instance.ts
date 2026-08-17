@@ -22,6 +22,7 @@ export interface InstanceStatus {
   documentation_profile: DocumentationProfile
   documentation_url: string
   support_url: string
+  ai_enabled: boolean
   enabled_chat_models: ChatModel[]
   lab: InstanceLabInfo | null
 }

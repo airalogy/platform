@@ -156,6 +156,7 @@ import { getDownloadPackage } from "@/service/api/project-protocols"
 import { getStars, StarResourceType } from "@/service/api/star"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import ApplyProtocolModal from "@/views/hub/components/apply-protocol-modal.vue"
 import ProtocolCategoriesCard from "@/views/hub/components/protocol-categories-card.vue"
 import ProtocolStatsCard from "@/views/hub/components/protocol-stats-card.vue"
@@ -189,7 +190,8 @@ const isCollapsed = ref(false)
 const splitSize = ref(props.defaultSpiltSize)
 
 const authStore = useAuthStore()
-const showAssistant = computed(() => authStore.isLogin)
+const instanceStore = useInstanceStore()
+const showAssistant = computed(() => authStore.isLogin && instanceStore.aiEnabled)
 const selectedTab = ref<"ai-assistant" | "protocol-detail" | undefined>(
   showAssistant.value ? props.defaultSelectedTab : "protocol-detail",
 )

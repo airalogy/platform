@@ -21,7 +21,9 @@
     @after-leave="handleAfterLeave"
     @before-enter="showSteps"
   >
-    <protocol-steps v-if="shouldShowSteps" ref="protocolStepsRef" :protocol-info="protocolInfo" :project-info="props.project" @cancel="handleCancel" @success="handleSuccess" />
+    <n-spin :show="contextLoading" class="min-h-60">
+      <protocol-steps v-if="shouldShowSteps && !contextLoading" ref="protocolStepsRef" :protocol-info="protocolInfo" :project-info="resolvedProject" @cancel="handleCancel" @success="handleSuccess" />
+    </n-spin>
   </n-modal>
 </template>
 
@@ -31,7 +33,10 @@ import type { CascaderOption } from "naive-ui"
 import ProtocolSteps from "@/components/apply-steps/protocol-steps.vue"
 
 import { useBoolean, useShowModal } from "@/composables"
+import { checkProjectActionPermission, ProjectAction } from "@/composables/useProjectPermissions"
 import { $t } from "@/locales"
+import { fetchUserProjects } from "@/service/api/users"
+import { useAuthStore } from "@/store/modules/auth"
 import AddCircleOutline from "~icons/ion/add-circle-outline"
 import { type ButtonProps, NButton } from "naive-ui/es/button"
 import { useProvideProtocolInfoStore } from "../hooks/useProtocolInfoStore"
@@ -85,6 +90,9 @@ export interface IEmits {
 }
 const { isShown, showModal, hideModal, setModalStatus } = useShowModal()
 const { bool: shouldShowSteps, setTrue: showSteps, setFalse: hideSteps } = useBoolean(true)
+const authStore = useAuthStore()
+const resolvedProject = ref<Api.Project.MyProjectInfo | null>(props.project)
+const contextLoading = ref(false)
 
 const { protocolInfo } = useProvideProtocolInfoStore(null)
 
@@ -129,9 +137,32 @@ function handleAfterLeave() {
 
 watch(
   () => isShown.value,
-  (shown) => {
+  async (shown) => {
     if (shown) {
-      setDefaultValue(props.project)
+      resolvedProject.value = props.project
+      if (!resolvedProject.value && authStore.userInfo.id) {
+        contextLoading.value = true
+        try {
+          const result = await fetchUserProjects(authStore.userInfo.id, {
+            page: 1,
+            pageSize: 10,
+            sortedBy: "updated_at",
+          })
+          resolvedProject.value = result?.projects.find(project =>
+            checkProjectActionPermission(
+              project.user_role,
+              project.type,
+              ProjectAction.CREATE_PROTOCOL,
+            ),
+          ) || null
+        }
+        catch {
+          resolvedProject.value = null
+        }
+        finally {
+          contextLoading.value = false
+        }
+      }
       showSteps()
       emits("modal:open")
     }
@@ -179,6 +210,7 @@ function restoreForm() {
 watch(
   () => props.project,
   (project) => {
+    resolvedProject.value = project
     setDefaultValue(project)
   },
   { immediate: true },

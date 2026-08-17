@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, UploadFile
 from app.database import DBSession
 from app.libs.masterbrain import stt
 from app.routers.depends import CurrentUser, get_current_user
+from app.services.chat_models import require_ai_enabled
 from app.services.model_usage import create_usage_context
 
 router = APIRouter(
@@ -19,6 +20,7 @@ async def send_stt_chat_message(
     current_user: CurrentUser,
     audio: UploadFile,
 ) -> dict[str, Any]:
+    require_ai_enabled()
     # Read audio file content
     audio_content = await audio.read()
 

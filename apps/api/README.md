@@ -108,7 +108,7 @@ In package mode, every real provider call is stored as an immutable row in `mode
 
 The old separately deployed Masterbrain API path is retained only as a compatibility escape hatch. Set `MASTERBRAIN_CALL_MODE=external` and `CHAT_API_ENDPOINT` only when intentionally routing AI requests to a legacy external service. Because an external process cannot use Platform's in-process database sink, that deployment must configure its own durable `UsageSink`; otherwise its provider usage will not appear in Platform's ledger.
 
-The GPT chat option is disabled by default. Configure `OPENAI_API_KEY` and set `ENABLE_GPT_MODEL=true` to expose it in the Web model selector and allow GPT requests. When using an external Masterbrain endpoint, the endpoint configuration can satisfy the provider requirement instead of a local OpenAI key.
+AI capability is reported by the instance API and auto-detected from usable provider configuration. Set `AI_ENABLED=false` for an instance-wide kill switch; the Web then removes AI entry points while Protocol, Record, Workflow, membership, permissions, search, import, and export paths remain available. Setting `AI_ENABLED=true` still requires at least one usable provider. The GPT chat option is disabled by default. Configure `OPENAI_API_KEY` and set `ENABLE_GPT_MODEL=true` to expose it in the Web model selector and allow GPT requests. When using an external Masterbrain endpoint, the endpoint configuration can satisfy the provider requirement instead of a local OpenAI key.
 
 ## Safety
 

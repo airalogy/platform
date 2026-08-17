@@ -1,37 +1,42 @@
 <template>
-  <div
-    class="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] mx-auto w-full gap-6 px-4"
-  >
-    <n-card
-      v-for="option in applyOptions"
-      :key="option.type"
-      hoverable
-      role="button"
-      tabindex="0"
-      :aria-label="option.title"
-      :data-testid="option.type === 'ai' ? 'protocol-create-ai' : undefined"
-      class="create-option-card relative transform cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
-      :class="{ 'create-option-card--featured': option.featured }"
-      content-class="flex flex-col items-center"
-      @click="handleSelectOption(option.type)"
-      @keydown.enter.prevent="handleSelectOption(option.type)"
-      @keydown.space.prevent="handleSelectOption(option.type)"
-    >
-      <n-tag v-if="option.featured" type="info" size="small" round class="absolute right-4 top-4">
-        {{ $t("page.protocol.apply.options.ai.recommended") }}
-      </n-tag>
-      <div class="create-option-icon" :class="{ 'create-option-icon--featured': option.featured }">
-        <n-icon :size="option.featured ? 30 : 36">
-          <component :is="option.icon" />
-        </n-icon>
+  <div class="mx-auto w-full space-y-8 px-4">
+    <section v-for="section in optionSections" :key="section.key">
+      <h2 v-if="section.title" class="mb-3 text-sm text-gray-500 font-semibold tracking-wide uppercase">
+        {{ section.title }}
+      </h2>
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
+        <n-card
+          v-for="option in section.options"
+          :key="option.type"
+          hoverable
+          role="button"
+          tabindex="0"
+          :aria-label="option.title"
+          :data-testid="option.type === 'ai' ? 'protocol-create-ai' : undefined"
+          class="create-option-card relative transform cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
+          :class="{ 'create-option-card--featured': option.featured }"
+          content-class="flex flex-col items-center"
+          @click="handleSelectOption(option.type)"
+          @keydown.enter.prevent="handleSelectOption(option.type)"
+          @keydown.space.prevent="handleSelectOption(option.type)"
+        >
+          <n-tag v-if="option.featured" type="info" size="small" round class="absolute right-4 top-4">
+            {{ $t("page.protocol.apply.options.ai.recommended") }}
+          </n-tag>
+          <div class="create-option-icon" :class="{ 'create-option-icon--featured': option.featured }">
+            <n-icon :size="option.featured ? 30 : 36">
+              <component :is="option.icon" />
+            </n-icon>
+          </div>
+          <div class="mb-2 min-h-15 text-center text-xl font-semibold">
+            {{ option.title }}
+          </div>
+          <div class="my-auto text-center text-gray-500">
+            {{ option.description }}
+          </div>
+        </n-card>
       </div>
-      <div class="mb-2 min-h-15 text-center text-xl font-semibold">
-        {{ option.title }}
-      </div>
-      <div class="my-auto text-center text-gray-500">
-        {{ option.description }}
-      </div>
-    </n-card>
+    </section>
   </div>
 
   <import-aira-archive-modal
@@ -47,10 +52,12 @@ import type { ImportAiraArchiveResponse } from "@/service/api/project-protocols"
 import type { ProtocolModels } from "@airalogy/shared/types/models"
 import type { ApplyOption } from "./composables/useApplyProtocolState"
 import { $t } from "@/locales"
+import { useInstanceStore } from "@/store/modules/instance"
 import ImportAiraArchiveModal from "@/views/project-protocols/modules/import-aira-archive-modal.vue"
 import HubIcon from "~icons/local/hub"
 import IconFile from "~icons/tabler/file"
 import IconFileImport from "~icons/tabler/file-import"
+import IconFilePlus from "~icons/tabler/file-plus"
 import IconFileZip from "~icons/tabler/file-zip"
 import IconReportSearch from "~icons/tabler/report-search"
 import IconWand from "~icons/tabler/wand"
@@ -71,7 +78,7 @@ const props = withDefaults(defineProps<IProps>(), {
 const { selectedOption, currentStep } = useApplyProtocol()
 
 interface ApplyOptionConfig {
-  type: NonNullable<ApplyOption> | "ai"
+  type: NonNullable<ApplyOption> | "ai" | "template"
   icon: Component
   title: string
   description: string
@@ -98,20 +105,38 @@ const defaultApplyOptions = computed<ApplyOptionConfig[]>(() => ([
     description: $t("page.protocol.apply.options.existing.description"),
   },
 ]))
+const instanceStore = useInstanceStore()
 
 const applyOptions = computed<ApplyOptionConfig[]>(() => {
   if (props.protocolInfo) {
     return defaultApplyOptions.value
   }
   return [
+    ...(instanceStore.aiEnabled
+      ? [{
+        type: "ai",
+        icon: IconWand,
+        title: $t("page.protocol.apply.options.ai.title"),
+        description: $t("page.protocol.apply.options.ai.description"),
+        featured: true,
+      } satisfies ApplyOptionConfig]
+      : []),
     {
-      type: "ai",
-      icon: IconWand,
-      title: $t("page.protocol.apply.options.ai.title"),
-      description: $t("page.protocol.apply.options.ai.description"),
+      type: "template",
+      icon: IconFilePlus,
+      title: $t("editor.landing.actions.template.title"),
+      description: $t("editor.landing.actions.template.description"),
       featured: true,
     },
-    defaultApplyOptions.value[0]!,
+    defaultApplyOptions.value[2]!,
+    ...(!instanceStore.isSingleLab
+      ? [{
+        type: "hub",
+        icon: HubIcon,
+        title: $t("page.protocol.apply.options.hub.title"),
+        description: $t("page.protocol.apply.options.hub.description"),
+      } satisfies ApplyOptionConfig]
+      : []),
     {
       type: "upload-aira",
       icon: IconFileImport,
@@ -119,12 +144,24 @@ const applyOptions = computed<ApplyOptionConfig[]>(() => {
       description: $t("page.protocol.apply.options.uploadAira.description"),
     },
     defaultApplyOptions.value[1]!,
-    defaultApplyOptions.value[2]!,
+    defaultApplyOptions.value[0]!,
+  ]
+})
+
+const optionSections = computed(() => {
+  if (props.protocolInfo) {
+    return [{ key: "update", title: "", options: applyOptions.value }]
+  }
+  return [
     {
-      type: "hub",
-      icon: HubIcon,
-      title: $t("page.protocol.apply.options.hub.title"),
-      description: $t("page.protocol.apply.options.hub.description"),
+      key: "recommended",
+      title: $t("page.protocol.apply.recommendedMethods"),
+      options: applyOptions.value.filter(option => option.featured),
+    },
+    {
+      key: "more",
+      title: $t("page.protocol.apply.moreMethods"),
+      options: applyOptions.value.filter(option => !option.featured),
     },
   ]
 })
@@ -154,13 +191,21 @@ function navigateToEditorWithContext(protocolUid?: string, query?: Record<string
   })
 }
 
-function handleSelectOption(option: NonNullable<ApplyOption> | "ai") {
+function handleSelectOption(option: NonNullable<ApplyOption> | "ai" | "template") {
   if (option === "ai") {
+    if (!instanceStore.aiEnabled) {
+      return
+    }
     const { protocolUid } = route.value.params as { protocolUid?: string }
     return navigateToEditorWithContext(protocolUid, {
       package_id: `ai-draft-${nanoid()}`,
       show_ai_create: "true",
     })
+  }
+
+  if (option === "template") {
+    const { protocolUid } = route.value.params as { protocolUid?: string }
+    return navigateToEditorWithContext(protocolUid, { show_template: "true" })
   }
 
   if (option === "scratch") {

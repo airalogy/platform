@@ -1,6 +1,6 @@
 <template>
   <section class="-mx-8">
-    <header class="h-[70px] w-full flex flex-1 flex-row items-center px-8">
+    <header class="min-h-[70px] w-full flex flex-1 flex-row flex-wrap items-center gap-3 px-8 py-2">
       <n-button quaternary class="mr-6 -ml-2" @click="handleRedirect">
         <template #icon>
           <n-icon size="28">
@@ -47,6 +47,31 @@
         {{ $t("common.close") }}
       </n-button>
       <template v-else>
+        <div v-if="formRef?.requiredCompletion" class="min-w-36 w-44">
+          <div class="mb-1 flex items-center justify-between text-xs text-gray-500">
+            <span>{{ $t("page.protocol.addRecord.requiredProgress") }}</span>
+            <span>
+              {{ formRef.requiredCompletion.filled }}/{{ formRef.requiredCompletion.total }}
+            </span>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="formRef.requiredCompletion.percent"
+            :height="5"
+            :show-indicator="false"
+            :status="formRef.requiredCompletion.percent === 100 ? 'success' : 'default'"
+          />
+        </div>
+        <n-tag v-if="autosaveState.hasPendingChanges" size="small" type="warning" round>
+          {{ $t("page.protocol.addRecord.draftSaving") }}
+        </n-tag>
+        <n-tag v-else-if="autosaveState.lastSavedAt" size="small" type="success" round>
+          {{ $t("page.protocol.addRecord.draftSavedOnDevice") }} ·
+          <n-time :time="autosaveState.lastSavedAt" type="relative" />
+        </n-tag>
+        <n-tag v-else size="small" round>
+          {{ $t("page.protocol.addRecord.draftAutosaveReady") }}
+        </n-tag>
         <n-input
           v-if="route.query.record"
           v-model:value="correctionReason"
@@ -60,8 +85,11 @@
           :protocol="protocol"
           @restore:draft="handleRestoreDraft"
         />
+        <n-button size="medium" secondary :disabled="loading || submissionLoading" @click="handleManualSave">
+          {{ $t("page.protocol.draft.saveButton") }}
+        </n-button>
         <n-button
-          size="medium" type="primary" :disabled="loading || isReadonly || (!!route.query.record && !correctionReason.trim())" :loading="loading" class="mr-4 px-4"
+          size="medium" type="primary" :disabled="loading || submissionLoading || isReadonly || (!!route.query.record && !correctionReason.trim())" :loading="submissionLoading" class="mr-4 px-4"
           @click="handleConfirm"
         >
           {{ $t("common.submit") }}
@@ -200,6 +228,8 @@ const correctionReason = ref("")
 
 const formRef = ref<{
   validate: () => any
+  requiredCompletion: { filled: number, total: number, percent: number }
+  focusFirstInvalidField: () => Promise<void>
   toggle: () => void
   fieldRecord: ShallowRef<ExtractResult | null>
   fieldModel: FieldRecord
@@ -230,7 +260,7 @@ const uploadAction = computed(() => {
 const recordData = ref<Partial<IRecordData>>({})
 const { bool: isReadonly, setTrue: setReadonly } = useBoolean()
 
-const { saveDraft, deleteDraft } = useDraftManagement(protocol, recordData)
+const { saveDraft, deleteDraft, getDraft, prepareRestoreDraft } = useDraftManagement(protocol, recordData)
 
 const AUTOSAVE_DEBOUNCE_MS = 4000
 const AUTOSAVE_INTERVAL_MS = 60_000
@@ -247,7 +277,7 @@ const { cleanup } = useBeforeUnload(() => autosaveState.hasPendingChanges, {
   id: route.fullPath,
 })
 
-type AutosaveReason = "debounce" | "interval" | "visibility" | "unload"
+type AutosaveReason = "debounce" | "interval" | "visibility" | "unload" | "manual"
 
 function canAutosave() {
   return Boolean(protocolId.value) && !isReadonly.value
@@ -296,7 +326,7 @@ function flushAutosave(reason: AutosaveReason, force = false) {
   }
 
   const signature = getDraftSignature()
-  if (!signature || signature === autosaveState.lastSignature) {
+  if (!signature || (signature === autosaveState.lastSignature && !force)) {
     autosaveState.hasPendingChanges = false
     return
   }
@@ -309,6 +339,11 @@ function flushAutosave(reason: AutosaveReason, force = false) {
   autosaveState.lastSignature = signature
   autosaveState.hasPendingChanges = false
   autosaveState.lastSavedAt = Date.now()
+}
+
+function handleManualSave() {
+  flushAutosave("manual", true)
+  message.success(t("page.protocol.addRecord.draftSavedConfirmation"))
 }
 
 function clearDraftAfterSubmit() {
@@ -441,12 +476,11 @@ function resourceCommitSummary(
   return summaries
 }
 
-function confirmResourceCommit(
+function confirmRecordSubmission(
   values: Record<string, any>,
+  isRevision: boolean,
 ): Promise<boolean> {
   const summaries = resourceCommitSummary(values)
-  if (!summaries.length)
-    return Promise.resolve(true)
   return new Promise((resolve) => {
     let settled = false
     const settle = (value: boolean) => {
@@ -456,30 +490,50 @@ function confirmResourceCommit(
       }
     }
     dialog.warning({
-      title: t("page.protocol.addRecord.resourceCommitTitle"),
+      title: t(isRevision
+        ? "page.protocol.addRecord.confirmRevisionTitle"
+        : "page.protocol.addRecord.confirmSubmitTitle"),
       content: () => h(
         "div",
         { class: "space-y-2" },
         [
-          h("p", t("page.protocol.addRecord.resourceCommitDescription")),
-          ...summaries.map(item =>
-            h("div", { class: "rounded border p-2 text-sm" }, [
-              h("strong", `${item.field} · ${item.role}`),
-              h("div", item.label),
-              item.quantity
-                ? h("div", `${item.quantity} ${item.unit || ""}`.trim())
-                : null,
-              item.container
-                ? h("div", `${t("page.protocol.addRecord.resourceContainer")}: ${item.container}`)
-                : null,
-              item.booking
-                ? h("div", `${t("page.protocol.addRecord.resourceBooking")}: ${item.booking}`)
-                : null,
-            ]),
-          ),
+          h("div", { class: "rounded border bg-gray-50 p-3 text-sm" }, [
+            h("strong", t("page.protocol.addRecord.saveDestination")),
+            h("div", `${protocolInfo.value?.lab.name || ""} / ${protocolInfo.value?.project.name || ""} / ${protocolInfo.value?.name || ""}`),
+            h("div", `v${displayProtocolVersion.value}`),
+            formRef.value?.requiredCompletion
+              ? h("div", t("page.protocol.addRecord.requiredProgressSummary", {
+                filled: formRef.value.requiredCompletion.filled,
+                total: formRef.value.requiredCompletion.total,
+              }))
+              : null,
+          ]),
+          ...(summaries.length
+            ? [
+                h("p", { class: "font-medium" }, t("page.protocol.addRecord.resourceCommitTitle")),
+                h("p", t("page.protocol.addRecord.resourceCommitDescription")),
+                ...summaries.map(item =>
+                  h("div", { class: "rounded border p-2 text-sm" }, [
+                    h("strong", `${item.field} · ${item.role}`),
+                    h("div", item.label),
+                    item.quantity
+                      ? h("div", `${item.quantity} ${item.unit || ""}`.trim())
+                      : null,
+                    item.container
+                      ? h("div", `${t("page.protocol.addRecord.resourceContainer")}: ${item.container}`)
+                      : null,
+                    item.booking
+                      ? h("div", `${t("page.protocol.addRecord.resourceBooking")}: ${item.booking}`)
+                      : null,
+                  ]),
+                ),
+              ]
+            : []),
         ],
       ),
-      positiveText: t("page.protocol.addRecord.confirmResourceCommit"),
+      positiveText: t(isRevision
+        ? "page.protocol.addRecord.confirmRevisionAction"
+        : "page.protocol.addRecord.confirmSubmitAction"),
       negativeText: t("common.cancel"),
       onPositiveClick: () => settle(true),
       onNegativeClick: () => settle(false),
@@ -488,11 +542,13 @@ function confirmResourceCommit(
   })
 }
 
+const submissionLoading = ref(false)
+
 async function handleConfirm() {
   if (!formRef.value || isReadonly.value) {
     return
   }
-  startLoading()
+  submissionLoading.value = true
 
   try {
     await formRef.value.validate()
@@ -511,6 +567,7 @@ async function handleConfirm() {
     )
 
     if (validateError) {
+      await formRef.value.focusFirstInvalidField()
       if (Array.isArray(validateError)) {
         // Format validation errors for better display
         const errors = formatPydanticErrors(validateError as PydanticError[])
@@ -531,7 +588,7 @@ async function handleConfirm() {
     const { research_variable = {} } = result
     // const preparedReport = formRef.value?.preparedReport()
     const { record } = route.query
-    if (!record && !(await confirmResourceCommit(research_variable))) {
+    if (!(await confirmRecordSubmission(research_variable, Boolean(record)))) {
       return
     }
 
@@ -588,14 +645,32 @@ async function handleConfirm() {
         })
       }
       else if (protocolInfo.value) {
-        message.success(t("page.protocol.addRecord.createSuccess"))
         const { lab, project, uid } = protocolInfo.value
-        cleanup()
-
-        unregister(route.fullPath)
-        await routerPushByKey("protocol-records", {
-          params: { protocolUid: uid, labUid: lab.uid, projectUid: project.uid },
-        })
+        const startAnother = await confirmRecordNextStep(Boolean(record))
+        if (startAnother) {
+          recordData.value = {}
+          Object.keys(formRef.value.fieldModel).forEach((key) => {
+            delete (formRef.value!.fieldModel as Record<string, unknown>)[key]
+          })
+          await formRef.value.restoreFieldRecord({})
+          correctionReason.value = ""
+          editingProtocolVersion.value = null
+          autosaveState.lastSavedAt = 0
+          resetAutosaveBaseline(recordData.value)
+          if (route.query.record) {
+            const query = { ...route.query }
+            delete query.record
+            delete query.recordVersion
+            await router.replace({ path: route.path, query })
+          }
+        }
+        else {
+          cleanup()
+          unregister(route.fullPath)
+          await routerPushByKey("protocol-records", {
+            params: { protocolUid: uid, labUid: lab.uid, projectUid: project.uid },
+          })
+        }
       }
       hideModal()
     }
@@ -620,8 +695,31 @@ async function handleConfirm() {
     })
   }
   finally {
-    endLoading()
+    submissionLoading.value = false
   }
+}
+
+function confirmRecordNextStep(isRevision: boolean): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const settle = (value: boolean) => {
+      if (!settled) {
+        settled = true
+        resolve(value)
+      }
+    }
+    dialog.success({
+      title: t(isRevision
+        ? "page.protocol.addRecord.revisionSuccessTitle"
+        : "page.protocol.addRecord.createSuccess"),
+      content: t("page.protocol.addRecord.successNextStep"),
+      positiveText: t("page.protocol.addRecord.viewRecordsAction"),
+      negativeText: isRevision ? undefined : t("page.protocol.addRecord.addAnotherAction"),
+      onPositiveClick: () => settle(false),
+      onNegativeClick: () => settle(true),
+      onClose: () => settle(false),
+    })
+  })
 }
 
 const isCollapsed = ref(false)
@@ -795,7 +893,7 @@ watch(() => formRef.value?.fieldRecord, (val) => {
 
 const { error, warning } = useClosableMessage()
 async function handleRestoreDraft(data: Partial<IRecordData>) {
-  const { restoreFieldRecord, validate } = formRef.value || {}
+  const { restoreFieldRecord } = formRef.value || {}
   if (!restoreFieldRecord) {
     warning(t("page.protocol.addRecord.noDraftFound"))
     return
@@ -822,6 +920,38 @@ async function handleRestoreDraft(data: Partial<IRecordData>) {
     }
   }
 }
+
+const resumeDraftHandled = ref(false)
+watch(
+  [() => route.query.resumeDraft, () => protocolId.value, () => formRef.value],
+  async ([shouldResume, currentProtocolId, currentForm]) => {
+    if (
+      resumeDraftHandled.value
+      || shouldResume !== "true"
+      || !currentProtocolId
+      || !currentForm
+    ) {
+      return
+    }
+
+    resumeDraftHandled.value = true
+    const draft = getDraft(currentProtocolId)
+    const data = prepareRestoreDraft<Partial<IRecordData>>(currentProtocolId)
+    if (data) {
+      await handleRestoreDraft(data)
+      autosaveState.lastSavedAt = draft?.timestamp || 0
+      message.success(t("page.protocol.addRecord.draftResumed"))
+    }
+    else {
+      warning(t("page.protocol.addRecord.noDraftFound"))
+    }
+
+    const query = { ...route.query }
+    delete query.resumeDraft
+    await router.replace({ path: route.path, query })
+  },
+  { flush: "post" },
+)
 
 async function fetchRecord() {
   const { record: recordId, recordVersion } = route.query

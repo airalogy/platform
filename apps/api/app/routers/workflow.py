@@ -24,6 +24,7 @@ from app.models.workflow import ProtocolWorkflow
 from app.routers.depends import CurrentUser
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
+from app.services.chat_models import require_ai_enabled
 from app.services.model_usage import create_usage_context
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
@@ -769,6 +770,7 @@ async def generate_workflow_step(
             detail=f"Unsupported workflow status: {path_status}",
         )
 
+    require_ai_enabled()
     workflow_data = _build_workflow_response(workflow.workflow_info, contexts, path_data)
     usage_context = create_usage_context(
         feature="workflow.step",

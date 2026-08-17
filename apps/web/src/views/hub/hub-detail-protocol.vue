@@ -153,6 +153,7 @@ import { useRouterPush } from "@/composables/useRouterPush"
 import { getCachedAttachment } from "@/service/api/attachments"
 import { getDownloadPackage } from "@/service/api/project-protocols"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { useOrProvideProtocolInfoStore } from "@/views/project-protocols/hooks/useProtocolInfoStore"
 import AssignerGraph from "@/views/project-protocols/modules/protocol/assigner-graph.vue"
 import ProtocolFields from "@/views/project-protocols/modules/protocol/protocol-fields.vue"
@@ -174,7 +175,8 @@ const isCollapsed = ref(false)
 const splitSize = ref(0.35)
 const selectedTab = ref<"ai-assistant" | "protocol-detail" | undefined>("protocol-detail")
 const authStore = useAuthStore()
-const showAssistant = computed(() => authStore.isLogin)
+const instanceStore = useInstanceStore()
+const showAssistant = computed(() => authStore.isLogin && instanceStore.aiEnabled)
 const appStore = useAppStore()
 const { protocolInfo } = useOrProvideProtocolInfoStore(null)
 const isStarred = ref(false)

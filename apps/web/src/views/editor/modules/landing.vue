@@ -26,6 +26,7 @@
             {{ $t("editor.landing.startLabel") }}
           </h2>
           <button
+            v-if="instanceStore.aiEnabled"
             type="button"
             data-testid="ai-protocol-create"
             class="ai-create-card w-full flex items-center gap-5 border border-primary/25 rounded-4 from-primary/10 to-sky-50 bg-gradient-to-r p-5 text-left transition hover:border-primary/50 hover:shadow-md"
@@ -49,6 +50,28 @@
             </span>
             <span class="shrink-0 rounded-2 bg-primary px-4 py-2 text-sm text-white font-medium">
               {{ $t("editor.aiCreate.action") }}
+            </span>
+          </button>
+          <button
+            type="button"
+            class="w-full flex items-center gap-5 border border-gray-200 rounded-4 bg-gray-50 p-5 text-left transition hover:border-primary/35 hover:bg-white hover:shadow-sm"
+            @click="handleNewProtocol"
+          >
+            <span class="size-13 flex-center shrink-0 rounded-3 bg-white text-primary shadow-sm ring-1 ring-gray-200">
+              <n-icon size="26">
+                <file-plus-icon />
+              </n-icon>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-lg font-semibold">
+                {{ $t("editor.landing.actions.template.title") }}
+              </span>
+              <span class="mt-1 block text-sm text-gray-600 leading-6">
+                {{ $t("editor.landing.actions.template.description") }}
+              </span>
+            </span>
+            <span class="shrink-0 rounded-2 border border-gray-200 bg-white px-4 py-2 text-sm font-medium">
+              {{ $t("common.create") }}
             </span>
           </button>
         </section>
@@ -85,13 +108,7 @@
             </define-action-card>
 
             <reuse-action-card
-              icon="file-plus"
-              :title="$t('editor.landing.actions.template.title')"
-              :description="$t('editor.landing.actions.template.description')"
-              :on-click="handleNewProtocol"
-            />
-
-            <reuse-action-card
+              v-if="!instanceStore.isSingleLab"
               icon="hub"
               :title="$t('editor.landing.actions.hub.title')"
               :description="$t('editor.landing.actions.hub.description')"
@@ -117,6 +134,7 @@
     </div>
 
     <ai-protocol-create-dialog
+      v-if="instanceStore.aiEnabled"
       v-model:show="showAiCreateDialog"
       :loading="isAiCreating"
       :generate-aimd="generateProtocolAimd"
@@ -192,6 +210,7 @@ import ProtocolUploadForm from "@/components/hub/protocol-upload-form.vue"
 import { useRouterPush } from "@/composables"
 import { postReuseProtocol } from "@/service/api/project-protocols"
 import { extractProtocolInstructionFile, generateProtocolAimd } from "@/service/api/protocol-generate"
+import { useInstanceStore } from "@/store/modules/instance"
 import { useFileUpload } from "@airalogy/components/monaco-editor/composables/useFileUpload"
 import { handleContentLoaded as handleProtocolContentLoaded, processProtocolZipWorkflow } from "@airalogy/components/monaco-editor/utils/protocolContentLoader"
 import { useThemeStore } from "@airalogy/composables/theme"
@@ -261,6 +280,7 @@ const themeStore = useThemeStore()
 
 // Stores
 const uploadFileDataStore = useUploadFileDataStore()
+const instanceStore = useInstanceStore()
 const webContainerStore = useWebContainerStore()
 const { createFromTemplate } = uploadFileDataStore
 const { initWebContainer } = webContainerStore
@@ -310,6 +330,9 @@ function handleNewProtocol() {
 }
 
 async function handleCreateAiProtocol(payload: { name: string, content: string }) {
+  if (!instanceStore.aiEnabled) {
+    return
+  }
   isAiCreating.value = true
   try {
     uploadFileDataStore.packageId = projectId.value
@@ -567,10 +590,10 @@ onMounted(() => {
   selectedOption.value = "upload-zip"
 
   // Open the requested guided creation flow when arriving from a creation entry.
-  if (route.query.show_ai_create === "true") {
+  if (route.query.show_ai_create === "true" && instanceStore.aiEnabled) {
     showAiCreateDialog.value = true
   }
-  else if (route.query.show_template === "true") {
+  else if (route.query.show_template === "true" || route.query.show_ai_create === "true") {
     showTemplateDialog.value = true
   }
 })

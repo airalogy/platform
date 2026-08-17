@@ -71,6 +71,8 @@ declare module "vue-router" {
     disableContentScroll?: boolean
     /** Force layout to fill viewport height */
     layoutFullHeight?: boolean
+    /** Optional maximum width for container-based routes */
+    containerMaxWidth?: number
     /** Whether to hide in tab */
     hideInTab?: boolean
     /** Whether to show in top level menu */

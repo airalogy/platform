@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     LOG_BACKUP_COUNT: int = 5
 
     # Chat config
+    # None auto-detects AI capability from configured providers. False is an
+    # explicit instance-wide kill switch; True still requires a usable provider.
+    AI_ENABLED: bool | None = None
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_BASE_URL: str = ""
     OPENAI_API_KEY: str = ""
@@ -150,6 +153,29 @@ class Settings(BaseSettings):
             return self.DOCUMENTATION_URL.strip()
         return "/docs/"
 
+    @property
+    def external_chat_configured(self) -> bool:
+        return (
+            self.MASTERBRAIN_CALL_MODE.strip().lower() == "external"
+            and bool(self.CHAT_API_ENDPOINT.strip())
+        )
+
+    @property
+    def qwen_chat_configured(self) -> bool:
+        return bool(self.DASHSCOPE_API_KEY.strip()) or self.external_chat_configured
+
+    @property
+    def gpt_chat_configured(self) -> bool:
+        return self.ENABLE_GPT_MODEL and (
+            bool(self.OPENAI_API_KEY.strip()) or self.external_chat_configured
+        )
+
+    @property
+    def effective_ai_enabled(self) -> bool:
+        if self.AI_ENABLED is False:
+            return False
+        return self.qwen_chat_configured or self.gpt_chat_configured
+
     @model_validator(mode="after")
     def validate_deployment_settings(self) -> "Settings":
         uid_pattern = re.compile(r"^[a-z][a-z0-9_]{2,31}$")
@@ -183,18 +209,19 @@ class Settings(BaseSettings):
         if self.LOG_BACKUP_COUNT <= 0:
             raise ValueError("LOG_BACKUP_COUNT must be positive")
 
-        external_chat_configured = (
-            self.MASTERBRAIN_CALL_MODE.strip().lower() == "external"
-            and bool(self.CHAT_API_ENDPOINT.strip())
-        )
         if (
             self.ENABLE_GPT_MODEL
             and not self.OPENAI_API_KEY.strip()
-            and not external_chat_configured
+            and not self.external_chat_configured
         ):
             raise ValueError(
                 "ENABLE_GPT_MODEL requires OPENAI_API_KEY or an external "
                 "Masterbrain endpoint"
+            )
+        if self.AI_ENABLED is True and not self.effective_ai_enabled:
+            raise ValueError(
+                "AI_ENABLED requires DASHSCOPE_API_KEY, an enabled OpenAI model, "
+                "or an external Masterbrain endpoint"
             )
 
         parsed_site_url = urlparse(self.SITE_URL)

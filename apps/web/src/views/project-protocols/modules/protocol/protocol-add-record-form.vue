@@ -9,6 +9,7 @@
   >
     <template #tabs>
       <n-tab-pane
+        v-if="instanceStore.aiEnabled"
         name="ai-assistant" class="relative" :tab="$t('chat.askAira')"
         display-directive="show"
         :style="{ paddingLeft: isCollapsed ? '32px' : undefined }"
@@ -56,7 +57,7 @@
           </div>
 
           <!-- Field Input Bar -->
-          <div class="mb-4">
+          <div v-if="instanceStore.aiEnabled" class="mb-4">
             <field-input-bar :protocol-id="props.protocolId" />
           </div>
         </div>
@@ -66,7 +67,7 @@
           class="px-4"
           :class="{ hidden: isCollapsed }"
         >
-          <n-form ref="formRef" class="h-full pb-3" :rules="validationRules" :model="fieldModel">
+          <n-form ref="formRef" class="record-fields-form h-full pb-3" :rules="validationRules" :model="fieldModel">
             <n-collapse-item v-for="(scopeName, idx) in scopeList" :key="scopeName" :name="scopeName">
               <template #header>
                 <span class="text-4 font-500 capitalize">
@@ -149,7 +150,7 @@
           @render:result="handlePreviewRendered"
         />
         <protocol-bubble-menu
-          v-if="previewRef?.rootElement"
+          v-if="instanceStore.aiEnabled && previewRef?.rootElement"
           :container-ref="previewRef.rootElement"
         />
       </n-form>
@@ -197,6 +198,7 @@ import {
 } from "@/service/api/resources"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { themeSettings } from "@/theme/settings"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import { bubbleMenuEventKey, fieldEventKey } from "@/utils/template/eventKey"
@@ -245,6 +247,7 @@ interface IProps {
 }
 
 const appStore = useAppStore()
+const instanceStore = useInstanceStore()
 
 // Assigner progress modal
 const { state: assignerProgressState, hide: hideAssignerProgress, toggleDetailMode } = getAssignerProgress()
@@ -415,7 +418,9 @@ watch(
   },
 )
 
-const selectedTab = ref<"form-fields" | "ai-assistant" | "workflow" | undefined>("ai-assistant")
+const selectedTab = ref<"form-fields" | "ai-assistant" | "workflow" | undefined>(
+  instanceStore.aiEnabled ? "ai-assistant" : "form-fields",
+)
 const docked = ref(false)
 function handleUpdateDocked(val: boolean) {
   if (val) {
@@ -423,7 +428,7 @@ function handleUpdateDocked(val: boolean) {
     docked.value = true
   }
   else {
-    if (!isCollapsed.value) {
+    if (!isCollapsed.value && instanceStore.aiEnabled) {
       selectedTab.value = "ai-assistant"
     }
     docked.value = false
@@ -448,7 +453,7 @@ watch(
       return
     }
 
-    selectedTab.value = "ai-assistant"
+    selectedTab.value = instanceStore.aiEnabled ? "ai-assistant" : "form-fields"
   },
 )
 
@@ -460,8 +465,12 @@ function handleCollapse(e: MouseEvent) {
   }
 
   const { tab } = target.dataset
-  if (tab === "ai-assistant" && docked.value) {
+  if (tab === "ai-assistant" && (!instanceStore.aiEnabled || docked.value)) {
     chatRef.value?.setDocked(false)
+  }
+
+  if (tab === "ai-assistant" && !instanceStore.aiEnabled) {
+    return
   }
 
   if (isCollapsed.value) {
@@ -593,6 +602,27 @@ const {
   fieldModel,
   locale,
   schema: () => props.protocol?.json_schema as Record<string, unknown> | undefined,
+})
+
+const requiredCompletion = computed(() => {
+  let filled = 0
+  let total = 0
+  Object.entries(validationRules.value).forEach(([scope, fields]) => {
+    Object.entries(fields).forEach(([field, rule]) => {
+      if (!rule.value.required) {
+        return
+      }
+      total += 1
+      if (isRecorderValueFilled(_get(fieldModel, [scope, field, "value"]))) {
+        filled += 1
+      }
+    })
+  })
+  return {
+    filled,
+    total,
+    percent: total === 0 ? 100 : Math.round((filled / total) * 100),
+  }
 })
 
 const previewMode = computed(() => props.readonly ? "report" : "edit")
@@ -1056,14 +1086,35 @@ async function wrappedValidate() {
 
   // If there are any validation errors, throw the first error to maintain original behavior
   if (!aimdValidation.valid || leftFormError || rightFormError) {
+    await focusFirstInvalidField()
     throw leftFormError || rightFormError || new Error(aimdValidation.issues[0]?.message || "Invalid AIMD record")
   }
+}
+
+async function focusFirstInvalidField() {
+  selectedTab.value = "form-fields"
+  expandedNamesRef.value = [...scopeList.value]
+  if (isCollapsed.value) {
+    splitSize.value = props.defaultSpiltSize
+    isCollapsed.value = false
+  }
+  await nextTick()
+  const target = document.querySelector<HTMLElement>(
+    ".record-fields-form .n-form-item--error, .record-fields-form [aria-invalid='true']",
+  ) || document.querySelector<HTMLElement>(
+    ".record-fields-form input, .record-fields-form textarea, .record-fields-form button, .record-fields-form [tabindex]",
+  )
+  target?.scrollIntoView({ behavior: "smooth", block: "center" })
+  const focusTarget = target?.matches("input, textarea, button, [tabindex]")
+    ? target
+    : target?.querySelector<HTMLElement>("input, textarea, button, [tabindex]")
+  focusTarget?.focus({ preventScroll: true })
 }
 
 const bubbleMenuEventBus = useEventBus<BubbleMenuEventName, BubbleMenuEventPayload>(bubbleMenuEventKey)
 
 bubbleMenuEventBus.on((event, payload) => {
-  if (event === "triggerChatAction" && typeof payload === "object") {
+  if (instanceStore.aiEnabled && event === "triggerChatAction" && typeof payload === "object") {
     const { event: eventType, value } = payload as { event: "sendToChat" | "addToChat", value: string | AddToChatPayload }
     isCollapsed.value = false
     if (!docked.value) {
@@ -1427,6 +1478,8 @@ watch(
 
 defineExpose({
   validate: wrappedValidate,
+  requiredCompletion,
+  focusFirstInvalidField,
   toggle: () => {
     if (isCollapsed.value) {
       splitSize.value = 0.35

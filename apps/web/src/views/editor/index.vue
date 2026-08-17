@@ -60,7 +60,7 @@
             mode="preview"
           />
           <protocol-bubble-menu
-            v-if="rawRef?.rootElement"
+            v-if="instanceStore.aiEnabled && rawRef?.rootElement"
             :container-ref="rawRef.rootElement"
           />
         </div>
@@ -85,7 +85,7 @@
             @render:result="handleFieldRendered"
           />
           <protocol-bubble-menu
-            v-if="previewRef?.rootElement"
+            v-if="instanceStore.aiEnabled && previewRef?.rootElement"
             :container-ref="previewRef.rootElement"
           />
         </n-form>
@@ -152,6 +152,7 @@ import { getDownloadPackage, getDownloadPackageData } from "@/service/api/projec
 import { postEditorSyntaxCheck } from "@/service/api/protocol"
 import { extractProtocolInstructionFile, generateProtocolAimd, generateProtocolAssigner, generateProtocolModel, postEditorCodeEdit } from "@/service/api/protocol-generate"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import { AimdEditor } from "@airalogy/aimd-editor/vue"
 import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
@@ -350,6 +351,7 @@ async function resolveProtocolFile(src: string): Promise<{ url: string } | null>
 }
 
 const { protocolId, currentEditorProtocolContext } = useChatProvider()
+const instanceStore = useInstanceStore()
 const editorChatProtocolId = computed(() => protocolInfo.value?.id ? String(protocolInfo.value.id) : null)
 const editorChatAiralogyId = computed(() => {
   if (protocolInfo.value?.airalogy_id) {
@@ -363,28 +365,38 @@ const editorChatAiralogyId = computed(() => {
   return "airalogy.local.editor"
 })
 
-const sideMenus = computed(() => defaultSideMenus.map((it): ISideMenuItem => {
-  const componentProps: ISideMenuItem["componentProps"] = { ...it.componentProps, protocolInfo: protocolInfo.value }
-  const result: ISideMenuItem = { ...it, componentProps }
-  if (it.key === "airalogy") {
-    componentProps.protocolId = editorChatProtocolId.value
-    componentProps.airalogyId = editorChatAiralogyId.value
-    componentProps.codeEdit = postEditorCodeEdit
-  }
-  if (it.key === "protocol-documents") {
-    componentProps.generateAimd = generateProtocolAimd
-    componentProps.generateModel = generateProtocolModel
-    componentProps.generateAssigner = generateProtocolAssigner
-    componentProps.extractInstructionFile = extractProtocolInstructionFile
-    componentProps.postEditorSyntaxCheck = postEditorSyntaxCheck
-  }
+const sideMenus = computed(() => defaultSideMenus
+  .filter(it => instanceStore.aiEnabled || !["airalogy", "protocol-documents"].includes(it.key))
+  .map((it): ISideMenuItem => {
+    const componentProps: ISideMenuItem["componentProps"] = { ...it.componentProps, protocolInfo: protocolInfo.value }
+    const result: ISideMenuItem = { ...it, componentProps }
+    if (it.key === "airalogy") {
+      componentProps.protocolId = editorChatProtocolId.value
+      componentProps.airalogyId = editorChatAiralogyId.value
+      componentProps.codeEdit = postEditorCodeEdit
+    }
+    if (it.key === "protocol-documents") {
+      componentProps.generateAimd = generateProtocolAimd
+      componentProps.generateModel = generateProtocolModel
+      componentProps.generateAssigner = generateProtocolAssigner
+      componentProps.extractInstructionFile = extractProtocolInstructionFile
+      componentProps.postEditorSyntaxCheck = postEditorSyntaxCheck
+    }
 
-  return result
-}))
+    return result
+  }))
 
 const message = useClosableMessage()
 
 async function showAiEditPanel(removeRouteFlag = false) {
+  if (!instanceStore.aiEnabled) {
+    if (removeRouteFlag && route.query.ai_created === "true") {
+      const remainingQuery = { ...route.query }
+      delete remainingQuery.ai_created
+      await router.replace({ ...route, query: remainingQuery })
+    }
+    return
+  }
   const aiMenu = sideMenus.value.find(menu => menu.key === "airalogy")
   openMenu("airalogy", aiMenu?.panelSize || null)
   message.info($t("editor.aiCreate.continueHint"))

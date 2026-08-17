@@ -1,5 +1,5 @@
 <template>
-  <div class="container mx-auto p-6 color-white md:py-8">
+  <div class="container mx-auto p-6 color-white md:py-8" :style="containerStyle">
     <div class="flex flex-row flex-wrap lg:flex-nowrap">
       <global-logo monochrome show-title />
       <template v-if="props.showLink">
@@ -35,7 +35,12 @@ const props = withDefaults(defineProps<IProps>(), {
 interface IProps {
   showLink?: boolean
   showIcon?: boolean
+  maxWidth?: number
 }
+
+const containerStyle = computed(() =>
+  props.maxWidth ? { maxWidth: `${props.maxWidth}px` } : undefined,
+)
 const currYear = new Date().getFullYear()
 const footerText = computed(() => ({
   copyright: $t("common.footer.copyright"),

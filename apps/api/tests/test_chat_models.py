@@ -10,10 +10,16 @@ from app.config import config
 from app.models.chat import ChatContext, ChatModel, ChatModelType, ChatUserMessage
 from app.routers.chats.qa import QAChatMessageParams, send_qa_chat_message
 from app.routers.chats.utils import check_model_usage
-from app.services.chat_models import enabled_chat_model_types, is_chat_model_enabled
+from app.services.chat_models import (
+    enabled_chat_model_types,
+    is_chat_model_enabled,
+    require_ai_enabled,
+)
 
 
 def test_gpt_is_excluded_when_not_enabled(monkeypatch):
+    monkeypatch.setattr(config, "AI_ENABLED", None)
+    monkeypatch.setattr(config, "DASHSCOPE_API_KEY", "test-dashscope-key")
     monkeypatch.setattr(config, "ENABLE_GPT_MODEL", False)
 
     assert enabled_chat_model_types() == (
@@ -25,13 +31,30 @@ def test_gpt_is_excluded_when_not_enabled(monkeypatch):
 
 
 def test_gpt_is_available_when_explicitly_enabled(monkeypatch):
+    monkeypatch.setattr(config, "AI_ENABLED", None)
+    monkeypatch.setattr(config, "DASHSCOPE_API_KEY", "")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setattr(config, "ENABLE_GPT_MODEL", True)
 
-    assert enabled_chat_model_types()[-1] == ChatModelType.GPT
+    assert enabled_chat_model_types() == (ChatModelType.GPT,)
     assert is_chat_model_enabled(ChatModelType.GPT) is True
 
 
+def test_all_chat_models_are_hidden_when_ai_is_disabled(monkeypatch):
+    monkeypatch.setattr(config, "AI_ENABLED", False)
+    monkeypatch.setattr(config, "DASHSCOPE_API_KEY", "test-dashscope-key")
+
+    assert enabled_chat_model_types() == ()
+    assert is_chat_model_enabled(ChatModelType.BASIC) is False
+
+    with pytest.raises(HTTPException, match="AI features are disabled") as error:
+        require_ai_enabled()
+    assert error.value.status_code == 503
+
+
 def test_disabled_gpt_request_is_rejected_before_usage_lookup(monkeypatch):
+    monkeypatch.setattr(config, "AI_ENABLED", None)
+    monkeypatch.setattr(config, "DASHSCOPE_API_KEY", "test-dashscope-key")
     monkeypatch.setattr(config, "ENABLE_GPT_MODEL", False)
 
     with pytest.raises(HTTPException, match="Chat model is not enabled") as error:
