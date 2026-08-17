@@ -368,6 +368,35 @@
     "profile": "用户信息"
   },
   "page": {
+    "help": {
+      "eyebrow": "文档与支持",
+      "title": "帮助中心",
+      "intro": "根据你的工作角色和当前实例的部署方式，进入对应指南。",
+      "open": "打开",
+      "visibilityNote": "卡片按角色展示只用于改善导航体验。文档属于公开信息，卡片是否显示不构成安全边界。",
+      "audience": {
+        "allUsers": "所有用户",
+        "labManagers": "Lab Owner 与 Manager",
+        "instanceOperators": "实例运维人员",
+        "vendorManaged": "供应商托管部署"
+      },
+      "userGuide": {
+        "title": "使用手册",
+        "description": "了解 Protocol、Record、协作、搜索以及安全导入导出数据。"
+      },
+      "labAdmin": {
+        "title": "实验室管理",
+        "description": "管理成员、权限、数据归属、组织访问和 Lab 设置。"
+      },
+      "selfHosting": {
+        "title": "自托管运维",
+        "description": "部署、升级、备份、恢复、监控并排查当前 Platform 实例。"
+      },
+      "managedSupport": {
+        "title": "托管支持",
+        "description": "通过当前部署配置的支持渠道联系服务提供方。"
+      }
+    },
     "auth": {
       "heroTitle": "全球首个面向科研数字化、自动化与加速的通用平台。"
     },

@@ -1,5 +1,7 @@
 import type { FileImporter } from "sass"
-import { resolve } from "node:path"
+import type { Plugin } from "vite"
+import { existsSync, readFileSync } from "node:fs"
+import { extname, resolve, sep } from "node:path"
 import { pathToFileURL } from "node:url"
 import importMetaUrlPlugin from "@codingame/esbuild-import-meta-url-plugin"
 import { defineConfig, loadEnv } from "vite"
@@ -8,6 +10,58 @@ import { setupVitePlugins } from "./build/plugins"
 
 const BUILD_TIME = new Date().toISOString()
 const base = pathToFileURL(resolve("./src/styles"))
+const documentationRoute = "/docs"
+
+function setupEmbeddedDocumentation(): Plugin {
+  return {
+    name: "airalogy:embedded-documentation",
+    apply: "serve",
+    configureServer(server) {
+      const documentationRoot = resolve(server.config.publicDir, "docs")
+      server.middlewares.use((request, response, next) => {
+        if (!request.url)
+          return next()
+
+        const url = new URL(request.url, "http://localhost")
+        if (url.pathname === documentationRoute) {
+          response.statusCode = 308
+          response.setHeader("Location", `${documentationRoute}/${url.search}`)
+          response.end()
+          return
+        }
+
+        if (!url.pathname.startsWith(`${documentationRoute}/`))
+          return next()
+
+        const relativePath = decodeURIComponent(
+          url.pathname.slice(`${documentationRoute}/`.length),
+        )
+        const candidates = !relativePath || relativePath.endsWith("/")
+          ? [`${relativePath}index.html`]
+          : extname(relativePath)
+            ? []
+            : [`${relativePath}.html`, `${relativePath}/index.html`]
+
+        for (const candidate of candidates) {
+          const absolutePath = resolve(documentationRoot, candidate)
+          if (
+            !absolutePath.startsWith(`${documentationRoot}${sep}`)
+            || !existsSync(absolutePath)
+          ) {
+            continue
+          }
+
+          response.statusCode = 200
+          response.setHeader("Content-Type", "text/html; charset=utf-8")
+          response.end(readFileSync(absolutePath))
+          return
+        }
+
+        next()
+      })
+    },
+  }
+}
 
 const sassFileImporter: FileImporter<"sync"> = {
   findFileUrl(url) {
@@ -55,7 +109,7 @@ export default defineConfig((configEnv) => {
     //     "@fonts": pathResolve("./src/assets/fonts"),
     //   },
     // },
-    plugins: setupVitePlugins(viteEnv),
+    plugins: [setupEmbeddedDocumentation(), ...setupVitePlugins(viteEnv)],
     define: { BUILD_TIME: JSON.stringify(BUILD_TIME, null, 0) },
     server: {
       host: "0.0.0.0",

@@ -81,7 +81,7 @@ export async function fetchUserLabs(
   } = { page: 1, pageSize: 10 },
   requestId?: string,
 ): Promise<{
-  labs: Api.Lab.LabInfo[]
+  labs: Api.Lab.UsersLabInfo[]
   total_count: number
 } | null> {
   if (!userId) {
@@ -90,7 +90,7 @@ export async function fetchUserLabs(
 
   const { page, pageSize, name, uid, sortedBy } = payload
   const { data, error } = await request<{
-    labs: Api.Lab.LabInfo[]
+    labs: Api.Lab.UsersLabInfo[]
     total_count: number
   }>({
     url: `/users/${userId}/labs`,

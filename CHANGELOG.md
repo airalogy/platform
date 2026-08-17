@@ -29,6 +29,7 @@ Target initial version: `0.1.0`.
 - Added a recommended “Write a Protocol with AI” creation method that opens the existing Aira drafting workflow directly in the current Lab and Project context.
 - Added end-to-end release and deployment identity: runtime version reporting, Alembic revision visibility, immutable four-image release manifests, tag-triggered verified releases, persisted deployment history, an opaque deployment ID, and sanitized operator support bundles.
 - Added an explicit trademark and customer-data boundary for public Community Edition distributions.
+- Added a unified, Airalogy-branded bilingual VitePress documentation system for the public site and version-matched Single-Lab images, plus a deployment-aware in-product Help Center with role-relevant user, Lab administration, self-hosting, and managed-support entry points.
 
 ### Changed
 

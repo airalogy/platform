@@ -25,7 +25,7 @@ COPY packages/components ./packages/components
 ARG VITE_APP_TITLE="Airalogy Lab"
 ARG VITE_APP_DESC="Private laboratory protocols, records, and research workflows."
 ARG VITE_SITE_ORIGIN="http://localhost:8080"
-ARG VITE_DOCS_URL="https://github.com/airalogy/platform/tree/main/docs"
+ARG VITE_DOCS_URL="/docs/"
 ARG NODE_COMPONENT_BUILD_MEMORY_MB=3072
 ARG NODE_BUILD_MEMORY_MB=6144
 ARG PLATFORM_VERSION=development
@@ -65,6 +65,8 @@ COPY apps/web ./apps/web
 RUN VITE_AUTH_ROUTE_MODE=static \
     NODE_OPTIONS="--max-old-space-size=${NODE_BUILD_MEMORY_MB}" \
     corepack pnpm --filter @airalogy/web build:no-check
+COPY docs ./docs
+RUN DOCS_BASE=/docs/ corepack pnpm docs:build
 
 FROM caddy:2.10.2-alpine
 
@@ -81,5 +83,6 @@ LABEL org.opencontainers.image.title="Airalogy Platform Web" \
 
 COPY deploy/single-lab/Caddyfile /etc/caddy/Caddyfile
 COPY --from=builder /workspace/apps/web/dist /srv
+COPY --from=builder /workspace/docs/.vitepress/dist /srv/docs
 
 EXPOSE 80 443 443/udp

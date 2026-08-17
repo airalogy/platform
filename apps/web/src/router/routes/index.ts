@@ -4,6 +4,7 @@ import { authRoute } from "./modules/auth"
 import { authorizeRoute } from "./modules/authorize"
 import { chatRoute } from "./modules/chat"
 import { groupsRoute } from "./modules/groups"
+import { helpRoute } from "./modules/help"
 import { homeRoute } from "./modules/home"
 import { hubDetailRoute, hubRoute } from "./modules/hub"
 import { labInfoRoute } from "./modules/lab-info"
@@ -41,6 +42,7 @@ export const customRoutes: CustomRoute[] = [
   hubRoute,
   hubDetailRoute,
   chatRoute,
+  helpRoute,
   // searchRoute,
   // {
   //   path: "/excel-editor",

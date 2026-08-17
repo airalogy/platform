@@ -1,16 +1,16 @@
 # 中文文档
 
-该目录用于存放 Airalogy Platform Community Edition 的中文文档。
+本目录是 Airalogy Platform 统一文档的中文部分。
 
-## 当前文档
+## 按受众阅读
 
-- `community-edition.md`: Community Edition 功能概览
-- `single-lab-deployment.md`: 单实验室生产部署与运维说明
-- `access-control.md`: 组织单元、作用域授权、权限继承与审计说明
-- `architecture/file-storage-bridge.md`: FileId 和文件存储桥接说明
-- `architecture/self-hosted-architecture.md`: 面向大体量科研数据的自托管架构说明
-- `development/frontend.md`: JavaScript workspace 和 Web app 开发说明
+- [使用手册](./user-guide/index.md)
+- [实验室管理](./lab-admin/index.md)
+- [自托管运维](./self-hosting/index.md)
+- [Platform 开发](./developer/index.md)
+
+原有 Community Edition、单实验室部署、访问控制、发布身份、架构和前端开发文档继续保留既有路径，并已纳入相应分类导航。
 
 ## 其他语言
 
-- [English documentation](../en/README.md)
+- [English documentation](../en/index.md)

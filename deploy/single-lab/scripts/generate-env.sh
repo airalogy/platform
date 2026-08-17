@@ -148,6 +148,9 @@ DEPLOYMENT_MODE=single_lab
 LAB_STRUCTURE_MODE=structured
 API_ROOT_PATH=
 SIGNUP_MODE=invite_only
+DOCUMENTATION_PROFILE=customer_managed
+DOCUMENTATION_URL=/docs/
+SUPPORT_URL=
 SINGLE_LAB_UID=$lab_uid
 SINGLE_LAB_NAME=$lab_name
 SINGLE_LAB_DESCRIPTION=
@@ -182,7 +185,7 @@ MAX_LABS_PER_USER=1
 
 VITE_APP_TITLE=$lab_name
 VITE_APP_DESC=Private laboratory research workspace.
-VITE_DOCS_URL=https://github.com/airalogy/platform/tree/main/docs
+VITE_DOCS_URL=/docs/
 
 APT_DEBIAN_MIRROR=http://deb.debian.org/debian
 APT_DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security

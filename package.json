@@ -10,10 +10,10 @@
     "api:check": "uv --directory apps/api run --no-sync python -m py_compile app/main.py",
     "api:test": "uv --directory apps/api run --with pytest python -m pytest tests",
     "dev:prepare": "pnpm --filter @airalogy/components prepare",
-    "dev": "pnpm --filter @airalogy/web dev",
+    "dev": "pnpm run docs:build:web && pnpm --filter @airalogy/web dev",
     "build:prepare": "pnpm --filter @airalogy/components build",
-    "build": "pnpm run build:prepare && NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @airalogy/web build",
-    "build:no-check": "pnpm run build:prepare && pnpm --filter @airalogy/web build:no-check",
+    "build": "pnpm run build:prepare && pnpm run docs:build:web && NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @airalogy/web build",
+    "build:no-check": "pnpm run build:prepare && pnpm run docs:build:web && pnpm --filter @airalogy/web build:no-check",
     "preview": "pnpm --filter @airalogy/web preview",
     "lint": "pnpm --recursive --parallel lint",
     "lint:fix": "pnpm --recursive --parallel lint:fix",
@@ -33,6 +33,10 @@
     "build:info": "node scripts/write-build-info.mjs apps/api/app/build-info.json",
     "release:metadata:test": "node --test scripts/release-metadata.test.mjs",
     "deployment:identity:test": "bash scripts/deployment-identity.test.sh",
+    "docs:dev": "DOCS_BASE=/docs/ vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:build:web": "DOCS_BASE=/docs/ DOCS_OUT_DIR=../apps/web/public/docs vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "release:check": "pnpm version:check && node scripts/check-release.mjs"
   },
   "dependencies": {
@@ -59,7 +63,8 @@
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-dts": "^4.5.4"
+    "vite-plugin-dts": "^4.5.4",
+    "vitepress": "catalog:"
   },
   "pnpm": {
     "patchedDependencies": {

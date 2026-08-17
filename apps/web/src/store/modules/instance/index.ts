@@ -15,6 +15,9 @@ function fallbackStatus(): InstanceStatus {
     bootstrap_token_required: false,
     site_url: window.location.origin,
     lab_structure_mode: singleLab ? "structured" : "flat",
+    documentation_profile: singleLab ? "customer_managed" : "community",
+    documentation_url: "/docs/",
+    support_url: "",
     enabled_chat_models: defaultEnabledChatModels,
     lab: null,
   }
@@ -30,6 +33,9 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
   const signupMode = computed(() => status.value.signup_mode)
   const lab = computed(() => status.value.lab)
   const isStructuredLab = computed(() => status.value.lab_structure_mode === "structured")
+  const documentationProfile = computed(() => status.value.documentation_profile)
+  const documentationUrl = computed(() => status.value.documentation_url)
+  const supportUrl = computed(() => status.value.support_url)
   const enabledChatModels = computed(() => status.value.enabled_chat_models ?? defaultEnabledChatModels)
 
   async function load() {
@@ -60,6 +66,9 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
     signupMode,
     lab,
     isStructuredLab,
+    documentationProfile,
+    documentationUrl,
+    supportUrl,
     enabledChatModels,
     load,
   }

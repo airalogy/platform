@@ -1,16 +1,16 @@
 # English Documentation
 
-This directory contains English documentation for Airalogy Platform Community Edition.
+This directory contains the English half of the unified Airalogy Platform documentation.
 
-## Current Documents
+## Audience guides
 
-- `community-edition.md`: Community Edition feature overview
-- `single-lab-deployment.md`: production deployment and operations for one laboratory
-- `access-control.md`: organizational units, scoped grants, permission inheritance, and grant auditing
-- `architecture/file-storage-bridge.md`: FileId and storage bridge design
-- `architecture/self-hosted-architecture.md`: self-hosted architecture for large research data deployments
-- `development/frontend.md`: JavaScript workspace and web app development notes
+- [User guide](./user-guide/index.md)
+- [Lab administration](./lab-admin/index.md)
+- [Self-hosting operations](./self-hosting/index.md)
+- [Platform development](./developer/index.md)
+
+The existing Community Edition, Single-Lab deployment, access-control, release-identity, architecture, and frontend-development pages remain at their established paths and are linked from the relevant guide.
 
 ## Other Languages
 
-- [中文文档](../zh/README.md)
+- [中文文档](../zh/index.md)

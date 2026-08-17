@@ -4,6 +4,7 @@ import { request } from "../request"
 export type DeploymentMode = "community" | "single_lab"
 export type SignupMode = "open" | "invite_only" | "disabled"
 export type LabStructureMode = "flat" | "structured"
+export type DocumentationProfile = "community" | "customer_managed" | "vendor_managed"
 
 export interface InstanceLabInfo {
   id: string
@@ -18,6 +19,9 @@ export interface InstanceStatus {
   bootstrap_token_required: boolean
   site_url: string
   lab_structure_mode: LabStructureMode
+  documentation_profile: DocumentationProfile
+  documentation_url: string
+  support_url: string
   enabled_chat_models: ChatModel[]
   lab: InstanceLabInfo | null
 }

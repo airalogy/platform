@@ -4,6 +4,7 @@ export type RootNameKey = "root"
 export type AuthRouteNameKey = "auth" | "login" | "sign-up" | "forget-password" | "instance-setup" | "join-lab" | "password-reset"
 export type UserProfileNameKey = "user-profile" | "user-profile" | "profile-settings" | "profile-groups" | "profile-questions" | "profile-answers" | "profile-starred" | "profile-protocols" | "profile-records"
 export type HomeNameKey = "home"
+export type HelpNameKey = "help-center"
 export type ProjectsNameKey = "projects" | "project-dashboard" | "project-starred"
 export type LabsNameKey = "labs" | "labs-my" | "labs-public"
 export type LabInfoNameKey = "lab-projects" | "lab-records" | "lab-resources" | "lab-members" | "lab-groups" | "lab-organization" | "lab-teams" | "lab-access" | "lab-settings"
@@ -25,7 +26,7 @@ export type SearchNameKey =
   | "search-discussion"
 export type DemoNameKey = "organization-demo"
 
-export type RouteNameKey = RootNameKey | HomeNameKey | AuthRouteNameKey | UserProfileNameKey | ProjectsNameKey | LabsNameKey | LabInfoNameKey | GroupsNameKey | ProjectInfoNameKey | ProtocolNameKey | ProtocolInfoNameKey | ProtocolRecordNameKey | AuthorizeNameKey | ExceptionNameKey | HubNameKey | SearchNameKey | DemoNameKey | "protocol-editor" | "protocol-editor-playground" | "excel-editor" | AdminNameKey | AdminMenuNameKey | "global-chat"
+export type RouteNameKey = RootNameKey | HomeNameKey | HelpNameKey | AuthRouteNameKey | UserProfileNameKey | ProjectsNameKey | LabsNameKey | LabInfoNameKey | GroupsNameKey | ProjectInfoNameKey | ProtocolNameKey | ProtocolInfoNameKey | ProtocolRecordNameKey | AuthorizeNameKey | ExceptionNameKey | HubNameKey | SearchNameKey | DemoNameKey | "protocol-editor" | "protocol-editor-playground" | "excel-editor" | AdminNameKey | AdminMenuNameKey | "global-chat"
 
 export type CustomRoute<T extends RouteNameKey = RouteNameKey> = RouteRecordRaw & {
   name?: T

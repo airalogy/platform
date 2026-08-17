@@ -24,12 +24,12 @@
         v-if="!isMobile"
         :theme-overrides="buttonThemeOverrides"
         class="ml-4 h-[36px] rounded-2 px-3"
-        @click="handleToDocs"
+        @click="handleToHelp"
       >
         <span class="flex items-center gap-1">
-          {{ $t("common.docs") }}
+          {{ $t("page.help.title") }}
           <n-icon :size="14">
-            <icon-ion-open-outline />
+            <icon-ion-help-circle-outline />
           </n-icon>
         </span>
       </n-button>
@@ -140,8 +140,8 @@ const instanceStore = useInstanceStore()
 const appStore = useAppStore()
 const { routerPushByKey } = useRouterPush()
 
-function handleToDocs() {
-  window.open(import.meta.env.VITE_DOCS_URL || "https://github.com/airalogy/platform/tree/main/docs", "_blank")
+async function handleToHelp() {
+  await routerPushByKey("help-center")
 }
 const menuOptions = computed<DropdownOption[]>(() => {
   if (!authStore.isLogin) {
@@ -155,7 +155,7 @@ const menuOptions = computed<DropdownOption[]>(() => {
 
   return [
     { label: $t("common.chat"), key: "chat" },
-    { label: $t("common.docs"), key: "docs" },
+    { label: $t("page.help.title"), key: "help" },
     { label: $t("common.profile"), key: "profile" },
     ...(authStore.userInfo.roles?.some(role => role === "R_ADMIN" || role === "R_SUPER")
       ? [{ label: $t("common.adminDashboard"), key: "admin-dashboard" }]
@@ -174,8 +174,8 @@ async function handleSelect(key: string | number) {
     case "chat":
       await routerPushByKey("global-chat")
       break
-    case "docs":
-      handleToDocs()
+    case "help":
+      await handleToHelp()
       break
     case "profile":
       await routerPushByKey("user-profile", {

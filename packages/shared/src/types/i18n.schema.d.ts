@@ -372,6 +372,35 @@ declare namespace I18n {
       "profile": string
     }
     page: {
+      help: {
+        eyebrow: string
+        title: string
+        intro: string
+        open: string
+        visibilityNote: string
+        audience: {
+          allUsers: string
+          labManagers: string
+          instanceOperators: string
+          vendorManaged: string
+        }
+        userGuide: {
+          title: string
+          description: string
+        }
+        labAdmin: {
+          title: string
+          description: string
+        }
+        selfHosting: {
+          title: string
+          description: string
+        }
+        managedSupport: {
+          title: string
+          description: string
+        }
+      }
       auth: {
         heroTitle: string
       }

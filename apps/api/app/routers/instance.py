@@ -1,7 +1,7 @@
 import os
 import secrets
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -55,6 +55,11 @@ class InstanceStatus(BaseModel):
     bootstrap_token_required: bool
     site_url: str
     lab_structure_mode: str
+    documentation_profile: Literal[
+        "community", "customer_managed", "vendor_managed"
+    ]
+    documentation_url: str
+    support_url: str
     enabled_chat_models: list[ChatModelType]
     lab: InstanceLabInfo | None = None
 
@@ -70,6 +75,9 @@ async def get_instance_status(db_session: DBSession):
         bootstrap_token_required=bool(config.INITIAL_ADMIN_TOKEN),
         site_url=config.SITE_URL,
         lab_structure_mode=config.effective_lab_structure_mode,
+        documentation_profile=config.effective_documentation_profile,
+        documentation_url=config.effective_documentation_url,
+        support_url=config.SUPPORT_URL.strip(),
         enabled_chat_models=list(enabled_chat_model_types()),
         lab=(
             InstanceLabInfo(id=lab.id, uid=lab.uid, name=lab.name)

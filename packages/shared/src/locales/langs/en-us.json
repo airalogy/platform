@@ -368,6 +368,35 @@
     "profile": "Profile"
   },
   "page": {
+    "help": {
+      "eyebrow": "Documentation and support",
+      "title": "Help Center",
+      "intro": "Open the guidance that matches your work and this instance's deployment mode.",
+      "open": "Open",
+      "visibilityNote": "These cards make navigation more relevant to your role. The documentation is public information, and card visibility is not a security boundary.",
+      "audience": {
+        "allUsers": "All users",
+        "labManagers": "Lab Owners and Managers",
+        "instanceOperators": "Instance operators",
+        "vendorManaged": "Vendor-managed deployment"
+      },
+      "userGuide": {
+        "title": "User guide",
+        "description": "Learn how to work with Protocols and Records, collaborate, search, and move data safely."
+      },
+      "labAdmin": {
+        "title": "Lab administration",
+        "description": "Manage members, permissions, data ownership, organizational access, and Lab settings."
+      },
+      "selfHosting": {
+        "title": "Self-hosting operations",
+        "description": "Deploy, upgrade, back up, restore, monitor, and troubleshoot this Platform installation."
+      },
+      "managedSupport": {
+        "title": "Managed support",
+        "description": "Contact the service provider through the support channel configured for this deployment."
+      }
+    },
     "auth": {
       "heroTitle": "The world's first universal platform for research digitization, automation, and acceleration."
     },

@@ -10,6 +10,8 @@ export * from "./clipboard"
 
 export * from "./date"
 
+export * from "./documentation"
+
 export * from "./download"
 
 export * from "./errorFormatter"

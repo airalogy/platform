@@ -68,6 +68,7 @@ apps/api/app/build-info.json
 # Docs
 docs/.vitepress/dist
 docs/.vitepress/cache
+apps/web/public/docs
 
 # Pyodide / Python
 apps/web/public/wasm/*

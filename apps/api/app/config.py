@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     DEPLOYMENT_MODE: Literal["community", "single_lab"] = "community"
     LAB_STRUCTURE_MODE: Literal["flat", "structured"] | None = None
     SIGNUP_MODE: Literal["open", "invite_only", "disabled"] | None = None
+    DOCUMENTATION_PROFILE: Literal[
+        "community", "customer_managed", "vendor_managed"
+    ] | None = None
+    DOCUMENTATION_URL: str = ""
+    SUPPORT_URL: str = ""
     SITE_URL: str = "http://localhost"
     # Opaque support identifier. It carries no customer or institution name.
     AIRALOGY_DEPLOYMENT_ID: str = ""
@@ -130,6 +135,20 @@ class Settings(BaseSettings):
         if self.SIGNUP_MODE is not None:
             return self.SIGNUP_MODE
         return "invite_only" if self.is_single_lab else "open"
+
+    @property
+    def effective_documentation_profile(
+        self,
+    ) -> Literal["community", "customer_managed", "vendor_managed"]:
+        if self.DOCUMENTATION_PROFILE is not None:
+            return self.DOCUMENTATION_PROFILE
+        return "customer_managed" if self.is_single_lab else "community"
+
+    @property
+    def effective_documentation_url(self) -> str:
+        if self.DOCUMENTATION_URL.strip():
+            return self.DOCUMENTATION_URL.strip()
+        return "/docs/"
 
     @model_validator(mode="after")
     def validate_deployment_settings(self) -> "Settings":

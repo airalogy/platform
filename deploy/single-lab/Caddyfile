@@ -25,6 +25,15 @@
 		}
 	}
 
+	@docsRoot path /docs
+	redir @docsRoot /docs/ 308
+
+	handle_path /docs/* {
+		root * /srv/docs
+		try_files {path} {path}.html {path}/index.html
+		file_server
+	}
+
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 

@@ -7,6 +7,7 @@ export default antfu(
     ignores: [
       // eslint ignore globs here
       ".history/*",
+      "apps/web/public/docs/**",
     ],
   },
   {

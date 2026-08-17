@@ -55,6 +55,33 @@ def test_explicit_signup_mode_overrides_profile_default():
     assert value.effective_signup_mode == "disabled"
 
 
+def test_community_defaults_to_same_origin_documentation():
+    value = settings(DEPLOYMENT_MODE="community")
+
+    assert value.effective_documentation_profile == "community"
+    assert value.effective_documentation_url == "/docs/"
+
+
+def test_single_lab_defaults_to_customer_managed_documentation():
+    value = settings(DEPLOYMENT_MODE="single_lab")
+
+    assert value.effective_documentation_profile == "customer_managed"
+    assert value.effective_documentation_url == "/docs/"
+
+
+def test_explicit_vendor_managed_documentation_overrides_deployment_default():
+    value = settings(
+        DEPLOYMENT_MODE="single_lab",
+        DOCUMENTATION_PROFILE="vendor_managed",
+        DOCUMENTATION_URL="https://docs.example.org/platform/",
+        SUPPORT_URL="https://support.example.org/",
+    )
+
+    assert value.effective_documentation_profile == "vendor_managed"
+    assert value.effective_documentation_url == "https://docs.example.org/platform/"
+    assert value.SUPPORT_URL == "https://support.example.org/"
+
+
 def test_gpt_model_is_disabled_by_default():
     assert settings().ENABLE_GPT_MODEL is False
 

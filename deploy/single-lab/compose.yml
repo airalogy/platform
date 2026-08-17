@@ -24,7 +24,7 @@ services:
         VITE_APP_TITLE: ${VITE_APP_TITLE:-Airalogy Lab}
         VITE_APP_DESC: ${VITE_APP_DESC:-Private laboratory research workspace.}
         VITE_SITE_ORIGIN: ${SITE_URL:-http://localhost:8080}
-        VITE_DOCS_URL: ${VITE_DOCS_URL:-https://github.com/airalogy/platform/tree/main/docs}
+        VITE_DOCS_URL: ${VITE_DOCS_URL:-/docs/}
         NODE_COMPONENT_BUILD_MEMORY_MB: ${COMPONENT_BUILD_MEMORY_MB:-3072}
         NODE_BUILD_MEMORY_MB: ${WEB_BUILD_MEMORY_MB:-6144}
         PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}

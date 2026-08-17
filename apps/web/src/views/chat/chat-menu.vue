@@ -45,14 +45,14 @@
           {{ $t("page.hub.title") }}
         </template>
       </tooltip-button>
-      <tooltip-button quaternary block :tooltip="$t('common.openDocs')" @click="openDoc">
+      <tooltip-button quaternary block :tooltip="$t('page.help.title')" @click="openHelpCenter">
         <template #icon>
           <n-icon :size="18">
             <icon-ion-book-outline />
           </n-icon>
         </template>
         <template v-if="!appStore.siderCollapse">
-          {{ $t("common.docsFull") }}
+          {{ $t("page.help.title") }}
         </template>
       </tooltip-button>
       <n-popover trigger="click" placement="top" :show-arrow="false">
@@ -132,8 +132,8 @@ function handleNewChat() {
 
 const { openNewTab } = useOpenNewTab()
 
-function openDoc() {
-  window.open(import.meta.env.VITE_DOCS_URL || "https://github.com/airalogy/platform/tree/main/docs", "_blank")
+function openHelpCenter() {
+  openNewTab({ name: "help-center" })
 }
 
 function handleClearHistory() {

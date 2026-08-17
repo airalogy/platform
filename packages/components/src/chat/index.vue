@@ -59,6 +59,8 @@
 
 <script setup lang="ts">
 import { $t } from "@airalogy/shared/locales"
+import { documentationPageUrl } from "@airalogy/shared/utils"
+import { useI18n } from "vue-i18n"
 import { type IProps, useOrProvideChatInfoStore } from "./composables/useChatInfoStore"
 import ChatInput from "./modules/chat-input.vue"
 import ChatPlaceholder from "./modules/chat-placeholder.vue"
@@ -93,6 +95,8 @@ const emit = defineEmits<IEmits>()
 interface IEmits {
   (e: "scrollToBottom", isBottom?: boolean): void
 }
+
+const { locale } = useI18n()
 
 const {
   emptyDraftId,
@@ -155,7 +159,8 @@ const chatExamples = computed(() => {
   ]
 
   const { source } = props
-  const docsBaseUrl = import.meta.env.VITE_DOCS_URL || "https://github.com/airalogy/platform/tree/main/docs"
+  const docsBaseUrl = import.meta.env.VITE_DOCS_URL || "/docs/"
+  const docsLink = (page: string) => documentationPageUrl(docsBaseUrl, locale.value, page)
 
   if (source === "protocol") {
     return [
@@ -209,12 +214,12 @@ const chatExamples = computed(() => {
           {
             title: "Research Planning",
             description: "Protocol optimization and design.",
-            link: `${docsBaseUrl}/getting-started`,
+            link: docsLink("user-guide/protocols"),
           },
           {
             title: "Data Analysis",
             description: "Visualize and analyze your data.",
-            link: `${docsBaseUrl}/analysis`,
+            link: docsLink("user-guide/records"),
           },
         ]),
       },
@@ -224,12 +229,12 @@ const chatExamples = computed(() => {
           {
             title: "Getting Started",
             description: "A comprehensive guide to Airalogy.",
-            link: `${docsBaseUrl}/getting-started`,
+            link: docsLink("user-guide/"),
           },
           {
             title: "Protocol Management",
             description: "Learn how to manage your protocols.",
-            link: `${docsBaseUrl}/protocols`,
+            link: docsLink("user-guide/protocols"),
           },
         ]),
       },
@@ -239,7 +244,7 @@ const chatExamples = computed(() => {
           {
             title: "Protocol Creation Guide",
             description: "Step-by-step instructions.",
-            link: `${docsBaseUrl}/protocols/create`,
+            link: docsLink("user-guide/protocols"),
           },
         ]),
       },
@@ -249,7 +254,7 @@ const chatExamples = computed(() => {
           {
             title: "Data Analysis Docs",
             description: "Explore our data analysis tools.",
-            link: `${docsBaseUrl}/analysis`,
+            link: docsLink("user-guide/records"),
           },
         ]),
       },
@@ -259,7 +264,7 @@ const chatExamples = computed(() => {
           {
             title: "Collaboration Guide",
             description: "Learn how to collaborate with your team.",
-            link: `${docsBaseUrl}/collaboration`,
+            link: docsLink("user-guide/collaboration"),
           },
         ]),
       },
