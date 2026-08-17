@@ -50,6 +50,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Fixed browsers retaining an unrelated cached site icon instead of the Airalogy favicon.
 - Added the owning Lab and Project path to aggregated Protocol lists so “My Protocols” and profile views retain their workspace context.
 - Fixed Protocol, Project, Lab, and Group descriptions showing a non-functional “Read more” action when the full text already fit within the three-line preview.
 - Fixed the AI Protocol review Diff editor collapsing into a thin strip, and reorganized the Aira sidebar guidance into a clearer assistant card.
