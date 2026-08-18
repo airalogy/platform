@@ -1,63 +1,56 @@
 <template>
   <n-list clickable hoverable>
     <template v-for="item in props.list" :key="item.id">
-      <n-list-item>
-        <template #prefix>
-          <n-icon :size="40">
+      <n-list-item class="protocol-list-item">
+        <div class="protocol-row">
+          <n-icon class="protocol-icon" :size="40">
             <icon-local-protocol />
           </n-icon>
-        </template>
-        <div class="min-w-0 flex-1">
-          <project-protocol-item
-            :item="item"
-            :is-compact="false"
-            :show-context="props.showContext"
-          />
-          <div v-if="hasFolders && getFolderNames(item).length" class="mt-1 flex flex-wrap gap-1">
-            <n-tag
-              v-for="name in getFolderNames(item).slice(0, 3)"
-              :key="name"
-              size="small"
-              type="info"
-            >
-              {{ name }}
-            </n-tag>
-            <n-tag
-              v-if="getFolderNames(item).length > 3"
-              size="small"
-              type="info"
-            >
-              +{{ getFolderNames(item).length - 3 }}
-            </n-tag>
-          </div>
-        </div>
-        <template #suffix>
-          <div v-if="showActionArea" class="flex items-center gap-2">
-            <template v-if="canViewOthersRecords || canViewOwnRecords">
-              <n-button
-                ghost
-                :bordered="false"
-                :theme-overrides="{ textColor: '#333333' }"
-                @click="() => handleNavigateLogs(item)"
+          <div class="protocol-main">
+            <project-protocol-item
+              :item="item"
+              :is-compact="false"
+              :show-context="props.showContext"
+            />
+            <div v-if="hasFolders && getFolderNames(item).length" class="mt-1 flex flex-wrap gap-1">
+              <n-tag
+                v-for="name in getFolderNames(item).slice(0, 3)"
+                :key="name"
+                size="small"
+                type="info"
               >
-                {{ item.records_count }}
-                <template #icon>
-                  <schema-icon />
-                </template>
-              </n-button>
-              <div class="metric-stat" :title="$t('common.starsCount')">
-                <n-icon :size="14">
-                  <icon-tabler-star />
-                </n-icon>
-                <span>{{ formatNumber(item.stars_count || 0) }}</span>
-              </div>
-              <div class="metric-stat" :title="$t('common.reusesCount')">
-                <n-icon :size="14">
-                  <icon-local-reuse />
-                </n-icon>
-                <span>{{ formatNumber(item.forks_count || 0) }}</span>
-              </div>
-            </template>
+                {{ name }}
+              </n-tag>
+              <n-tag v-if="getFolderNames(item).length > 3" size="small" type="info">
+                +{{ getFolderNames(item).length - 3 }}
+              </n-tag>
+            </div>
+          </div>
+          <div v-if="showActionArea" class="protocol-actions">
+            <n-button
+              v-if="canViewOthersRecords || canViewOwnRecords"
+              ghost
+              :bordered="false"
+              :theme-overrides="{ textColor: '#333333' }"
+              @click="() => handleNavigateLogs(item)"
+            >
+              {{ item.records_count }}
+              <template #icon>
+                <schema-icon />
+              </template>
+            </n-button>
+            <div class="aira-type-metric metric-stat" :title="$t('common.starsCount')">
+              <n-icon :size="14">
+                <icon-tabler-star />
+              </n-icon>
+              <span>{{ formatNumber(item.stars_count || 0) }}</span>
+            </div>
+            <div class="aira-type-metric metric-stat" :title="$t('common.reusesCount')">
+              <n-icon :size="14">
+                <icon-local-reuse />
+              </n-icon>
+              <span>{{ formatNumber(item.forks_count || 0) }}</span>
+            </div>
             <n-popover v-if="hasFolders" trigger="click" placement="top" class="ml-1">
               <template #trigger>
                 <n-button
@@ -70,8 +63,12 @@
                 </n-button>
               </template>
               <div class="w-64">
-                <div class="mb-2 text-xs text-gray-500">
-                  {{ canEditFolders(item) ? $t("page.project.protocolFolders.assignHint") : $t("page.project.protocolFolders.noPermissionHint") }}
+                <div class="aira-type-meta mb-2">
+                  {{
+                    canEditFolders(item)
+                      ? $t("page.project.protocolFolders.assignHint")
+                      : $t("page.project.protocolFolders.noPermissionHint")
+                  }}
                 </div>
                 <n-select
                   :value="getFolderSelection(item)"
@@ -80,11 +77,11 @@
                   clearable
                   :disabled="!canEditFolders(item)"
                   :loading="isFolderUpdating(item)"
-                  @update:value="(value) => handleFolderChange(item, value)"
+                  @update:value="value => handleFolderChange(item, value)"
                 />
               </div>
             </n-popover>
-            <n-tooltip v-if="showPin" placement="top" class="ml-auto">
+            <n-tooltip v-if="showPin" placement="top">
               <template #trigger>
                 <n-button
                   quaternary
@@ -111,7 +108,7 @@
             <!-- <edit-protocol-modal :item="item" @modal:edit-research="handleEditResearch" />
             <delete-button @click="handleDeleteResearch(item)" /> -->
           </div>
-        </template>
+        </div>
       </n-list-item>
     </template>
   </n-list>
@@ -193,7 +190,9 @@ const folderOptions = computed<SelectOption[]>(() =>
     value: folder.id,
   })),
 )
-const folderNameMap = computed(() => new Map((props.folders || []).map(folder => [folder.id, folder.name])))
+const folderNameMap = computed(
+  () => new Map((props.folders || []).map(folder => [folder.id, folder.name])),
+)
 
 watch(
   () => props.list,
@@ -211,15 +210,7 @@ watch(
 const showPin = computed(() => Boolean(props.pinnedMap))
 const showDeleteAction = computed(() => Boolean(projectInfo.value))
 const showActions = computed(() => props.showActions !== false)
-const showActionArea = computed(() =>
-  showActions.value && (
-    showPin.value
-    || canViewOthersRecords.value
-    || canViewOwnRecords.value
-    || hasFolders.value
-    || showDeleteAction.value
-  ),
-)
+const showActionArea = computed(() => showActions.value)
 
 function getPinnedKey(item: ProtocolModels.ProjectProtocolInfo) {
   return item?.id ? `${PinnedResourceType.Protocol}:${item.id}` : null
@@ -261,7 +252,10 @@ function canEditFolders(item: ProtocolModels.ProjectProtocolInfo) {
   return item.user_id === userInfo.id
 }
 
-async function handleFolderChange(item: ProtocolModels.ProjectProtocolInfo, value: Array<string | number> | null) {
+async function handleFolderChange(
+  item: ProtocolModels.ProjectProtocolInfo,
+  value: Array<string | number> | null,
+) {
   if (!item?.id || !item.project?.id) {
     return
   }
@@ -367,13 +361,32 @@ async function handleEditResearch() {
 </script>
 
 <style scoped lang="sass">
+.protocol-row
+  width: 100%
+  display: grid
+  grid-template-columns: 40px minmax(0, 1fr) auto
+  align-items: center
+  column-gap: 20px
+
+.protocol-icon
+  align-self: center
+
+.protocol-main
+  min-width: 0
+
+.protocol-actions
+  min-width: 0
+  display: flex
+  align-items: center
+  justify-content: flex-end
+  gap: 8px
+  white-space: nowrap
+
 .metric-stat
   min-width: 40px
   display: inline-flex
   align-items: center
   gap: 6px
-  color: #333333
-  font-size: 14px
 
 .metric-stat :deep(.n-icon)
   color: #A1A4AF
@@ -384,4 +397,19 @@ async function handleEditResearch() {
 
 .pin-action--active
   opacity: 1
+
+@media (max-width: 767px)
+  .protocol-row
+    grid-template-columns: 40px minmax(0, 1fr)
+    column-gap: 12px
+    row-gap: 6px
+
+  .protocol-actions
+    grid-column: 2
+    justify-content: flex-start
+    flex-wrap: wrap
+    white-space: normal
+
+  .metric-stat
+    min-width: auto
 </style>

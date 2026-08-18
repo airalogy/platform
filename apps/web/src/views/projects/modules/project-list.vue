@@ -36,7 +36,9 @@
         v-if="hasVisibleChildren(group.children) && (props.showPrivate || group.parent.type !== 1)"
         class="mb-4 ml-10 overflow-hidden border border-gray-200 rounded-lg bg-gray-50/60"
       >
-        <div class="flex items-center justify-between border-b border-gray-200 px-4 py-2 text-xs text-gray-500 font-600">
+        <div
+          class="aira-type-eyebrow flex items-center justify-between border-b border-gray-200 px-4 py-2"
+        >
           <span>{{ $t("page.project.settingsPage.subprojectsTitle") }}</span>
           <span>{{ getSubprojectCountLabel(group.children.length) }}</span>
         </div>

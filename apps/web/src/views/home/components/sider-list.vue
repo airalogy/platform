@@ -55,7 +55,7 @@
         </div>
       </div>
       <div v-else-if="!loading" class="mt-2.5 h-25 px-10 text-center text-xl leading-25 opacity-30">
-        {{ $t("page.home.placeholder") }}
+        <span class="aira-type-card-title">{{ $t("page.home.placeholder") }}</span>
       </div>
     </n-spin>
   </div>
@@ -85,7 +85,10 @@ export interface IProps {
   pinnedMap?: Map<string, PinnedItem>
   pinningKeys?: Set<string>
 }
-export type IListItem = Api.Lab.LabInfo | ProtocolModels.ProjectProtocolInfo | Api.Project.MyProjectInfo
+export type IListItem =
+  | Api.Lab.LabInfo
+  | ProtocolModels.ProjectProtocolInfo
+  | Api.Project.MyProjectInfo
 const props = withDefaults(defineProps<IProps>(), {
   title: "",
   type: "protocol",
@@ -177,7 +180,11 @@ async function fetchList() {
   try {
     // TODO: recent experiment API
     if (type === "protocol") {
-      const data = await fetchUserProtocols(userId, { page: 1, pageSize: 5, sortedBy: "updated_at" })
+      const data = await fetchUserProtocols(userId, {
+        page: 1,
+        pageSize: 5,
+        sortedBy: "updated_at",
+      })
       if (data) {
         await nextTick(() => {
           emits("update:list", "protocol", data.protocols)

@@ -1,0 +1,192 @@
+:root {
+  --aira-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC",
+    "Source Han Sans SC", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol";
+  --aira-font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", "Noto Sans Mono CJK SC",
+    "Noto Sans Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --aira-text-primary: #333333;
+  --aira-text-secondary: #4b5563;
+  --aira-text-muted: #6b7280;
+  --aira-text-subtle: #9ca3af;
+
+  --aira-type-display-size: 1.875rem;
+  --aira-type-display-line-height: 2.25rem;
+  --aira-type-page-title-size: 1.5rem;
+  --aira-type-page-title-line-height: 2rem;
+  --aira-type-section-title-size: 1.125rem;
+  --aira-type-section-title-line-height: 1.625rem;
+  --aira-type-card-title-size: 1rem;
+  --aira-type-card-title-line-height: 1.5rem;
+  --aira-type-item-title-size: 0.875rem;
+  --aira-type-item-title-line-height: 1.25rem;
+  --aira-type-body-size: 0.875rem;
+  --aira-type-body-line-height: 1.375rem;
+  --aira-type-label-size: 0.8125rem;
+  --aira-type-label-line-height: 1.25rem;
+  --aira-type-meta-size: 0.75rem;
+  --aira-type-meta-line-height: 1rem;
+  --aira-type-caption-size: 0.6875rem;
+  --aira-type-caption-line-height: 1rem;
+  --aira-type-code-size: 0.8125rem;
+  --aira-type-code-line-height: 1.25rem;
+}
+
+html,
+body {
+  font-family: var(--aira-font-sans);
+}
+
+body {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-body-size);
+  font-weight: 400;
+  line-height: var(--aira-type-body-line-height);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--aira-font-mono);
+}
+
+:where(
+    .aira-type-display,
+    .aira-type-page-title,
+    .aira-type-section-title,
+    .aira-type-card-title,
+    .aira-type-item-title,
+    .aira-type-body,
+    .aira-type-label,
+    .aira-type-meta,
+    .aira-type-caption,
+    .aira-type-status,
+    .aira-type-metric,
+    .aira-type-code,
+    .aira-type-eyebrow
+  ) {
+  margin-block: 0;
+}
+
+.aira-type-display {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-display-size);
+  font-weight: 600;
+  line-height: var(--aira-type-display-line-height);
+}
+
+.aira-type-page-title {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-page-title-size);
+  font-weight: 600;
+  line-height: var(--aira-type-page-title-line-height);
+}
+
+.aira-type-section-title {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-section-title-size);
+  font-weight: 600;
+  line-height: var(--aira-type-section-title-line-height);
+}
+
+.aira-type-card-title {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-card-title-size);
+  font-weight: 600;
+  line-height: var(--aira-type-card-title-line-height);
+}
+
+.aira-type-item-title {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-item-title-size);
+  font-weight: 500;
+  line-height: var(--aira-type-item-title-line-height);
+}
+
+.aira-type-body {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-body-size);
+  font-weight: 400;
+  line-height: var(--aira-type-body-line-height);
+}
+
+.aira-type-label {
+  color: var(--aira-text-primary);
+  font-size: var(--aira-type-label-size);
+  font-weight: 500;
+  line-height: var(--aira-type-label-line-height);
+}
+
+.aira-type-meta {
+  color: var(--aira-text-muted);
+  font-size: var(--aira-type-meta-size);
+  font-weight: 400;
+  line-height: var(--aira-type-meta-line-height);
+}
+
+.aira-type-caption {
+  color: var(--aira-text-subtle);
+  font-size: var(--aira-type-caption-size);
+  font-weight: 400;
+  line-height: var(--aira-type-caption-line-height);
+}
+
+.aira-type-status {
+  font-size: var(--aira-type-caption-size);
+  font-weight: 500;
+  line-height: var(--aira-type-caption-line-height);
+}
+
+.aira-type-metric {
+  color: var(--aira-text-secondary);
+  font-size: var(--aira-type-item-title-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: var(--aira-type-item-title-line-height);
+}
+
+.aira-type-code {
+  color: var(--aira-text-primary);
+  font-family: var(--aira-font-mono);
+  font-size: var(--aira-type-code-size);
+  font-weight: 400;
+  line-height: var(--aira-type-code-line-height);
+}
+
+.aira-type-eyebrow {
+  color: var(--aira-text-muted);
+  font-size: var(--aira-type-meta-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: var(--aira-type-meta-line-height);
+  text-transform: uppercase;
+}
+
+.aira-type-eyebrow--accent {
+  color: rgb(var(--primary-color));
+}
+
+.aira-text-primary {
+  color: var(--aira-text-primary);
+}
+
+.aira-text-secondary {
+  color: var(--aira-text-secondary);
+}
+
+.aira-text-muted {
+  color: var(--aira-text-muted);
+}
+
+.aira-text-subtle {
+  color: var(--aira-text-subtle);
+}
+
+.aira-numeric {
+  font-variant-numeric: tabular-nums;
+}

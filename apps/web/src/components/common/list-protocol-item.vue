@@ -1,25 +1,19 @@
 <template>
   <div class="w-full item__wrapper">
     <div class="relative max-w-full w-fit ellipsis-text">
-      <router-link
-        :to="researchRoute.research"
-        class="text-4 font-500 !text-[#333] !hover:router-link"
-      >
+      <router-link :to="researchRoute.research" class="aira-type-item-title !hover:router-link">
         {{ props.item.name }}
       </router-link>
     </div>
-    <div class="relative flex items-center text-3 color-text-secondary">
+    <div class="aira-type-meta relative flex items-center">
       <span class="relative inline-block min-w-5 w-fit ellipsis-text">
         <router-link :to="researchRoute.lab" class="!hover:router-link">
           {{ props.item.lab.name }}
         </router-link>
       </span>
-      <span class="pointer-events-none mx-1 inline-block text-sm font-500">/</span>
+      <span class="aira-text-subtle pointer-events-none mx-1 inline-block">/</span>
       <span class="relative inline-block min-w-5 w-fit ellipsis-text">
-        <router-link
-          :to="researchRoute.project"
-          class="!hover:router-link"
-        >
+        <router-link :to="researchRoute.project" class="!hover:router-link">
           {{ props.item.project.name }}
         </router-link>
       </span>
@@ -91,7 +85,5 @@ const researchRoute = computed<Record<"research" | "lab" | "project", RouteLocat
 
 <style scoped lang="sass">
 .item__wrapper
-  --n-item-text-color: #666
-  line-height: 1.25
   @apply overflow-hidden
 </style>

@@ -59,7 +59,9 @@ function presetAIRA(): Preset<Theme> {
   return preset
 }
 
-const breakpointsWithUnit = Object.fromEntries(Object.entries(breakpoints).map(([key, value]) => [key, `${value}px`]))
+const breakpointsWithUnit = Object.fromEntries(
+  Object.entries(breakpoints).map(([key, value]) => [key, `${value}px`]),
+)
 export default defineConfig<Theme>({
   safelist: [
     "bg-amber-100",
@@ -78,6 +80,10 @@ export default defineConfig<Theme>({
   },
   theme: {
     ...themeVars,
+    fontFamily: {
+      sans: "var(--aira-font-sans)",
+      mono: "var(--aira-font-mono)",
+    },
     // colors: {
     //   primary: {
     //     DEFAULT: "#1A79FF",

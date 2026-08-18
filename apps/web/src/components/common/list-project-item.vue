@@ -8,20 +8,20 @@
               name: 'project-protocols',
               params: { projectUid: display.project.uid, labUid: display.lab.uid },
             }"
-            class="min-w-0 truncate text-4 font-500 leading-5 !text-[#333] hover:router-link"
+            class="aira-type-item-title min-w-0 truncate hover:router-link"
             @click.stop
           >
             {{ item.name || item.uid }}
           </router-link>
           <span
             v-if="visibilityLabel"
-            class="inline-flex items-center whitespace-nowrap rounded px-2 py-0.5 text-xs font-500"
+            class="aira-type-status inline-flex items-center whitespace-nowrap rounded px-2 py-0.5"
             :class="visibilityClass"
           >
             {{ visibilityLabel }}
           </span>
         </div>
-        <div class="min-w-0 text-3 color-text-secondary leading-5">
+        <div class="aira-type-meta min-w-0">
           <router-link
             v-if="display.lab.uid"
             :to="{ name: 'lab-projects', params: { labUid: display.lab.uid } }"
@@ -36,24 +36,25 @@
         </div>
       </div>
       <div v-else class="lab-project-line ml-2 min-w-0 flex flex-wrap items-start gap-x-2 gap-y-1">
-        <div class="lab-project-text min-w-0 flex-1 break-words text-4 color-text-secondary leading-5">
+        <div class="lab-project-text min-w-0 flex flex-1 flex-wrap items-baseline gap-x-1">
           <router-link
-            v-if="display.lab.uid" :to="{ name: 'lab-projects', params: { labUid: display.lab.uid } }"
-            class="break-words hover:router-link"
+            v-if="display.lab.uid"
+            :to="{ name: 'lab-projects', params: { labUid: display.lab.uid } }"
+            class="aira-type-meta break-words hover:router-link"
             @click.stop
           >
             {{ labName }}
           </router-link>
-          <span v-else class="break-words">
+          <span v-else class="aira-type-meta break-words">
             {{ labName }}
           </span>
-          <span class="mx-1 select-none text-3">/</span>
+          <span class="aira-type-meta aira-text-subtle select-none">/</span>
           <router-link
             :to="{
               name: 'project-protocols',
               params: { projectUid: display.project.uid, labUid: display.lab.uid },
             }"
-            class="break-words hover:router-link"
+            class="aira-type-item-title break-words hover:router-link"
             @click.stop
           >
             {{ item.name || item.uid }}
@@ -61,7 +62,7 @@
         </div>
         <span
           v-if="visibilityLabel"
-          class="inline-flex items-center self-center whitespace-nowrap rounded px-2 py-0.5 text-xs font-500"
+          class="aira-type-status inline-flex items-center self-center whitespace-nowrap rounded px-2 py-0.5"
           :class="[
             visibilityClass,
             { 'ml-2': props.isCompact, 'ml-5': !props.isCompact, 'mr-auto': !props.isCompact },

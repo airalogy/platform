@@ -33,6 +33,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 变更
 
+- 将 Platform UI 字体规范集中为共享的标题、正文、标签、元信息、状态、指标和代码语义层级；浏览器、Naive UI 与 UnoCSS 统一使用同一套中英文字体栈，并将首页、Lab、Project、Protocol 与 Record 核心界面迁移到共享体系。
 - 将首页改为按角色和真实工作状态组织的任务工作台：可继续当前设备上的 Record 草稿、直接填写最近 Protocol、创建 Protocol 时继承最近 Project，仅根据实际成员关系显示管理快捷入口，并为宽屏提供最大 1920px 的有界工作画布，不拉伸其他产品页面。
 - 改进 Record 填写体验，新增当前设备草稿状态、手动保存反馈、必填进度、首个错误定位、包含保存位置和资源影响的确定性提交预览，以及提交后的明确下一步。
 - 将 AI 改为实例明确上报的能力：只有模型供应商可用时才显示 Aira 入口；关闭 AI 后不保留空白聊天控件，Protocol 和 Record 的确定性完整流程不受影响。
@@ -50,6 +51,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 修复
 
+- 改进 Protocol 列表行的响应式布局，使长标题、归属上下文、次级创建信息、指标和操作保持清晰视觉层级，并在窄屏自然换行，不再被挤进一行造成横向溢出；聚合列表继续展示非敏感的收藏与复用指标，Record 操作仍按权限显示。
 - 修复浏览器继续使用无关的旧站点图标、未显示 Airalogy favicon 的问题。
 - 为聚合 Protocol 列表补充所属 Lab 与 Project 路径，使“我的协议”和用户资料页保留工作空间上下文。
 - 修复 Protocol、Project、Lab 与 Group 描述已在三行预览中完整显示时，仍出现无实际展开内容的“展开”操作。

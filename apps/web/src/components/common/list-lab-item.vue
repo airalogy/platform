@@ -6,13 +6,13 @@
         :class="[props.isCompact ? (props.item.type === 1 ? 'max-w-29' : '') : 'min-w-20']"
       >
         <span class="relative">
-          <n-ellipsis class="m-0 text-4 font-500">
+          <n-ellipsis class="aira-type-item-title">
             <router-link :to="labRoute.lab" class="!hover:router-link">
               {{ display.name }}
             </router-link>
           </n-ellipsis>
         </span>
-        <div class="relative w-fit flex items-center text-3 color-text-secondary">
+        <div class="aira-type-metric relative w-fit flex items-center">
           <n-tooltip trigger="hover">
             <template #trigger>
               <project-icon-compact />

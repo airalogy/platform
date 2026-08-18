@@ -18,13 +18,22 @@
         >
           <template #toolbar>
             <div v-if="selectedRecords.length > 0" class="record-selection-actions">
-              <div v-if="selectedRecords.length === 1" class="record-compare-hint" role="status">
+              <div
+                v-if="selectedRecords.length === 1"
+                class="aira-type-label record-compare-hint"
+                role="status"
+              >
                 <n-icon size="16">
                   <icon-tabler-arrows-diff />
                 </n-icon>
                 <span>{{ $t("page.protocol.records.selectOneMoreToCompare") }}</span>
               </div>
-              <n-button v-else-if="selectedRecords.length <= 4" type="primary" size="small" @click="handleOpenComparison">
+              <n-button
+                v-else-if="selectedRecords.length <= 4"
+                type="primary"
+                size="small"
+                @click="handleOpenComparison"
+              >
                 <template #icon>
                   <n-icon size="16">
                     <icon-tabler-arrows-diff />
@@ -32,7 +41,11 @@
                 </template>
                 {{ $t("page.protocol.records.compareSelected", { count: selectedRecords.length }) }}
               </n-button>
-              <div v-else class="record-compare-hint record-compare-hint--warning" role="status">
+              <div
+                v-else
+                class="aira-type-label record-compare-hint record-compare-hint--warning"
+                role="status"
+              >
                 <n-icon size="16">
                   <icon-tabler-alert-triangle />
                 </n-icon>
@@ -52,7 +65,11 @@
                       <icon-tabler-message-plus />
                     </n-icon>
                   </template>
-                  {{ $t("page.protocol.records.addSelectedToChat", { count: selectedRecordsNotInChat.length }) }}
+                  {{
+                    $t("page.protocol.records.addSelectedToChat", {
+                      count: selectedRecordsNotInChat.length,
+                    })
+                  }}
                 </n-button>
 
                 <n-dropdown
@@ -67,7 +84,11 @@
                         <icon-mdi-code-json />
                       </n-icon>
                     </template>
-                    {{ $t("page.protocol.records.exportSelectedJson", { count: selectedRecords.length }) }}
+                    {{
+                      $t("page.protocol.records.exportSelectedJson", {
+                        count: selectedRecords.length,
+                      })
+                    }}
                   </n-button>
                 </n-dropdown>
               </div>
@@ -76,7 +97,10 @@
 
           <template #actions="{ record, index }">
             <div class="record-row-actions">
-              <n-tooltip v-if="instanceStore.aiEnabled && isItemInChatContext(getRecordKey(record, index))" trigger="hover">
+              <n-tooltip
+                v-if="instanceStore.aiEnabled && isItemInChatContext(getRecordKey(record, index))"
+                trigger="hover"
+              >
                 {{ $t("page.protocol.timeline.removeFromChat") }}
                 <template #trigger>
                   <n-button
@@ -98,7 +122,12 @@
               <n-tooltip v-else-if="instanceStore.aiEnabled" trigger="hover">
                 {{ $t("page.protocol.timeline.addToChat") }}
                 <template #trigger>
-                  <n-button quaternary circle size="small" @click="emit('addToChat', toTimelineItem(record, index))">
+                  <n-button
+                    quaternary
+                    circle
+                    size="small"
+                    @click="emit('addToChat', toTimelineItem(record, index))"
+                  >
                     <template #icon>
                       <n-icon size="16">
                         <icon-tabler-message-plus />
@@ -141,7 +170,12 @@
                 </template>
               </n-tooltip>
 
-              <tooltip-button quaternary size="small" circle @click="handleOpenRecord(record, index)">
+              <tooltip-button
+                quaternary
+                size="small"
+                circle
+                @click="handleOpenRecord(record, index)"
+              >
                 <template #tooltip>
                   {{ $t("page.protocol.timeline.viewReport") }}
                 </template>
@@ -189,12 +223,14 @@
             {{ $t("page.protocol.records.backToTableSelection") }}
           </n-button>
 
-          <div class="record-compare-heading">
+          <div class="aira-type-item-title record-compare-heading">
             <n-icon size="20">
               <icon-tabler-arrows-diff />
             </n-icon>
-            <span>{{ $t("page.protocol.records.comparingSelected", { count: selectedRecords.length }) }}</span>
-            <span class="record-compare-labels">{{ selectedRecordLabels }}</span>
+            <span>{{
+              $t("page.protocol.records.comparingSelected", { count: selectedRecords.length })
+            }}</span>
+            <span class="aira-type-meta record-compare-labels">{{ selectedRecordLabels }}</span>
           </div>
         </header>
 
@@ -216,7 +252,7 @@
         src="/images/empty_placeholder.svg"
         alt="placeholder"
         class="pointer-events-none h-40 w-full object-contain"
-      >
+      />
     </div>
 
     <n-pagination
@@ -264,10 +300,7 @@
 </template>
 
 <script setup lang="ts">
-import type {
-  AimdRecordMetadataColumn,
-  AimdRecordViewKey,
-} from "@airalogy/aimd-renderer/vue"
+import type { AimdRecordMetadataColumn, AimdRecordViewKey } from "@airalogy/aimd-renderer/vue"
 import type { ProtocolModels } from "@airalogy/shared/types"
 import type { ITimelineItem } from "../types"
 import { DeleteConfirmationModal, useDeleteConfirmation } from "@/components/common/settings"
@@ -344,17 +377,25 @@ watch(
   { immediate: true },
 )
 
-watch(visibleFieldKeys, (fieldKeys) => {
-  setRecordFieldKeysPreference(authStore.userInfo.id, props.protocolInfo.id, fieldKeys)
-}, { deep: true })
+watch(
+  visibleFieldKeys,
+  (fieldKeys) => {
+    setRecordFieldKeysPreference(authStore.userInfo.id, props.protocolInfo.id, fieldKeys)
+  },
+  { deep: true },
+)
 
-watch(visibleMetadataColumnKeys, (metadataColumnKeys) => {
-  setRecordMetadataColumnKeysPreference(
-    authStore.userInfo.id,
-    props.protocolInfo.id,
-    metadataColumnKeys,
-  )
-}, { deep: true })
+watch(
+  visibleMetadataColumnKeys,
+  (metadataColumnKeys) => {
+    setRecordMetadataColumnKeysPreference(
+      authStore.userInfo.id,
+      props.protocolInfo.id,
+      metadataColumnKeys,
+    )
+  },
+  { deep: true },
+)
 
 const { currentPage, currentPageSize, handlePageChange, pageCount } = usePagination({
   options: { page: 1, pageSize: props.initialPageSize || 10, total: computed(() => props.total) },
@@ -422,16 +463,18 @@ function handleSelectedRecordKeysUpdate(keys: AimdRecordViewKey[]) {
   }
 }
 
-const selectedRecords = computed(() => selectedRecordKeys.value
-  .map(key => selectedRecordMap.get(key))
-  .filter((record): record is ProtocolModels.RecordInfo => Boolean(record)))
-const selectedRecordLabels = computed(() => selectedRecords.value
-  .map(record => getRecordLabel(record))
-  .join(" · "))
+const selectedRecords = computed(() =>
+  selectedRecordKeys.value
+    .map(key => selectedRecordMap.get(key))
+    .filter((record): record is ProtocolModels.RecordInfo => Boolean(record)),
+)
+const selectedRecordLabels = computed(() =>
+  selectedRecords.value.map(record => getRecordLabel(record)).join(" · "),
+)
 
-const selectedRecordsNotInChat = computed(() => selectedRecords.value.filter(record => (
-  !props.isItemInChatContext(getRecordKey(record))
-)))
+const selectedRecordsNotInChat = computed(() =>
+  selectedRecords.value.filter(record => !props.isItemInChatContext(getRecordKey(record))),
+)
 
 function handleOpenComparison() {
   if (selectedRecords.value.length >= 2 && selectedRecords.value.length <= 4) {
@@ -450,15 +493,18 @@ function handleAddSelectedToChat() {
   }
 }
 
-watch(() => props.recordList, (records) => {
-  const selectedSet = new Set(selectedRecordKeys.value)
-  for (const record of records) {
-    const key = getRecordKey(record)
-    if (selectedSet.has(key)) {
-      selectedRecordMap.set(key, record)
+watch(
+  () => props.recordList,
+  (records) => {
+    const selectedSet = new Set(selectedRecordKeys.value)
+    for (const record of records) {
+      const key = getRecordKey(record)
+      if (selectedSet.has(key)) {
+        selectedRecordMap.set(key, record)
+      }
     }
-  }
-})
+  },
+)
 
 watch(selectedRecords, (records) => {
   if (records.length < 2 && activeView.value === "compare") {
@@ -471,16 +517,18 @@ const metadataColumns = computed<AimdRecordMetadataColumn[]>(() => [
     key: "submittedAt",
     label: t("page.protocol.records.submittedAt"),
     class: "record-metadata-column record-metadata-column--time",
-    getValue: record => formatDate(
-      (record as ProtocolModels.RecordInfo).metadata.record_current_version_submission_time,
-      "date-time",
-    ),
+    getValue: record =>
+      formatDate(
+        (record as ProtocolModels.RecordInfo).metadata.record_current_version_submission_time,
+        "date-time",
+      ),
   },
   {
     key: "submittedBy",
     label: t("page.protocol.records.submittedBy"),
     class: "record-metadata-column record-metadata-column--user",
-    getValue: record => `@${(record as ProtocolModels.RecordInfo).metadata.record_current_version_submission_user_id}`,
+    getValue: record =>
+      `@${(record as ProtocolModels.RecordInfo).metadata.record_current_version_submission_user_id}`,
   },
   {
     key: "recordVersion",
@@ -509,7 +557,9 @@ function getFilename(record: ProtocolModels.RecordInfo) {
     name || protocol_id,
     record_num ? `record-${record_num}` : record.record_id,
     `v${record.record_version}`,
-  ].filter(Boolean).join("-")
+  ]
+    .filter(Boolean)
+    .join("-")
 }
 
 function getSelectedRecordsFilename(records: ProtocolModels.RecordInfo[]) {
@@ -517,16 +567,12 @@ function getSelectedRecordsFilename(records: ProtocolModels.RecordInfo[]) {
   const recordNumbers = records
     .map(record => record.metadata.record_num)
     .filter((recordNumber): recordNumber is number => typeof recordNumber === "number")
-  const recordsLabel = recordNumbers.length === records.length
-    ? `records-${recordNumbers.join("-")}`
-    : `records-${records.length}`
+  const recordsLabel
+    = recordNumbers.length === records.length
+      ? `records-${recordNumbers.join("-")}`
+      : `records-${records.length}`
 
-  return [
-    lab?.name,
-    project?.name,
-    name,
-    recordsLabel,
-  ].filter(Boolean).join("-")
+  return [lab?.name, project?.name, name, recordsLabel].filter(Boolean).join("-")
 }
 
 function exportJson(key: string, value: unknown, filename: string) {
@@ -567,16 +613,20 @@ const effectiveDeleteGraceDays = computed(() => {
 
 function canDeleteByRole(record: unknown) {
   const item = record as ProtocolModels.RecordInfo
-  return canDeleteOthersRecords.value
+  return (
+    canDeleteOthersRecords.value
     || (canDeleteOwnRecords.value
       && item.metadata.record_current_version_submission_user_id === authStore.userInfo.id)
+  )
 }
 
 function hasNewerRecord(record: ProtocolModels.RecordInfo) {
   const currentNumber = record.metadata.record_num
-  return currentNumber != null
+  return (
+    currentNumber != null
     && props.latestRecordNumber != null
     && currentNumber < props.latestRecordNumber
+  )
 }
 
 function isDeleteGraceExpired(record: ProtocolModels.RecordInfo) {
@@ -584,7 +634,9 @@ function isDeleteGraceExpired(record: ProtocolModels.RecordInfo) {
     return false
   }
   const createdAt = record.metadata.record_current_version_submission_time
-  return Boolean(createdAt && dayjs().isAfter(dayjs(createdAt).add(effectiveDeleteGraceDays.value, "day")))
+  return Boolean(
+    createdAt && dayjs().isAfter(dayjs(createdAt).add(effectiveDeleteGraceDays.value, "day")),
+  )
 }
 
 function getDeleteBlockedReason(value: unknown) {
@@ -605,9 +657,9 @@ function getDeleteBlockedReason(value: unknown) {
 }
 
 const pendingDeleteRecord = ref<ProtocolModels.RecordInfo | null>(null)
-const deleteItemName = computed(() => pendingDeleteRecord.value
-  ? getRecordLabel(pendingDeleteRecord.value)
-  : t("common.record"))
+const deleteItemName = computed(() =>
+  pendingDeleteRecord.value ? getRecordLabel(pendingDeleteRecord.value) : t("common.record"),
+)
 
 const {
   showDeleteModal,
@@ -619,9 +671,11 @@ const {
   confirmDelete,
 } = useDeleteConfirmation(handleDeleteRecord, "Record", handleDeleteSuccess)
 
-const deleteAdminWarning = computed(() => pendingDeleteRecord.value && canDeleteOthersRecords.value
-  ? t("page.protocol.records.deleteAdminWarning", { days: effectiveDeleteGraceDays.value })
-  : "")
+const deleteAdminWarning = computed(() =>
+  pendingDeleteRecord.value && canDeleteOthersRecords.value
+    ? t("page.protocol.records.deleteAdminWarning", { days: effectiveDeleteGraceDays.value })
+    : "",
+)
 
 function handleDeleteClick(value: unknown) {
   const record = value as ProtocolModels.RecordInfo
@@ -646,7 +700,11 @@ async function handleDeleteRecord() {
   if (!record) {
     return { data: null, error: new Error("Wrong params") }
   }
-  return deleteResearchRecord(String(props.protocolInfo.id), record.record_id, record.record_version)
+  return deleteResearchRecord(
+    String(props.protocolInfo.id),
+    record.record_id,
+    record.record_version,
+  )
 }
 
 function handleDeleteSuccess() {
@@ -689,7 +747,6 @@ function handleDeleteSuccess() {
   border-radius: 5px;
   background: #eef8f4;
   color: #236451;
-  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -716,14 +773,6 @@ function handleDeleteSuccess() {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #253247;
-  font-weight: 650;
-}
-
-.record-compare-labels {
-  color: #607079;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 :deep(.record-metadata-column--time) {

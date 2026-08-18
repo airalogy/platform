@@ -24,7 +24,7 @@
             clearable
             :placeholder="$t('page.home.pinnedSearchLabsPlaceholder')"
           />
-          <span class="ml-auto text-3 text-gray-500">
+          <span class="aira-type-meta ml-auto">
             {{ $t("page.home.pinnedLimitHint", { count: props.maxCount }) }}
           </span>
         </div>
@@ -40,16 +40,18 @@
                     <n-checkbox
                       :checked="isPinned(PinnedResourceType.Lab, lab.id)"
                       :disabled="isCheckboxDisabled(PinnedResourceType.Lab, lab.id)"
-                      @update:checked="(checked: boolean) => handleToggle(PinnedResourceType.Lab, lab.id, checked)"
+                      @update:checked="
+                        (checked: boolean) => handleToggle(PinnedResourceType.Lab, lab.id, checked)
+                      "
                     />
                   </template>
                   {{ $t("page.home.pinnedLimitReached", { count: props.maxCount }) }}
                 </n-tooltip>
                 <div class="min-w-0 flex-1">
-                  <n-ellipsis class="font-500">
+                  <n-ellipsis class="aira-type-item-title">
                     {{ lab.name || lab.uid }}
                   </n-ellipsis>
-                  <div class="text-3 text-gray-500">
+                  <div class="aira-type-meta">
                     {{ formatNumber(lab.projects_count || 0) }} {{ $t("page.home.pinnedProjects") }}
                     ·
                     {{ formatNumber(lab.users_count || 0) }} {{ $t("page.home.pinnedMembers") }}
@@ -69,7 +71,7 @@
             clearable
             :placeholder="$t('page.home.pinnedSearchProjectsPlaceholder')"
           />
-          <span class="ml-auto text-3 text-gray-500">
+          <span class="aira-type-meta ml-auto">
             {{ $t("page.home.pinnedLimitHint", { count: props.maxCount }) }}
           </span>
         </div>
@@ -85,16 +87,19 @@
                     <n-checkbox
                       :checked="isPinned(PinnedResourceType.Project, project.id)"
                       :disabled="isCheckboxDisabled(PinnedResourceType.Project, project.id)"
-                      @update:checked="(checked: boolean) => handleToggle(PinnedResourceType.Project, project.id, checked)"
+                      @update:checked="
+                        (checked: boolean) =>
+                          handleToggle(PinnedResourceType.Project, project.id, checked)
+                      "
                     />
                   </template>
                   {{ $t("page.home.pinnedLimitReached", { count: props.maxCount }) }}
                 </n-tooltip>
                 <div class="min-w-0 flex-1">
-                  <n-ellipsis class="font-500">
+                  <n-ellipsis class="aira-type-item-title">
                     {{ project.name || project.uid }}
                   </n-ellipsis>
-                  <div class="text-3 text-gray-500">
+                  <div class="aira-type-meta">
                     {{ project.lab_name || project.lab_uid }}
                   </div>
                 </div>
@@ -112,7 +117,7 @@
             clearable
             :placeholder="$t('page.home.pinnedSearchProtocolsPlaceholder')"
           />
-          <span class="ml-auto text-3 text-gray-500">
+          <span class="aira-type-meta ml-auto">
             {{ $t("page.home.pinnedLimitHint", { count: props.maxCount }) }}
           </span>
         </div>
@@ -128,16 +133,19 @@
                     <n-checkbox
                       :checked="isPinned(PinnedResourceType.Protocol, protocol.id)"
                       :disabled="isCheckboxDisabled(PinnedResourceType.Protocol, protocol.id)"
-                      @update:checked="(checked: boolean) => handleToggle(PinnedResourceType.Protocol, protocol.id, checked)"
+                      @update:checked="
+                        (checked: boolean) =>
+                          handleToggle(PinnedResourceType.Protocol, protocol.id, checked)
+                      "
                     />
                   </template>
                   {{ $t("page.home.pinnedLimitReached", { count: props.maxCount }) }}
                 </n-tooltip>
                 <div class="min-w-0 flex-1">
-                  <n-ellipsis class="font-500">
+                  <n-ellipsis class="aira-type-item-title">
                     {{ protocol.name || protocol.uid }}
                   </n-ellipsis>
-                  <div class="text-3 text-gray-500">
+                  <div class="aira-type-meta">
                     {{ protocol.lab?.name || protocol.lab?.uid }}
                     <span v-if="protocol.project" class="mx-1">/</span>
                     {{ protocol.project?.name || protocol.project?.uid }}
@@ -262,13 +270,23 @@ function matchesSearch(values: Array<string | undefined>) {
 const filteredLabs = computed(() => {
   return labs.value
     .filter(lab => matchesSearch([lab.name, lab.uid]))
-    .sort((a, b) => Number(isPinned(PinnedResourceType.Lab, b.id)) - Number(isPinned(PinnedResourceType.Lab, a.id)))
+    .sort(
+      (a, b) =>
+        Number(isPinned(PinnedResourceType.Lab, b.id))
+        - Number(isPinned(PinnedResourceType.Lab, a.id)),
+    )
 })
 
 const filteredProjects = computed(() => {
   return projects.value
-    .filter(project => matchesSearch([project.name, project.uid, project.lab_name, project.lab_uid]))
-    .sort((a, b) => Number(isPinned(PinnedResourceType.Project, b.id)) - Number(isPinned(PinnedResourceType.Project, a.id)))
+    .filter(project =>
+      matchesSearch([project.name, project.uid, project.lab_name, project.lab_uid]),
+    )
+    .sort(
+      (a, b) =>
+        Number(isPinned(PinnedResourceType.Project, b.id))
+        - Number(isPinned(PinnedResourceType.Project, a.id)),
+    )
 })
 
 const filteredProtocols = computed(() => {
@@ -283,7 +301,11 @@ const filteredProtocols = computed(() => {
         protocol.project?.uid,
       ]),
     )
-    .sort((a, b) => Number(isPinned(PinnedResourceType.Protocol, b.id)) - Number(isPinned(PinnedResourceType.Protocol, a.id)))
+    .sort(
+      (a, b) =>
+        Number(isPinned(PinnedResourceType.Protocol, b.id))
+        - Number(isPinned(PinnedResourceType.Protocol, a.id)),
+    )
 })
 
 async function loadLabs() {
@@ -370,20 +392,24 @@ async function loadProtocols() {
   }
 }
 
-watch([isShown, activeTab], ([show, tab]) => {
-  if (!show) {
-    return
-  }
-  if (tab === "labs") {
-    loadLabs()
-  }
-  else if (tab === "projects") {
-    loadProjects()
-  }
-  else {
-    loadProtocols()
-  }
-}, { immediate: false })
+watch(
+  [isShown, activeTab],
+  ([show, tab]) => {
+    if (!show) {
+      return
+    }
+    if (tab === "labs") {
+      loadLabs()
+    }
+    else if (tab === "projects") {
+      loadProjects()
+    }
+    else {
+      loadProtocols()
+    }
+  },
+  { immediate: false },
+)
 </script>
 
 <style scoped lang="sass">

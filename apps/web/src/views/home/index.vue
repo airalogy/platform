@@ -48,7 +48,7 @@
         />
       </n-layout-content>
       <n-layout-header v-if="totalCount > 0 || !loading">
-        <h3 class="px-6 pb-3 pt-6 text-[18px] font-medium">
+        <h3 class="aira-type-section-title px-6 pb-3 pt-6">
           {{ $t("page.home.activities") }}
         </h3>
       </n-layout-header>
@@ -81,8 +81,8 @@
             v-else
             bordered
             class="flex items-center justify-center px-20 py-24.5"
-            header-class="!text-8 text-center "
-            content-class="!text-4"
+            header-class="aira-type-page-title text-center"
+            content-class="aira-type-body"
           >
             <template #header>
               {{
@@ -123,7 +123,14 @@
 <script setup lang="ts">
 import { useRouterPush } from "@/composables/useRouterPush"
 import { getActivities } from "@/service/api/activities"
-import { createPinnedItem, deletePinnedItem, getPinnedItems, type PinnedItem, PinnedResourceType, reorderPinnedItems } from "@/service/api/pinned-items"
+import {
+  createPinnedItem,
+  deletePinnedItem,
+  getPinnedItems,
+  type PinnedItem,
+  PinnedResourceType,
+  reorderPinnedItems,
+} from "@/service/api/pinned-items"
 import { getProtocolInfo } from "@/service/api/protocol"
 
 import { useAppStore } from "@/store/modules/app"
@@ -144,7 +151,11 @@ import TaskWorkbench from "./components/task-workbench.vue"
 const authStore = useAuthStore()
 const instanceStore = useInstanceStore()
 const { loading, startLoading, endLoading } = useLoading()
-const { loading: pinnedLoading, startLoading: startPinnedLoading, endLoading: endPinnedLoading } = useLoading(true)
+const {
+  loading: pinnedLoading,
+  startLoading: startPinnedLoading,
+  endLoading: endPinnedLoading,
+} = useLoading(true)
 const message = useClosableMessage()
 
 const activityRecord = ref<
@@ -438,12 +449,16 @@ onMounted(async () => {
 })
 
 // Also watch for auth state changes in case user navigates between pages
-watch(() => authStore.justSignedUp, (newValue) => {
-  if (newValue && !hasShownTestingDialog.value && !loading.value) {
-    showTestingDialog.value = true
-    hasShownTestingDialog.value = true
-  }
-}, { immediate: true })
+watch(
+  () => authStore.justSignedUp,
+  (newValue) => {
+    if (newValue && !hasShownTestingDialog.value && !loading.value) {
+      showTestingDialog.value = true
+      hasShownTestingDialog.value = true
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped lang="sass">

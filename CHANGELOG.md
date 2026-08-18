@@ -33,6 +33,7 @@ Target initial version: `0.1.0`.
 
 ### Changed
 
+- Centralized Platform UI typography into shared semantic roles for titles, body copy, labels, metadata, status, metrics, and code; the browser, Naive UI, and UnoCSS now use one Chinese/English font stack, with core Home, Lab, Project, Protocol, and Record surfaces migrated to the shared system.
 - Reworked the home page into a role- and work-state-aware task workbench that resumes real local Record drafts, starts the most recent Protocol directly, inherits recent Project context for Protocol creation, exposes management shortcuts only from actual memberships, and uses a bounded 1920px wide-screen canvas without stretching other product pages.
 - Improved Record entry with visible device-local draft status, manual save feedback, required-field progress, first-error focus, a deterministic destination/resource submission preview, and explicit post-submit next steps.
 - Made AI an explicit instance capability: provider-backed Aira entry points appear only when available, while AI-disabled instances retain the complete deterministic Protocol and Record experience without empty chat controls.
@@ -50,6 +51,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Made Protocol list rows responsive so long titles, ownership context, secondary creation metadata, metrics, and actions retain a stable visual hierarchy and wrap cleanly on narrow screens instead of compressing into one overflowing line; aggregated lists now retain the non-sensitive star and reuse metrics while record actions remain permission-gated.
 - Fixed browsers retaining an unrelated cached site icon instead of the Airalogy favicon.
 - Added the owning Lab and Project path to aggregated Protocol lists so “My Protocols” and profile views retain their workspace context.
 - Fixed Protocol, Project, Lab, and Group descriptions showing a non-functional “Read more” action when the full text already fit within the three-line preview.

@@ -2,6 +2,8 @@ import type { ConfigProviderProps } from "naive-ui"
 
 export const themeOverrides: ConfigProviderProps["themeOverrides"] = {
   common: {
+    fontFamily: "var(--aira-font-sans)",
+    fontFamilyMono: "var(--aira-font-mono)",
     primaryColor: "#1A79FF",
     primaryColorHover: "#4181FD",
     primaryColorPressed: "#1454D4",

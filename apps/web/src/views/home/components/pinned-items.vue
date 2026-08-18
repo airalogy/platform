@@ -2,9 +2,9 @@
   <n-card bordered class="rounded-2.5" content-class="!p-0">
     <template #header>
       <div class="flex items-center justify-between">
-        <span class="text-4 font-500">{{ $t("page.home.pinned") }}</span>
+        <span class="aira-type-card-title">{{ $t("page.home.pinned") }}</span>
         <div class="flex items-center gap-2">
-          <span class="text-3 text-gray-500">{{ props.items.length }}/{{ props.maxCount }}</span>
+          <span class="aira-type-metric">{{ props.items.length }}/{{ props.maxCount }}</span>
           <pinned-manage-modal
             :pinned-map="pinnedMap"
             :pinning-keys="props.pinningKeys"
@@ -16,7 +16,12 @@
     </template>
     <n-spin :show="props.loading" class="min-h-20">
       <div v-if="displayItems.length > 0" ref="listRef" class="pinned-list">
-        <div v-for="{ item, meta } in displayItems" :key="item.id" class="pinned-row group" :data-id="item.id">
+        <div
+          v-for="{ item, meta } in displayItems"
+          :key="item.id"
+          class="pinned-row group"
+          :data-id="item.id"
+        >
           <n-tooltip placement="top">
             <template #trigger>
               <span class="pinned-drag-handle">
@@ -39,7 +44,11 @@
           </div>
           <div class="pinned-content">
             <div class="pinned-title-row">
-              <n-ellipsis :line-clamp="1" :tooltip="{ placement: 'top' }" class="pinned-title">
+              <n-ellipsis
+                :line-clamp="1"
+                :tooltip="{ placement: 'top' }"
+                class="aira-type-item-title pinned-title"
+              >
                 <router-link v-if="meta.route" :to="meta.route" class="hover:router-link">
                   {{ meta.title }}
                 </router-link>
@@ -47,7 +56,7 @@
               </n-ellipsis>
               <span
                 v-if="meta.visibilityLabel"
-                class="pinned-visibility"
+                class="aira-type-status pinned-visibility"
                 :class="meta.visibilityClass"
               >
                 {{ meta.visibilityLabel }}
@@ -57,10 +66,13 @@
               v-if="meta.subtitle || (meta.subtitleParts && meta.subtitleParts.length > 0)"
               :line-clamp="1"
               :tooltip="false"
-              class="pinned-subtitle"
+              class="aira-type-meta pinned-subtitle"
             >
               <template v-if="meta.subtitleParts && meta.subtitleParts.length > 0">
-                <template v-for="(part, index) in meta.subtitleParts" :key="`${part.label}-${index}`">
+                <template
+                  v-for="(part, index) in meta.subtitleParts"
+                  :key="`${part.label}-${index}`"
+                >
                   <span v-if="index > 0" class="subtitle-sep">/</span>
                   <router-link v-if="part.route" :to="part.route" class="hover:router-link">
                     {{ part.label }}
@@ -98,10 +110,10 @@
         </div>
       </div>
       <div v-else-if="!props.loading" class="pinned-empty">
-        <div class="text-3 text-gray-500">
+        <div class="aira-type-meta">
           {{ $t("page.home.pinnedEmptyTitle") }}
         </div>
-        <div class="text-3 text-gray-400">
+        <div class="aira-type-caption">
           {{ $t("page.home.pinnedEmptyDesc") }}
         </div>
       </div>
@@ -201,26 +213,35 @@ function resolveItemMeta(item: PinnedItem): PinnedItemMeta {
     return {
       title: resource.name || resource.uid || "Untitled project",
       subtitle: labLabel || undefined,
-      subtitleRoute: resource.lab_uid ? { name: "lab-projects", params: { labUid: resource.lab_uid } } : null,
+      subtitleRoute: resource.lab_uid
+        ? { name: "lab-projects", params: { labUid: resource.lab_uid } }
+        : null,
       visibilityLabel: visibility.label || undefined,
       visibilityClass: visibility.className || undefined,
       subtitleParts: labLabel
         ? [
             {
               label: labLabel,
-              route: resource.lab_uid ? { name: "lab-projects", params: { labUid: resource.lab_uid } } : null,
+              route: resource.lab_uid
+                ? { name: "lab-projects", params: { labUid: resource.lab_uid } }
+                : null,
             },
           ]
         : undefined,
       route:
         resource.lab_uid && resource.uid
-          ? { name: "project-protocols", params: { labUid: resource.lab_uid, projectUid: resource.uid } }
+          ? {
+              name: "project-protocols",
+              params: { labUid: resource.lab_uid, projectUid: resource.uid },
+            }
           : null,
       icon: "project",
     }
   }
 
-  const resource = item.resource as Partial<ProtocolModels.ProjectProtocolInfo & ProtocolModels.ProtocolResponseInfo>
+  const resource = item.resource as Partial<
+    ProtocolModels.ProjectProtocolInfo & ProtocolModels.ProtocolResponseInfo
+  >
   const labUid = resource.lab?.uid || resource.lab_uid
   const projectUid = resource.project?.uid || resource.project_uid
   const labLabel = resource.lab?.name || resource.lab_name || resource.lab_uid || ""
@@ -236,7 +257,10 @@ function resolveItemMeta(item: PinnedItem): PinnedItemMeta {
     projectLabel
       ? {
           label: projectLabel,
-          route: labUid && projectUid ? { name: "project-protocols", params: { labUid, projectUid } } : null,
+          route:
+            labUid && projectUid
+              ? { name: "project-protocols", params: { labUid, projectUid } }
+              : null,
         }
       : null,
   ].filter(Boolean) as Array<{ label: string, route?: RouteLocationRaw | null }>
@@ -253,7 +277,9 @@ function resolveItemMeta(item: PinnedItem): PinnedItemMeta {
   }
 }
 
-const displayItems = computed(() => props.items.map(item => ({ item, meta: resolveItemMeta(item) })))
+const displayItems = computed(() =>
+  props.items.map(item => ({ item, meta: resolveItemMeta(item) })),
+)
 
 const listRef = ref<HTMLElement | null>(null)
 const sortableRef = ref<Sortable | null>(null)
@@ -384,14 +410,10 @@ function handleToggle(item: PinnedItem, event: MouseEvent) {
 .pinned-visibility
   padding: 2px 8px
   border-radius: 999px
-  font-size: 11px
-  line-height: 1
   white-space: nowrap
 
 .pinned-subtitle
   display: block
-  font-size: 12px
-  color: #6B7280
 
 .subtitle-sep
   margin: 0 4px
