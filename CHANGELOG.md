@@ -51,6 +51,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Fixed narrow-screen typography collisions by keeping the global fallback line height proportional, moving the public landing page and showcase cards onto the shared semantic type system, and delaying its two-column composition until sufficient width is available.
 - Made Protocol list rows responsive so long titles, ownership context, secondary creation metadata, metrics, and actions retain a stable visual hierarchy and wrap cleanly on narrow screens instead of compressing into one overflowing line; aggregated lists now retain the non-sensitive star and reuse metrics while record actions remain permission-gated.
 - Fixed browsers retaining an unrelated cached site icon instead of the Airalogy favicon.
 - Added the owning Lab and Project path to aggregated Protocol lists so “My Protocols” and profile views retain their workspace context.

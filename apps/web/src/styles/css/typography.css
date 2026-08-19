@@ -42,7 +42,9 @@ body {
   color: var(--aira-text-primary);
   font-size: var(--aira-type-body-size);
   font-weight: 400;
-  line-height: var(--aira-type-body-line-height);
+  /* Keep the inherited fallback proportional so legacy/local font sizes cannot
+     inherit a fixed 22px line box and visually collide on narrow screens. */
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

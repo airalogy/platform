@@ -1,14 +1,14 @@
 <template>
   <section class="hero">
     <div class="hero__content">
-      <h1 class="hero__title">
+      <h1 class="hero__title aira-type-display">
         Airalogy
       </h1>
-      <p class="hero__description">
+      <p class="hero__description aira-text-secondary">
         The world's first universal platform for research digitization, automation, and acceleration.
       </p>
       <div class="hero__buttons">
-        <n-button type="primary" icon-placement="right" @click="toLogin()">
+        <n-button class="hero__button" type="primary" icon-placement="right" @click="toLogin()">
           Get Started
           <template #icon>
             <n-icon>
@@ -16,7 +16,7 @@
             </n-icon>
           </template>
         </n-button>
-        <n-button @click="toLogin()">
+        <n-button class="hero__button" @click="toLogin()">
           Explore Protocols
         </n-button>
       </div>
@@ -24,7 +24,7 @@
 
     <div class="hero__cards">
       <activity-card
-        class="hero__card z-20 w-full md:ml-auto md:w-80"
+        class="hero__card hero__card--activity"
         badge-text="Activities"
         username="Alice"
         action="updates a protocol"
@@ -34,7 +34,7 @@
       />
 
       <organization-card
-        class="hero__card mr-auto mt-4 w-full md:w-80 md:-mt-4"
+        class="hero__card hero__card--organization"
         :labs="[
           {
             memberCount: 891,
@@ -76,26 +76,44 @@ onBeforeUnmount(() => {
 
 <style scoped lang="sass">
 .hero
-  @apply w-full p-6 flex flex-col md:flex-row md:px-0 justify-between overflow-hidden
+  @apply relative w-full flex flex-col gap-10 overflow-hidden px-5 py-10 sm:px-8 sm:py-12 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-6 lg:py-14 xl:gap-14
   background: url('/images/hero_placeholder.png') no-repeat right bottom / contain
 
 .hero__content
-  @apply my-auto w-full md:w-1/2 text-center md:text-left
+  @apply relative z-10 mx-auto w-full max-w-2xl text-center lg:mx-0 lg:w-1/2 lg:max-w-xl lg:text-left xl:max-w-2xl
 
 .hero__title
-  @apply text-12 font-600 text-[#333333]
+  font-size: clamp(2.75rem, 8vw, 4.5rem)
+  line-height: 1.05
+  letter-spacing: -0.035em
 
 .hero__description
-  @apply text-6 font-400 text-[#666666] opacity-80
+  @apply mx-auto mt-4 max-w-2xl font-400 lg:mx-0
+  font-size: clamp(1.125rem, 2.4vw, 1.5rem)
+  line-height: 1.45
 
 .hero__buttons
-  @apply flex items-center gap-16px justify-center mt-4 mb-5 md:justify-start
+  @apply mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center lg:justify-start
+
+.hero__button
+  @apply h-11 w-full px-5 text-4 sm:w-auto
 
 .hero__cards
-  @apply flex flex-col w-full px-6 md:p-10 md:w-11/24 items-center md:items-end
-  min-width: min(30rem, 100%)
+  @apply relative z-10 mx-auto flex min-w-0 w-full max-w-2xl flex-col items-stretch lg:mx-0 lg:w-11/24 lg:max-w-[34rem]
 
 .hero__card
+  @apply w-full max-w-lg
+
   &:hover
-    @apply scale-105 transition-all duration-300
+    @apply transition-all duration-300
+
+.hero__card--activity
+  @apply z-20 self-end
+
+.hero__card--organization
+  @apply mt-4 self-start
+
+@media (hover: hover) and (pointer: fine)
+  .hero__card:hover
+    @apply scale-[1.02]
 </style>

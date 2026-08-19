@@ -1,34 +1,34 @@
 <template>
-  <div class="relative flex flex-col gap-18px border border-[#EAECF0] rounded-8px border-solid bg-white p-19px shadow-[0px_3px_12px_rgba(43,54,94,0.06)]">
+  <div class="organization-card">
     <div class="inline-flex">
-      <div class="inline-flex items-center justify-center rounded-34px bg-[#1DC3E1] px-17px py-6px text-14px text-white font-400">
+      <div class="organization-card__badge aira-type-label">
         <span>{{ props.badgeText }}</span>
       </div>
     </div>
 
-    <div v-for="(item, index) in props.labs" :key="index" class="w-full flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <div class="h-8 w-8 overflow-hidden rounded-4px bg-[#D9D9D9]">
+    <div v-for="(item, index) in props.labs" :key="index" class="organization-card__item">
+      <div class="organization-card__main">
+        <div class="organization-card__logo">
           <div v-if="!item.logoSrc" class="h-full w-full bg-[#FDBF46] opacity-16" />
           <img v-else :src="item.logoSrc" class="h-full w-full object-cover">
         </div>
-        <div class="flex flex-col">
-          <div class="text-14px text-[#333333] font-500">
+        <div class="min-w-0 flex flex-col">
+          <div class="aira-type-item-title truncate">
             {{ item.name }}
           </div>
-          <div class="flex items-center gap-2">
+          <div class="organization-card__metrics aira-type-metric">
             <project-icon-compact color="#9A9A9A" />
-            <div class="text-14px text-[#666666] font-500">
+            <span>
               {{ item.projectCount }}
-            </div>
+            </span>
             <profile-icon-compact color="#9A9A9A" />
-            <div class="text-14px text-[#666666] font-500">
+            <span>
               {{ item.memberCount }}
-            </div>
+            </span>
           </div>
         </div>
       </div>
-      <n-tag :color="getRoleColor(item.role)" :bordered="false">
+      <n-tag class="shrink-0" size="small" :color="getRoleColor(item.role)" :bordered="false">
         {{ item.role }}
       </n-tag>
     </div>
@@ -74,5 +74,21 @@ function getRoleColor(role: "owner" | "manager" | "member") {
 </script>
 
 <style scoped lang="sass">
-// Remove all styles as they're now inline in the template using UnoCSS
+.organization-card
+  @apply relative flex min-w-0 flex-col gap-4 border border-[#EAECF0] rounded-8px border-solid bg-white p-4 shadow-[0px_3px_12px_rgba(43,54,94,0.06)] sm:p-5
+
+.organization-card__badge
+  @apply inline-flex items-center justify-center rounded-full bg-[#1DC3E1] px-4 py-1.5 text-white
+
+.organization-card__item
+  @apply flex min-w-0 w-full items-center justify-between gap-3
+
+.organization-card__main
+  @apply flex min-w-0 flex-1 items-center gap-3
+
+.organization-card__logo
+  @apply h-10 w-10 shrink-0 overflow-hidden rounded-4px bg-[#D9D9D9]
+
+.organization-card__metrics
+  @apply flex flex-wrap items-center gap-x-2 gap-y-0
 </style>

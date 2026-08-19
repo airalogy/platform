@@ -1,28 +1,28 @@
 <template>
   <div class="activity-card">
     <div class="activity-card__badge">
-      <div class="badge badge--green">
+      <div class="badge badge--green aira-type-label">
         <span>{{ props.badgeText }}</span>
       </div>
     </div>
 
     <div class="activity-card__content">
       <div class="activity-card__user-info">
-        <img :src="props.avatarSrc" :alt="`${props.username}'s avatar`">
-        <div>
+        <img class="activity-card__avatar" :src="props.avatarSrc" :alt="`${props.username}'s avatar`">
+        <div class="min-w-0">
           <div class="activity-card__user">
-            <span class="activity-card__username">{{ props.username }}</span>
-            <span class="activity-card__action">{{ props.action }}</span>
+            <span class="activity-card__username aira-type-item-title">{{ props.username }}</span>
+            <span class="activity-card__action aira-type-body">{{ props.action }}</span>
           </div>
-          <div class="activity-card__time">
+          <div class="activity-card__time aira-type-meta">
             {{ props.timeAgo }}
           </div>
         </div>
       </div>
-      <div class="activity-card__path">
+      <div class="activity-card__path aira-type-item-title">
         {{ props.path }}
       </div>
-      <p class="activity-card__description">
+      <p class="activity-card__description aira-type-body aira-text-muted">
         {{ props.description }}
       </p>
     </div>
@@ -51,38 +51,38 @@ const props = withDefaults(defineProps<Props>(), {
 
 <style scoped lang="sass">
 .activity-card
-  @apply bg-white border border-solid border-[#EAECF0] rounded-8px shadow-[0px_6px_18px_rgba(43,54,94,0.06)] p-20px relative
+  @apply relative border border-solid border-[#EAECF0] rounded-8px bg-white p-4 shadow-[0px_6px_18px_rgba(43,54,94,0.06)] sm:p-5
 
 .activity-card__badge
-  @apply inline-flex mb-10px
+  @apply mb-3 inline-flex
 
 .badge
-  @apply inline-flex items-center justify-center px-17px py-6px rounded-34px text-14px font-400
+  @apply inline-flex items-center justify-center rounded-full px-4 py-1.5
 
 .badge--green
   @apply bg-[#1BA37B] text-white
 
 .activity-card__user-info
-  @apply flex items-center gap-10px my-1
+  @apply my-1 flex min-w-0 items-center gap-3
+
+.activity-card__avatar
+  @apply h-10 w-10 shrink-0 rounded-full object-cover
 
 .activity-card__content
-  @apply flex flex-col gap-5px
+  @apply flex min-w-0 flex-col gap-2
 
 .activity-card__user
-  @apply flex gap-5px
+  @apply flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0
 
 .activity-card__username
-  @apply text-13px font-500 text-[#333333]
+  @apply shrink-0
 
 .activity-card__action
-  @apply text-13px font-400 text-[#333333]
-
-.activity-card__time
-  @apply text-10px font-400 text-[#666666]
+  @apply min-w-0
 
 .activity-card__path
-  @apply text-13px font-500 text-[#333333] mt-5px
+  @apply mt-2 break-words
 
 .activity-card__description
-  @apply text-11px font-400 text-[#666666] my-5px
+  @apply my-1 break-words
 </style>

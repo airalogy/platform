@@ -9,6 +9,8 @@
 
 Do not add page-local `font-family` declarations for ordinary Platform UI.
 
+The global fallback line height is unitless so any legacy or intentionally custom font size receives a proportional line box. Semantic roles still provide their own exact line height. Do not set a fixed global `rem` or `px` line height on a parent container.
+
 ## Semantic roles
 
 | Class | Use |
