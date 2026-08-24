@@ -24,6 +24,7 @@ export interface InstanceStatus {
   support_url: string
   ai_enabled: boolean
   sms_login_enabled: boolean
+  sms_signup_required: boolean
   enabled_chat_models: ChatModel[]
   lab: InstanceLabInfo | null
 }

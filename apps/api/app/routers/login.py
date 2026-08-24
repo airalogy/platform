@@ -26,6 +26,12 @@ from app.services.single_lab import (
     normalize_email,
     utcnow,
 )
+from app.services.signup_verification import (
+    SIGNUP_VERIFICATION_TTL_SECONDS,
+    consume_signup_verification,
+    get_signup_verification,
+    issue_signup_verification,
+)
 
 from .depends import create_access_token
 from .utils import UidStr, check_sms_verify_code, send_sms_verify_code
@@ -36,6 +42,14 @@ router = APIRouter(tags=["login"])
 def require_sms_login_enabled() -> None:
     if not config.effective_sms_login_enabled:
         raise HTTPException(status_code=503, detail="SMS login is disabled")
+
+
+def require_sms_signup_verification() -> None:
+    if not config.effective_sms_signup_required:
+        raise HTTPException(
+            status_code=503,
+            detail="SMS signup verification is disabled",
+        )
 
 
 class SignInParams(BaseModel):
@@ -125,6 +139,16 @@ class SignUpParams(BaseModel):
     verify_code: Annotated[
         str | None, StringConstraints(min_length=6, max_length=6)
     ] = None
+    signup_verification_token: Annotated[
+        str | None,
+        StringConstraints(min_length=32, max_length=128),
+    ] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "signup_verification_token",
+            "signupVerificationToken",
+        ),
+    )
     password: Annotated[str, StringConstraints(min_length=8, max_length=32)]
     invite_token: str | None = Field(
         default=None,
@@ -147,6 +171,22 @@ class SignUpParams(BaseModel):
 
 @router.post("/signup")
 async def signup(params: SignUpParams, db_session: DBSession):
+    verified_signup_phone = None
+    if config.effective_sms_signup_required:
+        if not params.signup_verification_token:
+            raise HTTPException(
+                status_code=403,
+                detail="Phone verification is required before signup",
+            )
+        verified_signup_phone = await get_signup_verification(
+            params.signup_verification_token
+        )
+        if verified_signup_phone is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Signup phone verification is invalid or expired",
+            )
+
     email = normalize_email(str(params.email))
     invitation = None
     single_lab = None
@@ -176,6 +216,27 @@ async def signup(params: SignUpParams, db_session: DBSession):
                     detail="Invitation does not match this email or Lab",
                 )
 
+    signup_country_code = (
+        verified_signup_phone["country_code"]
+        if verified_signup_phone is not None
+        else params.country_code
+    )
+    signup_phone = (
+        verified_signup_phone["phone"]
+        if verified_signup_phone is not None
+        else params.phone
+    )
+    if signup_country_code and signup_phone:
+        phone_exists = await User.exists(
+            db_session,
+            [
+                User.country_code == signup_country_code,
+                User.phone == signup_phone,
+            ],
+        )
+        if phone_exists:
+            raise HTTPException(status_code=400, detail="Phone number already exists")
+
     email_exists = await User.exists(db_session, [User.email == email])
     if email_exists:
         raise HTTPException(status_code=400, detail="Email already exists")
@@ -187,17 +248,16 @@ async def signup(params: SignUpParams, db_session: DBSession):
     if lab_exists:
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    if params.has_phone_verification:
-        phone_exists = await User.exists(
-            db_session,
-            [
-                User.country_code == params.country_code,
-                User.phone == params.phone,
-            ],
+    if verified_signup_phone is not None:
+        consumed_signup_phone = await consume_signup_verification(
+            params.signup_verification_token or ""
         )
-        if phone_exists:
-            raise HTTPException(status_code=400, detail="Phone number already exists")
-
+        if consumed_signup_phone != verified_signup_phone:
+            raise HTTPException(
+                status_code=400,
+                detail="Signup phone verification is invalid or expired",
+            )
+    elif params.has_phone_verification:
         await check_sms_verify_code(
             f"{params.country_code}{params.phone}", params.verify_code, "signup"
         )
@@ -205,8 +265,8 @@ async def signup(params: SignUpParams, db_session: DBSession):
         username=params.username,
         name=params.name,
         email=email,
-        country_code=params.country_code or "",
-        phone=params.phone or "",
+        country_code=signup_country_code or "",
+        phone=signup_phone or "",
         password=params.password,
         api_key_iv=os.urandom(16).hex(),
     )
@@ -267,6 +327,43 @@ class SendVerifyCodeParams(BaseModel):
     ]
 
 
+class VerifySignupPhoneParams(BaseModel):
+    country_code: Annotated[
+        str,
+        StringConstraints(pattern=r"^\d{1,4}$", min_length=1, max_length=4),
+    ]
+    phone: Annotated[
+        str, StringConstraints(pattern=r"^\d{7,11}$", min_length=7, max_length=11)
+    ]
+    verify_code: Annotated[str, StringConstraints(min_length=6, max_length=6)]
+
+
+@router.post("/signup/verify_phone")
+async def verify_signup_phone(params: VerifySignupPhoneParams, db_session: DBSession):
+    require_sms_signup_verification()
+    if params.country_code not in config.sms_country_code_allowlist:
+        raise HTTPException(status_code=400, detail="Country code is not supported")
+
+    await check_sms_verify_code(
+        f"{params.country_code}{params.phone}", params.verify_code, "signup"
+    )
+    phone_exists = await User.exists(
+        db_session,
+        [
+            User.country_code == params.country_code,
+            User.phone == params.phone,
+        ],
+    )
+    if phone_exists:
+        raise HTTPException(status_code=400, detail="Phone number already exists")
+
+    token = await issue_signup_verification(params.country_code, params.phone)
+    return {
+        "signup_verification_token": token,
+        "expires_in": SIGNUP_VERIFICATION_TTL_SECONDS,
+    }
+
+
 @router.post("/send_verify_code")
 async def send_phone_verify_code(
     db_session: DBSession,
@@ -274,20 +371,19 @@ async def send_phone_verify_code(
 ):
     if params.type == "signin":
         require_sms_login_enabled()
+    elif params.type == "signup":
+        require_sms_signup_verification()
 
     if params.country_code not in config.sms_country_code_allowlist:
         raise HTTPException(status_code=400, detail="Country code is not supported")
 
-    user: User | None = await User.find_by(
-        db_session,
-        [User.country_code == params.country_code, User.phone == params.phone],
-    )
     if params.type == "signin" or params.type == "reset_password":
+        user: User | None = await User.find_by(
+            db_session,
+            [User.country_code == params.country_code, User.phone == params.phone],
+        )
         if user is None:
             raise HTTPException(status_code=400, detail="User not found")
-    elif params.type == "signup":
-        if user is not None:
-            raise HTTPException(status_code=400, detail="Phone number already exists")
 
     await send_sms_verify_code(f"{params.country_code}{params.phone}", params.type)
     return {"success": True}

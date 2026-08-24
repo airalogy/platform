@@ -20,7 +20,21 @@ async def set_cache(key: str, value: str | dict | list, ex: int = 60 * 60 * 24):
 
 async def get_cache(key: str):
     client = await get_redis_client()
-    val = await client.get(key)
+    try:
+        val = await client.get(key)
+    finally:
+        await client.aclose()
+    if val is not None:
+        return json.loads(val)
+    return None
+
+
+async def pop_cache(key: str):
+    client = await get_redis_client()
+    try:
+        val = await client.getdel(key)
+    finally:
+        await client.aclose()
     if val is not None:
         return json.loads(val)
     return None

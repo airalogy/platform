@@ -28,6 +28,7 @@ def settings(**overrides):
         "MASTERBRAIN_CALL_MODE": "package",
         "CHAT_API_ENDPOINT": "",
         "SMS_LOGIN_ENABLED": None,
+        "SMS_SIGNUP_REQUIRED": None,
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "",
         "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "",
         "ALIBABA_CLOUD_SMS_SIGN_NAME": "",
@@ -176,6 +177,68 @@ def test_explicit_sms_login_enable_requires_complete_provider_config():
         )
 
 
+def test_sms_signup_requirement_auto_detects_provider_for_community():
+    assert settings(DEPLOYMENT_MODE="community").effective_sms_signup_required is False
+
+    value = settings(
+        DEPLOYMENT_MODE="community",
+        ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+        ALIBABA_CLOUD_SMS_SIGN_NAME="Airalogy",
+        ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE="SMS_123456",
+        SMS_COUNTRY_CODE_ALLOWLIST="86",
+    )
+
+    assert value.effective_sms_signup_required is True
+
+
+def test_single_lab_does_not_require_sms_signup_by_default():
+    value = settings(
+        DEPLOYMENT_MODE="single_lab",
+        ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+        ALIBABA_CLOUD_SMS_SIGN_NAME="Airalogy",
+        ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE="SMS_123456",
+        SMS_COUNTRY_CODE_ALLOWLIST="86",
+    )
+
+    assert value.sms_provider_configured is True
+    assert value.effective_sms_signup_required is False
+
+
+def test_explicit_sms_signup_requirement_overrides_profile_default():
+    provider = {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "test-access-key",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "test-secret",
+        "ALIBABA_CLOUD_SMS_SIGN_NAME": "Airalogy",
+        "ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE": "SMS_123456",
+        "SMS_COUNTRY_CODE_ALLOWLIST": "86",
+    }
+
+    assert settings(
+        DEPLOYMENT_MODE="single_lab",
+        SMS_SIGNUP_REQUIRED=True,
+        **provider,
+    ).effective_sms_signup_required is True
+    assert settings(
+        DEPLOYMENT_MODE="community",
+        SMS_SIGNUP_REQUIRED=False,
+        **provider,
+    ).effective_sms_signup_required is False
+
+
+def test_explicit_sms_signup_requirement_needs_complete_provider_config():
+    with pytest.raises(
+        ValidationError,
+        match=r"SMS_SIGNUP_REQUIRED=true.*ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+    ):
+        settings(
+            SMS_SIGNUP_REQUIRED=True,
+            ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+            SMS_COUNTRY_CODE_ALLOWLIST="86",
+        )
+
+
 def test_mixed_sms_regions_require_china_and_international_fields():
     with pytest.raises(ValidationError) as error:
         settings(
@@ -212,6 +275,8 @@ def test_single_lab_generated_config_disables_sms_login_by_default():
 
     assert "\nSMS_LOGIN_ENABLED=false\n" in env_example
     assert "\nSMS_LOGIN_ENABLED=false\n" in generator
+    assert "\nSMS_SIGNUP_REQUIRED=false\n" in env_example
+    assert "\nSMS_SIGNUP_REQUIRED=false\n" in generator
 
 
 def test_engine_image_uses_official_multiarch_immutable_release():

@@ -35,11 +35,15 @@ AI features are optional and depend on configured provider keys. The platform in
 
 ### No Mandatory SMS Provider
 
-Community deployments can create accounts with email and password by default. Phone verification and SMS delivery are optional deployment-specific capabilities, not requirements for local startup.
+Community deployments can choose between email-only registration and mandatory phone verification. SMS remains optional for local startup, while a public service that requires verified mobile identity should enable the signup policy explicitly.
 
 `SMS_LOGIN_ENABLED` is an instance-level backend setting. Leave it empty to auto-detect SMS login from a complete provider configuration, set it to `false` to force SMS login off, or set it to `true` to require SMS login and fail API startup with the missing provider fields listed when configuration is incomplete. A non-empty `SMS_COUNTRY_CODE_ALLOWLIST` and Alibaba Cloud access keys are always required. Country code `86` also requires the SMS sign name and verification-code template; any non-`86` code requires the sender ID. The login page reads the resulting capability from `/api/instance` and safely falls back to email login if the request fails.
 
-Changing this backend setting requires an API restart. After the first deployment that includes the capability-aware login page has rebuilt Web, later setting changes do not require another Web build. The switch controls SMS login only and does not directly disable password-reset, phone-change, or other SMS verification purposes.
+`SMS_SIGNUP_REQUIRED` controls registration independently. For Community deployments, an empty value auto-detects the capability from the same provider settings; `false` keeps email-only registration, and `true` requires phone verification and fails API startup if the provider is incomplete. Airalogy public-cloud deployments that require mobile identity verification should set `SMS_SIGNUP_REQUIRED=true` explicitly. The signup page first verifies the phone code, then receives a server-issued credential that expires after 30 minutes and can be used only once. Only after that verification does it collect email, password, username, and display name; final account creation binds the phone stored in the credential rather than trusting a phone number sent by the browser.
+
+Signup fails closed when the Web app cannot retrieve `sms_signup_required` from `/api/instance`: it shows registration as temporarily unavailable instead of assuming email registration is permitted. A runtime SMS provider outage likewise produces a verification error and never falls back to email registration. The API independently rejects signup without a valid phone-verification credential whenever `SMS_SIGNUP_REQUIRED=true`.
+
+Changing either backend setting requires an API restart. After the first deployment that includes the capability-aware login and signup pages has rebuilt Web, later setting changes do not require another Web build. `SMS_LOGIN_ENABLED` controls SMS login only; `SMS_SIGNUP_REQUIRED` controls the phone-first signup flow. Neither setting disables password-reset or phone-change verification.
 
 ## Included By Default
 

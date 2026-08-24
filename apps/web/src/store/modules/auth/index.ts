@@ -167,6 +167,7 @@ export const useAuthStore = defineStore(SetupStoreId.AUTH, () => {
       confirmPassword: string
       code?: string
       countryCode?: string
+      signupVerificationToken?: string
       inviteToken?: string
     },
   ) {

@@ -14,6 +14,7 @@
         <n-input
           v-model:value="model.email"
           class="form__input"
+          :readonly="props.emailReadonly"
           :placeholder="$t('page.login.common.emailPlaceholder')"
         />
       </n-form-item>
@@ -58,18 +59,29 @@
         </n-input>
       </n-form-item>
 
-      <n-button
-        type="primary"
-        size="large"
-        strong
-        block
-        :disabled="!!(loadingKeys.length || isValidating)"
-        :loading="isValidating"
-        class="mt-10"
-        @click="handleNext"
-      >
-        {{ $t("page.login.common.continue") }}
-      </n-button>
+      <div class="mt-10 flex gap-3">
+        <n-button
+          v-if="props.showBack"
+          size="large"
+          plain
+          class="flex-1"
+          @click="emit('back')"
+        >
+          {{ $t("page.login.common.back") }}
+        </n-button>
+        <n-button
+          type="primary"
+          size="large"
+          strong
+          :block="!props.showBack"
+          class="flex-1"
+          :disabled="!!(loadingKeys.length || isValidating)"
+          :loading="isValidating"
+          @click="handleNext"
+        >
+          {{ $t("page.login.common.continue") }}
+        </n-button>
+      </div>
     </n-form>
   </div>
 </template>
@@ -85,17 +97,6 @@ import EyeOutline from "~icons/ion/eye-outline"
 import { ref } from "vue"
 import { checkEmailDuplicate } from "../../../service/api/auth"
 
-defineOptions({
-  name: "AccountCredentialsStep",
-})
-
-const props = defineProps<Props>()
-
-const emit = defineEmits<{
-  "update:modelValue": [value: FormModel]
-  "next": [data: FormModel]
-}>()
-
 interface FormModel {
   email: string
   password: string
@@ -104,7 +105,24 @@ interface FormModel {
 
 interface Props {
   modelValue: FormModel
+  emailReadonly?: boolean
+  showBack?: boolean
 }
+
+defineOptions({
+  name: "AccountCredentialsStep",
+})
+
+const props = withDefaults(defineProps<Props>(), {
+  emailReadonly: false,
+  showBack: false,
+})
+
+const emit = defineEmits<{
+  "update:modelValue": [value: FormModel]
+  "next": [data: FormModel]
+  "back": []
+}>()
 
 const model = useVModel(props, "modelValue", emit)
 const debouncedCheckEmailDuplicate = useDebounceFn(checkEmailDuplicate, 500)

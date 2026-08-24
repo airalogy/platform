@@ -489,6 +489,9 @@ declare namespace I18n {
           agreement: string
           protocol: string
           policy: string
+          serviceUnavailableTitle: string
+          serviceUnavailableHelper: string
+          retry: string
           confirm: string
         }
         login: {
@@ -504,9 +507,11 @@ declare namespace I18n {
           step3: string
           finalStep: string
           jumpToStep: string
+          verifyButton: string
           confirmButton: string
           step1Label: string
           step2Label: string
+          phoneVerified: string
           success: string
           failure: string
         }

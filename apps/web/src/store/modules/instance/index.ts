@@ -17,6 +17,7 @@ function fallbackStatus(): InstanceStatus {
     support_url: "",
     ai_enabled: false,
     sms_login_enabled: false,
+    sms_signup_required: false,
     enabled_chat_models: [],
     lab: null,
   }
@@ -37,23 +38,29 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
   const supportUrl = computed(() => status.value.support_url)
   const aiEnabled = computed(() => status.value.ai_enabled)
   const smsLoginEnabled = computed(() => status.value.sms_login_enabled === true)
+  const smsSignupRequired = computed(() => status.value.sms_signup_required === true)
   const enabledChatModels = computed(() => status.value.enabled_chat_models ?? [])
 
   async function load() {
+    loaded.value = false
     try {
       const { data, error } = await fetchInstanceStatus()
       if (data) {
         status.value = data
-        loadError.value = null
+        loadError.value = typeof data.sms_signup_required === "boolean"
+          ? null
+          : new Error("Instance signup capability is unavailable")
       }
       else if (error) {
         loadError.value = error
         status.value.sms_login_enabled = false
+        status.value.sms_signup_required = false
       }
     }
     catch (error) {
       loadError.value = error
       status.value.sms_login_enabled = false
+      status.value.sms_signup_required = false
     }
     finally {
       loaded.value = true
@@ -74,6 +81,7 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
     supportUrl,
     aiEnabled,
     smsLoginEnabled,
+    smsSignupRequired,
     enabledChatModels,
     load,
   }

@@ -35,6 +35,7 @@
 
         <div class="mt-10 flex gap-3">
           <n-button
+            v-if="props.showBack"
             size="large"
             plain
             class="flex-1"
@@ -135,7 +136,7 @@
 import type { CountryData } from "@airalogy/shared/constants"
 import { useLoading } from "@/composables"
 import { createRequiredRule, useFormRules, useNaiveForm } from "@/composables/useForm"
-import { postSendCode } from "@/service/api/auth"
+import { postSendCode, postVerifySignupPhone } from "@/service/api/auth"
 import CountryPhoneInput from "@airalogy/components/country-phone-input.vue"
 import PinInput from "@airalogy/components/pin-input.vue"
 import { useClosableMessage } from "@airalogy/composables"
@@ -161,16 +162,19 @@ interface Props {
   userData: Partial<UserData>
   type: "signup" | "signin" | "reset_password"
   confirmButton: string
+  showBack?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  showBack: true,
+})
 
 const emit = defineEmits<IEmits>()
 
 interface IEmits {
   (e: "update:modelValue", value: FormModel): void
   (e: "back"): void
-  (e: "confirm", data: Partial<UserData & FormModel > & { code: string }): void
+  (e: "confirm", data: Partial<UserData & FormModel > & { code?: string, countryCode?: string, signupVerificationToken?: string }): void
 }
 
 const model = useVModel(props, "modelValue", emit)
@@ -269,15 +273,35 @@ async function handleVerify() {
     startTargetLoading("verify")
     verificationError.value = ""
 
-    // Complete the signup process
-    const inputData = {
-      ...props.userData,
-      ...model.value,
-      countryCode: model.value.country?.dialCode?.slice(1),
-      code: verificationCode.value,
+    const countryCode = model.value.country?.dialCode?.replace(/^\+/, "") || ""
+    if (props.type === "signup") {
+      const { data, error } = await postVerifySignupPhone(
+        model.value.phone,
+        countryCode,
+        verificationCode.value,
+      )
+      if (!data) {
+        const detail = (error as any)?.response?.data?.detail
+        verificationError.value = typeof detail === "string"
+          ? detail
+          : $t("page.login.verifyPhone.codeInvalid")
+        return
+      }
+
+      emit("confirm", {
+        ...model.value,
+        countryCode,
+        signupVerificationToken: data.signup_verification_token,
+      })
+      return
     }
 
-    emit("confirm", inputData)
+    emit("confirm", {
+      ...props.userData,
+      ...model.value,
+      countryCode,
+      code: verificationCode.value,
+    })
   }
   catch (error) {
     verificationError.value = $t("page.login.verifyPhone.codeInvalid")

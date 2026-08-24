@@ -133,10 +133,11 @@ export function postSignup(
     confirmPassword?: string
     code?: string
     countryCode?: string
+    signupVerificationToken?: string
     inviteToken?: string
   },
 ) {
-  const { password, email, phone, confirmPassword, username, code, displayName, countryCode, inviteToken } = payload
+  const { password, email, phone, confirmPassword, username, code, displayName, countryCode, signupVerificationToken, inviteToken } = payload
   if (type === "email") {
     return request<Api.Auth.LoginInfo>({
       url: "/signup",
@@ -164,6 +165,7 @@ export function postSignup(
       password,
       confirm_password: confirmPassword,
       country_code: countryCode,
+      signup_verification_token: signupVerificationToken,
       invite_token: inviteToken,
     },
   })
@@ -239,6 +241,22 @@ export function postSendCode(phone: string, dialCode: string, type: "signup" | "
       type,
       phone,
       country_code: dialCode.startsWith("+") ? dialCode.slice(1) : dialCode,
+    },
+  })
+}
+
+export function postVerifySignupPhone(phone: string, dialCode: string, code: string) {
+  if (!dialCode) {
+    throw new Error("Invalid country code")
+  }
+
+  return request<{ signup_verification_token: string, expires_in: number }>({
+    url: "/signup/verify_phone",
+    method: "POST",
+    data: {
+      phone,
+      country_code: dialCode.startsWith("+") ? dialCode.slice(1) : dialCode,
+      verify_code: code,
     },
   })
 }

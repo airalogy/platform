@@ -28,7 +28,23 @@
       <pwd-login v-else />
     </template>
     <template v-else>
-      <pwd-sign-up />
+      <div v-if="!instanceStore.loaded" class="flex justify-center py-12">
+        <n-spin size="large" />
+      </div>
+      <n-result
+        v-else-if="instanceStore.loadError"
+        status="error"
+        :title="$t('page.login.register.serviceUnavailableTitle')"
+        :description="$t('page.login.register.serviceUnavailableHelper')"
+      >
+        <template #footer>
+          <n-button type="primary" @click="instanceStore.load">
+            {{ $t("page.login.register.retry") }}
+          </n-button>
+        </template>
+      </n-result>
+      <phone-sign-up v-else-if="instanceStore.smsSignupRequired" />
+      <pwd-sign-up v-else />
     </template>
 
     <form-overlay
@@ -48,6 +64,7 @@ import { $t } from "@airalogy/shared/locales"
 import { computed, ref } from "vue"
 import CodeLogin from "./code-login.vue"
 import FormOverlay from "./form-overlay.vue"
+import PhoneSignUp from "./phone-sign-up.vue"
 import PwdLogin from "./pwd-login.vue"
 import PwdSignUp from "./pwd-sign-up.vue"
 

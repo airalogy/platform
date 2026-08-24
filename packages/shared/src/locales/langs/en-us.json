@@ -485,6 +485,9 @@
         "agreement": "I have read and agree to",
         "protocol": "《User agreement》",
         "policy": "《Privacy policy》",
+        "serviceUnavailableTitle": "Registration is temporarily unavailable",
+        "serviceUnavailableHelper": "We could not confirm this instance's registration policy. Please try again later.",
+        "retry": "Try again",
         "confirm": "Sign up"
       },
       "login": {
@@ -495,21 +498,23 @@
         "helper": "Enter your new password"
       },
       "phoneSignUp": {
-        "step1": "Step 1 of 3",
-        "step2": "Step 2 of 3",
-        "step3": "Step 3 of 3",
+        "step1": "Step 1 of 3: phone verification",
+        "step2": "Step 2 of 3: account details",
+        "step3": "Step 3 of 3: profile",
         "finalStep": "Final step",
         "jumpToStep": "Jump to step",
+        "verifyButton": "Verify and continue",
         "confirmButton": "Complete sign up",
         "step1Label": "Step 1: account details",
         "step2Label": "Step 2: profile info",
+        "phoneVerified": "Phone verified: {phone}",
         "success": "Account created successfully!",
         "failure": "Failed to create account"
       },
       "verifyPhone": {
         "title": "Verify your phone number",
         "helper": "Enter your phone to receive a code",
-        "permanentHint": "Your phone number is permanent and cannot be changed.",
+        "permanentHint": "Used for identity verification and account security. You can change it later in account settings.",
         "verificationTitle": "Verification code",
         "codeSentTo": "Code sent to",
         "enterCodeLabel": "Enter verification code",

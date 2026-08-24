@@ -18,6 +18,7 @@ SENSITIVE_KEYS = {
     "refresh_token",
     "secret",
     "setup_token",
+    "signup_verification_token",
     "token",
     "verify_code",
 }

@@ -28,6 +28,11 @@ def enable_sms_login_provider(monkeypatch):
     monkeypatch.setattr(config, "SMS_COUNTRY_CODE_ALLOWLIST", "86")
 
 
+def enable_sms_signup_provider(monkeypatch):
+    enable_sms_login_provider(monkeypatch)
+    monkeypatch.setattr(config, "SMS_SIGNUP_REQUIRED", True)
+
+
 def test_instance_status_reports_effective_sms_login_capability(monkeypatch):
     enable_sms_login_provider(monkeypatch)
     monkeypatch.setattr(instance_router, "get_single_lab", AsyncMock(return_value=None))
@@ -35,6 +40,7 @@ def test_instance_status_reports_effective_sms_login_capability(monkeypatch):
     status = asyncio.run(instance_router.get_instance_status(AsyncMock()))
 
     assert status.sms_login_enabled is True
+    assert status.sms_signup_required is True
 
 
 def test_disabled_sms_signin_returns_503_before_code_verification(monkeypatch):
@@ -105,7 +111,11 @@ def test_disabled_sms_login_does_not_block_other_code_types(
     existing_user,
 ):
     disable_sms_login(monkeypatch)
-    monkeypatch.setattr(config, "SMS_COUNTRY_CODE_ALLOWLIST", "86")
+    if code_type == "signup":
+        enable_sms_signup_provider(monkeypatch)
+        disable_sms_login(monkeypatch)
+    else:
+        monkeypatch.setattr(config, "SMS_COUNTRY_CODE_ALLOWLIST", "86")
     monkeypatch.setattr(
         login_router.User,
         "find_by",

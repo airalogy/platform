@@ -58,11 +58,11 @@
           size="large"
           strong
           class="flex-1"
-          :disabled="!!(loadingKeys.length || isValidating)"
-          :loading="isValidating"
+          :disabled="!!(loadingKeys.length || isValidating || props.loading)"
+          :loading="isValidating || props.loading"
           @click="handleNext"
         >
-          {{ $t("page.login.common.continue") }}
+          {{ props.nextLabel || $t("page.login.common.continue") }}
         </n-button>
       </div>
     </n-form>
@@ -81,9 +81,14 @@ interface FormModel {
 
 interface Props {
   modelValue: FormModel
+  loading?: boolean
+  nextLabel?: string
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+  nextLabel: "",
+})
 
 const emit = defineEmits<{
   "update:modelValue": [value: FormModel]

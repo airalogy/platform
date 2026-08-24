@@ -27,6 +27,7 @@ async function mockSmsLoginCapability(
         support_url: "",
         ai_enabled: false,
         sms_login_enabled: enabled,
+        sms_signup_required: false,
         enabled_chat_models: [],
         lab: null,
       },

@@ -105,9 +105,12 @@ class Settings(BaseSettings):
     OSS_ACCESS_KEY_SECRET: str = ""
 
     # Alibaba Cloud SMS config
-    # None auto-detects SMS login from the provider settings. False disables
-    # only SMS login; True requires a complete provider configuration.
+    # None auto-detects SMS capabilities from the provider settings. False
+    # disables the specific capability; True requires a complete provider
+    # configuration. Single-Lab never requires SMS signup unless explicitly
+    # enabled.
     SMS_LOGIN_ENABLED: bool | None = None
+    SMS_SIGNUP_REQUIRED: bool | None = None
     ALIBABA_CLOUD_ACCESS_KEY_ID: str = ""
     ALIBABA_CLOUD_ACCESS_KEY_SECRET: str = ""
     ALIBABA_CLOUD_SMS_SIGN_NAME: str = ""
@@ -154,6 +157,14 @@ class Settings(BaseSettings):
     @property
     def effective_sms_login_enabled(self) -> bool:
         if self.SMS_LOGIN_ENABLED is False:
+            return False
+        return self.sms_provider_configured
+
+    @property
+    def effective_sms_signup_required(self) -> bool:
+        if self.SMS_SIGNUP_REQUIRED is not None:
+            return self.SMS_SIGNUP_REQUIRED and self.sms_provider_configured
+        if self.is_single_lab:
             return False
         return self.sms_provider_configured
 
@@ -263,6 +274,12 @@ class Settings(BaseSettings):
         if self.SMS_LOGIN_ENABLED is True and not self.sms_provider_configured:
             raise ValueError(
                 "SMS_LOGIN_ENABLED=true requires complete SMS provider "
+                "configuration; missing: "
+                + ", ".join(self.sms_provider_missing_fields)
+            )
+        if self.SMS_SIGNUP_REQUIRED is True and not self.sms_provider_configured:
+            raise ValueError(
+                "SMS_SIGNUP_REQUIRED=true requires complete SMS provider "
                 "configuration; missing: "
                 + ", ".join(self.sms_provider_missing_fields)
             )

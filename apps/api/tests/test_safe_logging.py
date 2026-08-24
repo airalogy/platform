@@ -26,10 +26,14 @@ def test_safe_json_body_redacts_nested_secrets():
 
 
 def test_safe_query_string_redacts_tokens_and_passwords():
-    logged = safe_query_string("token=secret&project=alpha&current_password=hidden")
+    logged = safe_query_string(
+        "token=secret&signup_verification_token=signup-secret"
+        "&project=alpha&current_password=hidden"
+    )
 
     assert "secret" not in logged
     assert "hidden" not in logged
+    assert "signup-secret" not in logged
     assert "project=alpha" in logged
 
 

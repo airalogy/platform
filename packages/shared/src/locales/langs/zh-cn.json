@@ -485,7 +485,10 @@
         "usernameHintShort": "用户名固定后不可修改。",
         "agreement": "我已经仔细阅读并接受",
         "protocol": "《用户协议》",
-        "policy": "《隐私权政策》"
+        "policy": "《隐私权政策》",
+        "serviceUnavailableTitle": "注册服务暂不可用",
+        "serviceUnavailableHelper": "暂时无法确认当前实例的注册策略，请稍后重试。",
+        "retry": "重新加载"
       },
       "login": {
         "title": "登录账号"
@@ -495,21 +498,23 @@
         "helper": "请输入新密码"
       },
       "phoneSignUp": {
-        "step1": "第 1 步 / 共 3 步",
-        "step2": "第 2 步 / 共 3 步",
-        "step3": "第 3 步 / 共 3 步",
+        "step1": "第 1 步 / 共 3 步：验证手机号",
+        "step2": "第 2 步 / 共 3 步：账号信息",
+        "step3": "第 3 步 / 共 3 步：个人信息",
         "finalStep": "最后一步",
         "jumpToStep": "跳转到步骤",
+        "verifyButton": "验证并继续",
         "confirmButton": "完成注册",
         "step1Label": "第 1 步：账号信息",
         "step2Label": "第 2 步：个人信息",
+        "phoneVerified": "手机号已验证：{phone}",
         "success": "账号创建成功！",
         "failure": "创建账号失败"
       },
       "verifyPhone": {
         "title": "验证手机号",
         "helper": "输入手机号获取验证码",
-        "permanentHint": "手机号将作为永久信息，无法更改。",
+        "permanentHint": "手机号用于身份验证和账号安全，后续可在账号设置中更换。",
         "verificationTitle": "验证码",
         "codeSentTo": "验证码已发送至",
         "enterCodeLabel": "输入验证码",
