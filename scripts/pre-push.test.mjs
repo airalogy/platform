@@ -1,0 +1,49 @@
+/* eslint-disable test/no-import-node-test */
+import assert from "node:assert/strict"
+import test from "node:test"
+import { buildCheckPlan } from "./pre-push.mjs"
+
+function checkIds(files, fullRequested = false) {
+  return buildCheckPlan(files, fullRequested).map(check => check.id)
+}
+
+test("documentation changes add the documentation build", () => {
+  assert.deepEqual(checkIds(["docs/guide/getting-started.md"]), [
+    "lint",
+    "types",
+    "api-compile",
+    "docs",
+  ])
+})
+
+test("AI capability surfaces add the focused browser test", () => {
+  assert.deepEqual(checkIds(["apps/web/src/store/modules/instance/index.ts"]), [
+    "lint",
+    "types",
+    "api-compile",
+    "ai-e2e",
+  ])
+})
+
+test("API changes add unit tests before focused browser coverage", () => {
+  assert.deepEqual(checkIds(["apps/api/app/config.py"]), [
+    "lint",
+    "types",
+    "api-compile",
+    "api-tests",
+    "ai-e2e",
+  ])
+})
+
+test("E2E infrastructure changes run the full browser suite", () => {
+  assert.deepEqual(checkIds(["tests/e2e/scripts/start-api.sh"]), [
+    "lint",
+    "types",
+    "api-compile",
+    "full-e2e",
+  ])
+})
+
+test("the explicit full mode runs the full browser suite", () => {
+  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "full-e2e"])
+})

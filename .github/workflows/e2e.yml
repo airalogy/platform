@@ -37,18 +37,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: "10.15.0"
-          run_install: false
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
-          cache: "pnpm"
-          cache-dependency-path: pnpm-lock.yaml
+          node-version: "22"
+
+      - name: Enable pnpm
+        run: corepack enable
 
       - name: Setup Python and uv
         uses: astral-sh/setup-uv@v7

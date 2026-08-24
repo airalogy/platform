@@ -51,6 +51,33 @@ test("project creation menu opens the existing Aira drafting workflow", async ({
   await expect(page.getByTestId("ai-protocol-name").locator("input")).toHaveValue("AI 生成的 Protocol")
 })
 
+test("AI-disabled instances keep deterministic Protocol creation available", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("lang", JSON.stringify({ data: "zh-CN", expire: null }))
+  })
+  await page.route(/\/api\/instance(?:\?.*)?$/, async (route) => {
+    const response = await route.fetch()
+    const status = await response.json()
+    await route.fulfill({
+      response,
+      json: {
+        ...status,
+        ai_enabled: false,
+        enabled_chat_models: [],
+      },
+    })
+  })
+
+  await page.goto("/labs/dev_lab/projects/quickstart/protocols")
+  await page.getByRole("button", { name: "新建协议", exact: true }).click()
+  await expect(page.getByTestId("protocol-create-ai")).toHaveCount(0)
+  await expect(page.getByTestId("protocol-create-template")).toBeVisible()
+
+  await page.goto(`/editor?package_id=e2e-no-ai-${Date.now()}`)
+  await expect(page.getByTestId("ai-protocol-create")).toHaveCount(0)
+  await expect(page.getByTestId("template-protocol-create")).toBeVisible()
+})
+
 test("non-technical user can create and refine a Protocol with Aira", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("lang", JSON.stringify({ data: "zh-CN", expire: null }))

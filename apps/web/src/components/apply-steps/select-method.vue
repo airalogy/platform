@@ -12,7 +12,7 @@
           role="button"
           tabindex="0"
           :aria-label="option.title"
-          :data-testid="option.type === 'ai' ? 'protocol-create-ai' : undefined"
+          :data-testid="`protocol-create-${option.type}`"
           class="create-option-card relative transform cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
           :class="{ 'create-option-card--featured': option.featured }"
           content-class="flex flex-col items-center"

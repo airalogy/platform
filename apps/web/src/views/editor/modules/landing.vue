@@ -54,6 +54,7 @@
           </button>
           <button
             type="button"
+            data-testid="template-protocol-create"
             class="w-full flex items-center gap-5 border border-gray-200 rounded-4 bg-gray-50 p-5 text-left transition hover:border-primary/35 hover:bg-white hover:shadow-sm"
             @click="handleNewProtocol"
           >
