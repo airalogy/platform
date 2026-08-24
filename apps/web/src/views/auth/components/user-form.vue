@@ -8,7 +8,24 @@
     size="huge"
   >
     <template v-if="props.type === 'login'">
-      <pwd-login />
+      <n-tabs
+        v-if="instanceStore.smsLoginEnabled"
+        v-model:value="activeTab"
+        class="card-tabs"
+        size="large"
+        animated
+        pane-wrapper-style="margin: 0 -4px"
+        pane-style="padding-left: 4px; padding-right: 4px; padding-top: 36px; box-sizing: border-box;"
+        tab-style="text-transform: capitalize;"
+      >
+        <n-tab-pane name="verification" :tab="$t('page.login.codeLogin.title')" display-directive="show">
+          <code-login />
+        </n-tab-pane>
+        <n-tab-pane name="email" :tab="$t('page.login.emailLogin.title')" display-directive="show">
+          <pwd-login />
+        </n-tab-pane>
+      </n-tabs>
+      <pwd-login v-else />
     </template>
     <template v-else>
       <pwd-sign-up />
@@ -26,8 +43,10 @@
 
 <script setup lang="ts">
 import { useRouterPush } from "@/composables/useRouterPush"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
-import { computed } from "vue"
+import { computed, ref } from "vue"
+import CodeLogin from "./code-login.vue"
 import FormOverlay from "./form-overlay.vue"
 import PwdLogin from "./pwd-login.vue"
 import PwdSignUp from "./pwd-sign-up.vue"
@@ -47,6 +66,8 @@ const props = withDefaults(defineProps<IProps>(), {
   overlayDescription: undefined,
   overlayButtonText: undefined,
 })
+const instanceStore = useInstanceStore()
+const activeTab = ref("verification")
 const title = computed(() => {
   const { type } = props
   if (type === "login") {
@@ -70,4 +91,10 @@ function handleOverlayButtonClick() {
   --n-title-font-size: 36px
   font-family: PingFang SC
   line-height: 1
+
+:deep(.n-tabs-bar)
+  height: 4px
+  border-radius: 10px
+.card-tabs .n-tabs-nav--bar-type
+  padding-left: 4px
 </style>

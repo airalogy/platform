@@ -61,6 +61,7 @@ class InstanceStatus(BaseModel):
     documentation_url: str
     support_url: str
     ai_enabled: bool
+    sms_login_enabled: bool
     enabled_chat_models: list[ChatModelType]
     lab: InstanceLabInfo | None = None
 
@@ -80,6 +81,7 @@ async def get_instance_status(db_session: DBSession):
         documentation_url=config.effective_documentation_url,
         support_url=config.SUPPORT_URL.strip(),
         ai_enabled=config.effective_ai_enabled,
+        sms_login_enabled=config.effective_sms_login_enabled,
         enabled_chat_models=list(enabled_chat_model_types()),
         lab=(
             InstanceLabInfo(id=lab.id, uid=lab.uid, name=lab.name)

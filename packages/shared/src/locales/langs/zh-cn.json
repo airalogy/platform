@@ -458,7 +458,7 @@
         "protocolExamplesUnavailable": "已登录，但未导入 Airalogy 协议示例。设置 AIRALOGY_PROTOCOL_EXAMPLES_DIR 后可启用。"
       },
       "codeLogin": {
-        "title": "验证码登录",
+        "title": "手机号验证码登录",
         "heading": "手机号登录",
         "helper": "输入手机号获取验证码",
         "verificationTitle": "验证码",

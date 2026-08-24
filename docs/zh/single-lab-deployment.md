@@ -99,6 +99,8 @@ PostgreSQL、Redis 和 MinIO API 不映射到公网；MinIO console 只绑定 `1
 
 AI 功能是可选项。实例会根据可用的模型供应商配置自动判断 AI 能力；设置 `AI_ENABLED=false` 可明确隐藏全部 AI 入口并拒绝 AI 请求。关闭 AI 不影响 Protocol / Record 基础流程；设置 `AI_ENABLED=true` 时仍须配置至少一个可用供应商。GPT 默认关闭，不会出现在模型选择器中，后端也会拒绝 GPT 请求。启用时需同时设置 `OPENAI_API_KEY` 和 `ENABLE_GPT_MODEL=true`；使用旧的外部 Masterbrain 服务时，可改为配置 `MASTERBRAIN_CALL_MODE=external` 与 `CHAT_API_ENDPOINT`。修改后只需重启 API 容器，无需重新构建 Web 镜像。
 
+Single-Lab 默认设置 `SMS_LOGIN_ENABLED=false`，因此不依赖短信服务。若需启用短信登录，应配置阿里云 access key 和非空的 `SMS_COUNTRY_CODE_ALLOWLIST`；allowlist 包含中国区 `86` 时，还须配置 `ALIBABA_CLOUD_SMS_SIGN_NAME` 与 `ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE`，包含其他国家或地区代码时还须配置 `ALIBABA_CLOUD_SMS_SENDER_ID`。配置完整后设置 `SMS_LOGIN_ENABLED=true` 并重启 API 容器。登录页从 `/api/instance` 读取最终能力，因此本功能首次部署时需因登录页代码变化重新构建 Web；之后只切换配置值无需重建 Web。该开关仅控制短信登录，不会直接禁用短信重置密码、修改手机号或其他验证码流程。
+
 `LAB_STRUCTURE_MODE=structured` 是 single-Lab 生产部署的必需配置。Community profile 默认保持 `flat`，也可显式启用 `structured`，两种 profile 共用同一权限引擎和数据库模型。
 
 `COMPONENT_BUILD_MEMORY_MB` 和 `WEB_BUILD_MEMORY_MB` 只用于控制 Web 镜像构建时的 Node.js heap 上限。除非主机的 Docker 内存配额有明确差异，应保留生成配置中的默认值。

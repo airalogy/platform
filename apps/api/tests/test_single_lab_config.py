@@ -1,7 +1,12 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
 def settings(**overrides):
@@ -22,6 +27,13 @@ def settings(**overrides):
         "ENABLE_GPT_MODEL": False,
         "MASTERBRAIN_CALL_MODE": "package",
         "CHAT_API_ENDPOINT": "",
+        "SMS_LOGIN_ENABLED": None,
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "",
+        "ALIBABA_CLOUD_SMS_SIGN_NAME": "",
+        "ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE": "",
+        "ALIBABA_CLOUD_SMS_SENDER_ID": "",
+        "SMS_COUNTRY_CODE_ALLOWLIST": "",
     }
     values.update(overrides)
     return Settings(**values)
@@ -104,6 +116,102 @@ def test_ai_capability_is_auto_detected_and_can_be_disabled():
 def test_explicit_ai_enable_requires_a_provider():
     with pytest.raises(ValidationError, match="AI_ENABLED"):
         settings(AI_ENABLED=True)
+
+
+def test_sms_login_auto_detection_is_disabled_without_provider_config():
+    value = settings()
+
+    assert value.sms_provider_configured is False
+    assert value.effective_sms_login_enabled is False
+
+
+def test_sms_login_auto_detection_accepts_complete_china_config():
+    value = settings(
+        ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+        ALIBABA_CLOUD_SMS_SIGN_NAME="Airalogy",
+        ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE="SMS_123456",
+        SMS_COUNTRY_CODE_ALLOWLIST="86",
+    )
+
+    assert value.sms_provider_configured is True
+    assert value.effective_sms_login_enabled is True
+
+
+def test_sms_login_auto_detection_accepts_complete_international_config():
+    value = settings(
+        ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+        ALIBABA_CLOUD_SMS_SENDER_ID="Airalogy",
+        SMS_COUNTRY_CODE_ALLOWLIST="1,44",
+    )
+
+    assert value.sms_provider_configured is True
+    assert value.effective_sms_login_enabled is True
+
+
+def test_explicit_sms_login_disable_overrides_complete_provider_config():
+    value = settings(
+        SMS_LOGIN_ENABLED=False,
+        ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+        ALIBABA_CLOUD_SMS_SIGN_NAME="Airalogy",
+        ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE="SMS_123456",
+        SMS_COUNTRY_CODE_ALLOWLIST="86",
+    )
+
+    assert value.sms_provider_configured is True
+    assert value.effective_sms_login_enabled is False
+
+
+def test_explicit_sms_login_enable_requires_complete_provider_config():
+    with pytest.raises(
+        ValidationError,
+        match=r"SMS_LOGIN_ENABLED=true.*ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+    ):
+        settings(
+            SMS_LOGIN_ENABLED=True,
+            ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+            SMS_COUNTRY_CODE_ALLOWLIST="86",
+        )
+
+
+def test_mixed_sms_regions_require_china_and_international_fields():
+    with pytest.raises(ValidationError) as error:
+        settings(
+            SMS_LOGIN_ENABLED=True,
+            ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+            ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+            SMS_COUNTRY_CODE_ALLOWLIST="86,1",
+        )
+
+    message = str(error.value)
+    assert "ALIBABA_CLOUD_SMS_SIGN_NAME" in message
+    assert "ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE" in message
+    assert "ALIBABA_CLOUD_SMS_SENDER_ID" in message
+
+    value = settings(
+        SMS_LOGIN_ENABLED=True,
+        ALIBABA_CLOUD_ACCESS_KEY_ID="test-access-key",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET="test-secret",
+        ALIBABA_CLOUD_SMS_SIGN_NAME="Airalogy",
+        ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE="SMS_123456",
+        ALIBABA_CLOUD_SMS_SENDER_ID="Airalogy",
+        SMS_COUNTRY_CODE_ALLOWLIST="86,1",
+    )
+    assert value.effective_sms_login_enabled is True
+
+
+def test_single_lab_generated_config_disables_sms_login_by_default():
+    env_example = (
+        REPOSITORY_ROOT / "deploy/single-lab/.env.example"
+    ).read_text(encoding="utf-8")
+    generator = (
+        REPOSITORY_ROOT / "deploy/single-lab/scripts/generate-env.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "\nSMS_LOGIN_ENABLED=false\n" in env_example
+    assert "\nSMS_LOGIN_ENABLED=false\n" in generator
 
 
 def test_engine_image_uses_official_multiarch_immutable_release():

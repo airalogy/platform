@@ -23,6 +23,7 @@ export interface InstanceStatus {
   documentation_url: string
   support_url: string
   ai_enabled: boolean
+  sms_login_enabled: boolean
   enabled_chat_models: ChatModel[]
   lab: InstanceLabInfo | null
 }

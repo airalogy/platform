@@ -33,6 +33,11 @@ from .utils import UidStr, check_sms_verify_code, send_sms_verify_code
 router = APIRouter(tags=["login"])
 
 
+def require_sms_login_enabled() -> None:
+    if not config.effective_sms_login_enabled:
+        raise HTTPException(status_code=503, detail="SMS login is disabled")
+
+
 class SignInParams(BaseModel):
     country_code: Annotated[
         str,
@@ -47,6 +52,7 @@ class SignInParams(BaseModel):
 
 @router.post("/signin")
 async def login(params: SignInParams, db_session: DBSession):
+    require_sms_login_enabled()
     await check_sms_verify_code(
         f"{params.country_code}{params.phone}", params.verify_code, "signin"
     )
@@ -266,6 +272,9 @@ async def send_phone_verify_code(
     db_session: DBSession,
     params: SendVerifyCodeParams,
 ):
+    if params.type == "signin":
+        require_sms_login_enabled()
+
     if params.country_code not in config.sms_country_code_allowlist:
         raise HTTPException(status_code=400, detail="Country code is not supported")
 

@@ -16,6 +16,7 @@ function fallbackStatus(): InstanceStatus {
     documentation_url: "/docs/",
     support_url: "",
     ai_enabled: false,
+    sms_login_enabled: false,
     enabled_chat_models: [],
     lab: null,
   }
@@ -35,6 +36,7 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
   const documentationUrl = computed(() => status.value.documentation_url)
   const supportUrl = computed(() => status.value.support_url)
   const aiEnabled = computed(() => status.value.ai_enabled)
+  const smsLoginEnabled = computed(() => status.value.sms_login_enabled === true)
   const enabledChatModels = computed(() => status.value.enabled_chat_models ?? [])
 
   async function load() {
@@ -46,10 +48,12 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
       }
       else if (error) {
         loadError.value = error
+        status.value.sms_login_enabled = false
       }
     }
     catch (error) {
       loadError.value = error
+      status.value.sms_login_enabled = false
     }
     finally {
       loaded.value = true
@@ -69,6 +73,7 @@ export const useInstanceStore = defineStore(SetupStoreId.INSTANCE, () => {
     documentationUrl,
     supportUrl,
     aiEnabled,
+    smsLoginEnabled,
     enabledChatModels,
     load,
   }

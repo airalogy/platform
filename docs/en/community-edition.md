@@ -35,7 +35,11 @@ AI features are optional and depend on configured provider keys. The platform in
 
 ### No Mandatory SMS Provider
 
-Community deployments can create accounts with email and password by default. Phone verification and SMS delivery are treated as optional deployment-specific extensions, not as a requirement for local startup.
+Community deployments can create accounts with email and password by default. Phone verification and SMS delivery are optional deployment-specific capabilities, not requirements for local startup.
+
+`SMS_LOGIN_ENABLED` is an instance-level backend setting. Leave it empty to auto-detect SMS login from a complete provider configuration, set it to `false` to force SMS login off, or set it to `true` to require SMS login and fail API startup with the missing provider fields listed when configuration is incomplete. A non-empty `SMS_COUNTRY_CODE_ALLOWLIST` and Alibaba Cloud access keys are always required. Country code `86` also requires the SMS sign name and verification-code template; any non-`86` code requires the sender ID. The login page reads the resulting capability from `/api/instance` and safely falls back to email login if the request fails.
+
+Changing this backend setting requires an API restart. After the first deployment that includes the capability-aware login page has rebuilt Web, later setting changes do not require another Web build. The switch controls SMS login only and does not directly disable password-reset, phone-change, or other SMS verification purposes.
 
 ## Included By Default
 

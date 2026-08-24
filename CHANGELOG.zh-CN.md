@@ -37,6 +37,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 将首页改为按角色和真实工作状态组织的任务工作台：可继续当前设备上的 Record 草稿、直接填写最近 Protocol、创建 Protocol 时继承最近 Project，仅根据实际成员关系显示管理快捷入口，并为宽屏提供最大 1920px 的有界工作画布，不拉伸其他产品页面。
 - 改进 Record 填写体验，新增当前设备草稿状态、手动保存反馈、必填进度、首个错误定位、包含保存位置和资源影响的确定性提交预览，以及提交后的明确下一步。
 - 将 AI 改为实例明确上报的能力：只有模型供应商可用时才显示 Aira 入口；关闭 AI 后不保留空白聊天控件，Protocol 和 Record 的确定性完整流程不受影响。
+- 将短信登录改为实例明确上报的能力，支持供应商配置自动检测、显式启用时严格校验、后端强制执行和前端安全回退；Single-Lab 默认关闭且不影响其他短信验证码用途。
 - 将 Protocol 创建入口整理为推荐的 Aira/模板方式，以及复用、Hub、`.aira`、ZIP 和从头编辑等更多方式，并保留当前或最近 Project 上下文。
 - 将公开版版本号与发布历史重置为 Community Edition 初始发布。
 - 将公开仓库整理为产品级 monorepo：`apps/api`、`apps/web`、`apps/admin` 与共享 `packages/*`。

@@ -105,6 +105,9 @@ class Settings(BaseSettings):
     OSS_ACCESS_KEY_SECRET: str = ""
 
     # Alibaba Cloud SMS config
+    # None auto-detects SMS login from the provider settings. False disables
+    # only SMS login; True requires a complete provider configuration.
+    SMS_LOGIN_ENABLED: bool | None = None
     ALIBABA_CLOUD_ACCESS_KEY_ID: str = ""
     ALIBABA_CLOUD_ACCESS_KEY_SECRET: str = ""
     ALIBABA_CLOUD_SMS_SIGN_NAME: str = ""
@@ -119,6 +122,40 @@ class Settings(BaseSettings):
             for country_code in self.SMS_COUNTRY_CODE_ALLOWLIST.split(",")
             if country_code.strip()
         }
+
+    @property
+    def sms_provider_missing_fields(self) -> list[str]:
+        missing_fields = [
+            field_name
+            for field_name in (
+                "ALIBABA_CLOUD_ACCESS_KEY_ID",
+                "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+            )
+            if not getattr(self, field_name).strip()
+        ]
+        country_codes = self.sms_country_code_allowlist
+        if not country_codes:
+            missing_fields.append("SMS_COUNTRY_CODE_ALLOWLIST")
+        if "86" in country_codes:
+            for field_name in (
+                "ALIBABA_CLOUD_SMS_SIGN_NAME",
+                "ALIBABA_CLOUD_SMS_VERIFY_CODE_TEMPLATE_CODE",
+            ):
+                if not getattr(self, field_name).strip():
+                    missing_fields.append(field_name)
+        if country_codes - {"86"} and not self.ALIBABA_CLOUD_SMS_SENDER_ID.strip():
+            missing_fields.append("ALIBABA_CLOUD_SMS_SENDER_ID")
+        return missing_fields
+
+    @property
+    def sms_provider_configured(self) -> bool:
+        return not self.sms_provider_missing_fields
+
+    @property
+    def effective_sms_login_enabled(self) -> bool:
+        if self.SMS_LOGIN_ENABLED is False:
+            return False
+        return self.sms_provider_configured
 
     # inner api key
     INNER_API_KEY: str = ""
@@ -222,6 +259,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "AI_ENABLED requires DASHSCOPE_API_KEY, an enabled OpenAI model, "
                 "or an external Masterbrain endpoint"
+            )
+        if self.SMS_LOGIN_ENABLED is True and not self.sms_provider_configured:
+            raise ValueError(
+                "SMS_LOGIN_ENABLED=true requires complete SMS provider "
+                "configuration; missing: "
+                + ", ".join(self.sms_provider_missing_fields)
             )
 
         parsed_site_url = urlparse(self.SITE_URL)

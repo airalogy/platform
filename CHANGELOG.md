@@ -37,6 +37,7 @@ Target initial version: `0.1.0`.
 - Reworked the home page into a role- and work-state-aware task workbench that resumes real local Record drafts, starts the most recent Protocol directly, inherits recent Project context for Protocol creation, exposes management shortcuts only from actual memberships, and uses a bounded 1920px wide-screen canvas without stretching other product pages.
 - Improved Record entry with visible device-local draft status, manual save feedback, required-field progress, first-error focus, a deterministic destination/resource submission preview, and explicit post-submit next steps.
 - Made AI an explicit instance capability: provider-backed Aira entry points appear only when available, while AI-disabled instances retain the complete deterministic Protocol and Record experience without empty chat controls.
+- Made SMS login an instance capability with provider auto-detection, strict explicit-enable validation, backend enforcement, a safe email-only frontend fallback, and a disabled-by-default Single-Lab profile without affecting other SMS verification purposes.
 - Simplified Protocol creation into recommended Aira/template paths and secondary reuse, Hub, `.aira`, ZIP, and from-scratch paths, preserving current or recent Project context.
 - Reset public versioning and release history for the Community Edition initial release.
 - Reorganized the public repository as a product monorepo with `apps/api`, `apps/web`, `apps/admin`, and shared `packages/*`.

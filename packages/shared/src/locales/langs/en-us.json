@@ -458,7 +458,7 @@
         "protocolExamplesUnavailable": "Signed in, but Airalogy protocol examples were not imported. Set AIRALOGY_PROTOCOL_EXAMPLES_DIR to enable them."
       },
       "codeLogin": {
-        "title": "Phone number",
+        "title": "Phone code login",
         "heading": "Phone sign in",
         "helper": "Enter your phone to receive a code",
         "verificationTitle": "Verification code",
