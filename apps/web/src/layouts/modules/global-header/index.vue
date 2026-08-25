@@ -1,5 +1,6 @@
 <template>
   <section
+    data-testid="app-shell-header"
     class="mx-auto h-[70px] min-w-0 w-full flex items-center"
     :class="isContainer ? 'container' : ''"
     :style="containerStyle"

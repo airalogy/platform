@@ -29,7 +29,7 @@
     :right-footer="themeStore.footer.right"
     :float-button-props="props.floatButtonProps"
     :is-container="!route.meta.notContainer"
-    :max-width="route.meta.containerMaxWidth"
+    :max-width="contentMaxWidth"
     footer-class="bg-[#2B2B38]"
     header-class="bg-[#2B2B38]"
   >
@@ -37,7 +37,7 @@
       <global-header
         v-bind="headerProps"
         :is-container="!route.meta.notContainer"
-        :max-width="route.meta.containerMaxWidth"
+        :max-width="shellMaxWidth"
         :class="props.headerClass"
       />
     </template>
@@ -46,7 +46,7 @@
       <global-content v-else />
     </slot>
     <template v-if="!route.meta.hideFooter" #footer>
-      <global-footer :max-width="route.meta.containerMaxWidth" />
+      <global-footer :max-width="shellMaxWidth" />
     </template>
     <template v-if="$slots.floatButton" #floatButton>
       <slot name="floatButton" />
@@ -58,6 +58,7 @@
 <script setup lang="ts">
 import type { LayoutMode } from "@/types/layout"
 import type { FloatButtonProps } from "naive-ui"
+import { PAGE_LAYOUT_MAX_WIDTHS, resolvePageLayoutMaxWidth } from "@/constants/page-layout"
 import AIRALayout from "@/layouts/base-layout/index.vue"
 
 import { LAYOUT_SCROLL_EL_ID } from "@/layouts/base-layout/utils/shared"
@@ -151,6 +152,10 @@ function getSiderCollapsedWidth() {
 }
 
 const route = useRoute()
+const shellMaxWidth = PAGE_LAYOUT_MAX_WIDTHS.workspace
+const contentMaxWidth = computed(() =>
+  resolvePageLayoutMaxWidth(route.meta.contentWidth, route.meta.containerMaxWidth),
+)
 const layoutScrollMode = computed(() => route.meta.scrollMode ?? themeStore.layout.scrollMode)
 const layoutClass = computed(() => (route.meta.layoutFullHeight ? "h-screen overflow-hidden" : ""))
 const contentOverflowClass = computed(() => (route.meta.disableContentScroll ? "!overflow-y-hidden min-h-0" : ""))

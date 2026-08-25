@@ -33,8 +33,9 @@ Target initial version: `0.1.0`.
 
 ### Changed
 
+- Unified top-level Platform pages on a shared semantic layout-width system: navigation and operational workspaces now use the same bounded 1920px canvas, while focused and reading surfaces can opt into narrower standard widths without page-specific shell CSS.
 - Centralized Platform UI typography into shared semantic roles for titles, body copy, labels, metadata, status, metrics, and code; the browser, Naive UI, and UnoCSS now use one Chinese/English font stack, with core Home, Lab, Project, Protocol, and Record surfaces migrated to the shared system.
-- Reworked the home page into a role- and work-state-aware task workbench that resumes real local Record drafts, starts the most recent Protocol directly, inherits recent Project context for Protocol creation, exposes management shortcuts only from actual memberships, and uses a bounded 1920px wide-screen canvas without stretching other product pages.
+- Reworked the home page into a role- and work-state-aware task workbench that resumes real local Record drafts, starts the most recent Protocol directly, inherits recent Project context for Protocol creation, exposes management shortcuts only from actual memberships, and uses the shared bounded workspace canvas.
 - Improved Record entry with visible device-local draft status, manual save feedback, required-field progress, first-error focus, a deterministic destination/resource submission preview, and explicit post-submit next steps.
 - Made AI an explicit instance capability: provider-backed Aira entry points appear only when available, while AI-disabled instances retain the complete deterministic Protocol and Record experience without empty chat controls.
 - Made SMS login an instance capability with provider auto-detection, strict explicit-enable validation, backend enforcement, a safe email-only frontend fallback, and a disabled-by-default Single-Lab profile without affecting other SMS verification purposes.

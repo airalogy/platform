@@ -7,7 +7,7 @@ export const homeRoute: CustomRoute<HomeNameKey> = {
   component: GlobalLayout,
   children: [
     {
-      meta: { title: "Home", hideInBreadcrumb: true, containerMaxWidth: 1920 },
+      meta: { title: "Home", hideInBreadcrumb: true },
       path: "home",
       name: "home",
       component: () => import("@/views/home/index.vue"),

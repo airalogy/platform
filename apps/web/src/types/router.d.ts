@@ -1,3 +1,4 @@
+import type { PageLayoutWidth } from "../constants/page-layout"
 import type { LayoutScrollMode } from "./layout"
 import type { RouteNameKey } from "./page-route"
 import "vue-router"
@@ -71,7 +72,9 @@ declare module "vue-router" {
     disableContentScroll?: boolean
     /** Force layout to fill viewport height */
     layoutFullHeight?: boolean
-    /** Optional maximum width for container-based routes */
+    /** Semantic content width for container-based routes */
+    contentWidth?: PageLayoutWidth
+    /** Optional custom maximum width; prefer contentWidth for standard pages */
     containerMaxWidth?: number
     /** Whether to hide in tab */
     hideInTab?: boolean

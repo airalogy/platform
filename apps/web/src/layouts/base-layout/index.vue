@@ -78,6 +78,7 @@
       <!-- Main Content -->
       <main
         :id="isContentScroll ? scrollElId : undefined"
+        data-testid="app-shell-content"
         class="flex flex-grow flex-col"
         :style="containerStyle"
         :class="[
