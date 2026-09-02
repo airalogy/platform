@@ -43,6 +43,7 @@ from app.models.user import User
 from app.services.access_control import resolve_structured_access
 from app.services.model_usage import create_usage_context
 from app.services.persistent_jobs import enqueue_job
+from app.services.research_assets import research_asset_bundle
 
 AIRA_AI_STATUSES = {
     "waiting_for_research_strategy",
@@ -728,6 +729,27 @@ async def _result_package(
             )
         ).all()
     )
+    scientific_assets = await research_asset_bundle(db_session, task_id=task.id)
+    registered_evidence = {
+        (
+            item["artifact_type"],
+            item["artifact_id"],
+            item["artifact_version"],
+        )
+        for item in scientific_assets["evidence"]
+    }
+    legacy_evidence = [
+        {
+            "artifact_type": item.artifact_type,
+            "artifact_id": item.artifact_id,
+            "artifact_version": item.artifact_version,
+            "relation": item.relation,
+        }
+        for item in artifacts
+        if item.relation in {"produced", "evidence"}
+        and (item.artifact_type, item.artifact_id, item.artifact_version)
+        not in registered_evidence
+    ]
     return {
         "schema": "airalogy.research-result-package.v1",
         "task_id": str(task.id),
@@ -736,17 +758,12 @@ async def _result_package(
         "success_criteria": task.success_criteria,
         "goal_assessment": "requires_human_review",
         "narrative_conclusion": run.aira_state.get("final_research_conclusion") or "",
-        "claims": [],
+        "claims": scientific_assets["claims"],
         "evidence": [
-            {
-                "artifact_type": item.artifact_type,
-                "artifact_id": item.artifact_id,
-                "artifact_version": item.artifact_version,
-                "relation": item.relation,
-            }
-            for item in artifacts
-            if item.relation in {"produced", "evidence"}
+            *scientific_assets["evidence"],
+            *legacy_evidence,
         ],
+        "data_assets": scientific_assets["data_assets"],
         "actions": [
             {
                 "id": str(item.id),

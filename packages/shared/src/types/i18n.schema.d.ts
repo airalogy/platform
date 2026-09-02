@@ -976,6 +976,87 @@ declare namespace I18n {
         reviewResponsibility: string
         confirmReview: string
         reviewCompleted: string
+        scientificAssets: string
+        resultsAndEvidence: string
+        scientificAssetsHint: string
+        addDataAsset: string
+        addEvidence: string
+        addClaim: string
+        assetsLoadError: string
+        noScientificAssets: string
+        claims: string
+        evidence: string
+        dataAssets: string
+        confidence: string
+        uncertainty: string
+        linkedEvidenceCount: string
+        acceptClaim: string
+        rejectClaim: string
+        validateEvidence: string
+        rejectEvidence: string
+        markReady: string
+        assetName: string
+        assetKind: string
+        externalUri: string
+        mediaType: string
+        evidenceKind: string
+        evidenceSource: string
+        dataAsset: string
+        externalSource: string
+        evidenceSummary: string
+        claimStatement: string
+        linkEvidence: string
+        assetPreviewHint: string
+        previewAssetWrite: string
+        confirmAssetWrite: string
+        assetWriteCompleted: string
+        markReadyConfirm: string
+        evidenceReviewConfirm: string
+        claimReviewConfirm: string
+        noClaims: string
+        noEvidence: string
+        noDataAssets: string
+        claimState: {
+          suggested: string
+          draft: string
+          reviewed: string
+          rejected: string
+          superseded: string
+          archived: string
+        }
+        evidenceQuality: {
+          pending: string
+          validated: string
+          rejected: string
+        }
+        evidenceKindValue: {
+          observation: string
+          measurement: string
+          analysis: string
+          citation: string
+          validation: string
+        }
+        artifactType: {
+          record: string
+          data_asset: string
+          knowledge: string
+          paper_library_entry: string
+          external: string
+        }
+        dataAssetKind: {
+          file: string
+          table: string
+          image: string
+          model: string
+          archive: string
+          external: string
+        }
+        dataAssetStatus: {
+          draft: string
+          ready: string
+          superseded: string
+          archived: string
+        }
         taskStatus: {
           draft: string
           active: string
@@ -1056,6 +1137,14 @@ declare namespace I18n {
           approval_requested: string
           approval_approved: string
           approval_rejected: string
+          data_asset_created: string
+          data_asset_version_created: string
+          data_asset_status_changed: string
+          evidence_registered: string
+          evidence_reviewed: string
+          claim_created: string
+          claim_revised: string
+          claim_reviewed: string
         }
       }
       recordDiary: {

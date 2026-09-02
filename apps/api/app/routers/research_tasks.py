@@ -39,10 +39,18 @@ from app.models.research import (
     ResearchTaskStatus,
     ScientificOutcome,
 )
+from app.models.research_asset import (
+    ClaimState,
+    EvidenceKind,
+    EvidenceQuality,
+    ResearchClaim,
+    ResearchEvidence,
+)
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_structured_access
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
+from app.services.research_assets import research_asset_bundle
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
     activate_protocol_action,
@@ -1087,6 +1095,31 @@ async def complete_research_task(
             project=project,
             capability="research.approve",
         )
+    pending_evidence = await ResearchEvidence.count(
+        db_session,
+        [
+            ResearchEvidence.task_id == task.id,
+            ResearchEvidence.quality_state == EvidenceQuality.PENDING.value,
+        ],
+    )
+    pending_claims = await ResearchClaim.count(
+        db_session,
+        [
+            ResearchClaim.task_id == task.id,
+            ResearchClaim.state.in_(
+                [ClaimState.SUGGESTED.value, ClaimState.DRAFT.value]
+            ),
+        ],
+    )
+    if pending_evidence or pending_claims:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Review or reject pending Evidence and Claims before completing "
+                "the Research Task"
+            ),
+        )
+    scientific_assets = await research_asset_bundle(db_session, task_id=task.id)
     active_items = await db_session.scalar(
         select(func.count())
         .select_from(ResearchHumanWorkItem)
@@ -1129,6 +1162,7 @@ async def complete_research_task(
     task.completed_at = now
     task.result_package = {
         **(task.result_package or {}),
+        **scientific_assets,
         "goal_assessment": params.outcome.value,
         "scientific_outcome": params.scientific_outcome.value,
         "reviewed_conclusion": task.conclusion,
@@ -1903,6 +1937,49 @@ async def submit_research_work_item(
                     "protocol_version": record.protocol_version,
                 },
             )
+        )
+    existing_evidence = await ResearchEvidence.find_by(
+        db_session,
+        [
+            ResearchEvidence.task_id == task.id,
+            ResearchEvidence.artifact_type == "record",
+            ResearchEvidence.artifact_id == str(record.id),
+            ResearchEvidence.artifact_version == str(record.version),
+            ResearchEvidence.kind == EvidenceKind.OBSERVATION.value,
+        ],
+    )
+    if existing_evidence is None:
+        evidence = ResearchEvidence(
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind=EvidenceKind.OBSERVATION.value,
+            artifact_type="record",
+            artifact_id=str(record.id),
+            artifact_version=str(record.version),
+            summary=params.note.strip() or f"Validated Record for {action.title}",
+            quality_state=EvidenceQuality.VALIDATED.value,
+            validation_report=protocol_run.validation_report,
+            created_by_user_id=current_user.id,
+            reviewed_by_user_id=current_user.id,
+            reviewed_at=now,
+        )
+        db_session.add(evidence)
+        await db_session.flush()
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            work_item_id=item.id,
+            kind="evidence.registered",
+            actor_user_id=current_user.id,
+            payload={
+                "evidence_id": str(evidence.id),
+                "kind": evidence.kind,
+                "quality_state": evidence.quality_state,
+            },
+            idempotency_key=f"evidence:{evidence.id}:registered",
         )
     state = dict(run.aira_state or initial_aira_state(task.goal))
     steps = list(state.get("steps") or [])

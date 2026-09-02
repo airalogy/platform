@@ -2,17 +2,23 @@
   <div class="research-detail py-8">
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <n-button quaternary @click="goBack">
-        <template #icon><n-icon><icon-tabler-arrow-left /></n-icon></template>
+        <template #icon>
+          <n-icon><icon-tabler-arrow-left /></n-icon>
+        </template>
         {{ $t("page.research.backToTasks") }}
       </n-button>
       <n-button quaternary :loading="loading" @click="() => loadTask()">
-        <template #icon><n-icon><icon-tabler-refresh /></n-icon></template>
+        <template #icon>
+          <n-icon><icon-tabler-refresh /></n-icon>
+        </template>
         {{ $t("page.research.refresh") }}
       </n-button>
     </div>
 
     <n-alert v-if="loadError" type="error" :title="$t('page.research.loadError')">
-      <n-button size="small" class="mt-2" @click="() => loadTask()">{{ $t("common.retry") }}</n-button>
+      <n-button size="small" class="mt-2" @click="() => loadTask()">
+        {{ $t("common.retry") }}
+      </n-button>
     </n-alert>
 
     <n-spin v-else :show="loading && !task" class="min-h-80">
@@ -28,7 +34,9 @@
                 {{ $t("page.research.airaManaged") }}
               </n-tag>
             </div>
-            <h1 class="aira-type-page-title mb-0 mt-2">{{ task.title }}</h1>
+            <h1 class="aira-type-page-title mb-0 mt-2">
+              {{ task.title }}
+            </h1>
             <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
               {{ task.goal }}
             </p>
@@ -67,12 +75,14 @@
           {{ $t("page.research.reviewRequiredHint") }}
         </n-alert>
 
-        <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+        <div class="grid grid-cols-1 mt-6 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           <div class="space-y-5">
             <section class="research-panel">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div class="aira-type-eyebrow">{{ $t("page.research.currentRun") }}</div>
+                  <div class="aira-type-eyebrow">
+                    {{ $t("page.research.currentRun") }}
+                  </div>
                   <h2 class="aira-type-section-title mb-0 mt-1">
                     {{ latestRun ? $t("page.research.runNumber", { number: latestRun.run_number }) : "—" }}
                   </h2>
@@ -81,7 +91,7 @@
                   {{ runStatusLabel(latestRun.status) }}
                 </n-tag>
               </div>
-              <div v-if="latestRun" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div v-if="latestRun" class="grid grid-cols-1 mt-4 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="research-metric">
                   <span class="aira-type-meta">{{ $t("page.research.planVersion") }}</span>
                   <strong class="aira-type-metric">v{{ latestRun.plan_version }}</strong>
@@ -102,20 +112,28 @@
             </section>
 
             <section v-if="pendingApprovalActions.length" class="research-panel research-panel--attention">
-              <div class="aira-type-eyebrow">{{ $t("page.research.approvalGate") }}</div>
-              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.approvalRequired") }}</h2>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.approvalGate") }}
+              </div>
+              <h2 class="aira-type-section-title mb-0 mt-1">
+                {{ $t("page.research.approvalRequired") }}
+              </h2>
               <div class="mt-4 space-y-3">
                 <article v-for="action in pendingApprovalActions" :key="action.id" class="research-action-card">
                   <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-2">
-                        <n-tag type="warning" round size="small">{{ $t("page.research.approvalPending") }}</n-tag>
+                        <n-tag type="warning" round size="small">
+                          {{ $t("page.research.approvalPending") }}
+                        </n-tag>
                         <span class="aira-type-meta">#{{ action.sequence }}</span>
                         <span v-if="action.protocol" class="aira-type-meta">
                           {{ action.protocol.name }} · v{{ action.protocol.version }}
                         </span>
                       </div>
-                      <h3 class="aira-type-card-title mb-0 mt-2">{{ action.title }}</h3>
+                      <h3 class="aira-type-card-title mb-0 mt-2">
+                        {{ action.title }}
+                      </h3>
                       <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
                         {{ action.description || action.approval?.reason }}
                       </p>
@@ -135,17 +153,25 @@
             </section>
 
             <section v-if="openActions.length" class="research-panel">
-              <div class="aira-type-eyebrow">{{ $t("page.research.needsAction") }}</div>
-              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.humanWork") }}</h2>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.needsAction") }}
+              </div>
+              <h2 class="aira-type-section-title mb-0 mt-1">
+                {{ $t("page.research.humanWork") }}
+              </h2>
               <div class="mt-4 space-y-3">
                 <article v-for="action in openActions" :key="action.id" class="research-action-card">
                   <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div class="min-w-0 flex-1">
                       <div class="flex flex-wrap items-center gap-2">
-                        <n-tag type="info" round size="small">{{ actionStatusLabel(action.status) }}</n-tag>
+                        <n-tag type="info" round size="small">
+                          {{ actionStatusLabel(action.status) }}
+                        </n-tag>
                         <span class="aira-type-meta">#{{ action.sequence }}</span>
                       </div>
-                      <h3 class="aira-type-card-title mb-0 mt-2">{{ action.title }}</h3>
+                      <h3 class="aira-type-card-title mb-0 mt-2">
+                        {{ action.title }}
+                      </h3>
                       <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
                         {{ action.work_item?.instructions || action.description }}
                       </p>
@@ -167,20 +193,28 @@
             </section>
 
             <section class="research-panel">
-              <div class="aira-type-eyebrow">{{ $t("page.research.executionHistory") }}</div>
-              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.actions") }}</h2>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.executionHistory") }}
+              </div>
+              <h2 class="aira-type-section-title mb-0 mt-1">
+                {{ $t("page.research.actions") }}
+              </h2>
               <n-empty v-if="!task.actions.length" class="py-8" :description="$t('page.research.noActions')" />
               <div v-else class="mt-4 divide-y divide-gray-100">
                 <div v-for="action in task.actions" :key="action.id" class="flex gap-3 py-4 first:pt-0 last:pb-0">
-                  <div class="research-sequence">{{ action.sequence }}</div>
+                  <div class="research-sequence">
+                    {{ action.sequence }}
+                  </div>
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                      <h3 class="aira-type-label mb-0">{{ action.title }}</h3>
+                      <h3 class="aira-type-label mb-0">
+                        {{ action.title }}
+                      </h3>
                       <n-tag :type="actionStatusType(action.status)" size="small" round>
                         {{ actionStatusLabel(action.status) }}
                       </n-tag>
                     </div>
-                    <p v-if="action.description" class="aira-type-meta mb-0 mt-1 line-clamp-2">
+                    <p v-if="action.description" class="aira-type-meta line-clamp-2 mb-0 mt-1">
                       {{ action.description }}
                     </p>
                     <n-button
@@ -197,38 +231,65 @@
               </div>
             </section>
 
+            <research-assets-panel
+              :task-id="task.id"
+              @changed="() => loadTask(true)"
+            />
+
             <section v-if="hasResult" class="research-panel">
-              <div class="aira-type-eyebrow">{{ $t("page.research.resultPackage") }}</div>
-              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.researchConclusion") }}</h2>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.resultPackage") }}
+              </div>
+              <h2 class="aira-type-section-title mb-0 mt-1">
+                {{ $t("page.research.researchConclusion") }}
+              </h2>
               <p class="aira-type-body aira-text-secondary mb-0 mt-4 whitespace-pre-wrap">
                 {{ resultConclusion || $t("page.research.noConclusion") }}
               </p>
               <div class="mt-4 flex flex-wrap gap-2">
-                <n-tag v-if="task.outcome" type="success" round>{{ outcomeLabel(task.outcome) }}</n-tag>
-                <n-tag v-if="task.scientific_outcome" type="info" round>{{ scientificOutcomeLabel(task.scientific_outcome) }}</n-tag>
+                <n-tag v-if="task.outcome" type="success" round>
+                  {{ outcomeLabel(task.outcome) }}
+                </n-tag>
+                <n-tag v-if="task.scientific_outcome" type="info" round>
+                  {{ scientificOutcomeLabel(task.scientific_outcome) }}
+                </n-tag>
               </div>
             </section>
           </div>
 
           <aside class="space-y-5">
             <section class="research-panel">
-              <div class="aira-type-eyebrow">{{ $t("page.research.definitionOfDone") }}</div>
-              <h2 class="aira-type-card-title mb-0 mt-1">{{ $t("page.research.successCriteria") }}</h2>
-              <ul class="mb-0 mt-3 space-y-2 pl-5 aira-type-body aira-text-secondary">
-                <li v-for="criterion in task.success_criteria" :key="criterion">{{ criterion }}</li>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.definitionOfDone") }}
+              </div>
+              <h2 class="aira-type-card-title mb-0 mt-1">
+                {{ $t("page.research.successCriteria") }}
+              </h2>
+              <ul class="aira-type-body aira-text-secondary mb-0 mt-3 pl-5 space-y-2">
+                <li v-for="criterion in task.success_criteria" :key="criterion">
+                  {{ criterion }}
+                </li>
               </ul>
               <template v-if="task.stop_conditions.length">
                 <n-divider />
-                <h3 class="aira-type-label mb-0">{{ $t("page.research.stopConditions") }}</h3>
-                <ul class="mb-0 mt-2 space-y-1 pl-5 aira-type-meta">
-                  <li v-for="condition in task.stop_conditions" :key="condition">{{ condition }}</li>
+                <h3 class="aira-type-label mb-0">
+                  {{ $t("page.research.stopConditions") }}
+                </h3>
+                <ul class="aira-type-meta mb-0 mt-2 pl-5 space-y-1">
+                  <li v-for="condition in task.stop_conditions" :key="condition">
+                    {{ condition }}
+                  </li>
                 </ul>
               </template>
             </section>
 
             <section class="research-panel">
-              <div class="aira-type-eyebrow">{{ $t("page.research.researchEnvironment") }}</div>
-              <h2 class="aira-type-card-title mb-0 mt-1">{{ $t("page.research.pinnedMethods") }}</h2>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.researchEnvironment") }}
+              </div>
+              <h2 class="aira-type-card-title mb-0 mt-1">
+                {{ $t("page.research.pinnedMethods") }}
+              </h2>
               <div v-if="task.protocols.length" class="mt-3 space-y-2">
                 <button
                   v-for="protocol in task.protocols"
@@ -243,7 +304,9 @@
               </div>
               <n-empty v-else class="py-5" :description="$t('page.research.noMethods')" />
               <n-divider />
-              <h2 class="aira-type-card-title mb-0">{{ $t("page.research.pinnedKnowledge") }}</h2>
+              <h2 class="aira-type-card-title mb-0">
+                {{ $t("page.research.pinnedKnowledge") }}
+              </h2>
               <n-collapse v-if="task.knowledge.length" class="mt-3">
                 <n-collapse-item
                   v-for="item in task.knowledge"
@@ -252,8 +315,12 @@
                   :name="item.id"
                 >
                   <div class="flex flex-wrap gap-2">
-                    <n-tag size="small" type="success">{{ item.kind }}</n-tag>
-                    <n-tag size="small">r{{ item.revision }}</n-tag>
+                    <n-tag size="small" type="success">
+                      {{ item.kind }}
+                    </n-tag>
+                    <n-tag size="small">
+                      r{{ item.revision }}
+                    </n-tag>
                   </div>
                   <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
                     {{ item.body }}
@@ -269,15 +336,23 @@
             </section>
 
             <section class="research-panel">
-              <div class="aira-type-eyebrow">{{ $t("page.research.provenance") }}</div>
-              <h2 class="aira-type-card-title mb-0 mt-1">{{ $t("page.research.timeline") }}</h2>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.provenance") }}
+              </div>
+              <h2 class="aira-type-card-title mb-0 mt-1">
+                {{ $t("page.research.timeline") }}
+              </h2>
               <n-empty v-if="!task.events.length" class="py-5" :description="$t('page.research.noEvents')" />
               <div v-else class="mt-4 space-y-4">
                 <div v-for="event in task.events.slice(0, 30)" :key="event.id" class="research-event">
                   <span class="research-event__dot" />
                   <div class="min-w-0">
-                    <div class="aira-type-label">{{ eventLabel(event.kind) }}</div>
-                    <div class="aira-type-meta mt-0.5"><n-time :time="new Date(event.created_at)" type="relative" /></div>
+                    <div class="aira-type-label">
+                      {{ eventLabel(event.kind) }}
+                    </div>
+                    <div class="aira-type-meta mt-0.5">
+                      <n-time :time="new Date(event.created_at)" type="relative" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -313,15 +388,23 @@
               :autosize="{ minRows: 3, maxRows: 10 }"
               placeholder="{}"
             />
-            <template #feedback>{{ $t("page.research.initialValuesHint") }}</template>
+            <template #feedback>
+              {{ $t("page.research.initialValuesHint") }}
+            </template>
           </n-form-item>
         </n-form>
       </template>
       <template v-else>
-        <n-alert type="info">{{ $t("page.research.actionPreviewHint") }}</n-alert>
+        <n-alert type="info">
+          {{ $t("page.research.actionPreviewHint") }}
+        </n-alert>
         <div class="research-preview mt-4">
-          <div class="aira-type-eyebrow">{{ $t("page.research.saveDestination") }}</div>
-          <h3 class="aira-type-card-title mb-0 mt-1">{{ actionPreview.destination.task.title }}</h3>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.saveDestination") }}
+          </div>
+          <h3 class="aira-type-card-title mb-0 mt-1">
+            {{ actionPreview.destination.task.title }}
+          </h3>
           <p class="aira-type-body aira-text-secondary mb-0 mt-2">
             {{ actionPreview.protocol.name }} · v{{ actionPreview.protocol.version }}
           </p>
@@ -346,7 +429,9 @@
     </n-modal>
 
     <n-modal v-model:show="reviewModalVisible" preset="card" class="research-modal" :title="$t('page.research.reviewResult')" :mask-closable="false">
-      <n-alert type="warning" class="mb-4">{{ $t("page.research.reviewResponsibility") }}</n-alert>
+      <n-alert type="warning" class="mb-4">
+        {{ $t("page.research.reviewResponsibility") }}
+      </n-alert>
       <n-form label-placement="top">
         <n-form-item :label="$t('page.research.goalAssessment')" required>
           <n-select v-model:value="review.outcome" :options="outcomeOptions" />
@@ -360,7 +445,9 @@
       </n-form>
       <template #footer>
         <div class="flex justify-end gap-2">
-          <n-button @click="reviewModalVisible = false">{{ $t("common.cancel") }}</n-button>
+          <n-button @click="reviewModalVisible = false">
+            {{ $t("common.cancel") }}
+          </n-button>
           <n-button type="primary" :disabled="!review.conclusion.trim()" :loading="mutating" @click="completeTask">
             {{ $t("page.research.confirmReview") }}
           </n-button>
@@ -402,6 +489,7 @@ import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { useRoute, useRouter } from "vue-router"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
+import ResearchAssetsPanel from "./components/research-assets-panel.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -779,6 +867,14 @@ function eventLabel(kind: string) {
     "approval.approved",
     "approval.rejected",
     "run.manual_control_required",
+    "data_asset.created",
+    "data_asset.version_created",
+    "data_asset.status_changed",
+    "evidence.registered",
+    "evidence.reviewed",
+    "claim.created",
+    "claim.revised",
+    "claim.reviewed",
   ]
   return known.includes(kind)
     ? $t(`page.research.event.${kind.replaceAll(".", "_")}` as I18n.I18nKey)

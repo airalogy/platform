@@ -34,6 +34,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增 Knowledge Core 和按范围私有化的 Paper Library：支持 DOI 规范化、无 DOI 候选冲突显式确认、DOI/PDF/URL/BibTeX/RIS 的“解析预览→确认导入”、内容哈希去重但不继承权限的文件存储、真实 PDF 与配额校验、全文检索、集合和 Project 关联、BibTeX/RIS 导出、Knowledge 修订与审核，以及保留来源关系且不扩大原文件权限的 Personal→Project、Project→Lab 发布；文件预览使用短时令牌、读取时再鉴权和仅追加审计，Restricted 内容使用对象级显式授权；可选 Scholar 只作为只读文献候选服务。
 - Research Environment 现可固定 Project/Lab 中已审核 Knowledge 的具体修订，并将其作为受边界约束的 Aira 规划上下文；Restricted Knowledge 不进入共享 Task 快照，避免绕过对象级权限。
 - 新增保留修订历史的 Personal、Project 和 Lab Research Log：支持结构化进展、会议记录、反思、阻塞和里程碑，按角色控制发布，通过预览后确认保存，并在不可编辑的聚合时间线中呈现真实 Record、Protocol、Knowledge 与 Research Task 活动；现有 Record 热图、日历、导出与历史链接继续保留。
+- 新增版本化 DataAsset、按 Research Task 隔离的 Evidence 质量审核和关联 Evidence 且保留修订的科学 Claim；支持预览后确认创建、来源事件留痕、从已完成 Record 待办自动登记已校验 Evidence，并在 Research Result Package 与任务工作台中统一呈现正式科研资产。
 
 ### 变更
 

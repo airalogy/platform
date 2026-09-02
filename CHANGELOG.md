@@ -34,6 +34,7 @@ Target initial version: `0.1.0`.
 - Added Knowledge Core and a private scoped Paper Library with DOI normalization, explicit no-DOI duplicate decisions, DOI/PDF/URL/BibTeX/RIS preview-confirm imports, content-hash storage without permission inheritance, real PDF and quota validation, full-text search, collections and Project links, BibTeX/RIS exports, reviewed Knowledge revisions and lineage-preserving Personal-to-Project/Project-to-Lab publishing, short-lived reauthorized file access with append-only audits, object-level Restricted access, and an optional read-only Scholar literature provider.
 - Added revision-pinned reviewed Project/Lab Knowledge to Research Environments and Aira planning context, while excluding Restricted Knowledge from shared Task snapshots to preserve object-level access boundaries.
 - Added revisioned Personal, Project, and Lab Research Logs with structured progress, meeting, reflection, blocker, and milestone entries; role-scoped publishing; preview-confirm editing; and an immutable aggregate timeline of real Record, Protocol, Knowledge, and Research Task events while preserving the existing Record heatmap, calendar, exports, and legacy links.
+- Added versioned DataAssets, task-scoped Evidence quality review, revisioned evidence-linked scientific Claims, preview-confirm creation, provenance events, automatic validated Evidence from completed Record work items, and normalized scientific assets in the Research Result Package and Task workbench.
 
 ### Changed
 

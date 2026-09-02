@@ -25,6 +25,7 @@ MODEL_MODULES = [
     "app.models.record",
     "app.models.record_export",
     "app.models.research",
+    "app.models.research_asset",
     "app.models.research_log",
     "app.models.resource",
     "app.models.star",
