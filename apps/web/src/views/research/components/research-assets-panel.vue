@@ -163,6 +163,9 @@
                     <n-tag size="small" round :type="protocolImprovementStateType(proposal.state)">
                       {{ protocolImprovementStateLabel(proposal.state) }}
                     </n-tag>
+                    <n-tag v-if="proposal.generated_by === 'aira_assisted'" size="small" round type="info">
+                      {{ $t("page.research.airaAssisted") }}
+                    </n-tag>
                     <span class="aira-type-meta">
                       {{ proposal.protocol?.name || proposal.protocol_id }} · v{{ proposal.base_protocol_version }}
                     </span>
@@ -354,8 +357,48 @@
             {{ $t("page.research.protocolImprovementBoundary") }}
           </n-alert>
           <n-form-item :label="$t('page.research.targetProtocol')" required>
-            <n-select v-model:value="protocolImprovementDraft.protocol_id" :options="protocolOptions" />
+            <n-select
+              v-model:value="protocolImprovementDraft.protocol_id"
+              :options="protocolOptions"
+              @update:value="clearProtocolImprovementGeneration"
+            />
           </n-form-item>
+          <n-form-item :label="$t('page.research.validatedEvidence')" required>
+            <n-select
+              v-model:value="protocolImprovementDraft.evidence_ids"
+              multiple
+              clearable
+              :options="knowledgeEvidenceOptions"
+              @update:value="clearProtocolImprovementGeneration"
+            />
+          </n-form-item>
+          <div v-if="instanceStore.aiEnabled" class="mb-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+            <div class="aira-type-label mb-2">
+              {{ $t("page.research.airaImprovementDraft") }}
+            </div>
+            <n-input
+              v-model:value="airaImprovementInstruction"
+              type="textarea"
+              :placeholder="$t('page.research.airaImprovementInstructionPlaceholder')"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+            />
+            <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <span class="aira-type-meta">{{ $t("page.research.airaImprovementDraftHint") }}</span>
+              <n-button
+                size="small"
+                type="primary"
+                secondary
+                :disabled="!canGenerateProtocolImprovement"
+                :loading="airaGenerating"
+                @click="generateProtocolImprovementDraft"
+              >
+                {{ $t("page.research.generateDraftWithAira") }}
+              </n-button>
+            </div>
+          </div>
+          <n-alert v-if="protocolImprovementDraft.aira_generation" type="success" class="mb-4">
+            {{ $t("page.research.airaImprovementGenerated", { model: protocolImprovementDraft.aira_generation.model }) }}
+          </n-alert>
           <n-form-item :label="$t('page.research.improvementTitle')" required>
             <n-input v-model:value="protocolImprovementDraft.title" />
           </n-form-item>
@@ -364,14 +407,6 @@
           </n-form-item>
           <n-form-item :label="$t('page.research.proposedChanges')" required>
             <n-input v-model:value="protocolImprovementDraft.proposed_changes" type="textarea" :autosize="{ minRows: 4, maxRows: 12 }" />
-          </n-form-item>
-          <n-form-item :label="$t('page.research.validatedEvidence')" required>
-            <n-select
-              v-model:value="protocolImprovementDraft.evidence_ids"
-              multiple
-              clearable
-              :options="knowledgeEvidenceOptions"
-            />
           </n-form-item>
         </n-form>
       </template>
@@ -399,7 +434,7 @@
           <n-button @click="preview ? preview = null : modalVisible = false">
             {{ preview ? $t("page.research.backToEdit") : $t("common.cancel") }}
           </n-button>
-          <n-button v-if="!preview" type="primary" :disabled="!canPreview" :loading="mutating" @click="createPreview">
+          <n-button v-if="!preview" type="primary" :disabled="!canPreview || airaGenerating" :loading="mutating" @click="createPreview">
             {{ $t("page.research.previewAssetWrite") }}
           </n-button>
           <n-button v-else type="primary" :loading="mutating" @click="confirmCreate">
@@ -441,6 +476,7 @@ import {
   createEvidence,
   createKnowledgeSuggestion,
   createProtocolImprovement,
+  draftProtocolImprovementWithAira,
   fetchResearchAssets,
   previewClaim,
   previewDataAsset,
@@ -452,6 +488,7 @@ import {
   reviewProtocolImprovement,
   updateDataAssetStatus,
 } from "@/service/api/research-assets"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { useRouter } from "vue-router"
@@ -472,6 +509,7 @@ type ModalKind = "asset" | "evidence" | "claim" | "knowledge" | "protocolImprove
 const emptyBundle = (): ResearchAssetBundle => ({ data_assets: [], evidence: [], claims: [], knowledge_items: [], protocol_improvements: [] })
 const dialog = useDialog()
 const router = useRouter()
+const instanceStore = useInstanceStore()
 const bundle = ref<ResearchAssetBundle>(emptyBundle())
 const loading = ref(false)
 const loadError = ref(false)
@@ -486,6 +524,8 @@ const evidenceDraft = reactive<EvidenceDraft>(newEvidenceDraft())
 const claimDraft = reactive<ClaimDraft>(newClaimDraft())
 const knowledgeDraft = reactive<KnowledgeSuggestionDraft>(newKnowledgeDraft())
 const protocolImprovementDraft = reactive<ProtocolImprovementDraft>(newProtocolImprovementDraft())
+const airaImprovementInstruction = ref("")
+const airaGenerating = ref(false)
 
 const isEmpty = computed(() => !bundle.value.data_assets.length && !bundle.value.evidence.length && !bundle.value.claims.length && !bundle.value.knowledge_items.length && !bundle.value.protocol_improvements.length)
 const modalTitle = computed(() => {
@@ -526,6 +566,10 @@ const protocolOptions = computed(() => props.protocols.map(protocol => ({
   value: protocol.id,
   label: `${protocol.name} · v${protocol.version}`,
 })))
+const canGenerateProtocolImprovement = computed(() => Boolean(
+  protocolImprovementDraft.protocol_id
+  && protocolImprovementDraft.evidence_ids.length,
+))
 const canPreview = computed(() => {
   if (modalKind.value === "asset")
     return Boolean(assetDraft.name.trim() && assetDraft.external_uri.trim())
@@ -649,6 +693,38 @@ function resetModal() {
   Object.assign(claimDraft, newClaimDraft())
   Object.assign(knowledgeDraft, newKnowledgeDraft())
   Object.assign(protocolImprovementDraft, newProtocolImprovementDraft())
+  airaImprovementInstruction.value = ""
+}
+
+function clearProtocolImprovementGeneration() {
+  const hadGeneration = Boolean(protocolImprovementDraft.aira_generation)
+  delete protocolImprovementDraft.aira_generation
+  delete protocolImprovementDraft.aira_receipt
+  if (hadGeneration) {
+    protocolImprovementDraft.title = ""
+    protocolImprovementDraft.rationale = ""
+    protocolImprovementDraft.proposed_changes = ""
+    window.$message?.info($t("page.research.airaImprovementContextChanged"))
+  }
+}
+
+async function generateProtocolImprovementDraft() {
+  if (!canGenerateProtocolImprovement.value)
+    return
+  airaGenerating.value = true
+  try {
+    const draft = await draftProtocolImprovementWithAira({
+      task_id: props.taskId,
+      protocol_id: protocolImprovementDraft.protocol_id,
+      evidence_ids: [...protocolImprovementDraft.evidence_ids],
+      instruction: airaImprovementInstruction.value.trim(),
+    })
+    Object.assign(protocolImprovementDraft, draft)
+    window.$message?.success($t("page.research.airaImprovementDraftReady"))
+  }
+  finally {
+    airaGenerating.value = false
+  }
 }
 
 function resetEvidenceSource(value: EvidenceArtifactType) {

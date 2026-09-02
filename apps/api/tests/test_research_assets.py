@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from uuid import uuid4
 
@@ -22,6 +23,13 @@ from app.routers.research_assets import (
     ProtocolImprovementDraft,
     _knowledge_suggestion_command,
     _protocol_improvement_command,
+)
+from app.services.research_protocol_improvements import (
+    AiraProtocolImprovementOutput,
+    create_generation,
+    generate_protocol_improvement,
+    sign_generation_receipt,
+    verify_generation_receipt,
 )
 from app.services.research_runtime import canonical_digest
 from pydantic import ValidationError
@@ -91,6 +99,10 @@ def test_protocol_improvements_pin_method_version_and_evidence():
     }
     assert "source_snapshot" in evidence_ddl
     assert "uq_protocol_improvement_evidence" in evidence_ddl
+    assert "ck_protocol_improvement_generation_provenance" in proposal_ddl
+    assert "uq_protocol_improvement_proposals_generation_id" in {
+        index.name for index in ProtocolImprovementProposal.__table__.indexes
+    }
 
     migration = import_module("migrations.versions.0021_protocol_improvement_lineage")
     assert migration.down_revision == "0020_knowledge_evidence_lineage"
@@ -98,6 +110,17 @@ def test_protocol_improvements_pin_method_version_and_evidence():
         "protocol_improvement_proposals",
         "protocol_improvement_evidence",
     )
+
+    provenance_migration = import_module(
+        "migrations.versions.0022_protocol_improvement_ai_provenance"
+    )
+    assert provenance_migration.down_revision == "0021_protocol_improvement_lineage"
+    assert set(provenance_migration.ADDED_COLUMNS) == {
+        "generation_id",
+        "generation_model",
+        "generation_snapshot",
+        "generation_receipt_digest",
+    }
 
 
 def test_research_asset_migration_follows_research_log():
@@ -263,6 +286,129 @@ def test_protocol_improvement_preview_pins_protocol_and_evidence_state():
     )
 
 
+def test_aira_protocol_improvement_receipt_is_user_and_context_bound():
+    user_id = uuid4()
+    task_id = uuid4()
+    protocol_id = uuid4()
+    generation = create_generation(
+        output=AiraProtocolImprovementOutput(
+            title="Tighten incubation timing",
+            rationale="Validated measurements support a narrower window.",
+            proposed_changes="Use a 28-32 minute incubation window.",
+        ),
+        model_name="qwen3.5-plus",
+        context_digest="a" * 64,
+        instruction="Prefer the smallest safe change.",
+        source_snapshot={"task": {"goal": "Reduce variance"}},
+    )
+    receipt = sign_generation_receipt(
+        generation,
+        user_id=user_id,
+        task_id=task_id,
+        protocol_id=protocol_id,
+    )
+
+    with pytest.raises(ValidationError, match="provided together"):
+        ProtocolImprovementDraft(
+            task_id=task_id,
+            protocol_id=protocol_id,
+            title=generation.output.title,
+            rationale=generation.output.rationale,
+            proposed_changes=generation.output.proposed_changes,
+            evidence_ids=[uuid4()],
+            aira_generation=generation,
+        )
+
+    verify_generation_receipt(
+        receipt,
+        generation,
+        user_id=user_id,
+        task_id=task_id,
+        protocol_id=protocol_id,
+        context_digest="a" * 64,
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        verify_generation_receipt(
+            receipt,
+            generation,
+            user_id=uuid4(),
+            task_id=task_id,
+            protocol_id=protocol_id,
+            context_digest="a" * 64,
+        )
+    tampered = generation.model_copy(deep=True)
+    tampered.output.title = "Unrelated change"
+    with pytest.raises(ValueError, match="does not match"):
+        verify_generation_receipt(
+            receipt,
+            tampered,
+            user_id=user_id,
+            task_id=task_id,
+            protocol_id=protocol_id,
+            context_digest="a" * 64,
+        )
+
+
+@pytest.mark.asyncio
+async def test_aira_protocol_improvement_uses_strict_structured_output(monkeypatch):
+    async def fake_proposal(prompt, model_name, *, usage_context):
+        assert "Do not claim approval" in prompt
+        assert model_name == "qwen3.5-plus"
+        return {
+            "title": "Tighten incubation timing",
+            "rationale": "Validated measurements support a narrower window.",
+            "proposed_changes": "Use a 28-32 minute incubation window.",
+        }
+
+    monkeypatch.setattr(
+        "app.services.research_protocol_improvements.aira_structured_proposal",
+        fake_proposal,
+    )
+
+    output = await generate_protocol_improvement(
+        context={"task": {"goal": "Reduce variance"}},
+        instruction="Prefer a minimal safe change",
+        model_name="qwen3.5-plus",
+        usage_context=None,
+    )
+
+    assert output.title == "Tighten incubation timing"
+
+
+def test_aira_protocol_improvement_receipt_expires():
+    user_id = uuid4()
+    task_id = uuid4()
+    protocol_id = uuid4()
+    generation = create_generation(
+        output=AiraProtocolImprovementOutput(
+            title="Old draft",
+            rationale="This generation is intentionally expired.",
+            proposed_changes="Do not apply this stale proposal.",
+        ),
+        model_name="qwen3.5-plus",
+        context_digest="b" * 64,
+        instruction="",
+        source_snapshot={"task": {"goal": "Expired test"}},
+        now=datetime.now(UTC) - timedelta(hours=2),
+    )
+    receipt = sign_generation_receipt(
+        generation,
+        user_id=user_id,
+        task_id=task_id,
+        protocol_id=protocol_id,
+    )
+
+    with pytest.raises(ValueError, match="invalid or expired"):
+        verify_generation_receipt(
+            receipt,
+            generation,
+            user_id=user_id,
+            task_id=task_id,
+            protocol_id=protocol_id,
+            context_digest="b" * 64,
+        )
+
+
 def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     paths = app.openapi()["paths"]
 
@@ -276,4 +422,5 @@ def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     assert "/research-assets/knowledge-suggestions" in paths
     assert "/research-assets/protocol-improvements/preview" in paths
     assert "/research-assets/protocol-improvements" in paths
+    assert "/research-assets/protocol-improvements/aira-draft" in paths
     assert "/research-assets/protocol-improvements/{proposal_id}/review" in paths

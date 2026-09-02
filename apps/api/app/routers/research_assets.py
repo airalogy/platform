@@ -11,7 +11,9 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
+from app.config import config
 from app.database import DBSession
 from app.models.knowledge import (
     KnowledgeItem,
@@ -63,7 +65,15 @@ from app.services.knowledge import (
     resolve_scope,
     snapshot_knowledge,
 )
+from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
+from app.services.research_protocol_improvements import (
+    AiraProtocolImprovementGeneration,
+    create_generation,
+    generate_protocol_improvement,
+    sign_generation_receipt,
+    verify_generation_receipt,
+)
 from app.services.research_runtime import (
     canonical_digest,
     emit_research_event,
@@ -308,6 +318,8 @@ class ProtocolImprovementDraft(BaseModel):
     rationale: str = Field(min_length=1, max_length=100_000)
     proposed_changes: str = Field(min_length=1, max_length=200_000)
     evidence_ids: list[UUID] = Field(min_length=1, max_length=100)
+    aira_generation: AiraProtocolImprovementGeneration | None = None
+    aira_receipt: str | None = Field(default=None, min_length=1, max_length=20_000)
 
     @model_validator(mode="after")
     def normalize(self):
@@ -318,11 +330,29 @@ class ProtocolImprovementDraft(BaseModel):
             raise ValueError("Improvement title, rationale, and changes are required")
         if len(self.evidence_ids) != len(set(self.evidence_ids)):
             raise ValueError("Protocol improvement Evidence contains duplicates")
+        if bool(self.aira_generation) != bool(self.aira_receipt):
+            raise ValueError("Aira generation and receipt must be provided together")
         return self
 
 
 class ProtocolImprovementCreate(ProtocolImprovementDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class AiraProtocolImprovementDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    protocol_id: UUID
+    evidence_ids: list[UUID] = Field(min_length=1, max_length=100)
+    instruction: str = Field(default="", max_length=4_000)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.instruction = self.instruction.strip()
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("Protocol improvement Evidence contains duplicates")
+        return self
 
 
 class ProtocolImprovementReview(BaseModel):
@@ -671,11 +701,10 @@ def _knowledge_suggestion_command(
 async def _protocol_improvement_context(
     db_session: DBSession,
     current_user: User,
-    params: ProtocolImprovementDraft,
+    task_id: UUID,
+    protocol_id: UUID,
 ) -> tuple[TaskContext, Protocol, ProtocolVersion]:
-    context = await _task_context(
-        db_session, current_user, params.task_id, "research.run"
-    )
+    context = await _task_context(db_session, current_user, task_id, "research.run")
     row = (
         await db_session.execute(
             select(Protocol, ProtocolVersion)
@@ -689,7 +718,7 @@ async def _protocol_improvement_context(
             )
             .where(
                 ResearchTaskProtocol.task_id == context.task.id,
-                ResearchTaskProtocol.protocol_id == params.protocol_id,
+                ResearchTaskProtocol.protocol_id == protocol_id,
                 ProtocolVersion.protocol_id == Protocol.id,
                 ProtocolVersion.version == ResearchTaskProtocol.protocol_version,
                 Protocol.deleted_at.is_(None),
@@ -735,6 +764,56 @@ def _protocol_improvement_command(
         "protocol": protocol_snapshot,
         "evidence": [_evidence_snapshot(item) for item in evidence],
     }
+
+
+def _protocol_improvement_ai_context(
+    *,
+    context: TaskContext,
+    protocol: Protocol,
+    version: ProtocolVersion,
+    evidence: list[ResearchEvidence],
+    instruction: str,
+) -> dict[str, Any]:
+    return {
+        "task": {
+            "id": str(context.task.id),
+            "goal": context.task.goal,
+            "success_criteria": context.task.success_criteria,
+            "stop_conditions": context.task.stop_conditions,
+        },
+        "protocol": {
+            **_protocol_improvement_snapshot(protocol, version),
+            "metadata": version.meta_data,
+            "aimd": version.aimd,
+            "json_schema": version.json_schema,
+        },
+        "evidence": [_evidence_snapshot(item) for item in evidence],
+        "instruction": instruction,
+    }
+
+
+def _verify_protocol_improvement_generation(
+    params: ProtocolImprovementDraft,
+    *,
+    current_user: User,
+    context_digest: str,
+) -> AiraProtocolImprovementGeneration | None:
+    generation = params.aira_generation
+    receipt = params.aira_receipt
+    if generation is None or receipt is None:
+        return None
+    try:
+        verify_generation_receipt(
+            receipt,
+            generation,
+            user_id=current_user.id,
+            task_id=params.task_id,
+            protocol_id=params.protocol_id,
+            context_digest=context_digest,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return generation
 
 
 async def _protocol_improvement_payload(
@@ -1493,6 +1572,119 @@ async def create_knowledge_suggestion(
     return {**item.as_dict(), "evidence": links}
 
 
+@router.post("/protocol-improvements/aira-draft")
+async def draft_protocol_improvement_with_aira(
+    params: AiraProtocolImprovementDraftRequest,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    if not config.effective_ai_enabled:
+        raise HTTPException(status_code=503, detail="Aira is not available")
+    context, protocol, version = await _protocol_improvement_context(
+        db_session,
+        current_user,
+        params.task_id,
+        params.protocol_id,
+    )
+    evidence = await _knowledge_suggestion_evidence(
+        db_session, current_user, context, params.evidence_ids
+    )
+    ai_context = _protocol_improvement_ai_context(
+        context=context,
+        protocol=protocol,
+        version=version,
+        evidence=evidence,
+        instruction=params.instruction,
+    )
+    context_digest = canonical_digest(ai_context)
+    model_name = context.task.ai_model or config.CHAT_MODEL_ACCURATE
+    usage_context = create_usage_context(
+        feature="research.protocol_improvement.draft",
+        user_id=current_user.id,
+        lab_id=context.lab.id,
+        project_id=context.project.id,
+        attributes={
+            "task_id": str(context.task.id),
+            "protocol_id": str(protocol.id),
+            "base_protocol_version": version.version,
+        },
+    )
+    # Never hold a database transaction open while waiting for a model provider.
+    await db_session.commit()
+    output = await generate_protocol_improvement(
+        context=ai_context,
+        instruction=params.instruction,
+        model_name=model_name,
+        usage_context=usage_context,
+    )
+
+    (
+        current_context,
+        current_protocol,
+        current_version,
+    ) = await _protocol_improvement_context(
+        db_session,
+        current_user,
+        params.task_id,
+        params.protocol_id,
+    )
+    current_evidence = await _knowledge_suggestion_evidence(
+        db_session,
+        current_user,
+        current_context,
+        params.evidence_ids,
+        with_for_update=True,
+    )
+    current_ai_context = _protocol_improvement_ai_context(
+        context=current_context,
+        protocol=current_protocol,
+        version=current_version,
+        evidence=current_evidence,
+        instruction=params.instruction,
+    )
+    if canonical_digest(current_ai_context) != context_digest:
+        raise HTTPException(
+            status_code=409,
+            detail="Research context changed while Aira prepared the draft",
+        )
+    generation = create_generation(
+        output=output,
+        model_name=model_name,
+        context_digest=context_digest,
+        instruction=params.instruction,
+        source_snapshot={
+            "task": ai_context["task"],
+            "protocol": _protocol_improvement_snapshot(
+                current_protocol, current_version
+            ),
+            "evidence": [
+                {
+                    "id": str(item.id),
+                    "snapshot_digest": canonical_digest(_evidence_snapshot(item)),
+                }
+                for item in current_evidence
+            ],
+        },
+    )
+    receipt = sign_generation_receipt(
+        generation,
+        user_id=current_user.id,
+        task_id=params.task_id,
+        protocol_id=params.protocol_id,
+    )
+    await db_session.commit()
+    return {
+        "task_id": str(params.task_id),
+        "protocol_id": str(params.protocol_id),
+        "title": output.title,
+        "rationale": output.rationale,
+        "proposed_changes": output.proposed_changes,
+        "evidence_ids": [str(item) for item in params.evidence_ids],
+        "aira_generation": generation.model_dump(mode="json"),
+        "aira_receipt": receipt,
+    }
+
+
 @router.post("/protocol-improvements/preview")
 async def preview_protocol_improvement(
     params: ProtocolImprovementDraft,
@@ -1500,12 +1692,30 @@ async def preview_protocol_improvement(
     db_session: DBSession,
 ):
     context, protocol, version = await _protocol_improvement_context(
-        db_session, current_user, params
+        db_session,
+        current_user,
+        params.task_id,
+        params.protocol_id,
     )
     evidence = await _knowledge_suggestion_evidence(
         db_session, current_user, context, params.evidence_ids
     )
     protocol_snapshot = _protocol_improvement_snapshot(protocol, version)
+    generation = _verify_protocol_improvement_generation(
+        params,
+        current_user=current_user,
+        context_digest=canonical_digest(
+            _protocol_improvement_ai_context(
+                context=context,
+                protocol=protocol,
+                version=version,
+                evidence=evidence,
+                instruction=params.aira_generation.instruction
+                if params.aira_generation
+                else "",
+            )
+        ),
+    )
     command = _protocol_improvement_command(params, protocol_snapshot, evidence)
     return {
         "preview_digest": canonical_digest(command),
@@ -1523,6 +1733,7 @@ async def preview_protocol_improvement(
             "evidence_count": len(evidence),
             "requires_expert_review": True,
             "changes_published_protocol": False,
+            "generated_by": "aira_assisted" if generation else "human",
         },
     }
 
@@ -1537,7 +1748,10 @@ async def create_protocol_improvement(
         params.model_dump(exclude={"preview_digest"})
     )
     context, protocol, version = await _protocol_improvement_context(
-        db_session, current_user, draft
+        db_session,
+        current_user,
+        draft.task_id,
+        draft.protocol_id,
     )
     evidence = await _knowledge_suggestion_evidence(
         db_session,
@@ -1547,6 +1761,21 @@ async def create_protocol_improvement(
         with_for_update=True,
     )
     protocol_snapshot = _protocol_improvement_snapshot(protocol, version)
+    generation = _verify_protocol_improvement_generation(
+        draft,
+        current_user=current_user,
+        context_digest=canonical_digest(
+            _protocol_improvement_ai_context(
+                context=context,
+                protocol=protocol,
+                version=version,
+                evidence=evidence,
+                instruction=draft.aira_generation.instruction
+                if draft.aira_generation
+                else "",
+            )
+        ),
+    )
     command = _protocol_improvement_command(draft, protocol_snapshot, evidence)
     if canonical_digest(command) != params.preview_digest:
         raise HTTPException(
@@ -1561,11 +1790,26 @@ async def create_protocol_improvement(
         rationale=draft.rationale,
         proposed_changes=draft.proposed_changes,
         state=ProtocolImprovementState.SUGGESTED.value,
-        generated_by="human",
+        generated_by="aira_assisted" if generation else "human",
+        generation_id=generation.id if generation else None,
+        generation_model=generation.model if generation else None,
+        generation_snapshot=generation.model_dump(mode="json") if generation else None,
+        generation_receipt_digest=(
+            canonical_digest(draft.aira_receipt) if generation else None
+        ),
         created_by_user_id=current_user.id,
     )
     db_session.add(proposal)
-    await db_session.flush()
+    try:
+        await db_session.flush()
+    except IntegrityError as error:
+        await db_session.rollback()
+        if generation is None:
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail="This Aira draft has already been confirmed",
+        ) from error
     for source in evidence:
         db_session.add(
             ProtocolImprovementEvidence(
@@ -1599,6 +1843,7 @@ async def create_protocol_improvement(
             "protocol_id": str(protocol.id),
             "base_protocol_version": version.version,
             "evidence_ids": [str(item.id) for item in evidence],
+            "generated_by": proposal.generated_by,
         },
         idempotency_key=f"protocol-improvement:{proposal.id}:suggested:r1",
     )

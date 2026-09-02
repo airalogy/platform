@@ -342,6 +342,15 @@ class ProtocolImprovementProposal(Base):
 
     __tablename__ = "protocol_improvement_proposals"
     __table_args__ = (
+        CheckConstraint(
+            "((generated_by = 'human' AND generation_id IS NULL "
+            "AND generation_model IS NULL AND generation_snapshot IS NULL "
+            "AND generation_receipt_digest IS NULL) OR "
+            "(generated_by <> 'human' AND generation_id IS NOT NULL "
+            "AND generation_model IS NOT NULL AND generation_snapshot IS NOT NULL "
+            "AND generation_receipt_digest IS NOT NULL))",
+            name="ck_protocol_improvement_generation_provenance",
+        ),
         Index(
             "ix_protocol_improvement_task_state",
             "task_id",
@@ -351,6 +360,11 @@ class ProtocolImprovementProposal(Base):
             "ix_protocol_improvement_protocol_base",
             "protocol_id",
             "base_protocol_version",
+        ),
+        Index(
+            "uq_protocol_improvement_proposals_generation_id",
+            "generation_id",
+            unique=True,
         ),
     )
 
@@ -382,6 +396,10 @@ class ProtocolImprovementProposal(Base):
     generated_by: Mapped[str] = mapped_column(
         String(32), nullable=False, default="human"
     )
+    generation_id: Mapped[UUID | None] = mapped_column()
+    generation_model: Mapped[str | None] = mapped_column(String(255))
+    generation_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    generation_receipt_digest: Mapped[str | None] = mapped_column(String(64))
     revision: Mapped[int] = mapped_column(nullable=False, default=1)
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

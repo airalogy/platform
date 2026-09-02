@@ -47,6 +47,7 @@ Target initial version: `0.1.0`.
 - Added a governed Knowledge-to-Protocol flow: users preview an exact Knowledge revision and target Project before Aira generates an editable draft; final Protocol confirmation rechecks source access, scope, Project permission, and revision freshness, then atomically records immutable Knowledge-revision-to-Protocol-version provenance without exposing Restricted Knowledge to Protocol-only readers.
 - Added the evidence-gated reverse flow from validated Record/DataAsset Evidence to editable Project Suggested Knowledge, with preview-bound source state, locked confirmation, immutable Evidence snapshots and revision lineage, a separate Knowledge review boundary, and a complete non-AI path.
 - Added governed Protocol evolution from validated Task Evidence: version-pinned improvement proposals use preview-confirm creation, immutable source snapshots, combined research-approval and Protocol-update review, an explicit editable version draft, fail-closed base-version revalidation, and exact Evidence-to-proposal-to-new-Protocol-version lineage without mutating active Runs.
+- Added Aira-assisted Protocol improvement drafting on top of the same governed flow: model calls run without an open database transaction, returned drafts are rebound to current Task/Protocol/Evidence state, signed one-hour receipts preserve tamper-evident model provenance, and users must still edit or preview, confirm, review, and create a normal new Protocol version.
 
 ### Changed
 

@@ -413,19 +413,13 @@ def _extract_json_object(content: str) -> dict:
     return value
 
 
-async def aira_action_proposal(
+async def aira_structured_proposal(
     prompt: str,
     model_name: str | None = None,
     *,
     usage_context: UsageContext | None = None,
 ) -> dict:
-    """Ask Masterbrain for a Platform-owned, strictly validated Action proposal.
-
-    Masterbrain's AIRA Method remains responsible for scientific strategy and
-    Protocol selection. This adapter only supplies the additional Platform
-    decision boundary between a Protocol, a typed Tool, an external Wait, and
-    finishing the path.
-    """
+    """Ask Masterbrain for one bounded JSON object validated by Platform."""
 
     chunks = [
         chunk
@@ -445,3 +439,24 @@ async def aira_action_proposal(
         )
     ]
     return _extract_json_object("".join(chunks))
+
+
+async def aira_action_proposal(
+    prompt: str,
+    model_name: str | None = None,
+    *,
+    usage_context: UsageContext | None = None,
+) -> dict:
+    """Ask Masterbrain for a Platform-owned, strictly validated Action proposal.
+
+    Masterbrain's AIRA Method remains responsible for scientific strategy and
+    Protocol selection. This adapter only supplies the additional Platform
+    decision boundary between a Protocol, a typed Tool, an external Wait, and
+    finishing the path.
+    """
+
+    return await aira_structured_proposal(
+        prompt,
+        model_name,
+        usage_context=usage_context,
+    )

@@ -116,7 +116,11 @@ export interface ProtocolImprovementProposal {
   rationale: string
   proposed_changes: string
   state: ProtocolImprovementState
-  generated_by: "human" | "aira"
+  generated_by: "human" | "aira_assisted"
+  generation_id?: string | null
+  generation_model?: string | null
+  generation_snapshot?: AiraProtocolImprovementGeneration | null
+  generation_receipt_digest?: string | null
   revision: number
   created_by_user_id: string
   reviewed_by_user_id?: string | null
@@ -200,6 +204,29 @@ export interface ProtocolImprovementDraft {
   rationale: string
   proposed_changes: string
   evidence_ids: string[]
+  aira_generation?: AiraProtocolImprovementGeneration
+  aira_receipt?: string
+}
+
+export interface AiraProtocolImprovementGeneration {
+  id: string
+  model: string
+  generated_at: string
+  context_digest: string
+  instruction: string
+  source_snapshot: Record<string, unknown>
+  output: {
+    title: string
+    rationale: string
+    proposed_changes: string
+  }
+}
+
+export interface AiraProtocolImprovementDraftRequest {
+  task_id: string
+  protocol_id: string
+  evidence_ids: string[]
+  instruction: string
 }
 
 export interface AssetPreview<T> {
@@ -324,6 +351,14 @@ export function createKnowledgeSuggestion(payload: KnowledgeSuggestionDraft & { 
 export function previewProtocolImprovement(payload: ProtocolImprovementDraft) {
   return getData<AssetPreview<ProtocolImprovementDraft>>({
     url: "/research-assets/protocol-improvements/preview",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function draftProtocolImprovementWithAira(payload: AiraProtocolImprovementDraftRequest) {
+  return getData<ProtocolImprovementDraft>({
+    url: "/research-assets/protocol-improvements/aira-draft",
     method: "POST",
     data: payload,
   })

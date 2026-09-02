@@ -55,6 +55,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     protocol_improvement_revision = import_module(
         "migrations.versions.0021_protocol_improvement_lineage"
     )
+    protocol_improvement_ai_revision = import_module(
+        "migrations.versions.0022_protocol_improvement_ai_provenance"
+    )
     import_models()
 
     later_tables = {
@@ -78,6 +81,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(knowledge_protocol_revision.TABLE_NAMES)
     later_tables.update(knowledge_evidence_revision.TABLE_NAMES)
     later_tables.update(protocol_improvement_revision.TABLE_NAMES)
+    assert protocol_improvement_ai_revision.down_revision == (
+        "0021_protocol_improvement_lineage"
+    )
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

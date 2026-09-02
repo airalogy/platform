@@ -1188,6 +1188,14 @@ declare namespace I18n {
         validatedEvidence: string
         knowledgeSuggestionBoundary: string
         protocolImprovementBoundary: string
+        airaImprovementDraft: string
+        airaImprovementInstructionPlaceholder: string
+        airaImprovementDraftHint: string
+        generateDraftWithAira: string
+        airaImprovementGenerated: string
+        airaImprovementDraftReady: string
+        airaImprovementContextChanged: string
+        airaAssisted: string
         targetProtocol: string
         improvementTitle: string
         improvementRationale: string
