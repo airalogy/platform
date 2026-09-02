@@ -40,7 +40,7 @@ The new Run preserves every earlier execution and scientific asset and inherits 
 
 ## Choose the correct Action
 
-- **Protocol work** assigns a version-pinned method to a person. The person completes the normal Record form; a validated Record returns as Evidence without becoming a generic chat message.
+- **Protocol work** assigns a version-pinned method to a person. Lab managers can configure the corresponding Executor Binding to use the future Task owner or a specific eligible Project member. The person completes the normal Record form; a validated Record returns as Evidence without becoming a generic chat message. Platform checks the assignee's current membership and permission again at dispatch time.
 - **Research tool** runs an allowlisted, version-pinned digital capability such as reviewed Knowledge search or an optional literature provider. Inputs and outputs are Schema-validated, time-limited, retryable, and recorded in the execution ledger.
 - **Wait for an external result** pauses the Run at a typed boundary for a person, instrument, or service. Select and confirm the expected result contract. The generated event key is an immutable delivery reference; in the current version, an authorized user records the received result from the workbench.
 - **Reserve resource** resolves a concrete resource from a resource type pinned in the Research Environment. For inventory, select a container, exact quantity, UCUM unit, and optional expiry. For equipment, select the booking window. Platform previews current availability and policy, rejects stale or conflicting confirmation, and records the authoritative inventory reservation or equipment booking behind the Action.

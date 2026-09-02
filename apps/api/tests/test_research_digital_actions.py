@@ -1,7 +1,7 @@
 from importlib import import_module
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import ANY, AsyncMock, Mock
 from uuid import uuid4
 
 import asyncio
@@ -17,7 +17,11 @@ from app.models.research_execution import (
     ResearchToolJob,
     ResearchWaitEvent,
 )
-from app.routers.research_executor_bindings import ExecutorBindingDraft
+from app.routers import research_executor_bindings as executor_bindings_router
+from app.routers.research_executor_bindings import (
+    ExecutorBindingDraft,
+    list_eligible_executor_users,
+)
 from app.routers.research_actions import WaitEventDraft
 from app.routers.research_resources import (
     ResourceActionDraft,
@@ -27,6 +31,7 @@ from app.routers.research_resources import (
 from app.services import resource_job_worker
 from app.services import research_resources
 from app.models.research import (
+    ResearchHumanWorkItem,
     ResearchActionStatus,
     ResearchRunStatus,
     ResearchTaskStatus,
@@ -46,8 +51,10 @@ from app.services.research_executor_bindings import (
     derived_executor_binding,
     enforce_environment_binding_scope,
     environment_executor_binding,
+    resolve_human_executor_ref,
 )
 from app.services.research_runtime import (
+    activate_protocol_action,
     activate_tool_action,
     activate_wait_event_action,
     canonical_digest,
@@ -141,6 +148,80 @@ def test_executor_binding_contract_rejects_cross_type_dispatch():
             mode="durable_job",
             constraints={"pretend_budget_limit": 1},
         )
+
+
+def test_human_executor_bindings_pin_task_roles_and_specific_users():
+    owner_user_id = uuid4()
+    explicit_user_id = uuid4()
+    task_role = {
+        "executor_type": "human",
+        "executor_ref": {"type": "task_role", "id": "task.owner"},
+    }
+    explicit = {
+        "executor_type": "human",
+        "executor_ref": {"type": "user", "id": str(explicit_user_id)},
+    }
+
+    assert resolve_human_executor_ref(
+        task_role, owner_user_id=owner_user_id
+    )["resolved_executor_ref"] == {"type": "user", "id": str(owner_user_id)}
+    assert resolve_human_executor_ref(
+        explicit, owner_user_id=owner_user_id
+    )["resolved_executor_ref"] == {"type": "user", "id": str(explicit_user_id)}
+
+    with pytest.raises(ValueError, match="Unsupported human executor task role"):
+        resolve_human_executor_ref(
+            {
+                "executor_type": "human",
+                "executor_ref": {"type": "task_role", "id": "project.manager"},
+            },
+            owner_user_id=owner_user_id,
+        )
+
+
+def test_eligible_executor_users_are_project_permission_filtered(monkeypatch):
+    project = SimpleNamespace(id=uuid4(), lab_id=uuid4(), deleted_at=None)
+    current_user = SimpleNamespace(id=uuid4())
+    eligible_user = SimpleNamespace(id=uuid4(), username="runner", name="Runner")
+    blocked_user = SimpleNamespace(id=uuid4(), username="viewer", name="Viewer")
+    db_session = SimpleNamespace(
+        get=AsyncMock(return_value=project),
+        scalars=AsyncMock(
+            return_value=SimpleNamespace(all=lambda: [eligible_user, blocked_user])
+        ),
+    )
+    require_access = AsyncMock()
+    has_access = AsyncMock(
+        side_effect=lambda _db_session, **kwargs: kwargs["user"].id
+        == eligible_user.id
+    )
+    monkeypatch.setattr(
+        executor_bindings_router, "require_research_capability", require_access
+    )
+    monkeypatch.setattr(
+        executor_bindings_router, "has_research_capability", has_access
+    )
+
+    result = asyncio.run(
+        list_eligible_executor_users(
+            project_id=project.id,
+            current_user=current_user,
+            db_session=db_session,
+        )
+    )
+
+    assert result == {
+        "items": [
+            {"id": str(eligible_user.id), "username": "runner", "name": "Runner"}
+        ]
+    }
+    require_access.assert_awaited_once_with(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.read",
+    )
+    assert has_access.await_count == 2
 
 
 def test_resource_reservations_are_typed_and_follow_executor_bindings():
@@ -608,6 +689,7 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
     assert "/research-wait-events/{wait_event_id}/signal/preview" in paths
     assert "/research-wait-events/{wait_event_id}/signal" in paths
     assert "/research-executor-bindings" in paths
+    assert "/research-executor-bindings/eligible-users" in paths
     assert "/research-executor-bindings/preview" in paths
     assert "/research-executor-bindings/{binding_id}/preview" in paths
     assert "/research-tasks/{task_id}/resource-actions/preview" in paths
@@ -617,6 +699,55 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
         "/research-resource-reservations/{reservation_id}/release/preview" in paths
     )
     assert "/research-resource-reservations/{reservation_id}/release" in paths
+
+
+def test_protocol_action_activation_rechecks_pinned_executor_access(monkeypatch):
+    assignee = SimpleNamespace(id=uuid4())
+    project = SimpleNamespace(id=uuid4(), lab_id=uuid4())
+
+    async def get_model(model, key):
+        if model.__name__ == "Project":
+            return project
+        if model.__name__ == "User" and key == assignee.id:
+            return assignee
+        return None
+
+    db_session = SimpleNamespace(get=AsyncMock(side_effect=get_model), add=Mock())
+    monkeypatch.setattr(
+        ResearchHumanWorkItem, "find_by", AsyncMock(return_value=None)
+    )
+    access = AsyncMock(return_value=False)
+    monkeypatch.setattr(research_runtime, "has_research_capability", access)
+
+    with pytest.raises(ValueError, match="no longer eligible"):
+        asyncio.run(
+            activate_protocol_action(
+                db_session,
+                task=SimpleNamespace(
+                    id=uuid4(),
+                    project_id=project.id,
+                    owner_user_id=uuid4(),
+                ),
+                run=SimpleNamespace(id=uuid4()),
+                action=SimpleNamespace(
+                    id=uuid4(),
+                    policy_decision="ask",
+                    assignee_user_id=assignee.id,
+                ),
+                protocol=SimpleNamespace(id=uuid4(), name="Assay"),
+                version=SimpleNamespace(version="1.0.0"),
+                instructions="Run the assay",
+                actor_user_id=uuid4(),
+            )
+        )
+
+    access.assert_awaited_once_with(
+        db_session,
+        user=assignee,
+        project=project,
+        capability="research.run",
+    )
+    db_session.add.assert_not_called()
 
 
 def test_approved_tool_action_is_queued_at_a_durable_boundary(monkeypatch):

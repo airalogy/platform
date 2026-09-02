@@ -615,9 +615,26 @@ async def activate_protocol_action(
     if action.policy_decision not in {"allow", "ask"}:
         raise ValueError("A denied Research Action cannot be activated")
 
+    assignee_user_id = action.assignee_user_id or task.owner_user_id
+    project = await db_session.get(Project, task.project_id)
+    assignee = await db_session.get(User, assignee_user_id)
+    if (
+        project is None
+        or assignee is None
+        or not await has_research_capability(
+            db_session,
+            user=assignee,
+            project=project,
+            capability="research.run",
+        )
+    ):
+        raise ValueError(
+            "Pinned human executor is no longer eligible to run Research in this Project"
+        )
+
     work_item = ResearchHumanWorkItem(
         action_id=action.id,
-        assignee_user_id=action.assignee_user_id or task.owner_user_id,
+        assignee_user_id=assignee_user_id,
         instructions=instructions or f"Execute {protocol.name} and submit its Record.",
         submission_contract={
             "type": "protocol_record",

@@ -915,6 +915,9 @@ declare namespace I18n {
         backToBindings: string
         confirmBinding: string
         executorTaskOwner: string
+        humanExecutor: string
+        selectHumanExecutor: string
+        humanExecutorHint: string
         platformWorker: string
         resolvedExecutors: string
         invalidBindingConstraints: string

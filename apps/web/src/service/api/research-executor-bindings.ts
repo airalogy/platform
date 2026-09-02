@@ -2,6 +2,12 @@ import { request } from "../request"
 
 export type ExecutorApprovalPolicy = "always_ask" | "allow_read_only" | "deny"
 
+export interface ResearchEligibleExecutor {
+  id: string
+  username: string
+  name: string
+}
+
 export interface ResearchExecutorBinding {
   id: string
   revision: number
@@ -67,6 +73,14 @@ export function fetchExecutorBindings(labId: string) {
   return getData<{ items: ResearchExecutorBinding[], can_manage: boolean }>({
     url: "/research-executor-bindings",
     params: { lab_id: labId },
+    metadata: { showError: false },
+  })
+}
+
+export function fetchEligibleResearchExecutors(projectId: string) {
+  return getData<{ items: ResearchEligibleExecutor[] }>({
+    url: "/research-executor-bindings/eligible-users",
+    params: { project_id: projectId },
     metadata: { showError: false },
   })
 }

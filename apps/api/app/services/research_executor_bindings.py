@@ -69,6 +69,34 @@ def derived_executor_binding(
     raise ValueError("Resource requirements cannot be used as executor bindings")
 
 
+def resolve_human_executor_ref(
+    binding: dict[str, Any],
+    *,
+    owner_user_id: UUID,
+) -> dict[str, Any]:
+    """Resolve a human binding to the exact user captured by the environment."""
+
+    if binding.get("executor_type") != "human":
+        return binding
+    executor_ref = dict(binding.get("executor_ref") or {})
+    if executor_ref.get("type") == "task_role":
+        if executor_ref.get("id") != "task.owner":
+            raise ValueError("Unsupported human executor task role")
+        executor_user_id = owner_user_id
+    elif executor_ref.get("type") == "user":
+        try:
+            executor_user_id = UUID(str(executor_ref.get("id") or ""))
+        except ValueError as error:
+            raise ValueError("Invalid human executor user reference") from error
+    else:
+        raise ValueError("Human Executor Binding did not reference a user")
+    binding["resolved_executor_ref"] = {
+        "type": "user",
+        "id": str(executor_user_id),
+    }
+    return binding
+
+
 async def resolve_executor_binding(
     db_session: AsyncSession,
     *,
@@ -107,12 +135,7 @@ async def resolve_executor_binding(
             )
         except ValueError:
             continue
-        if snapshot["executor_ref"]["type"] == "task_role":
-            snapshot["resolved_executor_ref"] = {
-                "type": "user",
-                "id": str(owner_user_id),
-            }
-        return snapshot
+        return resolve_human_executor_ref(snapshot, owner_user_id=owner_user_id)
     return derived_executor_binding(
         capability=capability,
         owner_user_id=owner_user_id,

@@ -23,7 +23,12 @@ from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_structured_access
 from app.services.research_executor_bindings import executor_binding_snapshot
-from app.services.research_runtime import canonical_digest, utcnow
+from app.services.research_runtime import (
+    canonical_digest,
+    has_research_capability,
+    require_research_capability,
+    utcnow,
+)
 from app.services.research_tools import research_tool_catalog
 
 router = APIRouter(
@@ -331,6 +336,47 @@ async def list_executor_bindings(
         "items": [_binding_data(item) for item in bindings],
         "can_manage": membership.role <= LabRole.MANAGER,
     }
+
+
+@router.get("/eligible-users")
+async def list_eligible_executor_users(
+    project_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    """List only current Lab members allowed to execute Research in a Project."""
+
+    project = await db_session.get(Project, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.read",
+    )
+    users = list(
+        (
+            await db_session.scalars(
+                select(User)
+                .join(LabUser, LabUser.user_id == User.id)
+                .where(LabUser.lab_id == project.lab_id)
+                .order_by(User.name, User.username, User.id)
+            )
+        ).all()
+    )
+    eligible = []
+    for user in users:
+        if await has_research_capability(
+            db_session,
+            user=user,
+            project=project,
+            capability="research.run",
+        ):
+            eligible.append(
+                {"id": str(user.id), "username": user.username, "name": user.name}
+            )
+    return {"items": eligible}
 
 
 @router.post("/preview")

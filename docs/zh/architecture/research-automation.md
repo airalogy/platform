@@ -61,7 +61,7 @@ Protocol Run、Human Work Item、Tool Job、Resource Reservation 和 Wait Event 
 
 Platform 的第一版 Registry 由 Project 当前 Protocol 版本、实例白名单数字工具和 Lab 当前 Resource Type 修订派生。创建 Research Task 时必须明确选择 Protocol 和 Tool 能力，并在 `airalogy.research-environment.v2` 中固定来源版本及初始人员或 Platform Worker 执行绑定。Aira 和手工控件都不能执行快照之外的 Tool，版本已不可用时也必须失败关闭。Resource Type 只作为可发现的执行需求，不被伪装成可执行方法；具体预约和消耗在 Action 执行时解析。
 
-Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Executor Binding 覆盖策略。每次变更都需先预览再确认，递增 Binding 修订号并追加不可变审计快照。Binding 可要求审批、禁止使用，或仅放行 Platform 内部只读 Tool；也可限制 Project、自主等级及每次 Run 的 Action 数。创建 Task 时会确定性解析这些规则，并将具体 Binding 修订、已解析 Executor、策略与约束固定到环境。之后的策略修改不会改写正在运行的 Run。
+Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Executor Binding 覆盖策略。Protocol Binding 可解析为未来的 Task 负责人，也可直接指定当前 Lab 中对该 Project 拥有科研执行权的成员。每次变更都需先预览再确认，递增 Binding 修订号并追加不可变审计快照。Binding 可要求审批、禁止使用，或仅放行 Platform 内部只读 Tool；也可限制 Project、自主等级及每次 Run 的 Action 数。创建 Task 时会确定性解析这些规则，并将具体 Binding 修订、已解析 Executor、策略与约束固定到环境。之后的策略修改不会改写正在运行的 Run，但正式派发人工工作前会再次校验当前 Lab 成员身份和 `research.run` 权限；权限已撤销时必须失败关闭，不会根据过期授权继续派工。
 
 下列内容不应被强制建模为 Protocol：
 
@@ -225,7 +225,7 @@ Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，
 ### P2：现实资源与治理
 
 - 派生的 Capability Registry 与任务级版本固定（已交付）；
-- Lab 可配置的 Protocol/Tool Executor Binding 与可用性解析（已交付）；
+- Lab 可配置的 Protocol/Tool Executor Binding、合资格成员直接指派与权限复核（已交付）；
 - 固定修订的资源需求，以及库存/设备预约与释放 Action（已交付）；
 - Aira 资源请求、确定性候选解析、审批与过期状态拒绝（已交付）；
 - Task 截止时间、预算上限、不可变预算账本和执行停止门禁（已交付）；

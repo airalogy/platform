@@ -55,7 +55,7 @@ A `Protocol` is a repeatable, scientifically meaningful, versioned method with d
 
 Platform derives the first registry view from the Project's current Protocol versions, the instance's allowlisted digital tools, and the Lab's current resource-type revisions. Creating a Research Task explicitly selects Protocol and Tool capabilities, pins their source versions in `airalogy.research-environment.v2`, and records the initial human or Platform-worker executor binding. The runtime and manual controls both reject a Tool that is absent from that snapshot or whose implementation version is no longer available. Resource definitions are discoverable but remain requirements, not executable methods; concrete reservation and consumption are resolved at Action time.
 
-Lab Owners and Managers can add version-specific Executor Binding overrides from Project Research. Each change uses preview and confirmation, increments the binding revision, and appends an immutable audit snapshot. A binding can require approval, deny use, or allow only an internal read-only Tool; it can also restrict Projects, autonomy levels, and Actions per Run. Task creation resolves these rules deterministically and embeds the exact binding revision, resolved executor, policy, and constraints. Later policy edits never mutate an active Run.
+Lab Owners and Managers can add version-specific Executor Binding overrides from Project Research. A Protocol binding may resolve to the future Task owner or directly to a current Lab member who can run Research in that Project. Each change uses preview and confirmation, increments the binding revision, and appends an immutable audit snapshot. A binding can require approval, deny use, or allow only an internal read-only Tool; it can also restrict Projects, autonomy levels, and Actions per Run. Task creation resolves these rules deterministically and embeds the exact binding revision, resolved executor, policy, and constraints. Later policy edits never mutate an active Run, but current Lab membership and `research.run` permission are rechecked before a human work item is actually assigned; revocation therefore fails closed rather than dispatching work from stale authority.
 
 Assets, coordination objects, resources, notifications, approvals, reservations, waits, audit events, and payments are not forced into Protocols. Platform supports progressive formalization:
 
@@ -193,7 +193,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 ### P2: operational resources and governance
 
 - derived Capability Registry and task-scoped version pinning (delivered)
-- governed, Lab-configurable Protocol/Tool Executor Bindings and availability resolution (delivered)
+- governed, Lab-configurable Protocol/Tool Executor Bindings, direct eligible-member assignment, and permission revalidation (delivered)
 - revision-pinned resource requirements plus inventory/equipment reservation and release Actions (delivered)
 - Aira resource requests, deterministic candidate resolution, approval, and stale-state rejection (delivered)
 - Task deadlines, budget ceilings, immutable budget ledger, and execution stop gates (delivered)

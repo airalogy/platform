@@ -66,6 +66,20 @@
               @update:value="applyCapability"
             />
           </n-form-item>
+          <n-form-item
+            v-if="!editingId && selectedCapability?.kind === 'protocol'"
+            :label="$t('page.research.humanExecutor')"
+            required
+          >
+            <n-select
+              v-model:value="executorChoice"
+              :options="executorOptions"
+              filterable
+              :placeholder="$t('page.research.selectHumanExecutor')"
+              @update:value="applyExecutor"
+            />
+            <template #feedback>{{ $t("page.research.humanExecutorHint") }}</template>
+          </n-form-item>
           <n-form-item :label="$t('page.research.approvalPolicy')" required>
             <n-select v-model:value="policy" :options="policyOptions" />
           </n-form-item>
@@ -110,6 +124,10 @@
               <dt>{{ $t("page.research.bindingEnabled") }}</dt>
               <dd>{{ enabled ? $t("page.research.bindingEnabled") : $t("page.research.bindingDisabled") }}</dd>
             </div>
+            <div v-if="selectedCapability?.kind === 'protocol'">
+              <dt>{{ $t("page.research.humanExecutor") }}</dt>
+              <dd>{{ selectedExecutorLabel }}</dd>
+            </div>
           </dl>
           <p class="aira-type-meta mb-0 mt-4">
             {{ $t("page.research.bindingFutureRunsOnly") }}
@@ -146,12 +164,14 @@ import type {
   ExecutorApprovalPolicy,
   ExecutorBindingDraft,
   ExecutorBindingPreview,
+  ResearchEligibleExecutor,
   ResearchExecutorBinding,
 } from "@/service/api/research-executor-bindings"
 import type { TagProps } from "naive-ui"
 import { fetchResearchCapabilities } from "@/service/api/research-capabilities"
 import {
   createExecutorBinding,
+  fetchEligibleResearchExecutors,
   fetchExecutorBindings,
   previewExecutorBinding,
   previewExecutorBindingUpdate,
@@ -177,6 +197,7 @@ const editing = ref(false)
 const editingId = ref("")
 const bindings = ref<ResearchExecutorBinding[]>([])
 const capabilities = ref<ResearchCapabilityDescriptor[]>([])
+const eligibleExecutors = ref<ResearchEligibleExecutor[]>([])
 const preview = ref<ExecutorBindingPreview | null>(null)
 const policy = ref<ExecutorApprovalPolicy>("always_ask")
 const priority = ref(0)
@@ -185,6 +206,7 @@ const maxActionsPerRun = ref<number | null>(null)
 const onlyCurrentProject = ref(false)
 const allowedAutonomyLevels = ref<string[]>([])
 const reason = ref("")
+const executorChoice = ref("task.owner")
 const createDraft = reactive<ExecutorBindingDraft>({
   lab_id: "",
   capability_key: "",
@@ -209,6 +231,17 @@ const capabilityOptions = computed(() => capabilities.value
 const selectedCapability = computed(() =>
   capabilities.value.find(item => item.key === createDraft.capability_key),
 )
+const executorOptions = computed(() => [
+  { label: $t("page.research.executorTaskOwner"), value: "task.owner" },
+  ...eligibleExecutors.value.map(user => ({
+    label: user.name ? `${user.name} (@${user.username})` : `@${user.username}`,
+    value: `user:${user.id}`,
+  })),
+])
+const selectedExecutorLabel = computed(() => {
+  return executorOptions.value.find(item => item.value === executorChoice.value)?.label
+    || createDraft.executor_ref_id
+})
 const editingProtocol = computed(() => editingId.value
   ? bindings.value.find(item => item.id === editingId.value)?.capability_key.startsWith("protocol:")
   : false)
@@ -249,8 +282,11 @@ function capabilityName(key: string) {
 }
 
 function executorLabel(binding: ResearchExecutorBinding) {
-  return binding.executor_ref.type === "task_role"
-    ? $t("page.research.executorTaskOwner")
+  if (binding.executor_ref.type === "task_role")
+    return $t("page.research.executorTaskOwner")
+  const user = eligibleExecutors.value.find(item => item.id === binding.executor_ref.id)
+  return user
+    ? (user.name ? `${user.name} (@${user.username})` : `@${user.username}`)
     : binding.executor_ref.id
 }
 
@@ -266,12 +302,14 @@ async function load() {
     return
   loading.value = true
   try {
-    const [catalog, result] = await Promise.all([
+    const [catalog, result, executors] = await Promise.all([
       fetchResearchCapabilities(String(props.project.id)),
       fetchExecutorBindings(String(props.project.lab_id)),
+      fetchEligibleResearchExecutors(String(props.project.id)),
     ])
     capabilities.value = [...catalog.protocols, ...catalog.tools]
     bindings.value = result.items
+    eligibleExecutors.value = executors.items
     canManage.value = result.can_manage
   }
   finally {
@@ -316,6 +354,7 @@ function applyCapability(key: string) {
     createDraft.executor_type = "human"
     createDraft.executor_ref_type = "task_role"
     createDraft.executor_ref_id = "task.owner"
+    executorChoice.value = "task.owner"
     createDraft.mode = "protocol_record"
     if (policy.value === "allow_read_only")
       policy.value = "always_ask"
@@ -325,6 +364,18 @@ function applyCapability(key: string) {
     createDraft.executor_ref_type = "platform_worker"
     createDraft.executor_ref_id = item.source_id
     createDraft.mode = "durable_job"
+  }
+}
+
+function applyExecutor(value: string) {
+  if (value === "task.owner") {
+    createDraft.executor_ref_type = "task_role"
+    createDraft.executor_ref_id = value
+    return
+  }
+  if (value.startsWith("user:")) {
+    createDraft.executor_ref_type = "user"
+    createDraft.executor_ref_id = value.slice("user:".length)
   }
 }
 
@@ -339,6 +390,7 @@ function resetEditor() {
   onlyCurrentProject.value = false
   allowedAutonomyLevels.value = []
   reason.value = ""
+  executorChoice.value = "task.owner"
   createDraft.capability_key = ""
   createDraft.capability_version = ""
 }
