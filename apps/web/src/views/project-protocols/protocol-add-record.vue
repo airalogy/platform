@@ -97,6 +97,12 @@
       </template>
     </header>
     <n-divider class="!mb-4 !mt-0" />
+    <n-alert v-if="researchWorkItem" type="info" class="mx-8 mb-4">
+      <template #header>
+        {{ $t("page.protocol.addRecord.researchWorkTitle") }} · {{ researchWorkItem.task.title }}
+      </template>
+      {{ researchWorkItem.instructions || researchWorkItem.task.goal }}
+    </n-alert>
     <n-spin
       :show="loading" class="h-[calc(100vh-165px)] w-full pl-8"
       :content-class="`h-full w-full overflow-visible ${protocol ? '' : ' flex-center flex-col'}`"
@@ -150,6 +156,7 @@ import type { IRecordDataItem } from "./types"
 import { useBoolean, useGlobalBeforeUnload, useLoading, useShowModal } from "@/composables"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { getProtocolRecordReport, postNewResearchRecord, postValidateRecord, putUpdateResearchRecord, transformFields } from "@/service/api/project-protocols"
+import { fetchResearchWorkItem, type ResearchWorkItemDetail, submitResearchWorkItem } from "@/service/api/research-tasks"
 
 import { baseURL } from "@/service/request"
 import { useAuthStore } from "@/store/modules/auth"
@@ -258,6 +265,7 @@ const uploadAction = computed(() => {
 })
 
 const recordData = ref<Partial<IRecordData>>({})
+const researchWorkItem = ref<ResearchWorkItemDetail | null>(null)
 const { bool: isReadonly, setTrue: setReadonly } = useBoolean()
 
 const { saveDraft, deleteDraft, getDraft, prepareRestoreDraft } = useDraftManagement(protocol, recordData)
@@ -611,6 +619,29 @@ async function handleConfirm() {
 
     if (data) {
       clearDraftAfterSubmit()
+      if (researchWorkItem.value) {
+        const completedWork = await submitResearchWorkItem(researchWorkItem.value.id, {
+          expected_revision: researchWorkItem.value.revision,
+          record_id: String(data.id),
+          record_version: Number(data.version),
+        })
+        researchWorkItem.value = completedWork
+        cleanup()
+        unregister(route.fullPath)
+        hideModal()
+        dialog.success({
+          title: t("page.protocol.addRecord.researchWorkCompletedTitle"),
+          content: t("page.protocol.addRecord.researchWorkCompletedContent"),
+          positiveText: t("page.protocol.addRecord.returnToResearchTask"),
+          closable: false,
+          maskClosable: false,
+          onPositiveClick: () => router.push({
+            name: "research-task-detail",
+            params: { taskId: completedWork.task.id },
+          }),
+        })
+        return
+      }
       const { chain, target } = route.query
       const targetId = target as string
       const chainInfo = workflowStore.getWorkflow(chain as string)
@@ -769,6 +800,13 @@ function handleShowRrec() {
 }
 
 function handleRedirect() {
+  if (researchWorkItem.value) {
+    void router.push({
+      name: "research-task-detail",
+      params: { taskId: researchWorkItem.value.task.id },
+    })
+    return
+  }
   const { lab, project, uid } = protocolInfo.value || {}
   if (lab?.uid && project?.uid && uid) {
     void routerPushByKey("protocol-detail", {
@@ -804,9 +842,32 @@ onMounted(async () => {
     protocolUid: string
   }
 
+  const workItemId = typeof route.query.researchWorkItem === "string"
+    ? route.query.researchWorkItem
+    : ""
+  if (workItemId) {
+    researchWorkItem.value = await fetchResearchWorkItem(workItemId)
+    const workProtocol = researchWorkItem.value.action.protocol
+    if (!workProtocol || workProtocol.uid !== protocolUid) {
+      endLoading()
+      message.error(t("page.protocol.addRecord.researchWorkProtocolMismatch"))
+      await router.push({
+        name: "research-task-detail",
+        params: { taskId: researchWorkItem.value.task.id },
+      })
+      return
+    }
+    editingProtocolVersion.value = workProtocol.version
+  }
+
   // Always fetch the latest version without cache
   // Set memoize to false to ensure we get fresh data from backend
-  const info = await fetchProtocolInfoByUid({ labUid, projectUid, protocolUid }, true, false)
+  const info = await fetchProtocolInfoByUid({
+    labUid,
+    projectUid,
+    protocolUid,
+    version: researchWorkItem.value?.action.protocol?.version,
+  }, true, false)
 
   if (info) {
     await nextTick(() => {
@@ -821,6 +882,28 @@ onMounted(async () => {
   }
   endLoading()
 })
+
+const researchWorkInitialValuesApplied = ref(false)
+watch(
+  [researchWorkItem, () => formRef.value, () => protocolId.value],
+  async ([workItem, currentForm, currentProtocolId]) => {
+    if (
+      researchWorkInitialValuesApplied.value
+      || !workItem
+      || !currentForm
+      || !currentProtocolId
+    ) {
+      return
+    }
+    const initialValues = workItem.action.protocol_run?.initial_values || {}
+    if (Object.keys(initialValues).length) {
+      await handleRestoreDraft({ research_variable: initialValues } as Partial<IRecordData>)
+      message.success(t("page.protocol.addRecord.researchWorkValuesApplied"))
+    }
+    researchWorkInitialValuesApplied.value = true
+  },
+  { flush: "post" },
+)
 
 onMounted(() => {
   themeStore.footer.visible = false

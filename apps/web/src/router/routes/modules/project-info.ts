@@ -32,6 +32,12 @@ export const projectInfoRoute: CustomRoute<ProjectInfoNameKey> = {
       component: () => import("@/views/record-diary/index.vue"),
     },
     {
+      path: "research",
+      name: "project-research",
+      meta: { ...createProjectMeta("Project Research", "page.research.title"), allowGuest: false },
+      component: () => import("@/views/research/index.vue"),
+    },
+    {
       path: "members",
       name: "project-members",
       meta: { ...createProjectMeta("Project Members", "page.project.members"), allowGuest: false },

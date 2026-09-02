@@ -33,7 +33,49 @@
         <div
           class="rounded-3 border border-primary/25 from-primary/8 to-sky-50 bg-gradient-to-br p-5"
         >
-          <template v-if="latestDraft?.protocol">
+          <template v-if="assignedWorkItem">
+            <div class="aira-type-eyebrow aira-type-eyebrow--accent">
+              {{ $t("page.home.workbench.continueLabel") }}
+            </div>
+            <h2 class="aira-type-section-title mb-0 mt-2">
+              {{ assignedWorkItem.action.title }}
+            </h2>
+            <p class="aira-type-body aira-text-secondary mb-0 mt-2">
+              {{ assignedWorkItem.lab.name }} / {{ assignedWorkItem.project.name }} /
+              {{ assignedWorkItem.task.title }}
+            </p>
+            <p class="aira-type-meta mb-0 mt-2 line-clamp-2">
+              {{ assignedWorkItem.instructions || assignedWorkItem.task.goal }}
+            </p>
+            <div class="mt-5 flex flex-wrap gap-2">
+              <n-button type="primary" @click="executeResearchWork(assignedWorkItem)">
+                {{ $t("page.research.executeProtocol") }}
+              </n-button>
+              <n-button secondary @click="openResearchTask(assignedWorkItem.task.id)">
+                {{ $t("page.research.viewTask") }}
+              </n-button>
+            </div>
+          </template>
+
+          <template v-else-if="attentionTask">
+            <div class="aira-type-eyebrow aira-type-eyebrow--accent">
+              {{ $t("page.home.workbench.continueLabel") }}
+            </div>
+            <h2 class="aira-type-section-title mb-0 mt-2">
+              {{ attentionTask.title }}
+            </h2>
+            <p class="aira-type-body aira-text-secondary mb-0 mt-2">
+              {{ attentionTask.lab.name }} / {{ attentionTask.project.name }}
+            </p>
+            <p class="aira-type-meta mb-0 mt-2 line-clamp-2">
+              {{ attentionTask.goal }}
+            </p>
+            <n-button class="mt-5" type="primary" @click="openResearchTask(attentionTask.id)">
+              {{ attentionTask.status === "review_required" ? $t("page.research.reviewResult") : $t("page.research.viewTask") }}
+            </n-button>
+          </template>
+
+          <template v-else-if="latestDraft?.protocol">
             <div class="aira-type-eyebrow aira-type-eyebrow--accent">
               {{ $t("page.home.workbench.continueLabel") }}
             </div>
@@ -139,17 +181,13 @@
             {{ $t("page.home.workbench.attentionLabel") }}
           </div>
           <div class="mt-3 flex items-baseline gap-2">
-            <span class="aira-type-display aira-numeric">{{ validDrafts.length }}</span>
+            <span class="aira-type-display aira-numeric">{{ attentionCount }}</span>
             <span class="aira-type-body aira-text-secondary">
-              {{ $t("page.home.workbench.draftsCount", { count: validDrafts.length }) }}
+              {{ $t("page.home.workbench.attentionCount", { count: attentionCount }) }}
             </span>
           </div>
           <p class="aira-type-body aira-text-muted mb-0 mt-2">
-            {{
-              validDrafts.length
-                ? $t("page.home.workbench.draftsHint")
-                : $t("page.home.workbench.noDraftsHint")
-            }}
+            {{ attentionSummary }}
           </p>
         </div>
       </div>
@@ -159,6 +197,14 @@
           {{ $t("page.home.workbench.quickActions") }}
         </h2>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <button
+            type="button"
+            class="task-action task-action--ai"
+            @click="openResearchTasks"
+          >
+            <span class="aira-type-label task-action__title">{{ $t("page.research.title") }}</span>
+            <span class="aira-type-meta task-action__description">{{ $t("page.home.workbench.researchDescription") }}</span>
+          </button>
           <button
             v-if="recentProtocol"
             type="button"
@@ -253,12 +299,20 @@ import type { ProtocolModels } from "@airalogy/shared/types"
 import { checkProjectActionPermission, ProjectAction } from "@/composables/useProjectPermissions"
 import { LabRole, ProjectRole } from "@/enum"
 import { getProtocolInfo } from "@/service/api/protocol"
+import {
+  fetchResearchTasks,
+  fetchResearchWorkItems,
+  type ResearchTaskSummary,
+  type ResearchWorkItemDetail,
+  startResearchWorkItem,
+} from "@/service/api/research-tasks"
 import { fetchUserLabs, fetchUserProjects, fetchUserProtocols } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { listRecordDrafts, type RecordDraft } from "@/utils/recordDrafts"
 import CreateProjectModal from "@/views/projects/modules/create-project-modal.vue"
 import { useLoading } from "@airalogy/composables"
+import { $t } from "@airalogy/shared/locales"
 import { nanoid } from "nanoid"
 import { useRouter } from "vue-router"
 
@@ -275,6 +329,8 @@ const projects = ref<Api.Project.MyProjectInfo[]>([])
 const labs = ref<Api.Lab.UsersLabInfo[]>([])
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const validDrafts = ref<ResolvedDraft[]>([])
+const researchTasks = ref<ResearchTaskSummary[]>([])
+const researchWorkItems = ref<ResearchWorkItemDetail[]>([])
 const loadError = ref(false)
 
 const displayName = computed(() => authStore.userInfo.name || authStore.userInfo.username)
@@ -287,6 +343,24 @@ const protocolCreationProject = computed(
 )
 const recentProtocol = computed(() => protocols.value.find(canSubmitRecordForProtocol) || null)
 const latestDraft = computed(() => validDrafts.value[0] || null)
+const assignedWorkItem = computed(() => researchWorkItems.value[0] || null)
+const attentionTask = computed(() =>
+  researchTasks.value.find(task => task.status === "review_required")
+  || researchTasks.value.find(task => ["active", "paused", "failed"].includes(task.status))
+  || null,
+)
+const attentionCount = computed(() =>
+  validDrafts.value.length
+  + researchWorkItems.value.length
+  + researchTasks.value.filter(task => task.status === "review_required").length,
+)
+const attentionSummary = computed(() => attentionCount.value
+  ? $t("page.home.workbench.attentionSummary", {
+    work: researchWorkItems.value.length,
+    review: researchTasks.value.filter(task => task.status === "review_required").length,
+    drafts: validDrafts.value.length,
+  })
+  : $t("page.home.workbench.noAttentionHint"))
 const managedProject = computed(
   () =>
     projects.value.find(
@@ -330,14 +404,18 @@ async function loadWorkbench() {
   loadError.value = false
   try {
     const userId = authStore.userInfo.id
-    const [projectResult, labResult, protocolResult] = await Promise.all([
+    const [projectResult, labResult, protocolResult, taskResult, workItemResult] = await Promise.all([
       fetchUserProjects(userId, { page: 1, pageSize: 10, sortedBy: "updated_at" }),
       fetchUserLabs(userId, { page: 1, pageSize: 10, sortedBy: "updated_at" }),
       fetchUserProtocols(userId, { page: 1, pageSize: 10, sortedBy: "updated_at" }),
+      fetchResearchTasks({ page: 1, pageSize: 10 }),
+      fetchResearchWorkItems({ page: 1, pageSize: 10 }),
     ])
     projects.value = projectResult?.projects || []
     labs.value = labResult?.labs || []
     protocols.value = protocolResult?.protocols || []
+    researchTasks.value = taskResult.tasks
+    researchWorkItems.value = workItemResult.work_items
 
     const localDrafts = listRecordDrafts(userId).slice(0, 10)
     const draftResults = await Promise.allSettled(
@@ -423,6 +501,33 @@ function manageLabMembers(lab: Api.Lab.UsersLabInfo) {
 
 function openOperationsHelp() {
   void router.push({ name: "help-center" })
+}
+
+function openResearchTasks() {
+  void router.push({ name: "research-tasks" })
+}
+
+function openResearchTask(taskId: string) {
+  void router.push({ name: "research-task-detail", params: { taskId } })
+}
+
+async function executeResearchWork(item: ResearchWorkItemDetail) {
+  const protocol = item.action.protocol
+  if (!protocol) {
+    openResearchTask(item.task.id)
+    return
+  }
+  if (["open", "changes_requested"].includes(item.status))
+    await startResearchWorkItem(item.id, item.revision)
+  await router.push({
+    name: "add-protocol-record",
+    params: {
+      labUid: protocol.lab_uid || item.lab.uid,
+      projectUid: protocol.project_uid || item.project.uid,
+      protocolUid: protocol.uid,
+    },
+    query: { researchWorkItem: item.id },
+  })
 }
 
 function handleProjectCreated(project: Api.Project.MyProjectInfo) {

@@ -696,10 +696,14 @@ declare namespace I18n {
           openProjectDescription: string
           openProjectAction: string
           attentionLabel: string
+          attentionCount: string
+          attentionSummary: string
+          noAttentionHint: string
           draftsCount: string
           draftsHint: string
           noDraftsHint: string
           quickActions: string
+          researchDescription: string
           manageProjectAction: string
           reviewProtocolAction: string
           manageLabAction: string
@@ -730,6 +734,187 @@ declare namespace I18n {
           record: string
           protocol: string
           group: string
+        }
+      }
+      research: {
+        title: string
+        taskDetail: string
+        eyebrow: string
+        description: string
+        projectTitle: string
+        tasks: string
+        workItems: string
+        createTask: string
+        createTitle: string
+        taskName: string
+        taskNamePlaceholder: string
+        goal: string
+        goalPlaceholder: string
+        successCriteria: string
+        criteriaPlaceholder: string
+        stopConditions: string
+        stopPlaceholder: string
+        project: string
+        autonomy: string
+        autonomyAssisted: string
+        autonomyBounded: string
+        autonomyPolicy: string
+        methods: string
+        method: string
+        methodsPlaceholder: string
+        methodsHint: string
+        aiOffHint: string
+        previewTask: string
+        confirmCreate: string
+        backToEdit: string
+        saveDestination: string
+        confirmedMethods: string
+        effects: string
+        effectCreate: string
+        effectPin: string
+        effectAi: string
+        effectManual: string
+        warningManual: string
+        previewAiPath: string
+        previewManualPath: string
+        noMethods: string
+        created: string
+        refresh: string
+        loadError: string
+        noTasks: string
+        noWorkItems: string
+        owner: string
+        openWorkCount: string
+        partOfTask: string
+        due: string
+        viewTask: string
+        executeProtocol: string
+        backToTasks: string
+        airaManaged: string
+        startWithAira: string
+        startTask: string
+        pause: string
+        resume: string
+        cancelTask: string
+        cancelConfirm: string
+        addHumanWork: string
+        reviewResult: string
+        reviewRequiredHint: string
+        runNotice: string
+        currentRun: string
+        runNumber: string
+        planVersion: string
+        openWork: string
+        airaStage: string
+        notStarted: string
+        needsAction: string
+        humanWork: string
+        assignedTo: string
+        executionHistory: string
+        actions: string
+        noActions: string
+        viewEvidenceRecord: string
+        resultPackage: string
+        researchConclusion: string
+        noConclusion: string
+        definitionOfDone: string
+        researchEnvironment: string
+        pinnedMethods: string
+        provenance: string
+        timeline: string
+        noEvents: string
+        workTitle: string
+        instructions: string
+        initialValues: string
+        initialValuesHint: string
+        invalidInitialValues: string
+        previewAction: string
+        confirmAction: string
+        actionPreviewHint: string
+        actionCreated: string
+        goalAssessment: string
+        scientificOutcome: string
+        reviewedConclusion: string
+        reviewResponsibility: string
+        confirmReview: string
+        reviewCompleted: string
+        taskStatus: {
+          draft: string
+          active: string
+          paused: string
+          review_required: string
+          completed: string
+          failed: string
+          cancelled: string
+          archived: string
+        }
+        runStatus: {
+          draft: string
+          planning: string
+          running: string
+          waiting_for_human: string
+          waiting_for_approval: string
+          validating: string
+          paused: string
+          completed: string
+          failed: string
+          cancelled: string
+        }
+        actionStatus: {
+          proposed: string
+          approved: string
+          queued: string
+          running: string
+          waiting: string
+          submitted: string
+          validating: string
+          completed: string
+          failed: string
+          skipped: string
+          cancelled: string
+        }
+        workItemStatus: {
+          open: string
+          in_progress: string
+          submitted: string
+          accepted: string
+          changes_requested: string
+          cancelled: string
+        }
+        outcome: {
+          goal_met: string
+          goal_not_met_but_conclusive: string
+          inconclusive: string
+          blocked_missing_capability: string
+          stopped_budget: string
+          stopped_time: string
+          stopped_safety: string
+          cancelled: string
+          execution_failed: string
+        }
+        scientificOutcomeValue: {
+          supports_hypothesis: string
+          contradicts_hypothesis: string
+          inconclusive: string
+          unexpected: string
+          not_applicable: string
+        }
+        event: {
+          task_created: string
+          run_started: string
+          run_paused: string
+          run_resumed: string
+          run_completed: string
+          run_failed: string
+          task_cancelled: string
+          task_completed: string
+          task_review_requested: string
+          plan_version_created: string
+          aira_step_completed: string
+          work_item_assigned: string
+          work_item_started: string
+          work_item_completed: string
+          run_manual_control_required: string
         }
       }
       recordDiary: {
@@ -1377,6 +1562,12 @@ declare namespace I18n {
           createSuccess: string
           closeWindowTitle: string
           closeWindowContent: string
+          researchWorkTitle: string
+          researchWorkProtocolMismatch: string
+          researchWorkValuesApplied: string
+          researchWorkCompletedTitle: string
+          researchWorkCompletedContent: string
+          returnToResearchTask: string
           noDraftFound: string
         }
         timeline: {

@@ -14,6 +14,7 @@ import { projectInfoRoute } from "./modules/project-info"
 import { projectsRoute } from "./modules/projects"
 import { protocolEditorRoute, protocolInfoRoute } from "./modules/protocol-info"
 import { protocolRecordRoute } from "./modules/protocol-record"
+import { researchRoute } from "./modules/research"
 // import { searchRoute } from "./modules/search"
 import { protocolRoute } from "./modules/unit-to-protocol"
 import { ROOT_ROUTE } from "./root"
@@ -27,6 +28,7 @@ export const customRoutes: CustomRoute[] = [
   groupsRoute,
   projectsRoute,
   projectInfoRoute,
+  researchRoute,
   protocolRoute,
   protocolInfoRoute,
   protocolEditorRoute,

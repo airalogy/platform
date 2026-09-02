@@ -1,0 +1,837 @@
+<template>
+  <div class="research-detail py-8">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <n-button quaternary @click="goBack">
+        <template #icon><n-icon><icon-tabler-arrow-left /></n-icon></template>
+        {{ $t("page.research.backToTasks") }}
+      </n-button>
+      <n-button quaternary :loading="loading" @click="() => loadTask()">
+        <template #icon><n-icon><icon-tabler-refresh /></n-icon></template>
+        {{ $t("page.research.refresh") }}
+      </n-button>
+    </div>
+
+    <n-alert v-if="loadError" type="error" :title="$t('page.research.loadError')">
+      <n-button size="small" class="mt-2" @click="() => loadTask()">{{ $t("common.retry") }}</n-button>
+    </n-alert>
+
+    <n-spin v-else :show="loading && !task" class="min-h-80">
+      <template v-if="task">
+        <header class="research-detail__hero">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="aira-type-meta">{{ task.lab.name }} / {{ task.project.name }}</span>
+              <n-tag :type="taskStatusType" round size="small">
+                {{ taskStatusLabel(task.status) }}
+              </n-tag>
+              <n-tag v-if="task.ai_available" type="info" round size="small">
+                {{ $t("page.research.airaManaged") }}
+              </n-tag>
+            </div>
+            <h1 class="aira-type-page-title mb-0 mt-2">{{ task.title }}</h1>
+            <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
+              {{ task.goal }}
+            </p>
+          </div>
+          <div class="flex shrink-0 flex-wrap items-center gap-2">
+            <n-button v-if="task.status === 'draft'" type="primary" :loading="mutating" @click="startTask">
+              {{ task.ai_available && task.protocols.length ? $t("page.research.startWithAira") : $t("page.research.startTask") }}
+            </n-button>
+            <n-button v-if="canAddAction" secondary @click="openActionModal">
+              {{ $t("page.research.addHumanWork") }}
+            </n-button>
+            <n-button v-if="task.status === 'active'" :loading="mutating" @click="pauseTask">
+              {{ $t("page.research.pause") }}
+            </n-button>
+            <n-button v-if="task.status === 'paused' || task.status === 'failed'" type="primary" :loading="mutating" @click="resumeTask">
+              {{ $t("page.research.resume") }}
+            </n-button>
+            <n-button v-if="canReview" type="primary" :loading="mutating" @click="openReviewModal">
+              {{ $t("page.research.reviewResult") }}
+            </n-button>
+            <n-button v-if="canCancel" type="error" tertiary :loading="mutating" @click="cancelTask">
+              {{ $t("page.research.cancelTask") }}
+            </n-button>
+          </div>
+        </header>
+
+        <n-alert
+          v-if="latestRun?.last_error"
+          :type="latestRun.status === 'failed' ? 'error' : 'info'"
+          class="mt-5"
+          :title="$t('page.research.runNotice')"
+        >
+          {{ latestRun.last_error }}
+        </n-alert>
+        <n-alert v-if="task.status === 'review_required'" type="warning" class="mt-5">
+          {{ $t("page.research.reviewRequiredHint") }}
+        </n-alert>
+
+        <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+          <div class="space-y-5">
+            <section class="research-panel">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div class="aira-type-eyebrow">{{ $t("page.research.currentRun") }}</div>
+                  <h2 class="aira-type-section-title mb-0 mt-1">
+                    {{ latestRun ? $t("page.research.runNumber", { number: latestRun.run_number }) : "—" }}
+                  </h2>
+                </div>
+                <n-tag v-if="latestRun" :type="runStatusType(latestRun.status)" round>
+                  {{ runStatusLabel(latestRun.status) }}
+                </n-tag>
+              </div>
+              <div v-if="latestRun" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="research-metric">
+                  <span class="aira-type-meta">{{ $t("page.research.planVersion") }}</span>
+                  <strong class="aira-type-metric">v{{ latestRun.plan_version }}</strong>
+                </div>
+                <div class="research-metric">
+                  <span class="aira-type-meta">{{ $t("page.research.openWork") }}</span>
+                  <strong class="aira-type-metric">{{ task.open_work_items }}</strong>
+                </div>
+                <div class="research-metric">
+                  <span class="aira-type-meta">{{ $t("page.research.airaStage") }}</span>
+                  <strong class="aira-type-label break-words">{{ airaStage }}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section v-if="openActions.length" class="research-panel">
+              <div class="aira-type-eyebrow">{{ $t("page.research.needsAction") }}</div>
+              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.humanWork") }}</h2>
+              <div class="mt-4 space-y-3">
+                <article v-for="action in openActions" :key="action.id" class="research-action-card">
+                  <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <n-tag type="info" round size="small">{{ actionStatusLabel(action.status) }}</n-tag>
+                        <span class="aira-type-meta">#{{ action.sequence }}</span>
+                      </div>
+                      <h3 class="aira-type-card-title mb-0 mt-2">{{ action.title }}</h3>
+                      <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
+                        {{ action.work_item?.instructions || action.description }}
+                      </p>
+                      <div class="aira-type-meta mt-3">
+                        {{ $t("page.research.assignedTo") }} · {{ action.assignee?.name || action.assignee?.username }}
+                      </div>
+                    </div>
+                    <n-button
+                      v-if="canExecuteAction(action)"
+                      type="primary"
+                      :loading="startingWorkItemId === action.work_item?.id"
+                      @click="executeWorkItem(action)"
+                    >
+                      {{ $t("page.research.executeProtocol") }}
+                    </n-button>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="research-panel">
+              <div class="aira-type-eyebrow">{{ $t("page.research.executionHistory") }}</div>
+              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.actions") }}</h2>
+              <n-empty v-if="!task.actions.length" class="py-8" :description="$t('page.research.noActions')" />
+              <div v-else class="mt-4 divide-y divide-gray-100">
+                <div v-for="action in task.actions" :key="action.id" class="flex gap-3 py-4 first:pt-0 last:pb-0">
+                  <div class="research-sequence">{{ action.sequence }}</div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <h3 class="aira-type-label mb-0">{{ action.title }}</h3>
+                      <n-tag :type="actionStatusType(action.status)" size="small" round>
+                        {{ actionStatusLabel(action.status) }}
+                      </n-tag>
+                    </div>
+                    <p v-if="action.description" class="aira-type-meta mb-0 mt-1 line-clamp-2">
+                      {{ action.description }}
+                    </p>
+                    <n-button
+                      v-if="action.protocol_run?.record_id && action.protocol"
+                      text
+                      type="primary"
+                      class="mt-2"
+                      @click="openRecord(action)"
+                    >
+                      {{ $t("page.research.viewEvidenceRecord") }}
+                    </n-button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section v-if="hasResult" class="research-panel">
+              <div class="aira-type-eyebrow">{{ $t("page.research.resultPackage") }}</div>
+              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.researchConclusion") }}</h2>
+              <p class="aira-type-body aira-text-secondary mb-0 mt-4 whitespace-pre-wrap">
+                {{ resultConclusion || $t("page.research.noConclusion") }}
+              </p>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <n-tag v-if="task.outcome" type="success" round>{{ outcomeLabel(task.outcome) }}</n-tag>
+                <n-tag v-if="task.scientific_outcome" type="info" round>{{ scientificOutcomeLabel(task.scientific_outcome) }}</n-tag>
+              </div>
+            </section>
+          </div>
+
+          <aside class="space-y-5">
+            <section class="research-panel">
+              <div class="aira-type-eyebrow">{{ $t("page.research.definitionOfDone") }}</div>
+              <h2 class="aira-type-card-title mb-0 mt-1">{{ $t("page.research.successCriteria") }}</h2>
+              <ul class="mb-0 mt-3 space-y-2 pl-5 aira-type-body aira-text-secondary">
+                <li v-for="criterion in task.success_criteria" :key="criterion">{{ criterion }}</li>
+              </ul>
+              <template v-if="task.stop_conditions.length">
+                <n-divider />
+                <h3 class="aira-type-label mb-0">{{ $t("page.research.stopConditions") }}</h3>
+                <ul class="mb-0 mt-2 space-y-1 pl-5 aira-type-meta">
+                  <li v-for="condition in task.stop_conditions" :key="condition">{{ condition }}</li>
+                </ul>
+              </template>
+            </section>
+
+            <section class="research-panel">
+              <div class="aira-type-eyebrow">{{ $t("page.research.researchEnvironment") }}</div>
+              <h2 class="aira-type-card-title mb-0 mt-1">{{ $t("page.research.pinnedMethods") }}</h2>
+              <div v-if="task.protocols.length" class="mt-3 space-y-2">
+                <button
+                  v-for="protocol in task.protocols"
+                  :key="`${protocol.id}:${protocol.version}`"
+                  type="button"
+                  class="research-method"
+                  @click="openProtocol(protocol)"
+                >
+                  <span class="aira-type-label">{{ protocol.position }}. {{ protocol.name }}</span>
+                  <span class="aira-type-meta">v{{ protocol.version }}</span>
+                </button>
+              </div>
+              <n-empty v-else class="py-5" :description="$t('page.research.noMethods')" />
+              <div class="aira-type-meta mt-3">
+                {{ $t("page.research.autonomy") }} · {{ autonomyLabel(task.autonomy_level) }}
+              </div>
+            </section>
+
+            <section class="research-panel">
+              <div class="aira-type-eyebrow">{{ $t("page.research.provenance") }}</div>
+              <h2 class="aira-type-card-title mb-0 mt-1">{{ $t("page.research.timeline") }}</h2>
+              <n-empty v-if="!task.events.length" class="py-5" :description="$t('page.research.noEvents')" />
+              <div v-else class="mt-4 space-y-4">
+                <div v-for="event in task.events.slice(0, 30)" :key="event.id" class="research-event">
+                  <span class="research-event__dot" />
+                  <div class="min-w-0">
+                    <div class="aira-type-label">{{ eventLabel(event.kind) }}</div>
+                    <div class="aira-type-meta mt-0.5"><n-time :time="new Date(event.created_at)" type="relative" /></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </template>
+    </n-spin>
+
+    <n-modal
+      v-model:show="actionModalVisible"
+      preset="card"
+      class="research-modal"
+      :title="$t('page.research.addHumanWork')"
+      :mask-closable="false"
+      @after-leave="resetActionDraft"
+    >
+      <template v-if="!actionPreview">
+        <n-form label-placement="top">
+          <n-form-item :label="$t('page.research.method')" required>
+            <n-select v-model:value="actionDraft.protocol_id" :options="projectProtocolOptions" filterable />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.workTitle')">
+            <n-input v-model:value="actionDraft.title" />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.instructions')">
+            <n-input v-model:value="actionDraft.instructions" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.initialValues')">
+            <n-input
+              v-model:value="initialValuesText"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 10 }"
+              placeholder="{}"
+            />
+            <template #feedback>{{ $t("page.research.initialValuesHint") }}</template>
+          </n-form-item>
+        </n-form>
+      </template>
+      <template v-else>
+        <n-alert type="info">{{ $t("page.research.actionPreviewHint") }}</n-alert>
+        <div class="research-preview mt-4">
+          <div class="aira-type-eyebrow">{{ $t("page.research.saveDestination") }}</div>
+          <h3 class="aira-type-card-title mb-0 mt-1">{{ actionPreview.destination.task.title }}</h3>
+          <p class="aira-type-body aira-text-secondary mb-0 mt-2">
+            {{ actionPreview.protocol.name }} · v{{ actionPreview.protocol.version }}
+          </p>
+          <div class="aira-type-meta mt-2">
+            {{ $t("page.research.assignedTo") }} · {{ actionPreview.assignee.name || actionPreview.assignee.username }}
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <n-button @click="actionPreview ? actionPreview = null : actionModalVisible = false">
+            {{ actionPreview ? $t("page.research.backToEdit") : $t("common.cancel") }}
+          </n-button>
+          <n-button v-if="!actionPreview" type="primary" :disabled="!actionDraft.protocol_id" :loading="mutating" @click="previewAction">
+            {{ $t("page.research.previewAction") }}
+          </n-button>
+          <n-button v-else type="primary" :loading="mutating" @click="createAction">
+            {{ $t("page.research.confirmAction") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="reviewModalVisible" preset="card" class="research-modal" :title="$t('page.research.reviewResult')" :mask-closable="false">
+      <n-alert type="warning" class="mb-4">{{ $t("page.research.reviewResponsibility") }}</n-alert>
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.research.goalAssessment')" required>
+          <n-select v-model:value="review.outcome" :options="outcomeOptions" />
+        </n-form-item>
+        <n-form-item :label="$t('page.research.scientificOutcome')" required>
+          <n-select v-model:value="review.scientific_outcome" :options="scientificOutcomeOptions" />
+        </n-form-item>
+        <n-form-item :label="$t('page.research.reviewedConclusion')" required>
+          <n-input v-model:value="review.conclusion" type="textarea" :autosize="{ minRows: 6, maxRows: 16 }" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <n-button @click="reviewModalVisible = false">{{ $t("common.cancel") }}</n-button>
+          <n-button type="primary" :disabled="!review.conclusion.trim()" :loading="mutating" @click="completeTask">
+            {{ $t("page.research.confirmReview") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type {
+  HumanWorkItemStatus,
+  ManualProtocolActionDraft,
+  ManualProtocolActionPreview,
+  ResearchAction,
+  ResearchActionStatus,
+  ResearchProtocolRef,
+  ResearchRunStatus,
+  ResearchTaskDetail,
+  ResearchTaskStatus,
+} from "@/service/api/research-tasks"
+import type { ProtocolModels } from "@airalogy/shared/types"
+import type { TagProps } from "naive-ui"
+import { fetchProtocols } from "@/service/api/project-protocols"
+import {
+  cancelResearchTask,
+  completeResearchTask,
+  createManualProtocolAction,
+  fetchResearchTask,
+  pauseResearchTask,
+  previewManualProtocolAction,
+  resumeResearchTask,
+  startResearchTask,
+  startResearchWorkItem,
+} from "@/service/api/research-tasks"
+import { useAuthStore } from "@/store/modules/auth"
+import { $t } from "@airalogy/shared/locales"
+import { useDialog } from "naive-ui"
+import { nanoid } from "nanoid"
+import { useRoute, useRouter } from "vue-router"
+
+const route = useRoute()
+const router = useRouter()
+const dialog = useDialog()
+const authStore = useAuthStore()
+const task = ref<ResearchTaskDetail | null>(null)
+const loading = ref(false)
+const loadError = ref(false)
+const mutating = ref(false)
+const startingWorkItemId = ref("")
+const actionModalVisible = ref(false)
+const actionPreview = ref<ManualProtocolActionPreview | null>(null)
+const reviewModalVisible = ref(false)
+const projectProtocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
+const initialValuesText = ref("{}")
+const actionDraft = reactive<ManualProtocolActionDraft>({
+  protocol_id: "",
+  title: "",
+  instructions: "",
+  initial_values: {},
+  idempotency_key: "",
+})
+const review = reactive({
+  outcome: "goal_met",
+  scientific_outcome: "inconclusive",
+  conclusion: "",
+})
+let pollTimer: ReturnType<typeof setInterval> | undefined
+
+const latestRun = computed(() => task.value?.latest_run || task.value?.runs[0] || null)
+const canAddAction = computed(() => ["active", "paused"].includes(task.value?.status || ""))
+const canCancel = computed(() => !["completed", "cancelled", "archived"].includes(task.value?.status || ""))
+const canReview = computed(() => Boolean(
+  task.value
+  && task.value.status !== "completed"
+  && task.value.status !== "cancelled"
+  && task.value.open_work_items === 0
+  && ["review_required", "active", "paused", "failed"].includes(task.value.status),
+))
+const openActions = computed(() => (task.value?.actions || []).filter(action =>
+  action.work_item && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),
+))
+const hasResult = computed(() => Boolean(task.value?.conclusion || Object.keys(task.value?.result_package || {}).length))
+const resultConclusion = computed(() => task.value?.result_package.reviewed_conclusion
+  || task.value?.conclusion
+  || task.value?.result_package.narrative_conclusion
+  || "")
+const airaStage = computed(() => {
+  const stage = String(latestRun.value?.aira_state?.path_status || "")
+  return stage ? stage.replaceAll("_", " ") : $t("page.research.notStarted")
+})
+const taskStatusType = computed(() => statusType(task.value?.status || "draft"))
+const projectProtocolOptions = computed(() => projectProtocols.value.map(protocol => ({
+  label: `${protocol.name} · v${protocol.latest_version}`,
+  value: String(protocol.id),
+})))
+const outcomeValues = [
+  "goal_met",
+  "goal_not_met_but_conclusive",
+  "inconclusive",
+  "blocked_missing_capability",
+  "stopped_budget",
+  "stopped_time",
+  "stopped_safety",
+  "cancelled",
+  "execution_failed",
+]
+const scientificOutcomeValues = [
+  "supports_hypothesis",
+  "contradicts_hypothesis",
+  "inconclusive",
+  "unexpected",
+  "not_applicable",
+]
+const outcomeOptions = computed(() => outcomeValues.map(value => ({ label: outcomeLabel(value), value })))
+const scientificOutcomeOptions = computed(() => scientificOutcomeValues.map(value => ({ label: scientificOutcomeLabel(value), value })))
+
+async function loadTask(silent = false) {
+  if (!silent)
+    loading.value = true
+  loadError.value = false
+  try {
+    task.value = await fetchResearchTask(String(route.params.taskId))
+  }
+  catch {
+    if (!silent)
+      loadError.value = true
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function mutate(operation: (current: ResearchTaskDetail) => Promise<ResearchTaskDetail>) {
+  if (!task.value)
+    return
+  mutating.value = true
+  try {
+    task.value = await operation(task.value)
+  }
+  finally {
+    mutating.value = false
+  }
+}
+
+function startTask() {
+  void mutate(current => startResearchTask(current.id, current.revision))
+}
+
+function pauseTask() {
+  void mutate(current => pauseResearchTask(current.id, current.revision))
+}
+
+function resumeTask() {
+  void mutate(current => resumeResearchTask(current.id, current.revision))
+}
+
+function cancelTask() {
+  if (!task.value)
+    return
+  dialog.warning({
+    title: $t("page.research.cancelTask"),
+    content: $t("page.research.cancelConfirm"),
+    positiveText: $t("page.research.cancelTask"),
+    negativeText: $t("common.cancel"),
+    onPositiveClick: () => mutate(current => cancelResearchTask(current.id, current.revision, "Cancelled by user")),
+  })
+}
+
+async function loadProjectProtocols() {
+  if (!task.value)
+    return
+  const result = await fetchProtocols({ page: 1, pageSize: 100, projectId: task.value.project_id })
+  if (result.error)
+    throw result.error
+  projectProtocols.value = result.data?.protocols || []
+}
+
+async function openActionModal() {
+  actionModalVisible.value = true
+  if (!projectProtocols.value.length)
+    await loadProjectProtocols()
+  if (task.value?.protocols.length && !actionDraft.protocol_id)
+    actionDraft.protocol_id = task.value.protocols[0].id
+}
+
+function resetActionDraft() {
+  actionPreview.value = null
+  actionDraft.protocol_id = ""
+  actionDraft.title = ""
+  actionDraft.instructions = ""
+  actionDraft.initial_values = {}
+  actionDraft.idempotency_key = ""
+  initialValuesText.value = "{}"
+}
+
+function parsedInitialValues() {
+  try {
+    const value = JSON.parse(initialValuesText.value || "{}")
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("Initial values must be a JSON object")
+    return value as Record<string, unknown>
+  }
+  catch {
+    window.$message?.error($t("page.research.invalidInitialValues"))
+    return null
+  }
+}
+
+async function previewAction() {
+  if (!task.value || !actionDraft.protocol_id)
+    return
+  const initialValues = parsedInitialValues()
+  if (!initialValues)
+    return
+  mutating.value = true
+  try {
+    actionDraft.initial_values = initialValues
+    actionDraft.idempotency_key ||= `manual-${nanoid(16)}`
+    actionPreview.value = await previewManualProtocolAction(task.value.id, { ...actionDraft })
+  }
+  finally {
+    mutating.value = false
+  }
+}
+
+async function createAction() {
+  if (!task.value || !actionPreview.value)
+    return
+  mutating.value = true
+  try {
+    await createManualProtocolAction(task.value.id, {
+      ...actionDraft,
+      preview_digest: actionPreview.value.preview_digest,
+    })
+    actionModalVisible.value = false
+    window.$message?.success($t("page.research.actionCreated"))
+    await loadTask(true)
+  }
+  finally {
+    mutating.value = false
+  }
+}
+
+async function executeWorkItem(action: ResearchAction) {
+  if (!action.work_item || !action.protocol || !task.value)
+    return
+  startingWorkItemId.value = action.work_item.id
+  try {
+    if (["open", "changes_requested"].includes(action.work_item.status))
+      await startResearchWorkItem(action.work_item.id, action.work_item.revision)
+    await router.push({
+      name: "add-protocol-record",
+      params: {
+        labUid: action.protocol.lab_uid || task.value.lab.uid,
+        projectUid: action.protocol.project_uid || task.value.project.uid,
+        protocolUid: action.protocol.uid,
+      },
+      query: { researchWorkItem: action.work_item.id },
+    })
+  }
+  finally {
+    startingWorkItemId.value = ""
+  }
+}
+
+function canExecuteAction(action: ResearchAction) {
+  return Boolean(
+    action.work_item
+    && action.protocol
+    && String(action.work_item.assignee_user_id) === String(authStore.userInfo.id)
+    && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),
+  )
+}
+
+function openReviewModal() {
+  if (!task.value)
+    return
+  review.outcome = task.value.outcome || "goal_met"
+  review.scientific_outcome = task.value.scientific_outcome || "inconclusive"
+  review.conclusion = resultConclusion.value
+  reviewModalVisible.value = true
+}
+
+async function completeTask() {
+  if (!task.value || !review.conclusion.trim())
+    return
+  mutating.value = true
+  try {
+    task.value = await completeResearchTask(task.value.id, {
+      expected_revision: task.value.revision,
+      outcome: review.outcome,
+      scientific_outcome: review.scientific_outcome,
+      conclusion: review.conclusion.trim(),
+    })
+    reviewModalVisible.value = false
+    window.$message?.success($t("page.research.reviewCompleted"))
+  }
+  finally {
+    mutating.value = false
+  }
+}
+
+function goBack() {
+  void router.push({ name: "research-tasks" })
+}
+
+function openProtocol(protocol: ResearchProtocolRef) {
+  if (!task.value)
+    return
+  void router.push({
+    name: "protocol-detail",
+    params: {
+      labUid: task.value.lab.uid,
+      projectUid: task.value.project.uid,
+      protocolUid: protocol.uid,
+    },
+  })
+}
+
+function openRecord(action: ResearchAction) {
+  if (!task.value || !action.protocol_run?.record_id || !action.protocol_run.record_version || !action.protocol)
+    return
+  void router.push({
+    name: "protocol-record-report",
+    params: {
+      labUid: task.value.lab.uid,
+      projectUid: task.value.project.uid,
+      protocolUid: action.protocol.uid,
+      protocolVersion: action.protocol_run.protocol_version,
+      recordId: action.protocol_run.record_id,
+      recordVersion: String(action.protocol_run.record_version),
+    },
+  })
+}
+
+function statusType(status: ResearchTaskStatus): TagProps["type"] {
+  if (status === "completed")
+    return "success"
+  if (status === "failed" || status === "cancelled")
+    return "error"
+  if (status === "review_required")
+    return "warning"
+  if (status === "active")
+    return "info"
+  return "default"
+}
+
+function runStatusType(status: ResearchRunStatus): TagProps["type"] {
+  if (status === "completed")
+    return "success"
+  if (status === "failed" || status === "cancelled")
+    return "error"
+  if (status.startsWith("waiting"))
+    return "warning"
+  return "info"
+}
+
+function actionStatusType(status: ResearchActionStatus): TagProps["type"] {
+  if (status === "completed")
+    return "success"
+  if (status === "failed" || status === "cancelled")
+    return "error"
+  if (status === "waiting")
+    return "warning"
+  return "info"
+}
+
+function taskStatusLabel(status: ResearchTaskStatus) {
+  return $t(`page.research.taskStatus.${status}` as I18n.I18nKey)
+}
+
+function runStatusLabel(status: ResearchRunStatus) {
+  return $t(`page.research.runStatus.${status}` as I18n.I18nKey)
+}
+
+function actionStatusLabel(status: ResearchActionStatus) {
+  return $t(`page.research.actionStatus.${status}` as I18n.I18nKey)
+}
+
+function autonomyLabel(level: ResearchTaskDetail["autonomy_level"]) {
+  const key = level === "assisted" ? "autonomyAssisted" : level === "bounded_autopilot" ? "autonomyBounded" : "autonomyPolicy"
+  return $t(`page.research.${key}` as I18n.I18nKey)
+}
+
+function outcomeLabel(value: string) {
+  return $t(`page.research.outcome.${value}` as I18n.I18nKey)
+}
+
+function scientificOutcomeLabel(value: string) {
+  return $t(`page.research.scientificOutcomeValue.${value}` as I18n.I18nKey)
+}
+
+function eventLabel(kind: string) {
+  const known = [
+    "task.created",
+    "run.started",
+    "run.paused",
+    "run.resumed",
+    "run.completed",
+    "run.failed",
+    "task.cancelled",
+    "task.completed",
+    "task.review_requested",
+    "plan.version_created",
+    "aira.step_completed",
+    "work_item.assigned",
+    "work_item.started",
+    "work_item.completed",
+    "run.manual_control_required",
+  ]
+  return known.includes(kind)
+    ? $t(`page.research.event.${kind.replaceAll(".", "_")}` as I18n.I18nKey)
+    : kind.replaceAll(".", " · ").replaceAll("_", " ")
+}
+
+function startPolling() {
+  pollTimer = setInterval(() => {
+    if (task.value && ["active", "review_required"].includes(task.value.status))
+      void loadTask(true)
+  }, 5000)
+}
+
+onMounted(async () => {
+  await loadTask()
+  startPolling()
+})
+onUnmounted(() => {
+  if (pollTimer)
+    clearInterval(pollTimer)
+})
+</script>
+
+<style scoped>
+.research-detail {
+  width: 100%;
+}
+
+.research-detail__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border: 1px solid rgb(219 234 254);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgb(var(--primary-color) / 9%), white 70%);
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.research-panel {
+  border: 1px solid rgb(229 231 235);
+  border-radius: 0.875rem;
+  background: white;
+  padding: 1.25rem;
+}
+
+.research-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-radius: 0.75rem;
+  background: rgb(249 250 251);
+  padding: 0.875rem;
+}
+
+.research-action-card,
+.research-preview {
+  border: 1px solid rgb(219 234 254);
+  border-radius: 0.75rem;
+  background: rgb(var(--primary-color) / 4%);
+  padding: 1rem;
+}
+
+.research-sequence {
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgb(var(--primary-color) / 10%);
+  color: rgb(var(--primary-color));
+  font-weight: 600;
+}
+
+.research-method {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 0.625rem;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.research-method:hover,
+.research-method:focus-visible {
+  border-color: rgb(var(--primary-color) / 45%);
+  outline: none;
+}
+
+.research-event {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.research-event__dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  flex: 0 0 auto;
+  border: 2px solid white;
+  border-radius: 9999px;
+  background: rgb(var(--primary-color));
+  box-shadow: 0 0 0 2px rgb(var(--primary-color) / 18%);
+  margin-top: 0.3rem;
+}
+
+.research-modal {
+  width: min(44rem, calc(100vw - 2rem));
+}
+
+@media (max-width: 48rem) {
+  .research-detail__hero {
+    flex-direction: column;
+  }
+}
+</style>

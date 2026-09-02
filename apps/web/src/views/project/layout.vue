@@ -104,6 +104,7 @@ const showIcon = computed(
     route.name === "lab-projects"
     || route.name === "lab-members"
     || route.name === "project-protocols"
+    || route.name === "project-research"
     || route.name === "project-records"
     || route.name === "project-members"
     || route.name === "project-settings",
@@ -127,6 +128,7 @@ const baseTabs = computed<(TabPaneProps & { name: App.Global.TabKey })[]>(() => 
   ]
 
   if (authStore.isLogin) {
+    tabs.push({ name: "project-research", tab: $t("page.research.title") })
     tabs.push({ name: "project-records", tab: $t("page.recordDiary.tab") })
     tabs.push({ name: "project-members", tab: hintTab($t("page.project.tab.members"), membersHint.value) })
   }
@@ -266,6 +268,12 @@ async function setBreadcrumbs(info?: Api.Project.MyProjectInfo | null) {
           key: "project-protocols",
           label: "Project protocols",
           i18nKey: "page.project.protocols",
+        },
+        {
+          key: "project-research",
+          label: "Project research",
+          i18nKey: "page.research.title",
+          breadcrumbLabel: "Project research",
         },
         {
           key: "project-records",

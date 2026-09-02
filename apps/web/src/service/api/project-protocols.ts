@@ -491,7 +491,7 @@ export async function postNewResearchRecord(
   }
 
   const { research_check, research_step, research_variable, report } = payload
-  return await request({
+  return await request<ProtocolModels.RecordInfo>({
     url: `/protocols/${protocolId}/records`,
     method: "POST",
     data: {
