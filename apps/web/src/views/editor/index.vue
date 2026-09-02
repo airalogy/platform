@@ -6,25 +6,48 @@
     :loading="loading" :protocol-info="protocolInfo" :side-menus="sideMenus" :emit-zip="false" :package-id="packageId" :reload-flag="reloadFlag" :is-read-only="isReadOnly" @save:dry="handleSaveProtocol" @new-file="handleNewProtocol"
   >
     <template #editor>
-      <div class="relative size-full">
-        <aimd-editor
-          v-show="showAimdEditor"
-          v-model="liveProtocolContent"
-          :readonly="isReadOnly"
-          class="size-full"
-          :min-height="0"
-          :show-top-bar="true"
-          :show-toolbar="true"
-          :show-aimd-toolbar="true"
-          :show-md-toolbar="true"
-          @update:model-value="handleAimdEditorChange"
-        />
-        <split-editor
-          v-show="!showAimdEditor"
-          :editor-id="0"
-          :split-state="splitState"
-          class="absolute inset-0"
-        />
+      <div class="size-full flex flex-col">
+        <n-alert
+          v-if="sourceProtocolImprovement"
+          type="warning"
+          class="shrink-0"
+          :title="$t('editor.protocolImprovement.title')"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ $t("editor.protocolImprovement.banner", { title: sourceProtocolImprovement.title, version: sourceProtocolImprovement.base_protocol_version }) }}</span>
+            <n-button v-if="isReadOnly" size="small" type="primary" @click="handleNewProtocol('copy')">
+              {{ $t("editor.protocolImprovement.startDraft") }}
+            </n-button>
+          </div>
+        </n-alert>
+        <n-alert
+          v-else-if="sourceProtocolImprovementError"
+          type="error"
+          class="shrink-0"
+          :title="$t('editor.protocolImprovement.unavailable')"
+        >
+          {{ sourceProtocolImprovementError }}
+        </n-alert>
+        <div class="relative min-h-0 flex-1">
+          <aimd-editor
+            v-show="showAimdEditor"
+            v-model="liveProtocolContent"
+            :readonly="isReadOnly"
+            class="size-full"
+            :min-height="0"
+            :show-top-bar="true"
+            :show-toolbar="true"
+            :show-aimd-toolbar="true"
+            :show-md-toolbar="true"
+            @update:model-value="handleAimdEditorChange"
+          />
+          <split-editor
+            v-show="!showAimdEditor"
+            :editor-id="0"
+            :split-state="splitState"
+            class="absolute inset-0"
+          />
+        </div>
       </div>
     </template>
     <template #title>
@@ -112,6 +135,22 @@
     >
       {{ $t("editor.aiCreate.saveKnowledgeLineage", { revision: sourceKnowledgeReference.revision }) }}
     </n-alert>
+    <n-alert
+      v-if="sourceProtocolImprovement"
+      class="mb-4"
+      type="warning"
+      :title="$t('editor.protocolImprovement.saveTitle')"
+    >
+      {{ $t("editor.protocolImprovement.saveLineage", { title: sourceProtocolImprovement.title, version: sourceProtocolImprovement.base_protocol_version, count: sourceProtocolImprovement.evidence.length }) }}
+    </n-alert>
+    <n-alert
+      v-if="sourceProtocolImprovementError"
+      class="mb-4"
+      type="error"
+      :title="$t('editor.protocolImprovement.unavailable')"
+    >
+      {{ sourceProtocolImprovementError }}
+    </n-alert>
     <protocol-setup ref="protocolSetupRef" mode="reuse" :skip-upload="true" :protocol-info="protocolInfo" :disable-default="false" />
     <template #footer>
       <n-button size="medium" :disabled="loading" @click="hideModal">
@@ -120,7 +159,7 @@
       <n-button
         size="medium"
         type="primary"
-        :disabled="loading"
+        :disabled="loading || Boolean(sourceProtocolImprovementError)"
         :loading="loading"
         @click="handleApplyProtocol"
       >
@@ -140,6 +179,7 @@
 import type { IEmits as AIMDEmits, IAIMDWrapperProps } from "@/components/custom/aimd/types/aimd-types"
 import type { BreadcrumbSection } from "@/components/Layout/protocol-title-section.vue"
 import type { ProtocolData } from "@/constants/protocol"
+import type { ProtocolImprovementProposal } from "@/service/api/research-assets"
 import type { AimdTemplateEnv, BaseNode, RenderMode } from "@airalogy/aimd-core/types"
 import type { ExposeState } from "@airalogy/components/monaco-editor/layout.vue"
 import type { DiffModelInfo, ModelInfo } from "@airalogy/components/monaco-editor/store/editorStore"
@@ -159,6 +199,7 @@ import { $t } from "@/locales"
 import { getDownloadPackage, getDownloadPackageData } from "@/service/api/project-protocols"
 import { postEditorSyntaxCheck } from "@/service/api/protocol"
 import { extractProtocolInstructionFile, generateProtocolAimd, generateProtocolAssigner, generateProtocolModel, postEditorCodeEdit } from "@/service/api/protocol-generate"
+import { fetchProtocolImprovement } from "@/service/api/research-assets"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
@@ -211,6 +252,36 @@ const sourceKnowledgeReference = computed(() => {
     return null
   return { itemId, revision }
 })
+const sourceProtocolImprovement = ref<ProtocolImprovementProposal | null>(null)
+const sourceProtocolImprovementError = ref("")
+const sourceProtocolImprovementReference = computed(() => {
+  const proposal = sourceProtocolImprovement.value
+  return proposal ? { proposalId: proposal.id, revision: proposal.revision } : null
+})
+
+async function loadProtocolImprovementSource() {
+  const proposalId = typeof route.query.protocol_improvement_id === "string"
+    ? route.query.protocol_improvement_id
+    : ""
+  const revision = Number(route.query.protocol_improvement_revision)
+  if (!proposalId)
+    return
+  if (!Number.isInteger(revision) || revision < 1) {
+    sourceProtocolImprovementError.value = $t("editor.protocolImprovement.invalid")
+    return
+  }
+  try {
+    const proposal = await fetchProtocolImprovement(proposalId)
+    if (proposal.revision !== revision || proposal.state !== "reviewed") {
+      sourceProtocolImprovementError.value = $t("editor.protocolImprovement.changed")
+      return
+    }
+    sourceProtocolImprovement.value = proposal
+  }
+  catch {
+    sourceProtocolImprovementError.value = $t("editor.protocolImprovement.unavailableHint")
+  }
+}
 
 // Provide editor context for all child components
 const editorContext = useProvideProtocolEditorContext(route)
@@ -218,6 +289,16 @@ const editorContext = useProvideProtocolEditorContext(route)
 const { protocolInfo, fetchProtocolInfoByUid } = useProvideProtocolInfoStore(null)
 const isReadOnly = ref(true)
 const isFullScreen = ref(false)
+
+watch([sourceProtocolImprovement, protocolInfo], ([proposal, protocol]) => {
+  if (!proposal || !protocol)
+    return
+  const routeVersion = typeof route.params.protocolVersion === "string" ? route.params.protocolVersion : ""
+  if (String(protocol.id) !== proposal.protocol_id || (routeVersion && routeVersion !== proposal.base_protocol_version)) {
+    sourceProtocolImprovement.value = null
+    sourceProtocolImprovementError.value = $t("editor.protocolImprovement.changed")
+  }
+})
 
 const reloadFlag = ref(false)
 
@@ -491,7 +572,12 @@ async function handleApplyProtocol() {
       },
       updated: true,
     }
-    const res = await applyProtocol(undefined, sourceKnowledgeReference.value || undefined)
+    const res = await applyProtocol(undefined, {
+      ...(sourceKnowledgeReference.value ? { knowledge: sourceKnowledgeReference.value } : {}),
+      ...(sourceProtocolImprovementReference.value
+        ? { protocolImprovement: sourceProtocolImprovementReference.value }
+        : {}),
+    })
     if (res) {
       const { latest_version, project_uid, lab_uid, uid } = res
       // message.success(`Apply protocol with version v${latest_version} succeed`)
@@ -603,12 +689,19 @@ async function handleSaveProtocol() {
 }
 
 async function handleNewProtocol(mode: "empty" | "copy") {
+  const isImprovementDraft = mode === "copy" && Boolean(sourceProtocolImprovement.value)
   const action = dialog.warning({
-    title: mode === "empty" ? "Create empty protocol" : "Create copy of protocol",
-    content: isReadOnly.value
-      ? mode === "empty" ? "Are you sure you want to create a new protocol?" : "This protocol is in readonly mode. To make changes, you must first create a copy."
-      : "Unsaved changes will be lost. Are you sure you want to create a new protocol?",
-    positiveText: isReadOnly.value && mode === "copy" ? "Create Copy" : "Yes",
+    title: isImprovementDraft
+      ? $t("editor.protocolImprovement.draftConfirmTitle")
+      : mode === "empty" ? "Create empty protocol" : "Create copy of protocol",
+    content: isImprovementDraft
+      ? $t("editor.protocolImprovement.draftConfirmBody")
+      : isReadOnly.value
+        ? mode === "empty" ? "Are you sure you want to create a new protocol?" : "This protocol is in readonly mode. To make changes, you must first create a copy."
+        : "Unsaved changes will be lost. Are you sure you want to create a new protocol?",
+    positiveText: isImprovementDraft
+      ? $t("editor.protocolImprovement.startDraft")
+      : isReadOnly.value && mode === "copy" ? "Create Copy" : "Yes",
     negativeText: isReadOnly.value ? "Cancel" : "No",
     onPositiveClick: async () => {
       const id = nanoid()
@@ -683,6 +776,7 @@ watch(
 )
 
 onMounted(async () => {
+  await loadProtocolImprovementSource()
   startLoading()
   const { protocolUid, labUid, projectUid, protocolVersion } = route.params as {
     labUid: string

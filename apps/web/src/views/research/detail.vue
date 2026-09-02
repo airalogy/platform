@@ -370,6 +370,7 @@
               :task-id="task.id"
               :lab-uid="task.lab.uid"
               :project-uid="task.project.uid"
+              :protocols="task.protocols"
               @changed="() => loadTask(true)"
             />
 
@@ -1128,6 +1129,9 @@ function eventLabel(kind: string) {
     "claim.created",
     "claim.revised",
     "claim.reviewed",
+    "protocol_improvement.suggested",
+    "protocol_improvement.reviewed",
+    "protocol_improvement.applied",
     "tool_job.queued",
     "tool_job.started",
     "tool_job.completed",

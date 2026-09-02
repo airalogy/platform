@@ -1158,12 +1158,14 @@ declare namespace I18n {
         addEvidence: string
         addClaim: string
         suggestKnowledge: string
+        proposeProtocolImprovement: string
         assetsLoadError: string
         noScientificAssets: string
         claims: string
         evidence: string
         dataAssets: string
         knowledgeCandidates: string
+        protocolImprovements: string
         confidence: string
         uncertainty: string
         linkedEvidenceCount: string
@@ -1185,6 +1187,19 @@ declare namespace I18n {
         linkEvidence: string
         validatedEvidence: string
         knowledgeSuggestionBoundary: string
+        protocolImprovementBoundary: string
+        targetProtocol: string
+        improvementTitle: string
+        improvementRationale: string
+        proposedChanges: string
+        protocolImprovementEvidenceCount: string
+        acceptProtocolImprovement: string
+        rejectProtocolImprovement: string
+        protocolImprovementReviewConfirm: string
+        openProtocolVersionDraft: string
+        openAppliedProtocol: string
+        appliedAsVersion: string
+        noProtocolImprovements: string
         knowledgeEvidenceCount: string
         openProjectKnowledge: string
         assetPreviewHint: string
@@ -1198,6 +1213,12 @@ declare namespace I18n {
         noEvidence: string
         noDataAssets: string
         noKnowledgeCandidates: string
+        protocolImprovementState: {
+          suggested: string
+          reviewed: string
+          rejected: string
+          applied: string
+        }
         claimState: {
           suggested: string
           draft: string
@@ -1338,6 +1359,9 @@ declare namespace I18n {
           claim_created: string
           claim_revised: string
           claim_reviewed: string
+          protocol_improvement_suggested: string
+          protocol_improvement_reviewed: string
+          protocol_improvement_applied: string
           tool_job_queued: string
           tool_job_started: string
           tool_job_completed: string
@@ -3004,6 +3028,19 @@ declare namespace I18n {
         knowledgeSourceChanged: string
         knowledgeSourceUnavailable: string
         saveKnowledgeLineage: string
+      }
+      protocolImprovement: {
+        title: string
+        banner: string
+        startDraft: string
+        draftConfirmTitle: string
+        draftConfirmBody: string
+        saveTitle: string
+        saveLineage: string
+        invalid: string
+        changed: string
+        unavailable: string
+        unavailableHint: string
       }
       landing: {
         eyebrow: string

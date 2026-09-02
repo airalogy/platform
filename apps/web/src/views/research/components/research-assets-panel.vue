@@ -31,6 +31,15 @@
         >
           {{ $t("page.research.suggestKnowledge") }}
         </n-button>
+        <n-button
+          size="small"
+          type="warning"
+          secondary
+          :disabled="!knowledgeEvidenceOptions.length || !protocolOptions.length"
+          @click="openModal('protocolImprovement')"
+        >
+          {{ $t("page.research.proposeProtocolImprovement") }}
+        </n-button>
       </div>
     </div>
 
@@ -145,6 +154,63 @@
           </div>
         </n-tab-pane>
 
+        <n-tab-pane name="protocol-improvements" :tab="`${$t('page.research.protocolImprovements')} (${bundle.protocol_improvements.length})`">
+          <div class="space-y-3">
+            <article v-for="proposal in bundle.protocol_improvements" :key="proposal.id" class="scientific-card">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <n-tag size="small" round :type="protocolImprovementStateType(proposal.state)">
+                      {{ protocolImprovementStateLabel(proposal.state) }}
+                    </n-tag>
+                    <span class="aira-type-meta">
+                      {{ proposal.protocol?.name || proposal.protocol_id }} · v{{ proposal.base_protocol_version }}
+                    </span>
+                    <span class="aira-type-meta">r{{ proposal.revision }}</span>
+                  </div>
+                  <h3 class="aira-type-card-title mb-0 mt-2 break-words">
+                    {{ proposal.title }}
+                  </h3>
+                  <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
+                    {{ proposal.rationale }}
+                  </p>
+                  <div class="scientific-change mt-3">
+                    <div class="aira-type-eyebrow">
+                      {{ $t("page.research.proposedChanges") }}
+                    </div>
+                    <p class="aira-type-body mb-0 mt-1 whitespace-pre-wrap">
+                      {{ proposal.proposed_changes }}
+                    </p>
+                  </div>
+                  <div class="aira-type-meta mt-3">
+                    {{ $t("page.research.protocolImprovementEvidenceCount", { count: proposal.evidence.length }) }}
+                    <template v-if="proposal.applied_protocol_version">
+                      · {{ $t("page.research.appliedAsVersion", { version: proposal.applied_protocol_version }) }}
+                    </template>
+                  </div>
+                </div>
+                <div class="flex shrink-0 flex-wrap gap-1">
+                  <template v-if="proposal.state === 'suggested'">
+                    <n-button size="tiny" type="success" secondary @click="confirmProtocolImprovementReview(proposal, 'reviewed')">
+                      {{ $t("page.research.acceptProtocolImprovement") }}
+                    </n-button>
+                    <n-button size="tiny" type="error" tertiary @click="confirmProtocolImprovementReview(proposal, 'rejected')">
+                      {{ $t("common.reject") }}
+                    </n-button>
+                  </template>
+                  <n-button v-else-if="proposal.state === 'reviewed'" size="tiny" type="primary" @click="openProtocolImprovementDraft(proposal)">
+                    {{ $t("page.research.openProtocolVersionDraft") }}
+                  </n-button>
+                  <n-button v-else-if="proposal.state === 'applied'" size="tiny" secondary @click="openAppliedProtocol(proposal)">
+                    {{ $t("page.research.openAppliedProtocol") }}
+                  </n-button>
+                </div>
+              </div>
+            </article>
+            <n-empty v-if="!bundle.protocol_improvements.length" class="py-5" :description="$t('page.research.noProtocolImprovements')" />
+          </div>
+        </n-tab-pane>
+
         <n-tab-pane name="data" :tab="`${$t('page.research.dataAssets')} (${bundle.data_assets.length})`">
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <article v-for="asset in bundle.data_assets" :key="asset.id" class="scientific-card">
@@ -251,7 +317,7 @@
           </n-form-item>
         </n-form>
 
-        <n-form v-else label-placement="top">
+        <n-form v-else-if="modalKind === 'knowledge'" label-placement="top">
           <n-alert type="info" class="mb-4">
             {{ $t("page.research.knowledgeSuggestionBoundary") }}
           </n-alert>
@@ -281,6 +347,31 @@
           </n-form-item>
           <n-form-item :label="$t('page.knowledge.tags')">
             <n-dynamic-tags v-model:value="knowledgeDraft.tags" />
+          </n-form-item>
+        </n-form>
+        <n-form v-else label-placement="top">
+          <n-alert type="warning" class="mb-4">
+            {{ $t("page.research.protocolImprovementBoundary") }}
+          </n-alert>
+          <n-form-item :label="$t('page.research.targetProtocol')" required>
+            <n-select v-model:value="protocolImprovementDraft.protocol_id" :options="protocolOptions" />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.improvementTitle')" required>
+            <n-input v-model:value="protocolImprovementDraft.title" />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.improvementRationale')" required>
+            <n-input v-model:value="protocolImprovementDraft.rationale" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.proposedChanges')" required>
+            <n-input v-model:value="protocolImprovementDraft.proposed_changes" type="textarea" :autosize="{ minRows: 4, maxRows: 12 }" />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.validatedEvidence')" required>
+            <n-select
+              v-model:value="protocolImprovementDraft.evidence_ids"
+              multiple
+              clearable
+              :options="knowledgeEvidenceOptions"
+            />
           </n-form-item>
         </n-form>
       </template>
@@ -333,25 +424,32 @@ import type {
   EvidenceKind,
   EvidenceQuality,
   KnowledgeSuggestionDraft,
+  ProtocolImprovementDraft,
+  ProtocolImprovementProposal,
+  ProtocolImprovementState,
   ResearchAssetBundle,
   ResearchClaim,
   ResearchEvidence,
   ResearchKnowledgeItem,
   ResearchKnowledgeKind,
 } from "@/service/api/research-assets"
+import type { ResearchProtocolRef } from "@/service/api/research-tasks"
 import type { TagProps } from "naive-ui"
 import {
   createClaim,
   createDataAsset,
   createEvidence,
   createKnowledgeSuggestion,
+  createProtocolImprovement,
   fetchResearchAssets,
   previewClaim,
   previewDataAsset,
   previewEvidence,
   previewKnowledgeSuggestion,
+  previewProtocolImprovement,
   reviewClaim,
   reviewEvidence,
+  reviewProtocolImprovement,
   updateDataAssetStatus,
 } from "@/service/api/research-assets"
 import { $t } from "@airalogy/shared/locales"
@@ -362,15 +460,16 @@ const props = defineProps<{
   taskId: string
   labUid: string
   projectUid: string
+  protocols: ResearchProtocolRef[]
 }>()
 
 const emit = defineEmits<{
   changed: []
 }>()
 
-type ModalKind = "asset" | "evidence" | "claim" | "knowledge"
+type ModalKind = "asset" | "evidence" | "claim" | "knowledge" | "protocolImprovement"
 
-const emptyBundle = (): ResearchAssetBundle => ({ data_assets: [], evidence: [], claims: [], knowledge_items: [] })
+const emptyBundle = (): ResearchAssetBundle => ({ data_assets: [], evidence: [], claims: [], knowledge_items: [], protocol_improvements: [] })
 const dialog = useDialog()
 const router = useRouter()
 const bundle = ref<ResearchAssetBundle>(emptyBundle())
@@ -386,14 +485,16 @@ const assetDraft = reactive<DataAssetDraft>(newAssetDraft())
 const evidenceDraft = reactive<EvidenceDraft>(newEvidenceDraft())
 const claimDraft = reactive<ClaimDraft>(newClaimDraft())
 const knowledgeDraft = reactive<KnowledgeSuggestionDraft>(newKnowledgeDraft())
+const protocolImprovementDraft = reactive<ProtocolImprovementDraft>(newProtocolImprovementDraft())
 
-const isEmpty = computed(() => !bundle.value.data_assets.length && !bundle.value.evidence.length && !bundle.value.claims.length && !bundle.value.knowledge_items.length)
+const isEmpty = computed(() => !bundle.value.data_assets.length && !bundle.value.evidence.length && !bundle.value.claims.length && !bundle.value.knowledge_items.length && !bundle.value.protocol_improvements.length)
 const modalTitle = computed(() => {
   const keys: Record<ModalKind, I18n.I18nKey> = {
     asset: "page.research.addDataAsset",
     evidence: "page.research.addEvidence",
     claim: "page.research.addClaim",
     knowledge: "page.research.suggestKnowledge",
+    protocolImprovement: "page.research.proposeProtocolImprovement",
   }
   return $t(keys[modalKind.value])
 })
@@ -421,6 +522,10 @@ const knowledgeEvidenceOptions = computed(() => bundle.value.evidence
     value: item.id,
     label: item.summary || artifactLabel(item),
   })))
+const protocolOptions = computed(() => props.protocols.map(protocol => ({
+  value: protocol.id,
+  label: `${protocol.name} · v${protocol.version}`,
+})))
 const canPreview = computed(() => {
   if (modalKind.value === "asset")
     return Boolean(assetDraft.name.trim() && assetDraft.external_uri.trim())
@@ -428,7 +533,15 @@ const canPreview = computed(() => {
     return Boolean(evidenceDraft.artifact_id.trim())
   if (modalKind.value === "claim")
     return Boolean(claimDraft.statement.trim())
-  return Boolean(knowledgeDraft.title.trim() && knowledgeDraft.body.trim() && knowledgeDraft.evidence_ids.length)
+  if (modalKind.value === "knowledge")
+    return Boolean(knowledgeDraft.title.trim() && knowledgeDraft.body.trim() && knowledgeDraft.evidence_ids.length)
+  return Boolean(
+    protocolImprovementDraft.protocol_id
+    && protocolImprovementDraft.title.trim()
+    && protocolImprovementDraft.rationale.trim()
+    && protocolImprovementDraft.proposed_changes.trim()
+    && protocolImprovementDraft.evidence_ids.length,
+  )
 })
 const previewSummary = computed(() => {
   if (modalKind.value === "asset")
@@ -437,7 +550,9 @@ const previewSummary = computed(() => {
     return evidenceDraft.summary || evidenceDraft.artifact_id
   if (modalKind.value === "claim")
     return claimDraft.statement
-  return `${knowledgeDraft.title}\n${knowledgeDraft.body}`
+  if (modalKind.value === "knowledge")
+    return `${knowledgeDraft.title}\n${knowledgeDraft.body}`
+  return `${protocolImprovementDraft.title}\n${protocolImprovementDraft.proposed_changes}`
 })
 const previewDestinationLabel = computed(() => preview.value?.destination.project_name || preview.value?.destination.task_title || "")
 
@@ -489,6 +604,17 @@ function newKnowledgeDraft(): KnowledgeSuggestionDraft {
   }
 }
 
+function newProtocolImprovementDraft(): ProtocolImprovementDraft {
+  return {
+    task_id: props.taskId,
+    protocol_id: props.protocols.length === 1 ? props.protocols[0].id : "",
+    title: "",
+    rationale: "",
+    proposed_changes: "",
+    evidence_ids: [],
+  }
+}
+
 async function loadAssets() {
   loading.value = true
   loadError.value = false
@@ -522,6 +648,7 @@ function resetModal() {
   Object.assign(evidenceDraft, newEvidenceDraft())
   Object.assign(claimDraft, newClaimDraft())
   Object.assign(knowledgeDraft, newKnowledgeDraft())
+  Object.assign(protocolImprovementDraft, newProtocolImprovementDraft())
 }
 
 function resetEvidenceSource(value: EvidenceArtifactType) {
@@ -560,8 +687,10 @@ async function createPreview() {
       preview.value = await previewEvidence(normalizedEvidenceDraft())
     else if (modalKind.value === "claim")
       preview.value = await previewClaim(normalizedClaimDraft())
-    else
+    else if (modalKind.value === "knowledge")
       preview.value = await previewKnowledgeSuggestion({ ...knowledgeDraft })
+    else
+      preview.value = await previewProtocolImprovement({ ...protocolImprovementDraft })
   }
   finally {
     mutating.value = false
@@ -582,8 +711,11 @@ async function confirmCreate() {
     else if (modalKind.value === "claim") {
       await createClaim({ ...normalizedClaimDraft(), preview_digest: preview.value.preview_digest })
     }
-    else {
+    else if (modalKind.value === "knowledge") {
       await createKnowledgeSuggestion({ ...knowledgeDraft, preview_digest: preview.value.preview_digest })
+    }
+    else {
+      await createProtocolImprovement({ ...protocolImprovementDraft, preview_digest: preview.value.preview_digest })
     }
     modalVisible.value = false
     window.$message?.success($t("page.research.assetWriteCompleted"))
@@ -637,6 +769,54 @@ function confirmClaimReview(item: ResearchClaim, state: "reviewed" | "rejected")
   })
 }
 
+function confirmProtocolImprovementReview(item: ProtocolImprovementProposal, state: "reviewed" | "rejected") {
+  dialog.warning({
+    title: state === "reviewed" ? $t("page.research.acceptProtocolImprovement") : $t("page.research.rejectProtocolImprovement"),
+    content: $t("page.research.protocolImprovementReviewConfirm"),
+    positiveText: $t("common.confirm"),
+    negativeText: $t("common.cancel"),
+    onPositiveClick: async () => {
+      await reviewProtocolImprovement(item, state)
+      await loadAssets()
+      emit("changed")
+    },
+  })
+}
+
+function openProtocolImprovementDraft(proposal: ProtocolImprovementProposal) {
+  const protocol = props.protocols.find(item => item.id === proposal.protocol_id)
+  if (!protocol)
+    return
+  return router.push({
+    name: "protocol-editor",
+    params: {
+      labUid: protocol.lab_uid || props.labUid,
+      projectUid: protocol.project_uid || props.projectUid,
+      protocolUid: protocol.uid,
+      protocolVersion: proposal.base_protocol_version,
+    },
+    query: {
+      protocol_improvement_id: proposal.id,
+      protocol_improvement_revision: String(proposal.revision),
+    },
+  })
+}
+
+function openAppliedProtocol(proposal: ProtocolImprovementProposal) {
+  const protocol = props.protocols.find(item => item.id === proposal.protocol_id)
+  if (!protocol)
+    return
+  return router.push({
+    name: "protocol-editor",
+    params: {
+      labUid: protocol.lab_uid || props.labUid,
+      projectUid: protocol.project_uid || props.projectUid,
+      protocolUid: protocol.uid,
+      protocolVersion: proposal.applied_protocol_version || protocol.version,
+    },
+  })
+}
+
 function currentVersion(asset: DataAsset) {
   return asset.versions.find(version => version.version === asset.current_version)
 }
@@ -659,6 +839,20 @@ function evidenceStateType(state: EvidenceQuality): TagProps["type"] {
   if (state === "rejected")
     return "error"
   return "warning"
+}
+
+function protocolImprovementStateType(state: ProtocolImprovementState): TagProps["type"] {
+  if (state === "applied")
+    return "success"
+  if (state === "reviewed")
+    return "info"
+  if (state === "rejected")
+    return "error"
+  return "warning"
+}
+
+function protocolImprovementStateLabel(value: ProtocolImprovementState) {
+  return $t(`page.research.protocolImprovementState.${value}` as I18n.I18nKey)
 }
 
 function claimStateLabel(value: ClaimState) {
@@ -727,6 +921,12 @@ watch(() => props.taskId, () => {
   border-radius: 0.75rem;
   background: rgb(248 250 252 / 72%);
   padding: 1rem;
+}
+
+.scientific-change {
+  border-left: 3px solid rgb(245 158 11 / 60%);
+  background: rgb(255 251 235 / 75%);
+  padding: 0.75rem 0.875rem;
 }
 
 .research-asset-modal {

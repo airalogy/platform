@@ -26,12 +26,14 @@ from app.models.knowledge import (
 from app.models.lab import Lab
 from app.models.project import Project
 from app.models.protocol import Protocol
+from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
 from app.models.research import (
     ResearchAction,
     ResearchArtifactLink,
     ResearchRun,
     ResearchTask,
+    ResearchTaskProtocol,
 )
 from app.models.research_asset import (
     ClaimEvidenceRelation,
@@ -43,6 +45,9 @@ from app.models.research_asset import (
     EvidenceKind,
     EvidenceQuality,
     KnowledgeEvidenceLink,
+    ProtocolImprovementEvidence,
+    ProtocolImprovementProposal,
+    ProtocolImprovementState,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchClaimRevision,
@@ -50,6 +55,7 @@ from app.models.research_asset import (
 )
 from app.models.user import User
 from app.routers.depends import CurrentUser
+from app.routers.permission import check_user_permission
 from app.services.knowledge import (
     authorize_knowledge_item,
     authorize_library_entry,
@@ -291,6 +297,40 @@ class KnowledgeSuggestionDraft(BaseModel):
 
 class KnowledgeSuggestionCreate(KnowledgeSuggestionDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class ProtocolImprovementDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    protocol_id: UUID
+    title: str = Field(min_length=1, max_length=512)
+    rationale: str = Field(min_length=1, max_length=100_000)
+    proposed_changes: str = Field(min_length=1, max_length=200_000)
+    evidence_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.title = self.title.strip()
+        self.rationale = self.rationale.strip()
+        self.proposed_changes = self.proposed_changes.strip()
+        if not self.title or not self.rationale or not self.proposed_changes:
+            raise ValueError("Improvement title, rationale, and changes are required")
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("Protocol improvement Evidence contains duplicates")
+        return self
+
+
+class ProtocolImprovementCreate(ProtocolImprovementDraft):
+    preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class ProtocolImprovementReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=1)
+    expected_state: ProtocolImprovementState
+    state: Literal["reviewed", "rejected"]
 
 
 def validate_external_uri(value: str) -> None:
@@ -625,6 +665,105 @@ def _knowledge_suggestion_command(
     return {
         **params.model_dump(mode="json"),
         "evidence": [_evidence_snapshot(item) for item in evidence],
+    }
+
+
+async def _protocol_improvement_context(
+    db_session: DBSession,
+    current_user: User,
+    params: ProtocolImprovementDraft,
+) -> tuple[TaskContext, Protocol, ProtocolVersion]:
+    context = await _task_context(
+        db_session, current_user, params.task_id, "research.run"
+    )
+    row = (
+        await db_session.execute(
+            select(Protocol, ProtocolVersion)
+            .join(
+                ResearchTaskProtocol,
+                ResearchTaskProtocol.protocol_id == Protocol.id,
+            )
+            .join(
+                ProtocolVersion,
+                ProtocolVersion.id == ResearchTaskProtocol.protocol_version_id,
+            )
+            .where(
+                ResearchTaskProtocol.task_id == context.task.id,
+                ResearchTaskProtocol.protocol_id == params.protocol_id,
+                ProtocolVersion.protocol_id == Protocol.id,
+                ProtocolVersion.version == ResearchTaskProtocol.protocol_version,
+                Protocol.deleted_at.is_(None),
+            )
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Protocol improvement must target a version pinned to this Task",
+        )
+    protocol, version = row
+    await check_user_permission(
+        db_session,
+        project=context.project,
+        user=current_user,
+        action="update_protocol",
+        protocol=protocol,
+    )
+    return context, protocol, version
+
+
+def _protocol_improvement_snapshot(
+    protocol: Protocol,
+    version: ProtocolVersion,
+) -> dict[str, Any]:
+    return {
+        "id": str(protocol.id),
+        "uid": protocol.uid,
+        "name": protocol.name,
+        "base_protocol_version_id": str(version.id),
+        "base_protocol_version": version.version,
+    }
+
+
+def _protocol_improvement_command(
+    params: ProtocolImprovementDraft,
+    protocol_snapshot: dict[str, Any],
+    evidence: list[ResearchEvidence],
+) -> dict[str, Any]:
+    return {
+        **params.model_dump(mode="json"),
+        "protocol": protocol_snapshot,
+        "evidence": [_evidence_snapshot(item) for item in evidence],
+    }
+
+
+async def _protocol_improvement_payload(
+    db_session: DBSession,
+    proposal: ProtocolImprovementProposal,
+) -> dict[str, Any]:
+    protocol = await db_session.get(Protocol, proposal.protocol_id)
+    links = list(
+        (
+            await db_session.scalars(
+                select(ProtocolImprovementEvidence)
+                .where(ProtocolImprovementEvidence.proposal_id == proposal.id)
+                .order_by(ProtocolImprovementEvidence.created_at)
+            )
+        ).all()
+    )
+    return {
+        **proposal.as_dict(),
+        "protocol": (
+            {
+                "id": str(protocol.id),
+                "uid": protocol.uid,
+                "name": protocol.name,
+                "base_protocol_version": proposal.base_protocol_version,
+            }
+            if protocol is not None
+            else None
+        ),
+        "evidence": [link.as_dict() for link in links],
     }
 
 
@@ -1352,3 +1491,196 @@ async def create_knowledge_suggestion(
     )
     await db_session.commit()
     return {**item.as_dict(), "evidence": links}
+
+
+@router.post("/protocol-improvements/preview")
+async def preview_protocol_improvement(
+    params: ProtocolImprovementDraft,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    context, protocol, version = await _protocol_improvement_context(
+        db_session, current_user, params
+    )
+    evidence = await _knowledge_suggestion_evidence(
+        db_session, current_user, context, params.evidence_ids
+    )
+    protocol_snapshot = _protocol_improvement_snapshot(protocol, version)
+    command = _protocol_improvement_command(params, protocol_snapshot, evidence)
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "destination": {
+            "task_id": str(context.task.id),
+            "task_title": context.task.title,
+            "project_id": str(context.project.id),
+            "project_name": context.project.name,
+        },
+        "effect": {
+            "state": ProtocolImprovementState.SUGGESTED.value,
+            "protocol_id": str(protocol.id),
+            "base_protocol_version": version.version,
+            "evidence_count": len(evidence),
+            "requires_expert_review": True,
+            "changes_published_protocol": False,
+        },
+    }
+
+
+@router.post("/protocol-improvements")
+async def create_protocol_improvement(
+    params: ProtocolImprovementCreate,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    draft = ProtocolImprovementDraft.model_validate(
+        params.model_dump(exclude={"preview_digest"})
+    )
+    context, protocol, version = await _protocol_improvement_context(
+        db_session, current_user, draft
+    )
+    evidence = await _knowledge_suggestion_evidence(
+        db_session,
+        current_user,
+        context,
+        draft.evidence_ids,
+        with_for_update=True,
+    )
+    protocol_snapshot = _protocol_improvement_snapshot(protocol, version)
+    command = _protocol_improvement_command(draft, protocol_snapshot, evidence)
+    if canonical_digest(command) != params.preview_digest:
+        raise HTTPException(
+            status_code=409, detail="Protocol improvement preview has changed"
+        )
+    proposal = ProtocolImprovementProposal(
+        task_id=context.task.id,
+        protocol_id=protocol.id,
+        base_protocol_version_id=version.id,
+        base_protocol_version=version.version,
+        title=draft.title,
+        rationale=draft.rationale,
+        proposed_changes=draft.proposed_changes,
+        state=ProtocolImprovementState.SUGGESTED.value,
+        generated_by="human",
+        created_by_user_id=current_user.id,
+    )
+    db_session.add(proposal)
+    await db_session.flush()
+    for source in evidence:
+        db_session.add(
+            ProtocolImprovementEvidence(
+                proposal_id=proposal.id,
+                evidence_id=source.id,
+                source_snapshot=_evidence_snapshot(source),
+                created_by_user_id=current_user.id,
+            )
+        )
+    db_session.add(
+        ResearchArtifactLink(
+            task_id=context.task.id,
+            artifact_type="protocol_improvement",
+            artifact_id=str(proposal.id),
+            artifact_version="1",
+            relation="suggested",
+            link_metadata={
+                "protocol_id": str(protocol.id),
+                "base_protocol_version": version.version,
+                "title": proposal.title,
+            },
+        )
+    )
+    await emit_research_event(
+        db_session,
+        task_id=context.task.id,
+        kind="protocol_improvement.suggested",
+        actor_user_id=current_user.id,
+        payload={
+            "proposal_id": str(proposal.id),
+            "protocol_id": str(protocol.id),
+            "base_protocol_version": version.version,
+            "evidence_ids": [str(item.id) for item in evidence],
+        },
+        idempotency_key=f"protocol-improvement:{proposal.id}:suggested:r1",
+    )
+    await db_session.commit()
+    return await _protocol_improvement_payload(db_session, proposal)
+
+
+@router.get("/protocol-improvements/{proposal_id}")
+async def get_protocol_improvement(
+    proposal_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    proposal = await db_session.get(ProtocolImprovementProposal, proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Protocol improvement not found")
+    await _task_context(db_session, current_user, proposal.task_id, "research.read")
+    return await _protocol_improvement_payload(db_session, proposal)
+
+
+@router.post("/protocol-improvements/{proposal_id}/review")
+async def review_protocol_improvement(
+    proposal_id: UUID,
+    params: ProtocolImprovementReview,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    proposal = await db_session.scalar(
+        select(ProtocolImprovementProposal)
+        .where(ProtocolImprovementProposal.id == proposal_id)
+        .with_for_update()
+    )
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Protocol improvement not found")
+    context = await _task_context(
+        db_session, current_user, proposal.task_id, "research.approve"
+    )
+    protocol = await db_session.get(Protocol, proposal.protocol_id)
+    if protocol is None or protocol.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Protocol not found")
+    await check_user_permission(
+        db_session,
+        project=context.project,
+        user=current_user,
+        action="update_protocol",
+        protocol=protocol,
+    )
+    if protocol.latest_version != proposal.base_protocol_version:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Protocol changed after this improvement was proposed; "
+                "create a new proposal against the latest version"
+            ),
+        )
+    if (
+        proposal.revision != params.expected_revision
+        or proposal.state != params.expected_state.value
+    ):
+        raise HTTPException(
+            status_code=409, detail="Protocol improvement review state has changed"
+        )
+    if proposal.state != ProtocolImprovementState.SUGGESTED.value:
+        raise HTTPException(status_code=409, detail="Protocol improvement is final")
+    proposal.state = params.state
+    proposal.revision += 1
+    proposal.reviewed_by_user_id = current_user.id
+    proposal.reviewed_at = utcnow()
+    await emit_research_event(
+        db_session,
+        task_id=context.task.id,
+        kind="protocol_improvement.reviewed",
+        actor_user_id=current_user.id,
+        payload={
+            "proposal_id": str(proposal.id),
+            "state": proposal.state,
+            "revision": proposal.revision,
+        },
+        idempotency_key=(
+            f"protocol-improvement:{proposal.id}:review:{proposal.state}:"
+            f"r{proposal.revision}"
+        ),
+    )
+    await db_session.commit()
+    return await _protocol_improvement_payload(db_session, proposal)

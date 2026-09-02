@@ -8,6 +8,7 @@ export type ClaimState = "suggested" | "draft" | "reviewed" | "rejected" | "supe
 export type ClaimEvidenceRelation = "supports" | "contradicts" | "context"
 export type EvidenceArtifactType = "record" | "data_asset" | "knowledge" | "paper_library_entry" | "external"
 export type ResearchKnowledgeKind = "note" | "method" | "decision" | "finding"
+export type ProtocolImprovementState = "suggested" | "reviewed" | "rejected" | "applied"
 
 export interface DataAssetVersion {
   id: string
@@ -105,11 +106,45 @@ export interface ResearchKnowledgeItem {
   updated_at: string
 }
 
+export interface ProtocolImprovementProposal {
+  id: string
+  task_id: string
+  protocol_id: string
+  base_protocol_version_id: string
+  base_protocol_version: string
+  title: string
+  rationale: string
+  proposed_changes: string
+  state: ProtocolImprovementState
+  generated_by: "human" | "aira"
+  revision: number
+  created_by_user_id: string
+  reviewed_by_user_id?: string | null
+  reviewed_at?: string | null
+  applied_protocol_version_id?: string | null
+  applied_protocol_version?: string | null
+  applied_by_user_id?: string | null
+  applied_at?: string | null
+  created_at: string
+  updated_at: string
+  protocol?: {
+    id: string
+    uid: string
+    name: string
+    base_protocol_version: string
+  } | null
+  evidence: Array<{
+    evidence_id: string
+    source_snapshot: Record<string, unknown>
+  }>
+}
+
 export interface ResearchAssetBundle {
   data_assets: DataAsset[]
   evidence: ResearchEvidence[]
   claims: ResearchClaim[]
   knowledge_items: ResearchKnowledgeItem[]
+  protocol_improvements: ProtocolImprovementProposal[]
 }
 
 export interface DataAssetDraft {
@@ -155,6 +190,15 @@ export interface KnowledgeSuggestionDraft {
   body: string
   kind: ResearchKnowledgeKind
   tags: string[]
+  evidence_ids: string[]
+}
+
+export interface ProtocolImprovementDraft {
+  task_id: string
+  protocol_id: string
+  title: string
+  rationale: string
+  proposed_changes: string
   evidence_ids: string[]
 }
 
@@ -274,5 +318,43 @@ export function createKnowledgeSuggestion(payload: KnowledgeSuggestionDraft & { 
     url: "/research-assets/knowledge-suggestions",
     method: "POST",
     data: payload,
+  })
+}
+
+export function previewProtocolImprovement(payload: ProtocolImprovementDraft) {
+  return getData<AssetPreview<ProtocolImprovementDraft>>({
+    url: "/research-assets/protocol-improvements/preview",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createProtocolImprovement(payload: ProtocolImprovementDraft & { preview_digest: string }) {
+  return getData<ProtocolImprovementProposal>({
+    url: "/research-assets/protocol-improvements",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function fetchProtocolImprovement(proposalId: string) {
+  return getData<ProtocolImprovementProposal>({
+    url: `/research-assets/protocol-improvements/${proposalId}`,
+    metadata: { showError: false },
+  })
+}
+
+export function reviewProtocolImprovement(
+  proposal: ProtocolImprovementProposal,
+  state: "reviewed" | "rejected",
+) {
+  return getData<ProtocolImprovementProposal>({
+    url: `/research-assets/protocol-improvements/${proposal.id}/review`,
+    method: "POST",
+    data: {
+      expected_revision: proposal.revision,
+      expected_state: proposal.state,
+      state,
+    },
   })
 }

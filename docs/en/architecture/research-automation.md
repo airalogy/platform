@@ -122,7 +122,7 @@ Execution state and scientific outcome are separate. A correctly executed experi
 
 Aira cannot declare success by itself. Validation records Schema/QC, Protocol compliance, calibration, controls, sample size, statistical thresholds, replication, deviations, and failed attempts. Structured phased and final conclusions include Claims, supporting and contradicting Evidence, uncertainty, anomalies, goal progress, capability gaps, and proposed next actions.
 
-The final `Research Result Package` contains the summary, goal status, Claims and confidence, Evidence, pinned Protocol versions, Records, DataAssets, failed attempts, validation reports, unresolved questions, and a reproducibility manifest. Human-readable reports are views over that structured package.
+The final `Research Result Package` contains the summary, goal status, Claims and confidence, Evidence, pinned Protocol versions, Records, DataAssets, candidate Knowledge, Protocol improvement proposals, failed attempts, validation reports, unresolved questions, and a reproducibility manifest. Human-readable reports are views over that structured package.
 
 ## Knowledge, Log, and feedback loops
 
@@ -132,10 +132,12 @@ Knowledge-to-method flow is explicit and versioned. An authorized user previews 
 
 The reverse flow is evidence-gated. A Project member with Knowledge write access may select only validated Evidence backed by an exact Record or DataAsset version, preview the destination and source set, and create editable Project-scoped Suggested Knowledge. Confirmation locks and revalidates every Evidence row, binds the preview digest to its review state and immutable source version, and stores a source snapshot plus an exact `Evidence → Knowledge revision` link. The result is still a candidate: it becomes reviewed organizational Knowledge only through the separate Knowledge review capability. Pending or rejected Evidence, external links, papers, and existing Knowledge cannot enter through this path, and AI availability is not required.
 
+Protocol evolution uses a separate, method-specific gate. An authorized user selects a Protocol version already pinned to the Research Task plus validated Record/DataAsset Evidence, previews the exact version, Evidence snapshots, rationale, and proposed changes, then creates a Suggested `Protocol Improvement Proposal`. A research approver who can also update that Protocol must review the proposal before the existing Protocol Editor can open an editable version draft. Saving re-locks the proposal and Protocol, requires the reviewed revision to remain current and unapplied, and rejects the write if the Protocol has advanced beyond the pinned base. A successful save creates a normal higher Protocol version, marks the proposal Applied, and records the exact Evidence → proposal → Protocol-version provenance. It never mutates an existing version or changes a live Run's pinned environment. The first implementation is fully deterministic and works without AI; a future Aira-generated proposal must use the same contract.
+
 Three connected loops stay distinct:
 
 1. Research execution: Protocol/Action → Record/Evidence → phased state → next Action.
-2. Protocol evolution: Records → improvement proposal → Protocol Draft → expert review → new version/SOP.
+2. Protocol evolution: Records/DataAssets → improvement proposal → expert intent review → editable Protocol Draft → validated new version/SOP.
 3. Knowledge evolution: Runs/Evidence → Suggested Knowledge → review → Project/Lab Knowledge.
 
 Aira may create proposals and Suggested Knowledge. It never silently edits a published Protocol or switches a live Run to a different version.
@@ -201,7 +203,8 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 
 - Instrument Gateway and tiered control
 - quotes, SLA, logistics, chain of custody, and result receipt for external research services
-- Protocol evolution, independent Reviewer Agent, parallel/multi-agent execution, and reproduction evaluation
+- evidence-backed, reviewed Protocol improvement proposals and exact new-version lineage (delivered without AI dependency)
+- Aira proposal generation through the same governed contract, independent Reviewer Agent, parallel/multi-agent execution, and reproduction evaluation
 - protein-purification method evolution and OT-2 governance benchmarks
 
 ## Definition of complete

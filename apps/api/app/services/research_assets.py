@@ -10,10 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import KnowledgeItem
+from app.models.protocol import Protocol
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
     KnowledgeEvidenceLink,
+    ProtocolImprovementEvidence,
+    ProtocolImprovementProposal,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchEvidence,
@@ -130,6 +133,51 @@ async def research_asset_bundle(
     for link in knowledge_links:
         links_by_knowledge.setdefault(link.knowledge_item_id, []).append(link.as_dict())
 
+    improvement_proposals = list(
+        (
+            await db_session.scalars(
+                select(ProtocolImprovementProposal)
+                .where(ProtocolImprovementProposal.task_id == task_id)
+                .order_by(
+                    ProtocolImprovementProposal.created_at,
+                    ProtocolImprovementProposal.id,
+                )
+            )
+        ).all()
+    )
+    proposal_ids = [item.id for item in improvement_proposals]
+    protocol_ids = list(
+        dict.fromkeys(item.protocol_id for item in improvement_proposals)
+    )
+    protocols = (
+        list(
+            (
+                await db_session.scalars(
+                    select(Protocol).where(Protocol.id.in_(protocol_ids))
+                )
+            ).all()
+        )
+        if protocol_ids
+        else []
+    )
+    protocol_by_id = {item.id: item for item in protocols}
+    improvement_links = (
+        list(
+            (
+                await db_session.scalars(
+                    select(ProtocolImprovementEvidence)
+                    .where(ProtocolImprovementEvidence.proposal_id.in_(proposal_ids))
+                    .order_by(ProtocolImprovementEvidence.created_at)
+                )
+            ).all()
+        )
+        if proposal_ids
+        else []
+    )
+    links_by_proposal: dict[UUID, list[dict[str, Any]]] = {}
+    for link in improvement_links:
+        links_by_proposal.setdefault(link.proposal_id, []).append(link.as_dict())
+
     return {
         "data_assets": [
             {
@@ -154,5 +202,22 @@ async def research_asset_bundle(
             }
             for item_id in knowledge_item_ids
             if item_id in knowledge_by_id
+        ],
+        "protocol_improvements": [
+            {
+                **item.as_dict(),
+                "protocol": (
+                    {
+                        "id": str(protocol_by_id[item.protocol_id].id),
+                        "uid": protocol_by_id[item.protocol_id].uid,
+                        "name": protocol_by_id[item.protocol_id].name,
+                        "base_protocol_version": item.base_protocol_version,
+                    }
+                    if item.protocol_id in protocol_by_id
+                    else None
+                ),
+                "evidence": links_by_proposal.get(item.id, []),
+            }
+            for item in improvement_proposals
         ],
     }

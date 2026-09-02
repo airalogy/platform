@@ -70,6 +70,13 @@ class ClaimEvidenceRelation(StrEnum):
     CONTEXT = "context"
 
 
+class ProtocolImprovementState(StrEnum):
+    SUGGESTED = "suggested"
+    REVIEWED = "reviewed"
+    REJECTED = "rejected"
+    APPLIED = "applied"
+
+
 class DataAsset(Base):
     __tablename__ = "data_assets"
     __table_args__ = (
@@ -316,6 +323,113 @@ class KnowledgeEvidenceLink(Base):
     )
     knowledge_item_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
     knowledge_revision: Mapped[int] = mapped_column(nullable=False)
+    evidence_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_evidence.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    source_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProtocolImprovementProposal(Base):
+    """Reviewed change intent between validated Evidence and a Protocol version."""
+
+    __tablename__ = "protocol_improvement_proposals"
+    __table_args__ = (
+        Index(
+            "ix_protocol_improvement_task_state",
+            "task_id",
+            "state",
+        ),
+        Index(
+            "ix_protocol_improvement_protocol_base",
+            "protocol_id",
+            "base_protocol_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    protocol_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocols.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    base_protocol_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocol_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    base_protocol_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    proposed_changes: Mapped[str] = mapped_column(Text, nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ProtocolImprovementState.SUGGESTED.value,
+    )
+    generated_by: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="human"
+    )
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_protocol_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("protocol_versions.id", ondelete="RESTRICT")
+    )
+    applied_protocol_version: Mapped[str | None] = mapped_column(String(64))
+    applied_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ProtocolImprovementEvidence(Base):
+    """Immutable validated Evidence snapshots supporting one improvement proposal."""
+
+    __tablename__ = "protocol_improvement_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "proposal_id",
+            "evidence_id",
+            name="uq_protocol_improvement_evidence",
+        ),
+        Index("ix_protocol_improvement_evidence_source", "evidence_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    proposal_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocol_improvement_proposals.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     evidence_id: Mapped[UUID] = mapped_column(
         ForeignKey("research_evidence.id", ondelete="RESTRICT"),
         nullable=False,

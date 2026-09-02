@@ -46,6 +46,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增可追溯的后续 Research Run，用于重试、复现和延续研究：用户先预览再确认一条终态来源 Run，Platform 精确继承其环境并记录来源与结果摘要，既有执行证据保持不变，Task 级限额继续生效，工作台可对比每次 Run 及审核后结果。
 - 新增受治理的 Knowledge → Protocol 流程：用户先预览准确的 Knowledge 修订与目标 Project，再由 Aira 生成可编辑草稿；最终确认 Protocol 时重新检查来源访问、范围、Project 权限与修订新鲜度，并原子记录不可变的 Knowledge 修订到 Protocol 版本 provenance，同时不会向只可读取 Protocol 的用户泄露 Restricted Knowledge。
 - 新增受 Evidence 门禁的反向流转：只有已校验的 Record/DataAsset Evidence 才能经预览确认生成可编辑的 Project Suggested Knowledge；确认时锁定来源状态，保留不可变 Evidence 快照和修订来源关系，同时保持独立 Knowledge 审核边界与完整非 AI 路径。
+- 新增受治理的 Protocol 演进闭环：用户可从 Research Task 中已校验 Evidence 发起固定方法版本的改进建议，经“预览→确认”保留不可变来源快照；只有同时具备科研审批和 Protocol 更新权的人员审核后才能创建可编辑新版本草稿，最终保存会失败关闭地重新校验基线，并精确记录 Evidence→建议→Protocol 新版本来源链，不改写既有版本或活动 Run。
 
 ### 变更
 

@@ -1396,6 +1396,7 @@ async def _result_package(
         ],
         "data_assets": scientific_assets["data_assets"],
         "knowledge_items": scientific_assets["knowledge_items"],
+        "protocol_improvements": scientific_assets["protocol_improvements"],
         "actions": [
             {
                 "id": str(item.id),

@@ -46,6 +46,7 @@ Target initial version: `0.1.0`.
 - Added traceable subsequent Research Runs for retries, replications, and continuations: users preview-confirm a terminal source Run, Platform inherits its exact environment and records source/result digests, prior execution evidence stays immutable, Task-level limits remain active, and the workbench compares every Run and reviewed outcome.
 - Added a governed Knowledge-to-Protocol flow: users preview an exact Knowledge revision and target Project before Aira generates an editable draft; final Protocol confirmation rechecks source access, scope, Project permission, and revision freshness, then atomically records immutable Knowledge-revision-to-Protocol-version provenance without exposing Restricted Knowledge to Protocol-only readers.
 - Added the evidence-gated reverse flow from validated Record/DataAsset Evidence to editable Project Suggested Knowledge, with preview-bound source state, locked confirmation, immutable Evidence snapshots and revision lineage, a separate Knowledge review boundary, and a complete non-AI path.
+- Added governed Protocol evolution from validated Task Evidence: version-pinned improvement proposals use preview-confirm creation, immutable source snapshots, combined research-approval and Protocol-update review, an explicit editable version draft, fail-closed base-version revalidation, and exact Evidence-to-proposal-to-new-Protocol-version lineage without mutating active Runs.
 
 ### Changed
 

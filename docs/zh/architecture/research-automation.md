@@ -152,7 +152,7 @@ AIRA 的阶段性和最终结论不只保存为 Markdown。结构化状态至少
 - 异常、偏差、不确定性和未解决问题；
 - 成功标准评估与建议的下一步。
 
-最终交付是 `Research Result Package`，包含摘要、目标状态、Claim/Evidence、Protocol 版本、Records、DataAssets、失败尝试、验证报告和可复现清单。可读报告是该结构化包的视图。
+最终交付是 `Research Result Package`，包含摘要、目标状态、Claim/Evidence、固定的 Protocol 版本、Records、DataAssets、Knowledge 候选、Protocol 改进建议、失败尝试、验证报告和可复现清单。可读报告是该结构化包的视图。
 
 ## Knowledge、Log 与三个循环
 
@@ -164,10 +164,12 @@ Knowledge 到方法的流转必须显式并固定版本。获授权用户先预�
 
 反向流转必须经过 Evidence 门禁。具有 Knowledge 写权限的 Project 成员只能选择已校验、且指向准确 Record 或 DataAsset 版本的 Evidence；在预览保存位置和来源集合后，可创建 Project 范围的可编辑 Suggested Knowledge。确认时会锁定并重新校验每条 Evidence，将预览摘要与审核状态和不可变来源版本绑定，同时保存来源快照和准确的 `Evidence → Knowledge revision` 关系。该结果仍是候选认识，只有通过独立 Knowledge 审核权限才能成为组织已采纳的 Knowledge。待审核或已拒绝 Evidence、外部链接、Paper 及既有 Knowledge 都不能从该路径进入，且整个流程不依赖 AI。
 
+Protocol 演进使用独立的方法改进门禁。获授权用户选择已固定到 Research Task 的 Protocol 版本，再选择已校验的 Record/DataAsset Evidence；系统会先预览准确版本、Evidence 快照、科学依据和建议改动，然后创建待审核的 `Protocol Improvement Proposal`。同时具备科研审批权和该 Protocol 更新权的人员采纳建议后，现有 Protocol Editor 才会进入可编辑的新版本草稿。最终保存时会重新锁定建议和 Protocol，确保已审核修订未变、未被使用，且 Protocol 没有超过所固定的基线版本。保存成功会生成普通的更高 Protocol 版本，将建议标记为已应用，并记录准确的 Evidence → 改进建议 → Protocol 新版本来源链。既有版本和正在运行的 Run 固定环境不会被改写。首个实现是完整的确定性非 AI 路径；后续由 Aira 生成的建议也必须使用同一套契约。
+
 系统保持三个独立但互相连接的循环：
 
 1. 研究执行：Protocol/Action → Record/Evidence → 阶段状态 → 下一个 Action。
-2. Protocol 演进：Records → 改进建议 → Protocol Draft → 专家审核 → 新版本/SOP。
+2. Protocol 演进：Records/DataAssets → 改进建议 → 专家审核改进意图 → 可编辑 Protocol Draft → 校验后的新版本/SOP。
 3. Knowledge 演进：Runs/Evidence → Suggested Knowledge → 审核 → Project/Lab Knowledge。
 
 Aira 只能提交改进草稿或 Suggested Knowledge，不得静默修改已发布 Protocol，也不得在正在运行的 Run 中自动切换版本。
@@ -233,7 +235,8 @@ Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，
 
 - Instrument Gateway 与分级设备控制；
 - 外部研究服务的报价、SLA、物流、交接和结果接收；
-- Protocol 演进、独立 Reviewer Agent、并行/多 Agent 执行和复现评估；
+- 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
+- Aira 通过同一受治理契约生成改进建议、独立 Reviewer Agent、并行/多 Agent 执行和复现评估；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性

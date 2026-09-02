@@ -24,6 +24,12 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 Platform 会创建 Project 范围的可编辑 Suggested Knowledge，并保留不可变 Evidence 快照和版本关系；它不会宣布该候选已经成立或被组织采纳。进入 Project Knowledge 可继续修订，Knowledge Reviewer 评估证据后再使用独立的“审核并采纳”操作。待审核、已拒绝或非 Record/DataAsset 的 Evidence 不会出现在可选列表中。该确定性路径在 AI 关闭时仍可完整使用。
 
+## 用已校验 Evidence 改进 Protocol
+
+在“科研结果资产”中选择“提议改进 Protocol”。选择已固定到当前 Task 的 Protocol，说明科学依据和具体建议改动，并关联已校验的 Record 或 DataAsset Evidence。确认前先预览准确 Project、Protocol 基线版本和不可变 Evidence 快照。此时只创建建议，不会修改 Protocol。
+
+具备科研审批权且能更新该 Protocol 的人员必须先检查并采纳建议。审核后选择“创建新版本草稿”，在普通 Protocol Editor 中编辑复制的基线包。保存时选择高于当前 Protocol 的版本号并确认完整包。Platform 会在锁内重新检查已审核建议、Evidence 来源和基线版本。如果期间已发布另一版、建议已变化或已被应用，保存会中止，必须针对最新方法重新提议。成功保存会把建议标记为已应用，并关联到准确的 Protocol 新版本；既有版本和活动 Run 都不变。这条完整路径在 AI 关闭时也可用。
+
 ## 重试、复现或延续 Run
 
 当前 Run 和 Task 完成、失败或取消后，在 Task 页面选择“新建 Run”。已形成的科学结果必须先经人工审核，才能开启下一次 Run。可选择任意已结束的来源 Run，标记为重试、复现或延续研究，并说明这次执行预期产生的差异。确认前的预览会展示新 Run 序号、来源、保存位置和准确的 Research Environment 摘要。

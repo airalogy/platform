@@ -2,15 +2,13 @@ from importlib import import_module
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
-
 from app.main import app
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
     KnowledgeEvidenceLink,
+    ProtocolImprovementEvidence,
+    ProtocolImprovementProposal,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchClaimRevision,
@@ -21,9 +19,14 @@ from app.routers.research_assets import (
     DataAssetDraft,
     EvidenceDraft,
     KnowledgeSuggestionDraft,
+    ProtocolImprovementDraft,
     _knowledge_suggestion_command,
+    _protocol_improvement_command,
 )
 from app.services.research_runtime import canonical_digest
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -75,6 +78,26 @@ def test_suggested_knowledge_pins_validated_evidence_provenance():
     migration = import_module("migrations.versions.0020_knowledge_evidence_lineage")
     assert migration.down_revision == "0019_knowledge_protocol_lineage"
     assert migration.TABLE_NAMES == ("knowledge_evidence_links",)
+
+
+def test_protocol_improvements_pin_method_version_and_evidence():
+    proposal_ddl = compile_table(ProtocolImprovementProposal)
+    evidence_ddl = compile_table(ProtocolImprovementEvidence)
+
+    assert "base_protocol_version_id" in proposal_ddl
+    assert "applied_protocol_version_id" in proposal_ddl
+    assert "ix_protocol_improvement_task_state" in {
+        index.name for index in ProtocolImprovementProposal.__table__.indexes
+    }
+    assert "source_snapshot" in evidence_ddl
+    assert "uq_protocol_improvement_evidence" in evidence_ddl
+
+    migration = import_module("migrations.versions.0021_protocol_improvement_lineage")
+    assert migration.down_revision == "0020_knowledge_evidence_lineage"
+    assert migration.TABLE_NAMES == (
+        "protocol_improvement_proposals",
+        "protocol_improvement_evidence",
+    )
 
 
 def test_research_asset_migration_follows_research_log():
@@ -198,6 +221,48 @@ def test_knowledge_suggestion_preview_is_bound_to_evidence_review_state():
     )
 
 
+def test_protocol_improvement_preview_pins_protocol_and_evidence_state():
+    task_id = uuid4()
+    protocol_id = uuid4()
+    evidence = ResearchEvidence(
+        id=uuid4(),
+        task_id=task_id,
+        kind="measurement",
+        artifact_type="record",
+        artifact_id=str(uuid4()),
+        artifact_version="1",
+        summary="Replicate showed a narrower incubation window",
+        quality_state="validated",
+        validation_report={"replicates": 3},
+        created_by_user_id=uuid4(),
+        reviewed_by_user_id=uuid4(),
+    )
+    draft = ProtocolImprovementDraft(
+        task_id=task_id,
+        protocol_id=protocol_id,
+        title="Tighten incubation timing",
+        rationale="Validated Records show that timing variance changes the result.",
+        proposed_changes="Specify a 28-32 minute incubation window.",
+        evidence_ids=[evidence.id],
+    )
+    protocol_snapshot = {
+        "id": str(protocol_id),
+        "uid": "timing_assay",
+        "name": "Timing assay",
+        "base_protocol_version_id": str(uuid4()),
+        "base_protocol_version": "1.2.0",
+    }
+    validated_digest = canonical_digest(
+        _protocol_improvement_command(draft, protocol_snapshot, [evidence])
+    )
+
+    evidence.quality_state = "rejected"
+
+    assert validated_digest != canonical_digest(
+        _protocol_improvement_command(draft, protocol_snapshot, [evidence])
+    )
+
+
 def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     paths = app.openapi()["paths"]
 
@@ -209,3 +274,6 @@ def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     assert "/research-assets/claims/{claim_id}/review" in paths
     assert "/research-assets/knowledge-suggestions/preview" in paths
     assert "/research-assets/knowledge-suggestions" in paths
+    assert "/research-assets/protocol-improvements/preview" in paths
+    assert "/research-assets/protocol-improvements" in paths
+    assert "/research-assets/protocol-improvements/{proposal_id}/review" in paths

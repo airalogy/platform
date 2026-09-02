@@ -32,9 +32,15 @@ from app.models.lab import Lab
 from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolMetadata, ProtocolVersion
+from app.models.research import ResearchTask
+from app.models.research_asset import (
+    ProtocolImprovementProposal,
+    ProtocolImprovementState,
+)
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
+from app.services.research_runtime import emit_research_event, utcnow
 from app.services.schema_governance import (
     SchemaGovernanceError,
     build_compatibility_report,
@@ -131,6 +137,55 @@ async def _validated_knowledge_source(
     return item
 
 
+async def _validated_protocol_improvement(
+    db_session: DBSession,
+    project: Project,
+    protocol: Protocol,
+    proposal_id: UUID,
+    expected_revision: int,
+) -> ProtocolImprovementProposal:
+    proposal = await db_session.scalar(
+        select(ProtocolImprovementProposal)
+        .where(ProtocolImprovementProposal.id == proposal_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Protocol improvement not found")
+    task = await db_session.get(ResearchTask, proposal.task_id)
+    if task is None or task.project_id != project.id or task.lab_id != project.lab_id:
+        raise HTTPException(status_code=404, detail="Protocol improvement not found")
+    if proposal.protocol_id != protocol.id:
+        raise HTTPException(
+            status_code=422,
+            detail="Protocol improvement targets a different Protocol",
+        )
+    if proposal.revision != expected_revision:
+        raise HTTPException(
+            status_code=409,
+            detail="Protocol improvement changed; reload before saving",
+        )
+    if proposal.state != ProtocolImprovementState.REVIEWED.value:
+        raise HTTPException(
+            status_code=409,
+            detail="Protocol improvement must be reviewed before creating a version",
+        )
+    if proposal.applied_protocol_version_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Protocol improvement has already been applied",
+        )
+    if proposal.base_protocol_version != protocol.latest_version:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Protocol changed after this improvement was reviewed; "
+                "create a new proposal against the latest version"
+            ),
+        )
+    return proposal
+
+
 def _load_migration_manifests(
     protocol_path: str,
     *,
@@ -215,6 +270,8 @@ async def upload_package(
     protocol_id: UUID | None = Body(None, embed=True),
     source_knowledge_item_id: UUID | None = Body(None, embed=True),
     source_knowledge_revision: int | None = Body(None, embed=True),
+    source_protocol_improvement_id: UUID | None = Body(None, embed=True),
+    source_protocol_improvement_revision: int | None = Body(None, embed=True),
 ):
     project: Project = await Project.find(db_session, id=project_id)
     lab: Lab = await Lab.find(db_session, id=project.lab_id)
@@ -251,6 +308,25 @@ async def upload_package(
         raise HTTPException(
             status_code=422,
             detail="Knowledge provenance can only be attached when creating a Protocol",
+        )
+    if (source_protocol_improvement_id is None) != (
+        source_protocol_improvement_revision is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Protocol improvement id and revision must be provided together",
+        )
+    if (
+        source_protocol_improvement_revision is not None
+        and source_protocol_improvement_revision < 1
+    ):
+        raise HTTPException(
+            status_code=422, detail="Protocol improvement revision must be positive"
+        )
+    if protocol_id is None and source_protocol_improvement_id is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Protocol improvement can only create a new version of its Protocol",
         )
     if source_knowledge_item_id is not None and source_knowledge_revision is not None:
         await _validated_knowledge_source(
@@ -306,6 +382,7 @@ async def upload_package(
     compatibility_report = None
     migration_manifest: list[dict] | None = None
     source_knowledge = None
+    source_protocol_improvement = None
     if protocol is None:
         if (
             source_knowledge_item_id is not None
@@ -347,7 +424,9 @@ async def upload_package(
         if protocol.uid != meta_data.id:
             raise HTTPException(status_code=400, detail="Protocol id cannot be changed")
         if protocol.kind != meta_data.kind:
-            raise HTTPException(status_code=400, detail="Protocol kind cannot be changed")
+            raise HTTPException(
+                status_code=400, detail="Protocol kind cannot be changed"
+            )
         if not is_new_version(protocol.latest_version, meta_data.version):
             raise HTTPException(
                 status_code=400,
@@ -364,7 +443,20 @@ async def upload_package(
             ],
         )
         if previous_version is None:
-            raise HTTPException(status_code=400, detail="Current Protocol version not found")
+            raise HTTPException(
+                status_code=400, detail="Current Protocol version not found"
+            )
+        if (
+            source_protocol_improvement_id is not None
+            and source_protocol_improvement_revision is not None
+        ):
+            source_protocol_improvement = await _validated_protocol_improvement(
+                db_session,
+                project,
+                protocol,
+                source_protocol_improvement_id,
+                source_protocol_improvement_revision,
+            )
         try:
             compatibility_report = build_compatibility_report(
                 previous_version.json_schema,
@@ -432,6 +524,29 @@ async def upload_package(
             "scope_type": source_knowledge.scope_type,
             "relation_type": "derived_from",
         }
+    if source_protocol_improvement is not None:
+        source_protocol_improvement.state = ProtocolImprovementState.APPLIED.value
+        source_protocol_improvement.revision += 1
+        source_protocol_improvement.applied_protocol_version_id = protocol_version.id
+        source_protocol_improvement.applied_protocol_version = protocol_version.version
+        source_protocol_improvement.applied_by_user_id = current_user.id
+        source_protocol_improvement.applied_at = utcnow()
+        await emit_research_event(
+            db_session,
+            task_id=source_protocol_improvement.task_id,
+            kind="protocol_improvement.applied",
+            actor_user_id=current_user.id,
+            payload={
+                "proposal_id": str(source_protocol_improvement.id),
+                "protocol_id": str(protocol.id),
+                "base_protocol_version": source_protocol_improvement.base_protocol_version,
+                "applied_protocol_version": protocol_version.version,
+            },
+            idempotency_key=(
+                f"protocol-improvement:{source_protocol_improvement.id}:"
+                f"applied:{protocol_version.version}"
+            ),
+        )
 
     protocol_path = f"{protocol_dir}/{protocol_version.package_name}"
     if os.path.exists(protocol_path):

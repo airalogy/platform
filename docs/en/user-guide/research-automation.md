@@ -24,6 +24,12 @@ On a Research Task, register a Record or exact DataAsset version as Evidence and
 
 Platform creates editable Project-scoped Suggested Knowledge and preserves immutable Evidence snapshots and version links. It does not declare the candidate true or adopted. Open Project Knowledge to revise it and use the separate **Review and adopt** action when a Knowledge Reviewer has assessed the evidence. Pending, rejected, or non-Record/DataAsset Evidence is intentionally unavailable. This deterministic path works when AI is disabled.
 
+## Improve a Protocol from validated Evidence
+
+In **Scientific assets**, choose **Propose Protocol improvement**. Select a Protocol already pinned to the Task, describe the scientific rationale and concrete proposed changes, and attach validated Record or DataAsset Evidence. Preview the exact Project, base Protocol version, and immutable Evidence snapshots before confirming. This creates a proposal only; it does not edit the Protocol.
+
+An authorized research approver who can update the Protocol must inspect and accept the proposal. Choose **Create version draft** only after that review, then edit the copied package in the normal Protocol Editor. When saving, choose a version higher than the current Protocol and confirm the package. Platform rechecks the reviewed proposal, Evidence lineage, and base version under lock. If another version was published in the meantime, or the proposal changed or was already applied, saving stops and the proposal must be recreated against the latest method. A successful save marks the proposal Applied and links it to the exact new Protocol version. Existing versions and active Runs remain unchanged. This complete path also works with AI disabled.
+
 ## Repeat, replicate, or continue a Run
 
 After the current Run and Task are completed, failed, or cancelled, choose **New Run** on the Task page. A completed scientific result must receive its human review before another Run is opened. Select any terminal source Run, classify the relationship as retry, replication, or continuation, and explain the intended difference. The preview shows the new Run number, source, destination, and exact Research Environment digest before confirmation.

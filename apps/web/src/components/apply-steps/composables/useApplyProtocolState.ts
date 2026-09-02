@@ -64,7 +64,10 @@ export interface ApplyProtocolState {
   isStepValid: ComputedRef<Record<ApplyStep, boolean>>
   applyProtocol: (
     payload?: FormModel | UploadModel,
-    source?: { itemId: string, revision: number },
+    provenance?: {
+      knowledge?: { itemId: string, revision: number }
+      protocolImprovement?: { proposalId: string, revision: number }
+    },
   ) => Promise<ProtocolModels.ProtocolResponseInfo | undefined>
   applyResult: Ref<ProtocolModels.ProtocolResponseInfo | null>
   mode: "fork" | "reuse"
@@ -245,7 +248,10 @@ const [useProvideApplyProtocol, _useApplyProtocol] = createInjectionState(
 
     async function applyProtocol(
       payload?: FormModel | UploadModel,
-      source?: { itemId: string, revision: number },
+      provenance?: {
+        knowledge?: { itemId: string, revision: number }
+        protocolImprovement?: { proposalId: string, revision: number }
+      },
     ) {
       const finalModel = payload || (selectedOption.value === "existing" ? model.value : uploadModel.value)
       const projectInfoVal = projectInfo.value || protocolInfo.value?.project
@@ -375,8 +381,10 @@ const [useProvideApplyProtocol, _useApplyProtocol] = createInjectionState(
         projectId: targetProjectUUID,
         protocolId: protocolInfo.value?.id,
         env: envVar,
-        sourceKnowledgeItemId: source?.itemId,
-        sourceKnowledgeRevision: source?.revision,
+        sourceKnowledgeItemId: provenance?.knowledge?.itemId,
+        sourceKnowledgeRevision: provenance?.knowledge?.revision,
+        sourceProtocolImprovementId: provenance?.protocolImprovement?.proposalId,
+        sourceProtocolImprovementRevision: provenance?.protocolImprovement?.revision,
       })
 
       if (response?.data) {
