@@ -40,6 +40,11 @@ def test_role_catalog_exposes_stable_capability_sets():
     assert catalog["project_manager"]["grantable"] is True
     assert "record.read" in catalog["viewer"]["capabilities"]
     assert "record.create" not in catalog["viewer"]["capabilities"]
+    assert "research.read" in catalog["viewer"]["capabilities"]
+    assert "research.create" not in catalog["viewer"]["capabilities"]
+    assert "research.run" in catalog["recorder"]["capabilities"]
+    assert "research.assign" in catalog["protocol_editor"]["capabilities"]
+    assert "research.approve" in catalog["project_manager"]["capabilities"]
 
 
 def test_openapi_exposes_only_canonical_organizational_unit_contract():

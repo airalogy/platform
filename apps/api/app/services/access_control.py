@@ -43,6 +43,11 @@ ALL_CAPABILITIES = frozenset(
         "inventory.operate",
         "equipment.book",
         "equipment.service",
+        "research.read",
+        "research.create",
+        "research.run",
+        "research.assign",
+        "research.approve",
     }
 )
 
@@ -62,6 +67,10 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "record.delete",
             "record.read",
             "role.assign.other",
+            "research.read",
+            "research.create",
+            "research.run",
+            "research.assign",
         }
     ),
     "contributor": frozenset(
@@ -71,12 +80,23 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "assigner.execute",
             "record.create",
             "record.read",
+            "research.read",
+            "research.create",
+            "research.run",
         }
     ),
     "recorder": frozenset(
-        {"protocol.create", "protocol.read", "assigner.execute", "record.create", "record.read"}
+        {
+            "protocol.create",
+            "protocol.read",
+            "assigner.execute",
+            "record.create",
+            "record.read",
+            "research.read",
+            "research.run",
+        }
     ),
-    "viewer": frozenset({"protocol.read", "record.read"}),
+    "viewer": frozenset({"protocol.read", "record.read", "research.read"}),
     "resource_manager": frozenset(
         {
             "resource.read",
@@ -180,6 +200,11 @@ ACTION_CAPABILITY = {
     "operate_inventory": "inventory.operate",
     "book_equipment": "equipment.book",
     "service_equipment": "equipment.service",
+    "read_research": "research.read",
+    "create_research": "research.create",
+    "run_research": "research.run",
+    "assign_research": "research.assign",
+    "approve_research": "research.approve",
 }
 
 

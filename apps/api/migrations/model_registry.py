@@ -23,6 +23,7 @@ MODEL_MODULES = [
     "app.models.question",
     "app.models.record",
     "app.models.record_export",
+    "app.models.research",
     "app.models.resource",
     "app.models.star",
     "app.models.upvote",
