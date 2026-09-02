@@ -12,6 +12,12 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。只有新建计划或 Run 后，新版本才应进入执行。
 
+## 重试、复现或延续 Run
+
+当前 Run 和 Task 完成、失败或取消后，在 Task 页面选择“新建 Run”。已形成的科学结果必须先经人工审核，才能开启下一次 Run。可选择任意已结束的来源 Run，标记为重试、复现或延续研究，并说明这次执行预期产生的差异。确认前的预览会展示新 Run 序号、来源、保存位置和准确的 Research Environment 摘要。
+
+新 Run 会保留之前每次执行和科研资产，并精确继承来源环境。它不会自动采用之后更新的 Protocol、Knowledge、Tool、执行策略或资源定义。Task 会回到草稿状态，由用户明确启动下一次执行；原截止时间和共享预算账本继续生效。Run 来源链会保留每次结果和人工审核结论，便于对比。
+
 ## 选择正确的 Action
 
 - **Protocol 工作**：把锁定版本的方法指派给人员。执行人使用正常 Record 表单完成实验，校验通过的 Record 会回传为 Evidence，而不是普通对话消息。

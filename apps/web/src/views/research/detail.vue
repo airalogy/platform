@@ -69,6 +69,13 @@
             <n-button v-if="canReview" type="primary" :loading="mutating" @click="openReviewModal">
               {{ $t("page.research.reviewResult") }}
             </n-button>
+            <create-research-run-modal
+              v-if="canCreateRun"
+              :task-id="task.id"
+              :task-revision="task.revision"
+              :runs="task.runs"
+              @created="() => loadTask(true)"
+            />
             <n-button v-if="canCancel" type="error" tertiary :loading="mutating" @click="cancelTask">
               {{ $t("page.research.cancelTask") }}
             </n-button>
@@ -120,6 +127,54 @@
                   <span class="aira-type-meta">{{ $t("page.research.airaStage") }}</span>
                   <strong class="aira-type-label break-words">{{ airaStage }}</strong>
                 </div>
+              </div>
+            </section>
+
+            <section v-if="task.runs.length > 1" class="research-panel">
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.runHistory") }}
+              </div>
+              <h2 class="aira-type-section-title mb-0 mt-1">
+                {{ $t("page.research.runComparison") }}
+              </h2>
+              <div class="mt-4 space-y-3">
+                <article v-for="run in task.runs" :key="run.id" class="research-run-card">
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <strong class="aira-type-label">
+                          {{ $t("page.research.runNumber", { number: run.run_number }) }}
+                        </strong>
+                        <n-tag size="small" round>
+                          {{ runKindLabel(run) }}
+                        </n-tag>
+                        <n-tag :type="runStatusType(run.status)" size="small" round>
+                          {{ runStatusLabel(run.status) }}
+                        </n-tag>
+                      </div>
+                      <p v-if="runOrigin(run)" class="aira-type-meta mb-0 mt-2">
+                        {{ $t("page.research.inheritedFromRun", { number: runOrigin(run)?.source_run_number }) }}
+                        <template v-if="runOrigin(run)?.purpose">
+                          · {{ runOrigin(run)?.purpose }}
+                        </template>
+                      </p>
+                      <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
+                        {{ runConclusion(run) || $t("page.research.noRunConclusion") }}
+                      </p>
+                      <div class="mt-3 flex flex-wrap gap-2">
+                        <n-tag v-if="run.result_package.goal_assessment" size="small" type="info">
+                          {{ outcomeLabel(run.result_package.goal_assessment) }}
+                        </n-tag>
+                        <n-tag v-if="run.result_package.scientific_outcome" size="small" type="success">
+                          {{ scientificOutcomeLabel(run.result_package.scientific_outcome) }}
+                        </n-tag>
+                      </div>
+                    </div>
+                    <time class="aira-type-meta shrink-0" :datetime="run.created_at">
+                      {{ formatDateTime(run.created_at) }}
+                    </time>
+                  </div>
+                </article>
               </div>
             </section>
 
@@ -592,6 +647,8 @@ import type {
   ResearchActionStatus,
   ResearchEnvironmentExecutorBinding,
   ResearchProtocolRef,
+  ResearchRun,
+  ResearchRunOrigin,
   ResearchRunStatus,
   ResearchTaskDetail,
   ResearchTaskStatus,
@@ -615,6 +672,7 @@ import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { useRoute, useRouter } from "vue-router"
+import CreateResearchRunModal from "./components/create-research-run-modal.vue"
 import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
@@ -674,6 +732,12 @@ const canReview = computed(() => Boolean(
   && task.value.open_work_items === 0
   && task.value.pending_approvals === 0
   && ["review_required", "active", "paused", "failed"].includes(task.value.status),
+))
+const canCreateRun = computed(() => Boolean(
+  task.value?.permissions.can_run
+  && latestRun.value
+  && ["completed", "failed", "cancelled"].includes(task.value.status)
+  && ["completed", "failed", "cancelled"].includes(latestRun.value.status),
 ))
 const canManageBudget = computed(() => Boolean(
   task.value?.permissions.can_approve,
@@ -988,6 +1052,24 @@ function runStatusLabel(status: ResearchRunStatus) {
   return $t(`page.research.runStatus.${status}` as I18n.I18nKey)
 }
 
+function runOrigin(run: ResearchRun): ResearchRunOrigin | null {
+  const origin = run.environment_snapshot?.run_origin
+  if (!origin || typeof origin !== "object" || Array.isArray(origin))
+    return null
+  return origin as unknown as ResearchRunOrigin
+}
+
+function runKindLabel(run: ResearchRun) {
+  const kind = runOrigin(run)?.kind || "initial"
+  return $t(`page.research.runKinds.${kind}` as I18n.I18nKey)
+}
+
+function runConclusion(run: ResearchRun) {
+  return run.result_package.reviewed_conclusion
+    || run.result_package.narrative_conclusion
+    || ""
+}
+
 function actionStatusLabel(status: ResearchActionStatus) {
   return $t(`page.research.actionStatus.${status}` as I18n.I18nKey)
 }
@@ -1017,6 +1099,7 @@ function scientificOutcomeLabel(value: string) {
 function eventLabel(kind: string) {
   const known = [
     "task.created",
+    "run.created",
     "run.started",
     "run.paused",
     "run.resumed",
@@ -1111,6 +1194,7 @@ onUnmounted(() => {
 }
 
 .research-action-card,
+.research-run-card,
 .research-preview {
   border: 1px solid rgb(219 234 254);
   border-radius: 0.75rem;

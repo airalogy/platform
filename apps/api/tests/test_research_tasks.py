@@ -5,6 +5,7 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
@@ -19,7 +20,12 @@ from app.models.research import (
     ResearchTaskResourceRequirement,
     ResearchTaskStatus,
 )
-from app.routers.research_tasks import ResearchTaskDraft
+from app.routers.research_tasks import (
+    ResearchRunDraft,
+    ResearchTaskDraft,
+    _new_run_command,
+    _validate_new_run,
+)
 from app.services import resource_job_worker
 from app.services.research_runtime import (
     EXPECTED_AIRA_STEPS,
@@ -121,6 +127,85 @@ def test_research_task_draft_rejects_missing_criteria_and_duplicate_protocols():
     knowledge_id = uuid4()
     with pytest.raises(ValidationError):
         ResearchTaskDraft(**{**payload, "knowledge_ids": [knowledge_id, knowledge_id]})
+
+
+def test_new_research_run_command_pins_source_lineage_and_environment():
+    task_id = uuid4()
+    source_run_id = uuid4()
+    task = SimpleNamespace(id=task_id, revision=7)
+    source_run = SimpleNamespace(
+        id=source_run_id,
+        run_number=2,
+        environment_snapshot={"schema": "airalogy.research-environment.v2", "tools": []},
+        result_package={"scientific_outcome": "supports_hypothesis"},
+    )
+    params = ResearchRunDraft(
+        expected_task_revision=7,
+        source_run_id=source_run_id,
+        kind="replication",
+        purpose="  Reproduce the result with a second operator  ",
+        idempotency_key="  repeat-run-0001  ",
+    )
+
+    command = _new_run_command(
+        task=task,
+        source_run=source_run,
+        next_run_number=3,
+        params=params,
+    )
+
+    assert command == {
+        "task_id": str(task_id),
+        "task_revision": 7,
+        "source_run_id": str(source_run_id),
+        "source_run_number": 2,
+        "source_environment_digest": canonical_digest(source_run.environment_snapshot),
+        "source_result_digest": canonical_digest(source_run.result_package),
+        "next_run_number": 3,
+        "kind": "replication",
+        "purpose": "Reproduce the result with a second operator",
+        "idempotency_key": "repeat-run-0001",
+    }
+    assert len(canonical_digest(command)) == 64
+
+
+def test_research_run_draft_rejects_blank_purpose_and_short_idempotency_key():
+    payload = {
+        "expected_task_revision": 2,
+        "source_run_id": uuid4(),
+        "kind": "retry",
+        "purpose": "Retry failed execution",
+        "idempotency_key": "retry-run-0001",
+    }
+
+    with pytest.raises(ValidationError):
+        ResearchRunDraft(**{**payload, "purpose": "  "})
+    with pytest.raises(ValidationError):
+        ResearchRunDraft(**{**payload, "idempotency_key": " short "})
+
+
+def test_new_research_run_requires_a_terminal_task_before_database_changes():
+    params = ResearchRunDraft(
+        expected_task_revision=4,
+        source_run_id=uuid4(),
+        kind="continuation",
+        purpose="Continue after reviewing the first phase",
+        idempotency_key="continuation-0001",
+    )
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            _validate_new_run(
+                SimpleNamespace(),
+                task=SimpleNamespace(
+                    id=uuid4(), revision=4, status=ResearchTaskStatus.ACTIVE.value
+                ),
+                params=params,
+            )
+        )
+
+    assert getattr(error.value, "status_code", None) == 409
+    assert "current Research Task" in str(getattr(error.value, "detail", ""))
 
 
 def test_research_environment_knowledge_is_revision_pinned():
@@ -412,6 +497,8 @@ def test_openapi_exposes_research_task_and_human_work_contracts():
     assert "/research-capabilities" in paths
     assert "/research-tasks" in paths
     assert "/research-tasks/{task_id}" in paths
+    assert "/research-tasks/{task_id}/runs/preview" in paths
+    assert "/research-tasks/{task_id}/runs" in paths
     assert "/research-tasks/{task_id}/start" in paths
     assert "/research-tasks/{task_id}/actions/preview" in paths
     assert "/research-work-items" in paths

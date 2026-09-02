@@ -163,6 +163,16 @@ export interface ResearchRun {
   updated_at: string
 }
 
+export interface ResearchRunOrigin {
+  kind: "retry" | "replication" | "continuation"
+  purpose: string
+  source_run_id: string
+  source_run_number: number
+  source_environment_digest: string
+  source_result_digest: string
+  created_at: string
+}
+
 export interface ResearchResultPackage {
   schema?: string
   goal?: string
@@ -422,6 +432,33 @@ export interface ResearchTaskPreview {
   ai_path_available: boolean
 }
 
+export interface ResearchRunDraft {
+  expected_task_revision: number
+  source_run_id: string
+  kind: ResearchRunOrigin["kind"]
+  purpose: string
+  idempotency_key: string
+}
+
+export interface ResearchRunPreview {
+  preview_digest: string
+  command: Record<string, unknown>
+  destination: {
+    lab: ResearchScope
+    project: ResearchScope
+    task: { id: string, title: string }
+  }
+  source_run: {
+    id: string
+    run_number: number
+    status: ResearchRunStatus
+    environment_digest: string
+    result_digest: string
+  }
+  new_run: { run_number: number, kind: ResearchRunOrigin["kind"] }
+  effects: string[]
+}
+
 export interface ManualProtocolActionDraft {
   protocol_id: string
   assignee_user_id?: string
@@ -489,6 +526,25 @@ export function fetchResearchTask(taskId: string) {
   return getData<ResearchTaskDetail>({
     url: `/research-tasks/${taskId}`,
     metadata: { showError: false },
+  })
+}
+
+export function previewResearchRun(taskId: string, payload: ResearchRunDraft) {
+  return getData<ResearchRunPreview>({
+    url: `/research-tasks/${taskId}/runs/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createResearchRun(
+  taskId: string,
+  payload: ResearchRunDraft & { preview_digest: string },
+) {
+  return getData<ResearchTaskDetail>({
+    url: `/research-tasks/${taskId}/runs`,
+    method: "POST",
+    data: payload,
   })
 }
 

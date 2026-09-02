@@ -1067,6 +1067,32 @@ declare namespace I18n {
         runNotice: string
         currentRun: string
         runNumber: string
+        newRun: string
+        createRunTitle: string
+        runInheritanceHint: string
+        sourceRun: string
+        runKind: string
+        runPurpose: string
+        runPurposePlaceholder: string
+        runPreviewWarning: string
+        environmentDigest: string
+        runEffectCreate: string
+        runEffectInherit: string
+        runEffectPreserve: string
+        runEffectReopen: string
+        previewRun: string
+        confirmRun: string
+        runCreated: string
+        runHistory: string
+        runComparison: string
+        inheritedFromRun: string
+        noRunConclusion: string
+        runKinds: {
+          initial: string
+          retry: string
+          replication: string
+          continuation: string
+        }
         planVersion: string
         openWork: string
         pendingApprovals: string
@@ -1272,6 +1298,7 @@ declare namespace I18n {
         }
         event: {
           task_created: string
+          run_created: string
           run_started: string
           run_paused: string
           run_resumed: string

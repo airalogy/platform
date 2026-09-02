@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
@@ -83,6 +84,7 @@ from app.services.research_resources import (
 )
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
+    TERMINAL_RUN_STATUSES,
     activate_protocol_action,
     activate_tool_action,
     activate_wait_event_action,
@@ -172,6 +174,30 @@ class TaskTransitionParams(BaseModel):
 
     expected_revision: int = Field(ge=1)
     reason: str = Field(default="", max_length=4_000)
+
+
+class ResearchRunDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_task_revision: int = Field(ge=1)
+    source_run_id: UUID
+    kind: Literal["retry", "replication", "continuation"]
+    purpose: str = Field(min_length=1, max_length=4_000)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.purpose = self.purpose.strip()
+        self.idempotency_key = self.idempotency_key.strip()
+        if not self.purpose:
+            raise ValueError("Research Run purpose cannot be empty")
+        if len(self.idempotency_key) < 8:
+            raise ValueError("Research Run idempotency key is too short")
+        return self
+
+
+class ResearchRunCreate(ResearchRunDraft):
+    preview_digest: str = Field(min_length=64, max_length=64)
 
 
 class TaskCompleteParams(TaskTransitionParams):
@@ -264,6 +290,91 @@ async def _latest_run(db_session: DBSession, task_id: UUID) -> ResearchRun | Non
             .limit(1)
         )
     ).first()
+
+
+def _new_run_command(
+    *,
+    task: ResearchTask,
+    source_run: ResearchRun,
+    next_run_number: int,
+    params: ResearchRunDraft,
+) -> dict[str, Any]:
+    return {
+        "task_id": str(task.id),
+        "task_revision": task.revision,
+        "source_run_id": str(source_run.id),
+        "source_run_number": source_run.run_number,
+        "source_environment_digest": canonical_digest(
+            source_run.environment_snapshot or {}
+        ),
+        "source_result_digest": canonical_digest(source_run.result_package or {}),
+        "next_run_number": next_run_number,
+        "kind": params.kind,
+        "purpose": params.purpose,
+        "idempotency_key": params.idempotency_key,
+    }
+
+
+async def _validate_new_run(
+    db_session: DBSession,
+    *,
+    task: ResearchTask,
+    params: ResearchRunDraft,
+) -> tuple[ResearchRun, int, dict[str, Any]]:
+    if task.revision != params.expected_task_revision:
+        raise HTTPException(status_code=409, detail="Research Task has changed")
+    if task.status not in {
+        ResearchTaskStatus.COMPLETED.value,
+        ResearchTaskStatus.FAILED.value,
+        ResearchTaskStatus.CANCELLED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Complete, fail, or cancel the current Research Task first",
+        )
+    source_run = await db_session.get(ResearchRun, params.source_run_id)
+    if source_run is None or source_run.task_id != task.id:
+        raise HTTPException(status_code=404, detail="Source Research Run not found")
+    if source_run.status not in TERMINAL_RUN_STATUSES:
+        raise HTTPException(
+            status_code=409, detail="Source Research Run must be terminal"
+        )
+    nonterminal_run = (
+        await db_session.scalars(
+            select(ResearchRun)
+            .where(
+                ResearchRun.task_id == task.id,
+                ResearchRun.status.not_in(TERMINAL_RUN_STATUSES),
+            )
+            .limit(1)
+        )
+    ).first()
+    if nonterminal_run is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Complete, cancel, or resume the current Research Run first",
+        )
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
+        )
+    next_run_number = (
+        await db_session.scalar(
+            select(func.max(ResearchRun.run_number)).where(
+                ResearchRun.task_id == task.id
+            )
+        )
+        or 0
+    ) + 1
+    command = _new_run_command(
+        task=task,
+        source_run=source_run,
+        next_run_number=next_run_number,
+        params=params,
+    )
+    return source_run, next_run_number, command
 
 
 async def _validate_task_draft(
@@ -1163,6 +1274,166 @@ async def get_research_task(
     db_session: DBSession,
 ):
     task, project, lab = await _task_context(db_session, current_user, task_id)
+    return await _task_detail(db_session, task, project, lab, current_user)
+
+
+@router.post("/{task_id}/runs/preview")
+async def preview_research_run(
+    task_id: UUID,
+    params: ResearchRunDraft,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    task, project, lab = await _task_context(
+        db_session, current_user, task_id, "research.run"
+    )
+    source_run, next_run_number, command = await _validate_new_run(
+        db_session, task=task, params=params
+    )
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "destination": {
+            "lab": {"id": str(lab.id), "uid": lab.uid, "name": lab.name},
+            "project": {
+                "id": str(project.id),
+                "uid": project.uid,
+                "name": project.name,
+            },
+            "task": {"id": str(task.id), "title": task.title},
+        },
+        "source_run": {
+            "id": str(source_run.id),
+            "run_number": source_run.run_number,
+            "status": source_run.status,
+            "environment_digest": command["source_environment_digest"],
+            "result_digest": command["source_result_digest"],
+        },
+        "new_run": {"run_number": next_run_number, "kind": params.kind},
+        "effects": [
+            "Create a new draft Research Run under the same Research Task",
+            "Inherit the exact source Research Environment without changing versions",
+            "Preserve every prior Run, Action, Record, Evidence, and Result Package",
+            "Reopen the Task for an explicit new execution and human review",
+        ],
+    }
+
+
+@router.post("/{task_id}/runs")
+async def create_research_run(
+    task_id: UUID,
+    params: ResearchRunCreate,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    task, project, lab = await _task_context(
+        db_session, current_user, task_id, "research.run"
+    )
+    task = (
+        await db_session.scalars(
+            select(ResearchTask)
+            .where(ResearchTask.id == task.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).first()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Research Task not found")
+    event_key = f"research-run:{task.id}:{params.idempotency_key}"
+    existing_event = await ResearchEvent.find_by(
+        db_session, [ResearchEvent.idempotency_key == event_key]
+    )
+    if existing_event is not None:
+        if (
+            existing_event.kind != "run.created"
+            or existing_event.payload.get("preview_digest") != params.preview_digest
+            or existing_event.run_id is None
+        ):
+            raise HTTPException(
+                status_code=409, detail="Research Run idempotency key is already in use"
+            )
+        return await _task_detail(db_session, task, project, lab, current_user)
+
+    source_run, next_run_number, command = await _validate_new_run(
+        db_session, task=task, params=params
+    )
+    preview_digest = canonical_digest(command)
+    if preview_digest != params.preview_digest:
+        raise HTTPException(status_code=409, detail="Research Run preview has changed")
+    released_resource_ids = await release_research_run_reservations(
+        db_session,
+        run_id=source_run.id,
+        actor_user_id=current_user.id,
+        reason=f"Preparing Research Run {next_run_number}",
+    )
+    origin = {
+        "kind": params.kind,
+        "purpose": params.purpose,
+        "source_run_id": str(source_run.id),
+        "source_run_number": source_run.run_number,
+        "source_environment_digest": command["source_environment_digest"],
+        "source_result_digest": command["source_result_digest"],
+        "created_at": utcnow().isoformat(),
+    }
+    environment_snapshot = deepcopy(source_run.environment_snapshot or {})
+    environment_snapshot["run_origin"] = origin
+    run = ResearchRun(
+        task_id=task.id,
+        run_number=next_run_number,
+        status=ResearchRunStatus.DRAFT.value,
+        environment_snapshot=environment_snapshot,
+        aira_state=initial_aira_state(task.goal),
+        requested_by_user_id=current_user.id,
+    )
+    db_session.add(run)
+    await db_session.flush()
+    rows = await task_protocol_rows(db_session, task.id)
+    await create_plan_version(
+        db_session,
+        task=task,
+        run=run,
+        kind=params.kind,
+        plan={
+            "workflow": workflow_info_for_task(
+                task,
+                project,
+                lab,
+                rows,
+                knowledge_context=list(environment_snapshot.get("knowledge") or []),
+            ),
+            "success_criteria": task.success_criteria,
+            "stop_conditions": task.stop_conditions,
+            "run_origin": origin,
+        },
+        summary=f"{params.kind.replace('_', ' ').title()}: {params.purpose}",
+    )
+    task.status = ResearchTaskStatus.DRAFT.value
+    task.outcome = None
+    task.scientific_outcome = None
+    task.conclusion = ""
+    task.result_package = {}
+    task.completed_at = None
+    task.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="run.created",
+        actor_user_id=current_user.id,
+        payload={
+            "preview_digest": preview_digest,
+            "kind": params.kind,
+            "purpose": params.purpose,
+            "source_run_id": str(source_run.id),
+            "source_run_number": source_run.run_number,
+            "run_number": run.run_number,
+            "released_resource_reservation_ids": [
+                str(item) for item in released_resource_ids
+            ],
+        },
+        idempotency_key=event_key,
+    )
+    await db_session.commit()
     return await _task_detail(db_session, task, project, lab, current_user)
 
 

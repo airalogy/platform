@@ -218,6 +218,7 @@ declare module 'vue' {
     IconTablerPinned: typeof import('~icons/tabler/pinned')['default']
     IconTablerRefresh: typeof import('~icons/tabler/refresh')['default']
     IconTablerReload: typeof import('~icons/tabler/reload')['default']
+    IconTablerRepeat: typeof import('~icons/tabler/repeat')['default']
     IconTablerScan: typeof import('~icons/tabler/scan')['default']
     IconTablerSearch: typeof import('~icons/tabler/search')['default']
     IconTablerSettings: typeof import('~icons/tabler/settings')['default']

@@ -12,6 +12,12 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 
 Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new plan or Run when the new version should apply.
 
+## Repeat, replicate, or continue a Run
+
+After the current Run and Task are completed, failed, or cancelled, choose **New Run** on the Task page. A completed scientific result must receive its human review before another Run is opened. Select any terminal source Run, classify the relationship as retry, replication, or continuation, and explain the intended difference. The preview shows the new Run number, source, destination, and exact Research Environment digest before confirmation.
+
+The new Run preserves every earlier execution and scientific asset and inherits the source environment exactly. It does not automatically adopt later Protocol, Knowledge, Tool, executor-policy, or resource-definition changes. The Task returns to Draft so the next execution starts explicitly, while its original deadline and shared budget ledger still apply. The Run lineage panel keeps each result and human-reviewed conclusion available for comparison.
+
 ## Choose the correct Action
 
 - **Protocol work** assigns a version-pinned method to a person. The person completes the normal Record form; a validated Record returns as Evidence without becoming a generic chat message.

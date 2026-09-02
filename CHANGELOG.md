@@ -43,6 +43,7 @@ Target initial version: `0.1.0`.
 - Added Research resource requirements and governed Resource Reservation Actions: Tasks pin Lab resource-type revisions, users preview-confirm exact inventory quantities or equipment windows, Platform reuses the existing permissioned inventory and booking ledgers, stale availability and conflicts fail closed, pending equipment approval can be synchronized, releases are audited, and terminal Tasks return outstanding commitments automatically.
 - Added resource-aware Aira planning: the model may request only a pinned resource type and exact quantity or equipment window, while Platform deterministically selects an authorized concrete candidate, always requires approval, revalidates availability under lock, and then writes through the authoritative inventory or booking ledger.
 - Added hard Research Task operating limits with optional deadlines and currency-bound budget ceilings, an immutable reserve/release/expense/credit ledger, digest-bound preview-confirm writes, API-side execution gates, immediate pausing when a budget entry exhausts the ceiling, and safe pausing at the next runtime boundary after any limit is reached.
+- Added traceable subsequent Research Runs for retries, replications, and continuations: users preview-confirm a terminal source Run, Platform inherits its exact environment and records source/result digests, prior execution evidence stays immutable, Task-level limits remain active, and the workbench compares every Run and reviewed outcome.
 
 ### Changed
 

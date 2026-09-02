@@ -34,7 +34,9 @@ AI 是智能编排层，不是系统记录或权限系统。Platform 仍是所�
 
 ### Research Run
 
-`Research Run` 是一次可恢复的执行，对应一个计划分支、复现或重试。它固定当次 `Research Environment` 快照、Protocol 版本和每次计划修订，通过持久事件恢复，不依赖浏览器会话或一次性 AI 请求。
+`Research Run` 是一次可恢复的执行，对应一个计划分支、复现、重试或延续研究。它固定当次 `Research Environment` 快照、Protocol 版本和每次计划修订，通过持久事件恢复，不依赖浏览器会话或一次性 AI 请求。
+
+一次 Run 进入终态后，获授权用户可先预览，再以它为来源创建新 Run。Platform 会精确复制来源 Run 的 Research Environment，在 `run_origin` 中记录来源 Run、环境摘要和结果摘要，开启新的计划来源链，同时不改写任何既有 Action 或科研资产。因此重试和复现不会静默采用更新的 Protocol、Knowledge、Tool、执行策略或资源定义版本。当前运行时一个 Task 同时只允许一条非终态 Run，Task 级截止时间和预算账本会继续约束每次 Run。
 
 ### Research Action
 

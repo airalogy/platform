@@ -28,7 +28,9 @@ A `Research Task` is the top-level user-facing object for a bounded research obj
 
 ### Research Run
 
-A `Research Run` is one recoverable execution, branch, replication, or retry. It pins a Research Environment snapshot, Protocol versions, and every plan revision. It resumes from durable events and never depends on one browser session or a single AI request.
+A `Research Run` is one recoverable execution, branch, replication, retry, or continuation. It pins a Research Environment snapshot, Protocol versions, and every plan revision. It resumes from durable events and never depends on one browser session or a single AI request.
+
+After a Run reaches a terminal state, an authorized user can preview and create another Run from it. Platform clones the source Run's exact Research Environment, records the source Run plus environment and result digests in `run_origin`, starts a new plan lineage, and leaves all previous Actions and scientific assets unchanged. This makes retry and replication reproducible rather than silently adopting newer Protocol, Knowledge, Tool, executor-policy, or resource-definition versions. A Task may have only one non-terminal Run at a time in the current runtime; Task-level deadline and budget ledgers continue to govern every Run.
 
 ### Research Action
 
