@@ -18,6 +18,12 @@ Open **Knowledge**, switch to **Knowledge Notes**, and choose **Generate Protoco
 
 The Protocol does not exist until that final confirmation. At save time, Platform checks that you can still read the Knowledge, can create Protocols in the Project, and are still using the same revision. A changed, archived, superseded, cross-scope, or inaccessible source is rejected instead of silently producing an untraceable asset. The accepted Protocol version retains immutable Knowledge provenance. When AI is disabled, the entry is hidden while template, reuse, import, and manual Protocol creation remain available.
 
+## Turn validated results into candidate Knowledge
+
+On a Research Task, register a Record or exact DataAsset version as Evidence and have an authorized reviewer validate it. In **Scientific assets**, choose **Propose Knowledge**, write the reusable finding, method, decision, or note, and select one or more validated Evidence items. Preview the Project destination and exact source set, then confirm.
+
+Platform creates editable Project-scoped Suggested Knowledge and preserves immutable Evidence snapshots and version links. It does not declare the candidate true or adopted. Open Project Knowledge to revise it and use the separate **Review and adopt** action when a Knowledge Reviewer has assessed the evidence. Pending, rejected, or non-Record/DataAsset Evidence is intentionally unavailable. This deterministic path works when AI is disabled.
+
 ## Repeat, replicate, or continue a Run
 
 After the current Run and Task are completed, failed, or cancelled, choose **New Run** on the Task page. A completed scientific result must receive its human review before another Run is opened. Select any terminal source Run, classify the relationship as retry, replication, or continuation, and explain the intended difference. The preview shows the new Run number, source, destination, and exact Research Environment digest before confirmation.

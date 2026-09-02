@@ -130,6 +130,8 @@ The final `Research Result Package` contains the summary, goal status, Claims an
 
 Knowledge-to-method flow is explicit and versioned. An authorized user previews the exact Knowledge revision and destination Project before opening Aira's Protocol generator. The Knowledge body is fetched through its normal access control rather than placed in a URL. Saving the resulting Protocol rechecks source visibility, scope, target-Project write permission, and revision freshness, then atomically records an immutable `Knowledge revision → Protocol version` link and source snapshot. Personal Knowledge may target an accessible Project; Lab and Project Knowledge stay within their own Lab or Project. Archived, superseded, stale, or inaccessible sources fail closed. A Protocol response shows a source only when the reader can still read both assets, so provenance cannot reveal Restricted Knowledge.
 
+The reverse flow is evidence-gated. A Project member with Knowledge write access may select only validated Evidence backed by an exact Record or DataAsset version, preview the destination and source set, and create editable Project-scoped Suggested Knowledge. Confirmation locks and revalidates every Evidence row, binds the preview digest to its review state and immutable source version, and stores a source snapshot plus an exact `Evidence → Knowledge revision` link. The result is still a candidate: it becomes reviewed organizational Knowledge only through the separate Knowledge review capability. Pending or rejected Evidence, external links, papers, and existing Knowledge cannot enter through this path, and AI availability is not required.
+
 Three connected loops stay distinct:
 
 1. Research execution: Protocol/Action → Record/Evidence → phased state → next Action.

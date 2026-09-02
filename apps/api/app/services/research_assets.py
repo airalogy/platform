@@ -9,9 +9,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.knowledge import KnowledgeItem
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
+    KnowledgeEvidenceLink,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchEvidence,
@@ -94,6 +96,40 @@ async def research_asset_bundle(
     for relation in relations:
         relations_by_claim.setdefault(relation.claim_id, []).append(relation.as_dict())
 
+    knowledge_links = list(
+        (
+            await db_session.scalars(
+                select(KnowledgeEvidenceLink)
+                .join(
+                    ResearchEvidence,
+                    ResearchEvidence.id == KnowledgeEvidenceLink.evidence_id,
+                )
+                .where(ResearchEvidence.task_id == task_id)
+                .order_by(KnowledgeEvidenceLink.created_at, KnowledgeEvidenceLink.id)
+            )
+        ).all()
+    )
+    knowledge_item_ids = list(
+        dict.fromkeys(link.knowledge_item_id for link in knowledge_links)
+    )
+    knowledge_items = (
+        list(
+            (
+                await db_session.scalars(
+                    select(KnowledgeItem).where(
+                        KnowledgeItem.id.in_(knowledge_item_ids)
+                    )
+                )
+            ).all()
+        )
+        if knowledge_item_ids
+        else []
+    )
+    knowledge_by_id = {item.id: item for item in knowledge_items}
+    links_by_knowledge: dict[UUID, list[dict[str, Any]]] = {}
+    for link in knowledge_links:
+        links_by_knowledge.setdefault(link.knowledge_item_id, []).append(link.as_dict())
+
     return {
         "data_assets": [
             {
@@ -110,5 +146,13 @@ async def research_asset_bundle(
                 "evidence": relations_by_claim.get(item.id, []),
             }
             for item in claims
+        ],
+        "knowledge_items": [
+            {
+                **knowledge_by_id[item_id].as_dict(),
+                "evidence": links_by_knowledge.get(item_id, []),
+            }
+            for item_id in knowledge_item_ids
+            if item_id in knowledge_by_id
         ],
     }

@@ -2,20 +2,28 @@ from importlib import import_module
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.main import app
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
+    KnowledgeEvidenceLink,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchClaimRevision,
     ResearchEvidence,
 )
-from app.routers.research_assets import ClaimDraft, DataAssetDraft, EvidenceDraft
+from app.routers.research_assets import (
+    ClaimDraft,
+    DataAssetDraft,
+    EvidenceDraft,
+    KnowledgeSuggestionDraft,
+    _knowledge_suggestion_command,
+)
 from app.services.research_runtime import canonical_digest
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -53,6 +61,20 @@ def test_claims_are_revisioned_and_link_to_evidence_with_semantics():
     assert "UNIQUE (claim_id, revision)" in revision_ddl
     assert "relation" in relation_ddl
     assert "UNIQUE (claim_id, evidence_id)" in relation_ddl
+
+
+def test_suggested_knowledge_pins_validated_evidence_provenance():
+    ddl = compile_table(KnowledgeEvidenceLink)
+
+    assert "knowledge_revision" in ddl
+    assert "evidence_id" in ddl
+    assert "source_snapshot" in ddl
+    assert "uq_knowledge_evidence_lineage" in ddl
+    assert "fk_knowledge_evidence_target_revision" in ddl
+
+    migration = import_module("migrations.versions.0020_knowledge_evidence_lineage")
+    assert migration.down_revision == "0019_knowledge_protocol_lineage"
+    assert migration.TABLE_NAMES == ("knowledge_evidence_links",)
 
 
 def test_research_asset_migration_follows_research_log():
@@ -113,6 +135,69 @@ def test_evidence_and_claim_inputs_are_task_scoped_and_deduplicate_relations():
         )
 
 
+def test_knowledge_suggestion_requires_content_and_unique_evidence():
+    task_id = uuid4()
+    evidence_id = uuid4()
+    draft = KnowledgeSuggestionDraft(
+        task_id=task_id,
+        title="  Reusable finding  ",
+        body="  Validated measurements support this candidate finding.  ",
+        kind="finding",
+        tags=[" assay ", "assay", "validated"],
+        evidence_ids=[evidence_id],
+    )
+
+    assert draft.title == "Reusable finding"
+    assert draft.tags == ["assay", "validated"]
+    with pytest.raises(ValidationError):
+        KnowledgeSuggestionDraft(
+            task_id=task_id,
+            title="Duplicate sources",
+            body="Must not create ambiguous provenance.",
+            evidence_ids=[evidence_id, evidence_id],
+        )
+    with pytest.raises(ValidationError):
+        KnowledgeSuggestionDraft(
+            task_id=task_id,
+            title="Reference is not inferred",
+            body="Paper references use the Paper Library flow.",
+            kind="reference",
+            evidence_ids=[evidence_id],
+        )
+
+
+def test_knowledge_suggestion_preview_is_bound_to_evidence_review_state():
+    task_id = uuid4()
+    evidence = ResearchEvidence(
+        id=uuid4(),
+        task_id=task_id,
+        kind="measurement",
+        artifact_type="data_asset",
+        artifact_id=str(uuid4()),
+        artifact_version="2",
+        summary="Replicate measurements passed QC",
+        quality_state="validated",
+        validation_report={"qc": "passed"},
+        created_by_user_id=uuid4(),
+        reviewed_by_user_id=uuid4(),
+    )
+    draft = KnowledgeSuggestionDraft(
+        task_id=task_id,
+        title="Replicated effect",
+        body="The measured effect was reproduced under the recorded conditions.",
+        evidence_ids=[evidence.id],
+    )
+    validated_digest = canonical_digest(
+        _knowledge_suggestion_command(draft, [evidence])
+    )
+
+    evidence.quality_state = "rejected"
+
+    assert validated_digest != canonical_digest(
+        _knowledge_suggestion_command(draft, [evidence])
+    )
+
+
 def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     paths = app.openapi()["paths"]
 
@@ -122,3 +207,5 @@ def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     assert "/research-assets/evidence/{evidence_id}/review" in paths
     assert "/research-assets/claims/preview" in paths
     assert "/research-assets/claims/{claim_id}/review" in paths
+    assert "/research-assets/knowledge-suggestions/preview" in paths
+    assert "/research-assets/knowledge-suggestions" in paths

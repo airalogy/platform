@@ -7,6 +7,7 @@ export type EvidenceQuality = "pending" | "validated" | "rejected"
 export type ClaimState = "suggested" | "draft" | "reviewed" | "rejected" | "superseded" | "archived"
 export type ClaimEvidenceRelation = "supports" | "contradicts" | "context"
 export type EvidenceArtifactType = "record" | "data_asset" | "knowledge" | "paper_library_entry" | "external"
+export type ResearchKnowledgeKind = "note" | "method" | "decision" | "finding"
 
 export interface DataAssetVersion {
   id: string
@@ -84,10 +85,31 @@ export interface ResearchClaim {
   evidence: ClaimEvidenceLink[]
 }
 
+export interface ResearchKnowledgeItem {
+  id: string
+  lab_id: string
+  project_id: string
+  visibility: "project"
+  kind: ResearchKnowledgeKind
+  state: "suggested" | "draft" | "reviewed" | "superseded" | "archived"
+  title: string
+  body: string
+  tags: string[]
+  revision: number
+  generated_by: "human" | "aira"
+  evidence: Array<{
+    evidence_id: string
+    source_snapshot: Record<string, unknown>
+  }>
+  created_at: string
+  updated_at: string
+}
+
 export interface ResearchAssetBundle {
   data_assets: DataAsset[]
   evidence: ResearchEvidence[]
   claims: ResearchClaim[]
+  knowledge_items: ResearchKnowledgeItem[]
 }
 
 export interface DataAssetDraft {
@@ -125,6 +147,15 @@ export interface ClaimDraft {
     relation: ClaimEvidenceRelation
     rationale: string
   }>
+}
+
+export interface KnowledgeSuggestionDraft {
+  task_id: string
+  title: string
+  body: string
+  kind: ResearchKnowledgeKind
+  tags: string[]
+  evidence_ids: string[]
 }
 
 export interface AssetPreview<T> {
@@ -227,5 +258,21 @@ export function reviewClaim(claim: ResearchClaim, state: "reviewed" | "rejected"
       expected_state: claim.state,
       state,
     },
+  })
+}
+
+export function previewKnowledgeSuggestion(payload: KnowledgeSuggestionDraft) {
+  return getData<AssetPreview<KnowledgeSuggestionDraft>>({
+    url: "/research-assets/knowledge-suggestions/preview",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createKnowledgeSuggestion(payload: KnowledgeSuggestionDraft & { preview_digest: string }) {
+  return getData<ResearchKnowledgeItem>({
+    url: "/research-assets/knowledge-suggestions",
+    method: "POST",
+    data: payload,
   })
 }

@@ -182,6 +182,8 @@ export interface ResearchResultPackage {
   reviewed_conclusion?: string
   claims?: Array<Record<string, unknown>>
   evidence?: Array<Record<string, unknown>>
+  data_assets?: Array<Record<string, unknown>>
+  knowledge_items?: Array<Record<string, unknown>>
   actions?: Array<Record<string, unknown>>
   failed_attempts?: string[]
   unresolved_questions?: string[]

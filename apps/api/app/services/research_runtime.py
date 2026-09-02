@@ -1253,15 +1253,9 @@ async def _materialize_aira_digital_action(
                 else None
             ),
             quantity=(
-                resolved["inventory"]["quantity"]
-                if resolved.get("inventory")
-                else None
+                resolved["inventory"]["quantity"] if resolved.get("inventory") else None
             ),
-            unit=(
-                resolved["inventory"]["unit"]
-                if resolved.get("inventory")
-                else None
-            ),
+            unit=(resolved["inventory"]["unit"] if resolved.get("inventory") else None),
             starts_at=(
                 datetime.fromisoformat(resolved["equipment"]["starts_at"])
                 if resolved.get("equipment")
@@ -1401,6 +1395,7 @@ async def _result_package(
             *legacy_evidence,
         ],
         "data_assets": scientific_assets["data_assets"],
+        "knowledge_items": scientific_assets["knowledge_items"],
         "actions": [
             {
                 "id": str(item.id),

@@ -49,6 +49,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     knowledge_protocol_revision = import_module(
         "migrations.versions.0019_knowledge_protocol_lineage"
     )
+    knowledge_evidence_revision = import_module(
+        "migrations.versions.0020_knowledge_evidence_lineage"
+    )
     import_models()
 
     later_tables = {
@@ -70,6 +73,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(research_resource_revision.TABLE_NAMES)
     later_tables.update(research_limits_revision.TABLE_NAMES)
     later_tables.update(knowledge_protocol_revision.TABLE_NAMES)
+    later_tables.update(knowledge_evidence_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

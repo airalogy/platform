@@ -15,6 +15,9 @@ from sqlalchemy import delete, select
 from app.database import DBSession
 from app.models.knowledge import (
     KnowledgeItem,
+    KnowledgeKind,
+    KnowledgeRevision,
+    KnowledgeState,
     OwnerScope,
     PaperLibraryEntry,
     ResearchFile,
@@ -39,6 +42,7 @@ from app.models.research_asset import (
     DataAssetVersion,
     EvidenceKind,
     EvidenceQuality,
+    KnowledgeEvidenceLink,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchClaimRevision,
@@ -50,6 +54,8 @@ from app.services.knowledge import (
     authorize_knowledge_item,
     authorize_library_entry,
     authorize_research_file,
+    resolve_scope,
+    snapshot_knowledge,
 )
 from app.services.research_assets import research_asset_bundle
 from app.services.research_runtime import (
@@ -252,6 +258,39 @@ class ClaimReview(BaseModel):
     expected_revision: int = Field(ge=1)
     expected_state: ClaimState
     state: Literal["reviewed", "rejected"]
+
+
+class KnowledgeSuggestionDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    title: str = Field(min_length=1, max_length=512)
+    body: str = Field(min_length=1, max_length=2_000_000)
+    kind: Literal[
+        KnowledgeKind.NOTE,
+        KnowledgeKind.METHOD,
+        KnowledgeKind.DECISION,
+        KnowledgeKind.FINDING,
+    ] = KnowledgeKind.FINDING
+    tags: list[str] = Field(default_factory=list, max_length=100)
+    evidence_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.title = self.title.strip()
+        self.body = self.body.strip()
+        self.tags = sorted(
+            {tag.strip() for tag in self.tags if tag.strip()}, key=str.casefold
+        )
+        if not self.title or not self.body:
+            raise ValueError("Knowledge title and body are required")
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("Knowledge evidence contains duplicates")
+        return self
+
+
+class KnowledgeSuggestionCreate(KnowledgeSuggestionDraft):
+    preview_digest: str = Field(min_length=64, max_length=64)
 
 
 def validate_external_uri(value: str) -> None:
@@ -510,6 +549,83 @@ async def _evidence_for_task(
             status_code=422, detail="Claim evidence is not in this Task"
         )
     return evidence
+
+
+def _evidence_snapshot(evidence: ResearchEvidence) -> dict[str, Any]:
+    return {
+        "id": str(evidence.id),
+        "task_id": str(evidence.task_id),
+        "run_id": str(evidence.run_id) if evidence.run_id else None,
+        "action_id": str(evidence.action_id) if evidence.action_id else None,
+        "kind": evidence.kind,
+        "artifact_type": evidence.artifact_type,
+        "artifact_id": evidence.artifact_id,
+        "artifact_version": evidence.artifact_version,
+        "summary": evidence.summary,
+        "quality_state": evidence.quality_state,
+        "validation_report": evidence.validation_report,
+        "reviewed_by_user_id": (
+            str(evidence.reviewed_by_user_id) if evidence.reviewed_by_user_id else None
+        ),
+        "reviewed_at": evidence.reviewed_at.isoformat()
+        if evidence.reviewed_at
+        else None,
+    }
+
+
+async def _knowledge_suggestion_evidence(
+    db_session: DBSession,
+    current_user: User,
+    context: TaskContext,
+    evidence_ids: list[UUID],
+    *,
+    with_for_update: bool = False,
+) -> list[ResearchEvidence]:
+    statement = select(ResearchEvidence).where(
+        ResearchEvidence.id.in_(evidence_ids),
+        ResearchEvidence.task_id == context.task.id,
+    )
+    if with_for_update:
+        statement = statement.with_for_update()
+    found = list((await db_session.scalars(statement)).all())
+    by_id = {item.id: item for item in found}
+    if set(by_id) != set(evidence_ids):
+        raise HTTPException(
+            status_code=422, detail="Knowledge evidence is not in this Task"
+        )
+    evidence = [by_id[item_id] for item_id in evidence_ids]
+    for item in evidence:
+        if item.quality_state != EvidenceQuality.VALIDATED.value:
+            raise HTTPException(
+                status_code=409,
+                detail="Only validated Evidence can become Suggested Knowledge",
+            )
+        if item.artifact_type not in {"record", "data_asset"}:
+            raise HTTPException(
+                status_code=422,
+                detail="Suggested Knowledge requires Record or DataAsset Evidence",
+            )
+        version = await _validate_evidence_artifact(
+            db_session,
+            current_user,
+            context,
+            artifact_type=item.artifact_type,
+            artifact_id=item.artifact_id,
+            artifact_version=item.artifact_version,
+        )
+        if version != item.artifact_version:
+            raise HTTPException(status_code=409, detail="Evidence source has changed")
+    return evidence
+
+
+def _knowledge_suggestion_command(
+    params: KnowledgeSuggestionDraft,
+    evidence: list[ResearchEvidence],
+) -> dict[str, Any]:
+    return {
+        **params.model_dump(mode="json"),
+        "evidence": [_evidence_snapshot(item) for item in evidence],
+    }
 
 
 def _claim_command(params: ClaimDraft | ClaimRevisionDraft) -> dict[str, Any]:
@@ -771,7 +887,9 @@ async def update_data_asset_status(
         DataAssetStatus.READY.value: {DataAssetStatus.ARCHIVED.value},
     }
     if params.status not in allowed_transitions.get(asset.status, set()):
-        raise HTTPException(status_code=409, detail="Invalid DataAsset status transition")
+        raise HTTPException(
+            status_code=409, detail="Invalid DataAsset status transition"
+        )
     asset.status = params.status
     if params.status == DataAssetStatus.ARCHIVED.value:
         asset.archived_at = utcnow()
@@ -1102,3 +1220,135 @@ async def review_claim(
         **claim.as_dict(),
         "confidence": float(claim.confidence) if claim.confidence is not None else None,
     }
+
+
+@router.post("/knowledge-suggestions/preview")
+async def preview_knowledge_suggestion(
+    params: KnowledgeSuggestionDraft,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    context = await _task_context(
+        db_session, current_user, params.task_id, "research.read"
+    )
+    await resolve_scope(
+        db_session,
+        current_user,
+        scope_type=OwnerScope.PROJECT,
+        lab_id=context.lab.id,
+        project_id=context.project.id,
+        capability="knowledge.create",
+    )
+    evidence = await _knowledge_suggestion_evidence(
+        db_session, current_user, context, params.evidence_ids
+    )
+    command = _knowledge_suggestion_command(params, evidence)
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "destination": {
+            "task_id": str(context.task.id),
+            "task_title": context.task.title,
+            "project_id": str(context.project.id),
+            "project_name": context.project.name,
+        },
+        "effect": {
+            "state": KnowledgeState.SUGGESTED.value,
+            "visibility": Visibility.PROJECT.value,
+            "evidence_count": len(evidence),
+            "requires_review": True,
+        },
+    }
+
+
+@router.post("/knowledge-suggestions")
+async def create_knowledge_suggestion(
+    params: KnowledgeSuggestionCreate,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    draft = KnowledgeSuggestionDraft.model_validate(
+        params.model_dump(exclude={"preview_digest"})
+    )
+    context = await _task_context(
+        db_session, current_user, draft.task_id, "research.read"
+    )
+    scope = await resolve_scope(
+        db_session,
+        current_user,
+        scope_type=OwnerScope.PROJECT,
+        lab_id=context.lab.id,
+        project_id=context.project.id,
+        capability="knowledge.create",
+    )
+    evidence = await _knowledge_suggestion_evidence(
+        db_session,
+        current_user,
+        context,
+        draft.evidence_ids,
+        with_for_update=True,
+    )
+    command = _knowledge_suggestion_command(draft, evidence)
+    if canonical_digest(command) != params.preview_digest:
+        raise HTTPException(
+            status_code=409, detail="Knowledge suggestion preview has changed"
+        )
+    item = KnowledgeItem(
+        **scope.model_values(),
+        visibility=Visibility.PROJECT.value,
+        kind=draft.kind.value,
+        state=KnowledgeState.SUGGESTED.value,
+        title=draft.title,
+        body=draft.body,
+        tags=draft.tags,
+        generated_by="human",
+        created_by_user_id=current_user.id,
+    )
+    db_session.add(item)
+    await db_session.flush()
+    db_session.add(
+        KnowledgeRevision(
+            knowledge_item_id=item.id,
+            revision=1,
+            snapshot=snapshot_knowledge(item),
+            change_summary="Suggested from validated Research Evidence",
+            created_by_user_id=current_user.id,
+        )
+    )
+    links: list[dict[str, Any]] = []
+    for source in evidence:
+        snapshot = _evidence_snapshot(source)
+        db_session.add(
+            KnowledgeEvidenceLink(
+                knowledge_item_id=item.id,
+                knowledge_revision=1,
+                evidence_id=source.id,
+                source_snapshot=snapshot,
+                created_by_user_id=current_user.id,
+            )
+        )
+        links.append({"evidence_id": str(source.id), "source_snapshot": snapshot})
+    db_session.add(
+        ResearchArtifactLink(
+            task_id=context.task.id,
+            artifact_type="knowledge",
+            artifact_id=str(item.id),
+            artifact_version="1",
+            relation="derived",
+            link_metadata={"kind": item.kind, "title": item.title},
+        )
+    )
+    await emit_research_event(
+        db_session,
+        task_id=context.task.id,
+        kind="knowledge.suggested",
+        actor_user_id=current_user.id,
+        payload={
+            "knowledge_item_id": str(item.id),
+            "revision": 1,
+            "evidence_ids": [str(source.id) for source in evidence],
+        },
+        idempotency_key=f"knowledge:{item.id}:suggested:r1",
+    )
+    await db_session.commit()
+    return {**item.as_dict(), "evidence": links}

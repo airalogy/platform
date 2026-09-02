@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Numeric,
     String,
@@ -282,6 +283,45 @@ class ResearchClaimEvidence(Base):
     )
     relation: Mapped[str] = mapped_column(String(32), nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class KnowledgeEvidenceLink(Base):
+    """Immutable provenance from validated Task Evidence to Knowledge."""
+
+    __tablename__ = "knowledge_evidence_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["knowledge_item_id", "knowledge_revision"],
+            ["knowledge_revisions.knowledge_item_id", "knowledge_revisions.revision"],
+            name="fk_knowledge_evidence_target_revision",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "knowledge_item_id",
+            "knowledge_revision",
+            "evidence_id",
+            name="uq_knowledge_evidence_lineage",
+        ),
+        Index("ix_knowledge_evidence_links_evidence", "evidence_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    knowledge_item_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    knowledge_revision: Mapped[int] = mapped_column(nullable=False)
+    evidence_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_evidence.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    source_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )

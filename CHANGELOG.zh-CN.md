@@ -45,6 +45,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增 Research Task 硬性运行边界：可设置截止时间及绑定币种的预算上限，使用不可变的预留/释放/支出/冲销账本和摘要绑定的“预览→确认”写入；所有执行入口在 API 层检查限额，预算写入耗尽上限时立即暂停，其他超限状态在下一次运行边界安全暂停。
 - 新增可追溯的后续 Research Run，用于重试、复现和延续研究：用户先预览再确认一条终态来源 Run，Platform 精确继承其环境并记录来源与结果摘要，既有执行证据保持不变，Task 级限额继续生效，工作台可对比每次 Run 及审核后结果。
 - 新增受治理的 Knowledge → Protocol 流程：用户先预览准确的 Knowledge 修订与目标 Project，再由 Aira 生成可编辑草稿；最终确认 Protocol 时重新检查来源访问、范围、Project 权限与修订新鲜度，并原子记录不可变的 Knowledge 修订到 Protocol 版本 provenance，同时不会向只可读取 Protocol 的用户泄露 Restricted Knowledge。
+- 新增受 Evidence 门禁的反向流转：只有已校验的 Record/DataAsset Evidence 才能经预览确认生成可编辑的 Project Suggested Knowledge；确认时锁定来源状态，保留不可变 Evidence 快照和修订来源关系，同时保持独立 Knowledge 审核边界与完整非 AI 路径。
 
 ### 变更
 

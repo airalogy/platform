@@ -18,6 +18,12 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 只有完成最后确认，Protocol 才会成为正式资产。保存时 Platform 会重新检查你是否仍可读取 Knowledge、是否能在 Project 创建 Protocol，以及来源是否仍是同一修订。来源发生变化、归档、被取代、跨范围或不可访问时都会拒绝保存，不会静默生成失去来源的资产。保存成功的 Protocol 版本保留不可变 Knowledge provenance。AI 关闭时不显示这个入口，但模板、复用、导入和手工创建 Protocol 仍完整可用。
 
+## 将已校验结果整理为候选 Knowledge
+
+在 Research Task 中，先把 Record 或准确 DataAsset 版本登记为 Evidence，并由有权人员完成校验。在“科研结果资产”中选择“提议为 Knowledge”，写下可复用的发现、方法、决策或笔记，并选择一条或多条已校验 Evidence。检查 Project 保存位置和准确来源集合后再确认。
+
+Platform 会创建 Project 范围的可编辑 Suggested Knowledge，并保留不可变 Evidence 快照和版本关系；它不会宣布该候选已经成立或被组织采纳。进入 Project Knowledge 可继续修订，Knowledge Reviewer 评估证据后再使用独立的“审核并采纳”操作。待审核、已拒绝或非 Record/DataAsset 的 Evidence 不会出现在可选列表中。该确定性路径在 AI 关闭时仍可完整使用。
+
 ## 重试、复现或延续 Run
 
 当前 Run 和 Task 完成、失败或取消后，在 Task 页面选择“新建 Run”。已形成的科学结果必须先经人工审核，才能开启下一次 Run。可选择任意已结束的来源 Run，标记为重试、复现或延续研究，并说明这次执行预期产生的差异。确认前的预览会展示新 Run 序号、来源、保存位置和准确的 Research Environment 摘要。

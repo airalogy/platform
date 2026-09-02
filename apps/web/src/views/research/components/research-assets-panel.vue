@@ -22,6 +22,15 @@
         <n-button size="small" type="primary" @click="openModal('claim')">
           {{ $t("page.research.addClaim") }}
         </n-button>
+        <n-button
+          size="small"
+          type="primary"
+          secondary
+          :disabled="!knowledgeEvidenceOptions.length"
+          @click="openModal('knowledge')"
+        >
+          {{ $t("page.research.suggestKnowledge") }}
+        </n-button>
       </div>
     </div>
 
@@ -105,6 +114,34 @@
               </div>
             </article>
             <n-empty v-if="!bundle.evidence.length" class="py-5" :description="$t('page.research.noEvidence')" />
+          </div>
+        </n-tab-pane>
+
+        <n-tab-pane name="knowledge" :tab="`${$t('page.research.knowledgeCandidates')} (${bundle.knowledge_items.length})`">
+          <div class="space-y-3">
+            <article v-for="item in bundle.knowledge_items" :key="item.id" class="scientific-card">
+              <div class="flex flex-wrap items-center gap-2">
+                <n-tag size="small" round :type="item.state === 'reviewed' ? 'success' : 'warning'">
+                  {{ knowledgeStateLabel(item.state) }}
+                </n-tag>
+                <span class="aira-type-meta">{{ knowledgeKindLabel(item.kind) }} · r{{ item.revision }}</span>
+              </div>
+              <h3 class="aira-type-card-title mb-0 mt-2 break-words">
+                {{ item.title }}
+              </h3>
+              <p class="aira-type-body line-clamp-3 mb-0 mt-2 whitespace-pre-wrap">
+                {{ item.body }}
+              </p>
+              <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span class="aira-type-meta aira-text-secondary">
+                  {{ $t("page.research.knowledgeEvidenceCount", { count: item.evidence.length }) }}
+                </span>
+                <n-button size="tiny" secondary @click="openProjectKnowledge">
+                  {{ $t("page.research.openProjectKnowledge") }}
+                </n-button>
+              </div>
+            </article>
+            <n-empty v-if="!bundle.knowledge_items.length" class="py-5" :description="$t('page.research.noKnowledgeCandidates')" />
           </div>
         </n-tab-pane>
 
@@ -199,7 +236,7 @@
           </n-form-item>
         </n-form>
 
-        <n-form v-else label-placement="top">
+        <n-form v-else-if="modalKind === 'claim'" label-placement="top">
           <n-form-item :label="$t('page.research.claimStatement')" required>
             <n-input v-model:value="claimDraft.statement" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" />
           </n-form-item>
@@ -213,6 +250,39 @@
             <n-select v-model:value="selectedEvidenceIds" multiple clearable :options="evidenceOptions" />
           </n-form-item>
         </n-form>
+
+        <n-form v-else label-placement="top">
+          <n-alert type="info" class="mb-4">
+            {{ $t("page.research.knowledgeSuggestionBoundary") }}
+          </n-alert>
+          <div class="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
+            <n-form-item :label="$t('page.knowledge.knowledgeTitle')" required>
+              <n-input v-model:value="knowledgeDraft.title" />
+            </n-form-item>
+            <n-form-item :label="$t('page.knowledge.kind')" required>
+              <n-select v-model:value="knowledgeDraft.kind" :options="knowledgeKindOptions" />
+            </n-form-item>
+          </div>
+          <n-form-item :label="$t('page.knowledge.knowledgeBody')" required>
+            <n-input
+              v-model:value="knowledgeDraft.body"
+              type="textarea"
+              :autosize="{ minRows: 5, maxRows: 12 }"
+              :placeholder="$t('page.knowledge.knowledgeBodyPlaceholder')"
+            />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.validatedEvidence')" required>
+            <n-select
+              v-model:value="knowledgeDraft.evidence_ids"
+              multiple
+              clearable
+              :options="knowledgeEvidenceOptions"
+            />
+          </n-form-item>
+          <n-form-item :label="$t('page.knowledge.tags')">
+            <n-dynamic-tags v-model:value="knowledgeDraft.tags" />
+          </n-form-item>
+        </n-form>
       </template>
       <template v-else>
         <n-alert type="info">
@@ -223,7 +293,7 @@
             {{ $t("page.research.saveDestination") }}
           </div>
           <div class="aira-type-card-title mt-1">
-            {{ preview.destination.task_title }}
+            {{ previewDestinationLabel }}
           </div>
           <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
             {{ previewSummary }}
@@ -262,38 +332,47 @@ import type {
   EvidenceDraft,
   EvidenceKind,
   EvidenceQuality,
+  KnowledgeSuggestionDraft,
   ResearchAssetBundle,
   ResearchClaim,
   ResearchEvidence,
+  ResearchKnowledgeItem,
+  ResearchKnowledgeKind,
 } from "@/service/api/research-assets"
 import type { TagProps } from "naive-ui"
 import {
   createClaim,
   createDataAsset,
   createEvidence,
+  createKnowledgeSuggestion,
   fetchResearchAssets,
   previewClaim,
   previewDataAsset,
   previewEvidence,
+  previewKnowledgeSuggestion,
   reviewClaim,
   reviewEvidence,
   updateDataAssetStatus,
 } from "@/service/api/research-assets"
 import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
+import { useRouter } from "vue-router"
 
 const props = defineProps<{
   taskId: string
+  labUid: string
+  projectUid: string
 }>()
 
 const emit = defineEmits<{
   changed: []
 }>()
 
-type ModalKind = "asset" | "evidence" | "claim"
+type ModalKind = "asset" | "evidence" | "claim" | "knowledge"
 
-const emptyBundle = (): ResearchAssetBundle => ({ data_assets: [], evidence: [], claims: [] })
+const emptyBundle = (): ResearchAssetBundle => ({ data_assets: [], evidence: [], claims: [], knowledge_items: [] })
 const dialog = useDialog()
+const router = useRouter()
 const bundle = ref<ResearchAssetBundle>(emptyBundle())
 const loading = ref(false)
 const loadError = ref(false)
@@ -306,9 +385,18 @@ const selectedEvidenceIds = ref<string[]>([])
 const assetDraft = reactive<DataAssetDraft>(newAssetDraft())
 const evidenceDraft = reactive<EvidenceDraft>(newEvidenceDraft())
 const claimDraft = reactive<ClaimDraft>(newClaimDraft())
+const knowledgeDraft = reactive<KnowledgeSuggestionDraft>(newKnowledgeDraft())
 
-const isEmpty = computed(() => !bundle.value.data_assets.length && !bundle.value.evidence.length && !bundle.value.claims.length)
-const modalTitle = computed(() => $t(`page.research.${modalKind.value === "asset" ? "addDataAsset" : modalKind.value === "evidence" ? "addEvidence" : "addClaim"}` as I18n.I18nKey))
+const isEmpty = computed(() => !bundle.value.data_assets.length && !bundle.value.evidence.length && !bundle.value.claims.length && !bundle.value.knowledge_items.length)
+const modalTitle = computed(() => {
+  const keys: Record<ModalKind, I18n.I18nKey> = {
+    asset: "page.research.addDataAsset",
+    evidence: "page.research.addEvidence",
+    claim: "page.research.addClaim",
+    knowledge: "page.research.suggestKnowledge",
+  }
+  return $t(keys[modalKind.value])
+})
 const assetKindValues: DataAssetKind[] = ["file", "table", "image", "model", "archive", "external"]
 const assetKindOptions = computed(() => assetKindValues.map(value => ({ value, label: dataAssetKindLabel(value) })))
 const evidenceKindValues: EvidenceKind[] = ["observation", "measurement", "analysis", "citation", "validation"]
@@ -325,20 +413,33 @@ const evidenceOptions = computed(() => bundle.value.evidence.map(item => ({
   value: item.id,
   label: item.summary || artifactLabel(item),
 })))
+const knowledgeKindValues: ResearchKnowledgeKind[] = ["note", "method", "decision", "finding"]
+const knowledgeKindOptions = computed(() => knowledgeKindValues.map(value => ({ value, label: knowledgeKindLabel(value) })))
+const knowledgeEvidenceOptions = computed(() => bundle.value.evidence
+  .filter(item => item.quality_state === "validated" && (item.artifact_type === "record" || item.artifact_type === "data_asset"))
+  .map(item => ({
+    value: item.id,
+    label: item.summary || artifactLabel(item),
+  })))
 const canPreview = computed(() => {
   if (modalKind.value === "asset")
     return Boolean(assetDraft.name.trim() && assetDraft.external_uri.trim())
   if (modalKind.value === "evidence")
     return Boolean(evidenceDraft.artifact_id.trim())
-  return Boolean(claimDraft.statement.trim())
+  if (modalKind.value === "claim")
+    return Boolean(claimDraft.statement.trim())
+  return Boolean(knowledgeDraft.title.trim() && knowledgeDraft.body.trim() && knowledgeDraft.evidence_ids.length)
 })
 const previewSummary = computed(() => {
   if (modalKind.value === "asset")
     return `${assetDraft.name}\n${assetDraft.external_uri}`
   if (modalKind.value === "evidence")
     return evidenceDraft.summary || evidenceDraft.artifact_id
-  return claimDraft.statement
+  if (modalKind.value === "claim")
+    return claimDraft.statement
+  return `${knowledgeDraft.title}\n${knowledgeDraft.body}`
 })
+const previewDestinationLabel = computed(() => preview.value?.destination.project_name || preview.value?.destination.task_title || "")
 
 function newAssetDraft(): DataAssetDraft {
   return {
@@ -377,6 +478,17 @@ function newClaimDraft(): ClaimDraft {
   }
 }
 
+function newKnowledgeDraft(): KnowledgeSuggestionDraft {
+  return {
+    task_id: props.taskId,
+    title: "",
+    body: "",
+    kind: "finding",
+    tags: [],
+    evidence_ids: [],
+  }
+}
+
 async function loadAssets() {
   loading.value = true
   loadError.value = false
@@ -396,12 +508,20 @@ function openModal(kind: ModalKind) {
   modalVisible.value = true
 }
 
+function openProjectKnowledge() {
+  return router.push({
+    name: "project-knowledge",
+    params: { labUid: props.labUid, projectUid: props.projectUid },
+  })
+}
+
 function resetModal() {
   preview.value = null
   selectedEvidenceIds.value = []
   Object.assign(assetDraft, newAssetDraft())
   Object.assign(evidenceDraft, newEvidenceDraft())
   Object.assign(claimDraft, newClaimDraft())
+  Object.assign(knowledgeDraft, newKnowledgeDraft())
 }
 
 function resetEvidenceSource(value: EvidenceArtifactType) {
@@ -438,8 +558,10 @@ async function createPreview() {
       preview.value = await previewDataAsset({ ...assetDraft })
     else if (modalKind.value === "evidence")
       preview.value = await previewEvidence(normalizedEvidenceDraft())
-    else
+    else if (modalKind.value === "claim")
       preview.value = await previewClaim(normalizedClaimDraft())
+    else
+      preview.value = await previewKnowledgeSuggestion({ ...knowledgeDraft })
   }
   finally {
     mutating.value = false
@@ -457,8 +579,11 @@ async function confirmCreate() {
     else if (modalKind.value === "evidence") {
       await createEvidence({ ...normalizedEvidenceDraft(), preview_digest: preview.value.preview_digest })
     }
-    else {
+    else if (modalKind.value === "claim") {
       await createClaim({ ...normalizedClaimDraft(), preview_digest: preview.value.preview_digest })
+    }
+    else {
+      await createKnowledgeSuggestion({ ...knowledgeDraft, preview_digest: preview.value.preview_digest })
     }
     modalVisible.value = false
     window.$message?.success($t("page.research.assetWriteCompleted"))
@@ -560,8 +685,32 @@ function dataAssetStatusLabel(value: DataAsset["status"]) {
   return $t(`page.research.dataAssetStatus.${value}` as I18n.I18nKey)
 }
 
+function knowledgeKindLabel(value: ResearchKnowledgeKind) {
+  const keys: Record<ResearchKnowledgeKind, I18n.I18nKey> = {
+    note: "page.knowledge.kindNote",
+    method: "page.knowledge.kindMethod",
+    decision: "page.knowledge.kindDecision",
+    finding: "page.knowledge.kindFinding",
+  }
+  return $t(keys[value])
+}
+
+function knowledgeStateLabel(value: ResearchKnowledgeItem["state"]) {
+  const keys: Record<ResearchKnowledgeItem["state"], I18n.I18nKey> = {
+    suggested: "page.knowledge.stateSuggested",
+    draft: "page.knowledge.stateDraft",
+    reviewed: "page.knowledge.stateReviewed",
+    superseded: "page.knowledge.stateSuperseded",
+    archived: "page.knowledge.stateArchived",
+  }
+  return $t(keys[value])
+}
+
 onMounted(loadAssets)
-watch(() => props.taskId, loadAssets)
+watch(() => props.taskId, () => {
+  resetModal()
+  loadAssets()
+})
 </script>
 
 <style scoped>

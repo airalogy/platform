@@ -110,6 +110,19 @@ export interface KnowledgeItem {
   reviewed_at?: string | null
   paper_library_entry_ids: string[]
   research_file_ids: string[]
+  evidence_sources: Array<{
+    knowledge_revision: number
+    evidence_id: string
+    source_snapshot: {
+      kind: string
+      artifact_type: string
+      artifact_id: string
+      artifact_version: string
+      summary: string
+      quality_state: string
+      validation_report: Record<string, unknown>
+    }
+  }>
   created_at: string
   updated_at: string
 }

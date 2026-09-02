@@ -368,6 +368,8 @@
 
             <research-assets-panel
               :task-id="task.id"
+              :lab-uid="task.lab.uid"
+              :project-uid="task.project.uid"
               @changed="() => loadTask(true)"
             />
 

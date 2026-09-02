@@ -835,6 +835,8 @@ declare namespace I18n {
         updated: string
         review: string
         reviewHint: string
+        evidenceProvenance: string
+        evidenceProvenanceHint: string
         reviewed: string
         publish: string
         publishToProject: string
@@ -1155,11 +1157,13 @@ declare namespace I18n {
         addDataAsset: string
         addEvidence: string
         addClaim: string
+        suggestKnowledge: string
         assetsLoadError: string
         noScientificAssets: string
         claims: string
         evidence: string
         dataAssets: string
+        knowledgeCandidates: string
         confidence: string
         uncertainty: string
         linkedEvidenceCount: string
@@ -1179,6 +1183,10 @@ declare namespace I18n {
         evidenceSummary: string
         claimStatement: string
         linkEvidence: string
+        validatedEvidence: string
+        knowledgeSuggestionBoundary: string
+        knowledgeEvidenceCount: string
+        openProjectKnowledge: string
         assetPreviewHint: string
         previewAssetWrite: string
         confirmAssetWrite: string
@@ -1189,6 +1197,7 @@ declare namespace I18n {
         noClaims: string
         noEvidence: string
         noDataAssets: string
+        noKnowledgeCandidates: string
         claimState: {
           suggested: string
           draft: string

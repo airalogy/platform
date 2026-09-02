@@ -179,6 +179,36 @@
             <p class="aira-type-body aira-text-secondary line-clamp-5 mb-0 mt-3 whitespace-pre-wrap">
               {{ item.body }}
             </p>
+            <n-collapse v-if="item.evidence_sources.length" class="mt-3">
+              <n-collapse-item
+                name="evidence-provenance"
+                :title="$t('page.knowledge.evidenceProvenance', { count: item.evidence_sources.length })"
+              >
+                <p class="aira-type-meta aira-text-secondary mb-3 mt-0">
+                  {{ $t("page.knowledge.evidenceProvenanceHint") }}
+                </p>
+                <div class="space-y-2">
+                  <div v-for="source in item.evidence_sources" :key="source.evidence_id" class="knowledge-evidence-source">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <n-tag size="small" type="success" round>
+                        {{ $t("page.research.evidenceQuality.validated") }}
+                      </n-tag>
+                      <span class="aira-type-meta">
+                        {{ source.source_snapshot.artifact_type === "record" ? "Record" : "DataAsset" }}
+                        · v{{ source.source_snapshot.artifact_version }}
+                        · {{ $t("page.knowledge.revision", { revision: source.knowledge_revision }) }}
+                      </span>
+                    </div>
+                    <p class="aira-type-body mb-0 mt-2 whitespace-pre-wrap">
+                      {{ source.source_snapshot.summary || source.source_snapshot.artifact_id }}
+                    </p>
+                    <div class="aira-type-meta aira-text-secondary mt-1 break-all">
+                      {{ source.source_snapshot.artifact_id }}
+                    </div>
+                  </div>
+                </div>
+              </n-collapse-item>
+            </n-collapse>
             <div class="mt-4 flex flex-wrap items-center gap-2">
               <n-tag v-for="tag in item.tags" :key="tag" size="small" round>
                 {{ tag }}
@@ -1034,6 +1064,13 @@ onMounted(async () => {
   padding: 1.25rem;
   text-align: left;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.knowledge-evidence-source {
+  border: 1px solid rgb(209 250 229);
+  border-radius: 0.625rem;
+  background: rgb(236 253 245 / 52%);
+  padding: 0.75rem;
 }
 
 button.knowledge-card:hover,

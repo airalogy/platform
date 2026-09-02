@@ -51,6 +51,7 @@ from app.models.knowledge import (
 )
 from app.models.lab import LabRole, LabUser
 from app.models.project import Project
+from app.models.research_asset import KnowledgeEvidenceLink
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.knowledge import (
@@ -305,7 +306,9 @@ async def _create_import_draft(
     return draft
 
 
-async def _draft_response(db_session: DBSession, draft: PaperImportDraft) -> dict[str, Any]:
+async def _draft_response(
+    db_session: DBSession, draft: PaperImportDraft
+) -> dict[str, Any]:
     duplicate_ids = draft.duplicate_candidate_ids
     duplicate_kind = "none"
     if duplicate_ids:
@@ -1092,7 +1095,9 @@ async def _collection_and_entry(
         )
     )
     if matches_scope is None:
-        raise HTTPException(status_code=422, detail="Paper and Collection must share a scope")
+        raise HTTPException(
+            status_code=422, detail="Paper and Collection must share a scope"
+        )
     await authorize_library_entry(db_session, current_user, entry)
     return collection, entry
 
@@ -1167,9 +1172,29 @@ async def _knowledge_payload(
             )
         ).all()
     )
+    evidence_links = list(
+        (
+            await db_session.scalars(
+                select(KnowledgeEvidenceLink)
+                .where(KnowledgeEvidenceLink.knowledge_item_id == item.id)
+                .order_by(
+                    KnowledgeEvidenceLink.knowledge_revision,
+                    KnowledgeEvidenceLink.created_at,
+                )
+            )
+        ).all()
+    )
     return item.as_dict(
         paper_library_entry_ids=paper_ids,
         research_file_ids=file_ids,
+        evidence_sources=[
+            {
+                "knowledge_revision": link.knowledge_revision,
+                "evidence_id": link.evidence_id,
+                "source_snapshot": link.source_snapshot,
+            }
+            for link in evidence_links
+        ],
     )
 
 

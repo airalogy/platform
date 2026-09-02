@@ -45,6 +45,7 @@ Target initial version: `0.1.0`.
 - Added hard Research Task operating limits with optional deadlines and currency-bound budget ceilings, an immutable reserve/release/expense/credit ledger, digest-bound preview-confirm writes, API-side execution gates, immediate pausing when a budget entry exhausts the ceiling, and safe pausing at the next runtime boundary after any limit is reached.
 - Added traceable subsequent Research Runs for retries, replications, and continuations: users preview-confirm a terminal source Run, Platform inherits its exact environment and records source/result digests, prior execution evidence stays immutable, Task-level limits remain active, and the workbench compares every Run and reviewed outcome.
 - Added a governed Knowledge-to-Protocol flow: users preview an exact Knowledge revision and target Project before Aira generates an editable draft; final Protocol confirmation rechecks source access, scope, Project permission, and revision freshness, then atomically records immutable Knowledge-revision-to-Protocol-version provenance without exposing Restricted Knowledge to Protocol-only readers.
+- Added the evidence-gated reverse flow from validated Record/DataAsset Evidence to editable Project Suggested Knowledge, with preview-bound source state, locked confirmation, immutable Evidence snapshots and revision lineage, a separate Knowledge review boundary, and a complete non-AI path.
 
 ### Changed
 
