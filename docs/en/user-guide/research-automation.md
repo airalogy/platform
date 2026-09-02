@@ -19,9 +19,11 @@ Changing a Protocol or Knowledge item later does not silently change the capture
 - **Wait for an external result** pauses the Run at a typed boundary for a person, instrument, or service. Select and confirm the expected result contract. The generated event key is an immutable delivery reference; in the current version, an authorized user records the received result from the workbench.
 - **Reserve resource** resolves a concrete resource from a resource type pinned in the Research Environment. For inventory, select a container, exact quantity, UCUM unit, and optional expiry. For equipment, select the booking window. Platform previews current availability and policy, rejects stale or conflicting confirmation, and records the authoritative inventory reservation or equipment booking behind the Action.
 
+Aira can request a pinned resource type, quantity, unit, or equipment window, but it cannot pick an arbitrary hidden resource or reserve it directly. Platform selects an accessible candidate deterministically and presents the exact impact for approval. If inventory, permissions, the resource revision, or a booking window changes before approval, the proposal is rejected and must be replanned.
+
 Search candidates remain Action output. Platform does not silently approve them as Knowledge, Evidence, or Claims.
 
-At each next-action boundary, Aira first chooses between a pinned Protocol, an available Tool, a typed external Wait, or finishing the path. This Action Planner does not execute arbitrary model output: Platform validates the chosen type, allowlist entry, pinned version, arguments, and result contract before creating an Action. Aira-proposed digital and human Actions are approval-gated until an explicit Lab policy allows that exact risk class.
+At each next-action boundary, Aira first chooses between a pinned Protocol, an available Tool, a pinned Resource requirement, a typed external Wait, or finishing the path. This Action Planner does not execute arbitrary model output: Platform validates the chosen type, allowlist entry, pinned version, arguments, resource need, and result contract before creating an Action. Aira-proposed digital, resource, and human Actions are approval-gated until an explicit Lab policy allows that exact risk class.
 
 ## Supply an external result
 

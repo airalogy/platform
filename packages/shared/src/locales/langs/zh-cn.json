@@ -918,6 +918,7 @@
       "noResourceRequirements": "尚未固定现实资源需求。",
       "reserveResource": "预约资源",
       "resourceReservationHint": "这里只能使用当前 Research Environment 已固定的资源类型。确认前，Platform 会检查具体资源修订、权限、库存可用量和设备时段冲突。",
+      "reservationImpact": "预约影响",
       "resourceRequirement": "固定的资源类型",
       "resource": "具体资源",
       "reservationKind": "预约类型",
@@ -1206,6 +1207,7 @@
         "protocol_run": "Protocol 执行",
         "tool_job": "数字工具",
         "human_work_item": "人工工作",
+        "resource_reservation": "资源预约",
         "wait_event": "外部等待"
       },
       "workItemStatus": {

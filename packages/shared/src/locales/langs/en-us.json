@@ -918,6 +918,7 @@
       "noResourceRequirements": "No operational resource requirement is pinned.",
       "reserveResource": "Reserve resource",
       "resourceReservationHint": "Only resource types pinned in this Research Environment are available. Platform checks the exact resource revision, permissions, inventory, and booking conflicts before confirmation.",
+      "reservationImpact": "Reservation impact",
       "resourceRequirement": "Pinned resource type",
       "resource": "Resource",
       "reservationKind": "Reservation type",
@@ -1206,6 +1207,7 @@
         "protocol_run": "Protocol execution",
         "tool_job": "Digital tool",
         "human_work_item": "Human work",
+        "resource_reservation": "Resource reservation",
         "wait_event": "External wait"
       },
       "workItemStatus": {

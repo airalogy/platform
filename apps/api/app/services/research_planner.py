@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from masterbrain.usage import UsageContext
@@ -12,12 +14,51 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.libs.masterbrain import aira_action_proposal
 
 
+class AiraResourceRequest(BaseModel):
+    """An abstract need; Platform resolves the concrete Resource deterministically."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type_key: str = Field(min_length=1, max_length=255)
+    kind: Literal["inventory", "equipment"]
+    quantity: Decimal | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    purpose: str = Field(min_length=1, max_length=4000)
+
+    @model_validator(mode="after")
+    def validate_kind_fields(self):
+        self.resource_type_key = self.resource_type_key.strip()
+        self.unit = self.unit.strip() if self.unit else None
+        self.purpose = self.purpose.strip()
+        if self.kind == "inventory":
+            if self.quantity is None or self.unit is None:
+                raise ValueError("An inventory request requires quantity and unit")
+            if self.starts_at is not None or self.ends_at is not None:
+                raise ValueError("Inventory requests cannot include a booking window")
+        else:
+            if self.starts_at is None or self.ends_at is None:
+                raise ValueError("An equipment request requires a booking window")
+            if self.quantity is not None or self.unit is not None:
+                raise ValueError("Equipment requests cannot include inventory fields")
+            if self.starts_at.tzinfo is None:
+                self.starts_at = self.starts_at.replace(tzinfo=UTC)
+            if self.ends_at.tzinfo is None:
+                self.ends_at = self.ends_at.replace(tzinfo=UTC)
+            if self.ends_at <= self.starts_at:
+                raise ValueError("Equipment request end must be later than start")
+            if self.ends_at <= datetime.now(UTC):
+                raise ValueError("Equipment request must end in the future")
+        return self
+
+
 class AiraActionProposal(BaseModel):
     """One untrusted AI proposal, validated before any Action is persisted."""
 
     model_config = ConfigDict(extra="forbid")
 
-    decision: Literal["protocol", "tool", "wait", "finish"]
+    decision: Literal["protocol", "tool", "resource", "wait", "finish"]
     thought: str = Field(default="", max_length=4000)
     tool_key: str | None = Field(default=None, max_length=128)
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -28,6 +69,7 @@ class AiraActionProposal(BaseModel):
     ] | None = None
     wait_title: str | None = Field(default=None, max_length=255)
     wait_description: str | None = Field(default=None, max_length=20_000)
+    resource_request: AiraResourceRequest | None = None
 
     @model_validator(mode="after")
     def validate_decision_fields(self):
@@ -47,6 +89,10 @@ class AiraActionProposal(BaseModel):
             [self.wait_template_key, self.wait_title, self.wait_description]
         ):
             raise ValueError("Wait fields are only valid for a wait proposal")
+        if self.decision == "resource" and self.resource_request is None:
+            raise ValueError("A resource proposal requires resource_request")
+        if self.decision != "resource" and self.resource_request is not None:
+            raise ValueError("resource_request is only valid for a resource proposal")
         return self
 
 
@@ -119,11 +165,32 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         for item in list(context.get("tools") or [])
         if item.get("available", True)
     ]
+    resources = [
+        {
+            "key": item.get("key"),
+            "version": item.get("version"),
+            "name": item.get("name"),
+            "description": item.get("description"),
+            "capabilities": (item.get("metadata") or {}).get("capabilities") or {},
+            "booking_policy": (item.get("metadata") or {}).get("booking_policy"),
+        }
+        for item in list(context.get("resource_requirements") or [])
+        if item.get("available", True)
+    ]
     decision_schema = {
-        "decision": "protocol | tool | wait | finish",
+        "decision": "protocol | tool | resource | wait | finish",
         "thought": "short scientific reason",
         "tool_key": "required only for tool",
         "arguments": "required only for tool; must match its input_schema",
+        "resource_request": {
+            "resource_type_key": "required pinned Resource key",
+            "kind": "inventory | equipment",
+            "quantity": "positive number required only for inventory",
+            "unit": "UCUM unit required only for inventory",
+            "starts_at": "ISO timestamp required only for equipment",
+            "ends_at": "ISO timestamp required only for equipment",
+            "purpose": "required operational purpose",
+        },
         "wait_template_key": "required only for wait",
         "wait_title": "optional for wait",
         "wait_description": "optional for wait",
@@ -131,9 +198,10 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, resource, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
+            "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "Wait only when progress truly depends on an external result that is not available yet.",
             "Finish only when the research path can proceed to its final evidence-based conclusion.",
             "Do not repeat a completed Tool with equivalent arguments unless new evidence requires it.",
@@ -141,6 +209,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "Return one JSON object only, with no Markdown and no extra keys.",
             f"OUTPUT_SCHEMA={_bounded_json(decision_schema)}",
             f"AVAILABLE_TOOLS={_bounded_json(tools)}",
+            f"AVAILABLE_RESOURCE_REQUIREMENTS={_bounded_json(resources)}",
             f"WAIT_TEMPLATES={_bounded_json(AIRA_WAIT_TEMPLATES)}",
             f"RESEARCH_CONTEXT={_bounded_json(context)}",
         ]
@@ -183,4 +252,23 @@ async def plan_next_research_action(
         if definition.version != str(pinned.get("version") or ""):
             raise ValueError("Aira proposed an unavailable Research Tool version")
         validate_tool_arguments(definition, proposal.arguments)
+    if proposal.decision == "resource":
+        request = proposal.resource_request
+        if request is None:
+            raise ValueError("Aira Resource proposal is incomplete")
+        pinned = next(
+            (
+                item
+                for item in list(context.get("resource_requirements") or [])
+                if item.get("key") == request.resource_type_key
+            ),
+            None,
+        )
+        if pinned is None:
+            raise ValueError("Aira proposed a Resource type outside the environment")
+        capabilities = dict((pinned.get("metadata") or {}).get("capabilities") or {})
+        if request.kind == "inventory" and not capabilities.get("inventory"):
+            raise ValueError("Aira proposed inventory for a non-inventory Resource type")
+        if request.kind == "equipment" and not capabilities.get("booking"):
+            raise ValueError("Aira proposed equipment for a non-bookable Resource type")
     return proposal

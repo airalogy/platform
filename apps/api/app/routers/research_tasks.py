@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from app.config import config
 from app.database import DBSession
@@ -50,6 +51,7 @@ from app.models.research_asset import (
 )
 from app.models.research_execution import (
     ResearchResourceReservation,
+    ResearchResourceReservationStatus,
     ResearchToolJob,
     ResearchToolJobStatus,
     ResearchWaitEvent,
@@ -86,7 +88,11 @@ from app.services.research_runtime import (
     utcnow,
     workflow_info_for_task,
 )
-from app.services.research_resources import release_research_run_reservations
+from app.services.research_resources import (
+    ResearchResourceError,
+    activate_aira_resource_action,
+    release_research_run_reservations,
+)
 
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
 work_items_router = APIRouter(
@@ -1351,6 +1357,24 @@ async def cancel_research_task(
             for wait_event in wait_events:
                 wait_event.status = ResearchWaitEventStatus.CANCELLED.value
                 wait_event.revision += 1
+            resource_proposals = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchResourceReservation).where(
+                            ResearchResourceReservation.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchResourceReservation.status
+                            == ResearchResourceReservationStatus.PROPOSED.value,
+                        )
+                    )
+                ).all()
+            )
+            for resource_proposal in resource_proposals:
+                resource_proposal.status = (
+                    ResearchResourceReservationStatus.CANCELLED.value
+                )
+                resource_proposal.revision += 1
             approvals = list(
                 (
                     await db_session.scalars(
@@ -2584,6 +2608,7 @@ async def approve_research_action(
     if action.kind not in {
         ResearchActionKind.PROTOCOL_RUN.value,
         ResearchActionKind.TOOL_JOB.value,
+        ResearchActionKind.RESOURCE_RESERVATION.value,
         ResearchActionKind.WAIT_EVENT.value,
     }:
         raise HTTPException(
@@ -2597,6 +2622,7 @@ async def approve_research_action(
     approval.decided_at = now
     approval.revision += 1
     action.policy_decision = "allow"
+    resource_event: tuple[str, dict[str, Any]] | None = None
     if action.kind == ResearchActionKind.PROTOCOL_RUN.value:
         protocol_run = await ResearchProtocolRun.find_by(
             db_session, [ResearchProtocolRun.action_id == action.id]
@@ -2630,6 +2656,25 @@ async def approve_research_action(
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+    elif action.kind == ResearchActionKind.RESOURCE_RESERVATION.value:
+        try:
+            resource_event = await activate_aira_resource_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                actor_user_id=run.requested_by_user_id,
+            )
+        except (ResearchResourceError, IntegrityError) as error:
+            await db_session.rollback()
+            detail = (
+                str(error)
+                if isinstance(error, ResearchResourceError)
+                else "Equipment is already booked in that time range"
+            )
+            raise HTTPException(status_code=409, detail=detail) from error
+        if action.status == ResearchActionStatus.COMPLETED.value:
+            await enqueue_research_advance(db_session, task=task, run=run)
     else:
         try:
             await activate_wait_event_action(
@@ -2642,6 +2687,18 @@ async def approve_research_action(
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
     task.revision += 1
+    if resource_event is not None:
+        event_kind, event_payload = resource_event
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind=event_kind,
+            actor_user_id=current_user.id,
+            payload=event_payload,
+            idempotency_key=f"research-resource:{event_payload['reservation_id']}:created",
+        )
     await emit_research_event(
         db_session,
         task_id=task.id,
@@ -2707,6 +2764,16 @@ async def reject_research_action(
     if wait_event is not None:
         wait_event.status = ResearchWaitEventStatus.CANCELLED.value
         wait_event.revision += 1
+    resource_reservation = await ResearchResourceReservation.find_by(
+        db_session, [ResearchResourceReservation.action_id == action.id]
+    )
+    if (
+        resource_reservation is not None
+        and resource_reservation.status
+        == ResearchResourceReservationStatus.PROPOSED.value
+    ):
+        resource_reservation.status = ResearchResourceReservationStatus.REJECTED.value
+        resource_reservation.revision += 1
 
     state = dict(run.aira_state or initial_aira_state(task.goal))
     run.aira_state = {

@@ -922,6 +922,7 @@ declare namespace I18n {
         noResourceRequirements: string
         reserveResource: string
         resourceReservationHint: string
+        reservationImpact: string
         resourceRequirement: string
         resource: string
         reservationKind: string
@@ -1210,6 +1211,7 @@ declare namespace I18n {
           protocol_run: string
           tool_job: string
           human_work_item: string
+          resource_reservation: string
           wait_event: string
         }
         workItemStatus: {

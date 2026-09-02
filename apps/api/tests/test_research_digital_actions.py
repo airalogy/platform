@@ -25,6 +25,7 @@ from app.routers.research_resources import (
     _resource_command,
 )
 from app.services import resource_job_worker
+from app.services import research_resources
 from app.models.research import (
     ResearchActionStatus,
     ResearchRunStatus,
@@ -50,6 +51,11 @@ from app.services.research_runtime import (
     activate_tool_action,
     activate_wait_event_action,
     canonical_digest,
+)
+from app.services.research_resources import (
+    ResearchResourceError,
+    activate_aira_resource_action,
+    resolve_aira_resource_request,
 )
 from pydantic import ValidationError
 
@@ -237,6 +243,203 @@ def test_resource_action_preview_is_bound_to_inventory_and_environment_revisions
     assert digest != canonical_digest(
         _resource_command(task=task, run=run, params=params, context=context)
     )
+
+
+def test_aira_resource_resolution_selects_a_permissioned_available_container(
+    monkeypatch,
+):
+    resource_type_id = uuid4()
+    type_revision_id = uuid4()
+    resource = SimpleNamespace(
+        id=uuid4(),
+        lab_id=uuid4(),
+        resource_type_id=resource_type_id,
+        current_revision_id=uuid4(),
+        name="Antibody A",
+        code="AB-A",
+        visibility="lab",
+    )
+    revision = SimpleNamespace(
+        id=resource.current_revision_id,
+        revision=5,
+        resource_type_revision_id=type_revision_id,
+    )
+    container = SimpleNamespace(id=uuid4(), code="AB-A-01")
+    balance = SimpleNamespace(version=3, available=10, unit="mg")
+    scalars = SimpleNamespace(all=lambda: [resource])
+    rows = SimpleNamespace(all=lambda: [(container, balance, None)])
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(return_value=scalars),
+        execute=AsyncMock(return_value=rows),
+        get=AsyncMock(return_value=revision),
+    )
+    access = SimpleNamespace(allows=lambda capability: capability == "inventory.operate")
+    access.sources = []
+    monkeypatch.setattr(
+        research_resources, "resolve_resource_access", AsyncMock(return_value=access)
+    )
+    task = SimpleNamespace(id=uuid4(), lab_id=resource.lab_id)
+    run = SimpleNamespace(
+        environment_snapshot={
+            "resources": [
+                {
+                    "key": f"resource:{resource_type_id}",
+                    "version": "2",
+                    "source_id": str(resource_type_id),
+                    "source_revision_id": str(type_revision_id),
+                    "metadata": {"capabilities": {"inventory": True}},
+                }
+            ]
+        }
+    )
+
+    resolved = asyncio.run(
+        resolve_aira_resource_request(
+            db_session,
+            task=task,
+            run=run,
+            user_id=uuid4(),
+            request={
+                "resource_type_key": f"resource:{resource_type_id}",
+                "kind": "inventory",
+                "quantity": "2.5",
+                "unit": "mg",
+                "purpose": "Run assay",
+            },
+        )
+    )
+
+    assert resolved["resource_id"] == str(resource.id)
+    assert resolved["inventory"]["container_id"] == str(container.id)
+    assert resolved["inventory"]["balance_version"] == 3
+
+
+def test_approved_aira_resource_action_rechecks_inventory_version(monkeypatch):
+    resource_type_id = uuid4()
+    type_revision_id = uuid4()
+    resource_id = uuid4()
+    revision_id = uuid4()
+    container_id = uuid4()
+    action_id = uuid4()
+    requirement = {
+        "key": f"resource:{resource_type_id}",
+        "version": "2",
+        "source_id": str(resource_type_id),
+        "source_revision_id": str(type_revision_id),
+    }
+    reservation = SimpleNamespace(
+        id=uuid4(),
+        action_id=action_id,
+        kind="inventory",
+        resource_id=resource_id,
+        resource_revision_id=revision_id,
+        resource_revision=5,
+        container_id=container_id,
+        quantity="2.5",
+        unit="mg",
+        purpose="Run assay",
+        status="proposed",
+        revision=1,
+        inventory_reservation_id=None,
+    )
+    resource = SimpleNamespace(
+        id=resource_id,
+        lab_id=uuid4(),
+        resource_type_id=resource_type_id,
+        current_revision_id=revision_id,
+        status="active",
+        archived_at=None,
+        visibility="lab",
+    )
+    revision = SimpleNamespace(
+        id=revision_id,
+        revision=5,
+        resource_type_revision_id=type_revision_id,
+    )
+    type_revision = SimpleNamespace(booking_policy="none")
+    container = SimpleNamespace(
+        id=container_id,
+        resource_id=resource_id,
+        status="active",
+        archived_at=None,
+    )
+    balance = SimpleNamespace(version=4, available=10, unit="mg")
+
+    async def get_model(model, key):
+        name = model.__name__
+        return {
+            "Resource": resource,
+            "ResourceRevision": revision,
+            "ResourceTypeRevision": type_revision,
+            "ResourceContainer": container,
+        }.get(name)
+
+    db_session = SimpleNamespace(
+        get=AsyncMock(side_effect=get_model),
+        execute=AsyncMock(
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: balance)
+        ),
+    )
+    access = SimpleNamespace(allows=lambda capability: capability == "inventory.operate")
+    access.sources = []
+    monkeypatch.setattr(
+        ResearchResourceReservation, "find_by", AsyncMock(return_value=reservation)
+    )
+    monkeypatch.setattr(
+        research_resources, "resolve_resource_access", AsyncMock(return_value=access)
+    )
+    reserve = AsyncMock()
+    monkeypatch.setattr(research_resources, "reserve_inventory", reserve)
+    task = SimpleNamespace(id=uuid4(), lab_id=resource.lab_id)
+    run = SimpleNamespace(
+        environment_snapshot={"resources": [requirement]},
+        requested_by_user_id=uuid4(),
+        status="waiting_for_approval",
+    )
+    action = SimpleNamespace(
+        id=action_id,
+        input_data={
+            "resolved": {
+                "resource_revision_id": str(revision_id),
+                "resource_type_requirement": requirement,
+                "inventory": {"balance_version": 3},
+            }
+        },
+        revision=1,
+    )
+
+    with pytest.raises(ResearchResourceError, match="changed after Aira"):
+        asyncio.run(
+            activate_aira_resource_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                actor_user_id=run.requested_by_user_id,
+            )
+        )
+    reserve.assert_not_awaited()
+
+    balance.version = 3
+    reserve.return_value = SimpleNamespace(
+        id=uuid4(), status="active", quantity="2.5", unit="mg"
+    )
+    event_kind, event_payload = asyncio.run(
+        activate_aira_resource_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=run.requested_by_user_id,
+        )
+    )
+
+    assert event_kind == "resource.inventory_reserved"
+    assert event_payload["status"] == "active"
+    assert reservation.status == "active"
+    assert action.status == ResearchActionStatus.COMPLETED.value
+    assert run.status == ResearchRunStatus.RUNNING.value
+    reserve.assert_awaited_once()
 def test_executor_binding_scope_constraints_fail_closed():
     allowed_project = uuid4()
     binding = {

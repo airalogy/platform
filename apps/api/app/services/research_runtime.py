@@ -40,6 +40,7 @@ from app.models.research import (
     ResearchTaskStatus,
 )
 from app.models.research_execution import (
+    ResearchResourceReservation,
     ResearchToolJob,
     ResearchToolJobStatus,
     ResearchWaitEvent,
@@ -1035,7 +1036,7 @@ async def _materialize_aira_digital_action(
 ) -> ResearchAction:
     """Turn one validated Aira decision into a governed typed Action."""
 
-    if proposal.decision not in {"tool", "wait"}:
+    if proposal.decision not in {"tool", "resource", "wait"}:
         raise ValueError("Only digital Aira proposals can be materialized here")
     proposal_data = proposal.model_dump(exclude_none=True)
     proposal_digest = canonical_digest(proposal_data)
@@ -1122,6 +1123,35 @@ async def _materialize_aira_digital_action(
             "source": "aira",
             "resume_run": True,
         }
+    elif proposal.decision == "resource":
+        from app.services.research_resources import resolve_aira_resource_request
+
+        if proposal.resource_request is None:
+            raise ValueError("Aira Resource proposal is incomplete")
+        resource_request = proposal.resource_request.model_dump(mode="python")
+        resolved_resource = await resolve_aira_resource_request(
+            db_session,
+            task=task,
+            run=run,
+            user_id=run.requested_by_user_id,
+            request=resource_request,
+        )
+        requirements = {
+            "risk": "resource_commitment",
+            "approval_policy": "always_ask",
+            "resource_type": resolved_resource["resource_type_requirement"],
+            "deterministic_resolution": True,
+        }
+        executor_type = "platform_resource_manager"
+        kind = ResearchActionKind.RESOURCE_RESERVATION.value
+        title = f"Reserve {resolved_resource['resource_name']}"
+        description = proposal.thought or proposal.resource_request.purpose
+        input_data = {
+            "resource_request": proposal.resource_request.model_dump(mode="json"),
+            "resolved": resolved_resource,
+            "source": "aira",
+            "resume_run": True,
+        }
     else:
         template = AIRA_WAIT_TEMPLATES[proposal.wait_template_key]
         requirements = {"payload_schema": template["payload_schema"]}
@@ -1182,6 +1212,42 @@ async def _materialize_aira_digital_action(
             status=ResearchToolJobStatus.QUEUED.value,
         )
         db_session.add(tool_job)
+    elif proposal.decision == "resource":
+        resolved = input_data["resolved"]
+        typed_reservation = ResearchResourceReservation(
+            action_id=action.id,
+            kind=resolved["kind"],
+            resource_id=UUID(resolved["resource_id"]),
+            resource_revision_id=UUID(resolved["resource_revision_id"]),
+            resource_revision=int(resolved["resource_revision"]),
+            container_id=(
+                UUID(resolved["inventory"]["container_id"])
+                if resolved.get("inventory")
+                else None
+            ),
+            quantity=(
+                resolved["inventory"]["quantity"]
+                if resolved.get("inventory")
+                else None
+            ),
+            unit=(
+                resolved["inventory"]["unit"]
+                if resolved.get("inventory")
+                else None
+            ),
+            starts_at=(
+                datetime.fromisoformat(resolved["equipment"]["starts_at"])
+                if resolved.get("equipment")
+                else None
+            ),
+            ends_at=(
+                datetime.fromisoformat(resolved["equipment"]["ends_at"])
+                if resolved.get("equipment")
+                else None
+            ),
+            purpose=resolved["purpose"],
+        )
+        db_session.add(typed_reservation)
     else:
         wait_event = ResearchWaitEvent(
             action_id=action.id,
@@ -1224,7 +1290,7 @@ async def _materialize_aira_digital_action(
             action=action,
             actor_user_id=None,
         )
-    else:
+    elif proposal.decision == "wait":
         await activate_wait_event_action(
             db_session,
             task=task,
@@ -1232,6 +1298,8 @@ async def _materialize_aira_digital_action(
             action=action,
             actor_user_id=None,
         )
+    else:
+        raise ValueError("Aira Resource Actions must be approved before activation")
     return action
 
 
@@ -1473,7 +1541,7 @@ async def process_research_run_advance(
                     await db_session.commit()
                 raise
             planner_decision = proposal.decision
-            if proposal.decision in {"tool", "wait"}:
+            if proposal.decision in {"tool", "resource", "wait"}:
                 current_run = (
                     await db_session.execute(
                         select(ResearchRun)

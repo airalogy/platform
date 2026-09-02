@@ -49,7 +49,7 @@ AI 是智能编排层，不是系统记录或权限系统。Platform 仍是所�
 - Resource Reservation
 - Wait Event
 
-Protocol Run、Human Work Item、Tool Job 和 Wait Event 已使用这套生命周期。Instrument、外部服务、审批请求和资源预留类型会在对应 Executor 接入时沿用同一边界。
+Protocol Run、Human Work Item、Tool Job、Resource Reservation 和 Wait Event 已使用这套生命周期。Instrument、外部服务和审批请求类型会在对应 Executor 接入时沿用同一边界。
 
 ### Protocol 与 Capability
 
@@ -168,7 +168,7 @@ Aira 只能提交改进草稿或 Suggested Knowledge，不得静默修改已发�
 
 ## 资源、设备与外部服务
 
-规划阶段预留资源，执行阶段确认消耗或释放。Task 会把选定 Lab 资源类型的具体修订固定为需求，但不会把不断变化的可用量误当成方法的一部分。创建 Action 时，Platform 解析具体资源并校验其修订与对象级访问权限，再通过预览与确认固定库存容器和准确数量，或设备预约时段。Resource Reservation 与 Research Action 一一关联，现有库存和设备预约账本仍是权威来源。余额版本变化、库存不足、Schema 漂移、预约冲突以及未获授权的 Restricted 资源都会失败关闭。设备策略可让 Action 等待管理员审批；状态同步会从权威预约结果恢复 Run。显式释放以及 Task 进入终态都会归还尚未使用的资源承诺，并留下审计事件。
+规划阶段预留资源，执行阶段确认消耗或释放。Task 会把选定 Lab 资源类型的具体修订固定为需求，但不会把不断变化的可用量误当成方法的一部分。手工 Action 由用户选择并预览确认具体资源；Aira 只能请求已固定的资源类型、准确库存数量与单位，或设备时段，再由 Platform 在请求人的权限范围内确定性选择具体候选并始终请求审批。批准时会在权威账本内重新校验资源修订、访问权、余额版本或设备时段，状态过期就拒绝执行。Resource Reservation 与 Research Action 一一关联，现有库存和设备预约账本仍是权威来源。余额版本变化、库存不足、Schema 漂移、预约冲突以及未获授权的 Restricted 资源都会失败关闭。设备策略可让 Action 再次等待资源管理员审批；状态同步会从权威预约结果恢复 Run。显式释放以及 Task 进入终态都会归还尚未使用的资源承诺，并留下审计事件。
 
 库存记录批次、失效期、位置、容器、数量和样品谱系；设备记录能力、排期、校准/维护状态、风险和输出格式。预算区分总额、预留和实际支出，超阈值必须审批。人员执行受技能/资质、可用时间、工作量、权限和审批职责限制。
 
@@ -215,6 +215,7 @@ Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，
 - 派生的 Capability Registry 与任务级版本固定（已交付）；
 - Lab 可配置的 Protocol/Tool Executor Binding 与可用性解析（已交付）；
 - 固定修订的资源需求，以及库存/设备预约与释放 Action（已交付）；
+- Aira 资源请求、确定性候选解析、审批与过期状态拒绝（已交付）；
 - 人员、设备和外部服务 Executor Binding 适配器；
 - 人员技能、样品语义、预算和计算资源；
 - 消耗完成、风险策略、审批阈值和资源感知的计划重排。
