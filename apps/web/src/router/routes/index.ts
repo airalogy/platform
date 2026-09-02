@@ -7,6 +7,7 @@ import { groupsRoute } from "./modules/groups"
 import { helpRoute } from "./modules/help"
 import { homeRoute } from "./modules/home"
 import { hubDetailRoute, hubRoute } from "./modules/hub"
+import { knowledgeRoute } from "./modules/knowledge"
 import { labInfoRoute } from "./modules/lab-info"
 import { labsRoute } from "./modules/labs"
 import { userProfileRoute } from "./modules/profile"
@@ -28,6 +29,7 @@ export const customRoutes: CustomRoute[] = [
   groupsRoute,
   projectsRoute,
   projectInfoRoute,
+  knowledgeRoute,
   researchRoute,
   protocolRoute,
   protocolInfoRoute,

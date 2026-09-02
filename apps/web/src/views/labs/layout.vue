@@ -96,7 +96,7 @@ const instanceStore = useInstanceStore()
 const routerStore = useRouteStore()
 const { userInfo } = useAuthStore()
 
-const showIconRoute = ["lab-projects", "lab-records", "lab-resources", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings", "project-protocols", "project-records", "project-members"]
+const showIconRoute = ["lab-projects", "lab-knowledge", "lab-records", "lab-resources", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings", "project-protocols", "project-records", "project-members"]
 const showIcon = computed(() => typeof route.name === "string" && showIconRoute.includes(route.name))
 
 const { routerPushByKey } = useRouterPush()
@@ -114,13 +114,14 @@ const tabs = computed((): TabPaneProps[] => {
     ]
   }
 
-  if (["lab-projects", "lab-records", "lab-resources", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings"].includes(String(name))) {
+  if (["lab-projects", "lab-knowledge", "lab-records", "lab-resources", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings"].includes(String(name))) {
     const membersHint = $t("page.labs.tab.membersHint")
     const groupsHint = $t("page.labs.tab.groupsHint")
     const hintTab = (label: string, hint: string) =>
       () => h(TabHintLabel, { label, hint })
     const list = [
       { name: "lab-projects", tab: $t("page.labs.projects") },
+      { name: "lab-knowledge", tab: $t("page.knowledge.title") },
       { name: "lab-records", tab: $t("page.recordDiary.tab") },
       { name: "lab-resources", tab: $t("page.resourceLibrary.title") },
       {
@@ -150,9 +151,10 @@ const tabs = computed((): TabPaneProps[] => {
     return list
   }
 
-  if (name === "project-protocols" || name === "project-records" || name === "project-members") {
+  if (name === "project-protocols" || name === "project-knowledge" || name === "project-records" || name === "project-members") {
     return [
       { name: "project-protocols", tab: $t("page.project.protocols") },
+      { name: "project-knowledge", tab: $t("page.knowledge.title") },
       { name: "project-records", tab: $t("page.recordDiary.tab") },
       { name: "project-members", tab: $t("page.project.members") },
     ]
@@ -177,7 +179,7 @@ const title = computed(() => {
     return "Labs"
   }
 
-  if (["lab-projects", "lab-records", "lab-resources", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings"].includes(String(name))) {
+  if (["lab-projects", "lab-knowledge", "lab-records", "lab-resources", "lab-members", "lab-groups", "lab-organization", "lab-access", "lab-settings"].includes(String(name))) {
     const { name: labName, uid } = labInfo.value || {}
 
     return labName || uid || "Labs"

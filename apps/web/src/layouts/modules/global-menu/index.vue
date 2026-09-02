@@ -80,6 +80,7 @@ const instanceStore = useInstanceStore()
 const menuItems = computed<MenuItem[]>(() => ([
   ...(!instanceStore.isSingleLab ? [{ name: "labs-my" as const, label: $t("common.labsLabel") }] : []),
   { name: "project-dashboard", label: $t("common.projectsLabel") },
+  { name: "knowledge-home", label: $t("page.knowledge.title") },
   { name: "research-tasks", label: $t("page.research.title") },
   { name: "protocols-my", label: $t("common.protocolsLabel") },
 ]))

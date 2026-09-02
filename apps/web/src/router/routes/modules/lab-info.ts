@@ -17,6 +17,15 @@ export const labInfoRoute: CustomRoute<LabInfoNameKey> = {
       component: () => import("@/views/labs/projects.vue"),
     },
     {
+      path: "knowledge",
+      name: "lab-knowledge",
+      meta: {
+        i18nKey: "page.knowledge.labKnowledge",
+        title: "Lab Knowledge",
+      },
+      component: () => import("@/views/knowledge/index.vue"),
+    },
+    {
       path: "records",
       name: "lab-records",
       meta: {

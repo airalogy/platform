@@ -15,6 +15,7 @@ declare namespace App {
       | "project-starred"
       | "lab-records"
       | "project-protocols"
+      | "project-knowledge"
       | "project-research"
       | "project-records"
       | "project-members"
