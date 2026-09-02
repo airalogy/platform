@@ -10,6 +10,22 @@
   >
     <template #header>
       <div class="mb-4 flex flex-col gap-3">
+        <div v-if="showUnifiedLog" class="research-log-heading">
+          <div>
+            <div class="aira-type-eyebrow">{{ logScopeLabel }}</div>
+            <h1 class="aira-type-page-title mb-0 mt-1">{{ $t("page.recordDiary.title") }}</h1>
+            <p class="aira-type-body aira-text-secondary mb-0 mt-1">
+              {{ $t("page.recordDiary.description") }}
+            </p>
+          </div>
+          <research-log-entry-modal
+            v-if="logScope && canWriteLog"
+            ref="logEntryModal"
+            :scope="logScope"
+            :scope-label="logScopeLabel"
+            @saved="refreshTimeline"
+          />
+        </div>
         <div class="record-diary-time-toolbar">
           <n-radio-group v-model:value="viewMode" size="small">
             <n-radio-button value="heatmap">
@@ -46,6 +62,13 @@
           </n-tag>
           <span v-else />
           <div class="flex flex-wrap items-center gap-3">
+            <n-select
+              v-if="showUnifiedLog"
+              v-model:value="sourceFilter"
+              :options="sourceOptions"
+              size="small"
+              class="record-diary-source-filter"
+            />
             <record-export-modal
               v-if="canBulkExport && exportLabId"
               :scope-type="exportScopeType"
@@ -92,7 +115,12 @@
     </template>
 
     <template #default="{ data }">
-      <n-timeline size="large" class="record-diary-timeline">
+      <research-log-list
+        v-if="showUnifiedLog"
+        :items="data"
+        @edit="editLogEntry"
+      />
+      <n-timeline v-else size="large" class="record-diary-timeline">
         <n-timeline-item
           v-for="(item, index) in data"
           :key="item.airalogy_record_id"
@@ -212,14 +240,17 @@
     </template>
 
     <template #empty>
-      <custom-empty :description="$t('page.recordDiary.empty')" class="py-20" />
+      <custom-empty
+        :description="$t(showUnifiedLog ? 'page.recordDiary.logEmpty' : 'page.recordDiary.empty')"
+        class="py-20"
+      />
     </template>
   </loading-list-wrapper>
 
   <teleport to="body">
     <transition name="record-diary-floating-collapse">
       <n-button
-        v-if="hasExpandedRecord"
+        v-if="!showUnifiedLog && hasExpandedRecord"
         class="record-diary-floating-collapse"
         type="primary"
         size="large"
@@ -233,6 +264,11 @@
 
 <script setup lang="ts">
 import type { FetchData, FetchPayload } from "@/components/common/loading-list-wrapper.vue"
+import type {
+  ResearchLogManualEntry,
+  ResearchLogScopeParams,
+  ResearchLogSource,
+} from "@/service/api/research-log"
 import type { RecordDiaryEventItem, RecordDiaryItem, RecordDiarySubmitter } from "@/service/api/users"
 import type { ITimelineItem } from "@/views/project-protocols/types"
 import type { SelectOption } from "naive-ui"
@@ -243,6 +279,7 @@ import RecordExportModal from "@/components/common/record-export-modal.vue"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { LabRole, ProjectRole } from "@/enum"
 import { fetchProjectList } from "@/service/api/projects"
+import { fetchResearchLogTimeline } from "@/service/api/research-log"
 import { fetchAccessibleRecordDiary, fetchUserLabs, fetchUserProjects, fetchUserRecordDiary } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import { useOrProvideLabInfoStore } from "@/views/labs/hooks/useLabsInfoStore"
@@ -253,6 +290,8 @@ import { $t } from "@airalogy/shared/locales"
 import { formatDate } from "@airalogy/shared/utils"
 import RecordDiaryCalendar from "./modules/record-diary-calendar.vue"
 import RecordDiaryHeatmap from "./modules/record-diary-heatmap.vue"
+import ResearchLogEntryModal from "./modules/research-log-entry-modal.vue"
+import ResearchLogList from "./modules/research-log-list.vue"
 
 defineOptions({ name: "RecordDiary" })
 
@@ -279,6 +318,10 @@ const submitterFilter = ref<RecordDiarySubmitter>("all")
 const selectedDate = ref<string>()
 const selectedLabUid = ref("")
 const selectedProjectUid = ref("")
+const sourceFilter = ref<ResearchLogSource>("all")
+const refreshSerial = ref(0)
+const canWriteLog = ref(false)
+const logEntryModal = ref<InstanceType<typeof ResearchLogEntryModal>>()
 const labLoading = ref(false)
 const projectLoading = ref(false)
 const labOptions = ref<SelectOption[]>([])
@@ -287,6 +330,11 @@ const projectIdByUid = ref<Record<string, string>>({})
 const expandedRecordMap = ref<Record<string, boolean>>({})
 const activeExpandedRecordKey = ref<string>()
 const timelineItemCache = new Map<string, ITimelineItem>()
+const targetUserId = computed(() => {
+  if (isProfileScope.value)
+    return profileStore?.userInfo.value?.id || ""
+  return authStore.userInfo.id || ""
+})
 const submitterOptions = computed(() => [
   { label: $t("page.recordDiary.filterAllAccessible"), value: "all" },
   { label: $t("page.recordDiary.filterMySubmissions"), value: "me" },
@@ -348,6 +396,53 @@ const effectiveProjectUid = computed(() => {
   return undefined
 })
 
+const isOwnProfile = computed(() =>
+  isProfileScope.value && Boolean(targetUserId.value) && targetUserId.value === authStore.userInfo.id,
+)
+const showUnifiedLog = computed(() => isLabScope.value || isProjectScope.value || isOwnProfile.value)
+const logScope = computed<ResearchLogScopeParams | null>(() => {
+  if (isProjectScope.value && projectInfo.value?.id) {
+    return {
+      scope_type: "project",
+      lab_id: projectInfo.value.lab_id,
+      project_id: projectInfo.value.id,
+    }
+  }
+  if (isLabScope.value && labInfo.value?.id && effectiveProjectUid.value) {
+    const projectId = projectIdByUid.value[effectiveProjectUid.value]
+    if (!projectId) {
+      return null
+    }
+    return { scope_type: "project", lab_id: labInfo.value.id, project_id: projectId }
+  }
+  if (isLabScope.value && labInfo.value?.id)
+    return { scope_type: "lab", lab_id: labInfo.value.id }
+  if (isOwnProfile.value)
+    return { scope_type: "personal" }
+  return null
+})
+const logScopeLabel = computed(() => {
+  if (logScope.value?.scope_type === "project") {
+    return projectInfo.value?.name
+      || projectOptions.value.find(item => item.value === effectiveProjectUid.value)?.label?.toString()
+      || $t("page.recordDiary.scope.project")
+  }
+  if (logScope.value?.scope_type === "lab")
+    return labInfo.value?.name || $t("page.recordDiary.scope.lab")
+  return $t("page.recordDiary.scope.personal")
+})
+const sourceOptions = computed(() => ([
+  "all",
+  "manual",
+  "record",
+  "protocol",
+  "knowledge",
+  "research",
+] as ResearchLogSource[]).map(value => ({
+  value,
+  label: $t(`page.recordDiary.source.${value}` as I18n.I18nKey),
+})))
+
 const exportProjectId = computed(() => {
   if (isProjectScope.value)
     return projectInfo.value?.id
@@ -375,14 +470,9 @@ const canBulkExport = computed(() => {
     || projectInfo.value.user_role === ProjectRole.MANAGER
 })
 
-const targetUserId = computed(() => {
-  if (isProfileScope.value) {
-    return profileStore?.userInfo.value?.id || ""
-  }
-  return authStore.userInfo.id || ""
-})
-
 const canFetch = computed(() => {
+  if (showUnifiedLog.value)
+    return Boolean(logScope.value)
   if (isProfileScope.value) {
     return Boolean(targetUserId.value)
   }
@@ -397,6 +487,8 @@ const requestKey = computed(() => [
   effectiveProjectUid.value || "all-projects",
   showSubmitterFilter.value ? submitterFilter.value : "profile",
   selectedDate.value || "all-dates",
+  showUnifiedLog.value ? sourceFilter.value : "records-only",
+  refreshSerial.value,
 ].join(":"))
 
 async function loadLabOptions() {
@@ -483,6 +575,22 @@ async function fetcher(payload: FetchPayload): Promise<FetchData> {
     return null
   }
 
+  if (showUnifiedLog.value && logScope.value) {
+    const data = await fetchResearchLogTimeline({
+      ...logScope.value,
+      source: sourceFilter.value,
+      actor_user_id: showSubmitterFilter.value && submitterFilter.value === "me"
+        ? authStore.userInfo.id
+        : undefined,
+      date_from: selectedDate.value,
+      date_to: selectedDate.value,
+      page: payload.currentPage,
+      page_size: payload.currentPageSize,
+    })
+    canWriteLog.value = data.can_write
+    return { list: data.items, total: data.total_count }
+  }
+
   const queryPayload = {
     page: payload.currentPage,
     pageSize: payload.currentPageSize,
@@ -504,6 +612,14 @@ async function fetcher(payload: FetchPayload): Promise<FetchData> {
     list: data.records,
     total: data.total_count,
   }
+}
+
+function refreshTimeline() {
+  refreshSerial.value += 1
+}
+
+function editLogEntry(item: ResearchLogManualEntry) {
+  logEntryModal.value?.open(item)
 }
 
 function clearSelectedDate() {
@@ -729,9 +845,16 @@ watch([showProjectFilter, isProfileScope, targetUserId, effectiveLabUid], () => 
   justify-content: flex-end
 
 .record-diary-lab-filter,
-.record-diary-project-filter
+.record-diary-project-filter,
+.record-diary-source-filter
   width: 220px
   max-width: calc(100vw - 48px)
+
+.research-log-heading
+  display: flex
+  align-items: flex-start
+  justify-content: space-between
+  gap: 24px
 
 .record-diary-card
   min-width: 0
@@ -820,6 +943,9 @@ watch([showProjectFilter, isProfileScope, targetUserId, effectiveLabUid], () => 
   transform: translateY(8px)
 
 @media (max-width: 640px)
+  .research-log-heading
+    flex-direction: column
+
   .record-diary-floating-collapse
     right: 16px
     bottom: 16px

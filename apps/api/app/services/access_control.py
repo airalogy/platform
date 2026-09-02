@@ -56,6 +56,8 @@ ALL_CAPABILITIES = frozenset(
         "knowledge.import",
         "knowledge.export",
         "knowledge.restricted.read",
+        "log.read",
+        "log.write",
     }
 )
 
@@ -89,6 +91,8 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "knowledge.create",
             "knowledge.import",
             "knowledge.export",
+            "log.read",
+            "log.write",
         }
     ),
     "contributor": frozenset(
@@ -105,6 +109,8 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "knowledge.create",
             "knowledge.import",
             "knowledge.export",
+            "log.read",
+            "log.write",
         }
     ),
     "recorder": frozenset(
@@ -120,6 +126,8 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "knowledge.create",
             "knowledge.import",
             "knowledge.export",
+            "log.read",
+            "log.write",
         }
     ),
     "viewer": frozenset(
@@ -129,6 +137,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.read",
             "knowledge.read",
             "knowledge.export",
+            "log.read",
         }
     ),
     "knowledge_librarian": frozenset(
@@ -152,6 +161,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "knowledge_restricted_reader": frozenset(
         {"knowledge.read", "knowledge.restricted.read", "knowledge.export"}
     ),
+    "lab_log_publisher": frozenset({"log.read", "log.write"}),
     "resource_manager": frozenset(
         {
             "resource.read",
@@ -204,6 +214,7 @@ ROLE_LABELS = {
     "knowledge_librarian": "Knowledge librarian",
     "knowledge_reviewer": "Knowledge reviewer",
     "knowledge_restricted_reader": "Restricted knowledge reader",
+    "lab_log_publisher": "Lab Log publisher",
 }
 
 ROLE_LEGACY_PROJECT_ROLE = {
@@ -271,6 +282,8 @@ ACTION_CAPABILITY = {
     "import_knowledge": "knowledge.import",
     "export_knowledge": "knowledge.export",
     "read_restricted_knowledge": "knowledge.restricted.read",
+    "read_log": "log.read",
+    "write_log": "log.write",
 }
 
 

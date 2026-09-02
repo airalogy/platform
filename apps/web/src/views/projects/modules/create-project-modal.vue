@@ -99,17 +99,6 @@
           />
         </n-form-item>
 
-        <n-form-item :label="$t('page.project.createProjectModal.withDiaryLabel')" label-placement="top" :show-feedback="false">
-          <div class="w-full">
-            <n-checkbox v-model:checked="model.withDiary">
-              {{ $t("page.project.createProjectModal.withDiaryOption") }}
-            </n-checkbox>
-            <div class="mt-2 text-sm text-gray-500">
-              {{ $t("page.project.createProjectModal.withDiaryHint") }}
-            </div>
-          </div>
-        </n-form-item>
-
         <n-form-item v-if="!instanceStore.isSingleLab" :label="$t('page.project.settingsPage.visibilityLabel')" path="type" label-placement="left" required :show-feedback="false">
           <n-radio-group v-model:value="model.type">
             <n-radio
@@ -161,15 +150,12 @@
 import type { SelectOption } from "naive-ui/es/select"
 import { createDisplayNameValidator, useBoolean, useFormRules, useLoading, useNaiveForm, useShowModal } from "@/composables"
 import { createUidValidator } from "@/composables/useForm"
-import { diaryProtocol } from "@/constants/protocol"
-import { postUploadProtocol } from "@/service/api/project-protocols"
 import { checkProjectUid, fetchProjectList, postNewProject } from "@/service/api/projects"
 import { fetchUserLabs } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { snakeCase } from "@/utils/changeCase"
 import { convertDisplayname } from "@/utils/convertDisplayname"
-import { convertProtocolToZip } from "@/utils/protocolPackage"
 import CreateLabModal from "@/views/labs/modules/lab/create-lab-modal.vue"
 import CommonIdInput from "@airalogy/components/common/common-id-input.vue"
 import { useClosableMessage } from "@airalogy/composables"
@@ -211,7 +197,6 @@ interface FormModel {
   parentProjectId: string | null
   type: 1 | 2
   copyMembers: boolean
-  withDiary: boolean
 }
 
 interface IEmits {
@@ -237,7 +222,6 @@ const model = ref<FormModel>({
   parentProjectId: props.parentProject?.id ?? null,
   type: 1,
   copyMembers: true,
-  withDiary: false,
 })
 
 const selectedLabUid = computed(() => {
@@ -409,7 +393,7 @@ async function loadParentProjects() {
 async function handleConfirm() {
   await validate()
 
-  const { uid: rawUid, displayName, labId, description, parentProjectId, copyMembers, type, withDiary } = model.value
+  const { uid: rawUid, displayName, labId, description, parentProjectId, copyMembers, type } = model.value
   if (!labId) {
     message.error($t("page.project.createProjectModal.labRequired"))
     return
@@ -463,33 +447,8 @@ async function handleConfirm() {
     if (!data) {
       return
     }
-    const { id } = data
-    if (withDiary) {
-      try {
-        const msgInstance = message.loading($t("page.project.createProjectModal.creatingWithDiary"), { duration: 0 })
-        if (!diaryProtocol) {
-          throw new Error("Failed to create diary unit")
-        }
-
-        const diaryPackage = await convertProtocolToZip(diaryProtocol, "diary")
-
-        await postUploadProtocol({
-          projectId: id,
-          file: diaryPackage,
-        })
-
-        msgInstance.destroy()
-      }
-      catch (diaryError) {
-        message.warning($t("page.project.createProjectModal.diaryCreateFailed"), { closable: true, duration: 5000 })
-      }
-    }
-
     emits("modal:new-project", data)
-    const successKey = withDiary
-      ? "page.project.createProjectModal.createSuccessWithDiary"
-      : "page.project.createProjectModal.createSuccess"
-    message.success($t(successKey, { name: displayName }))
+    message.success($t("page.project.createProjectModal.createSuccess", { name: displayName }))
     hideModal()
   }
   catch (e) {

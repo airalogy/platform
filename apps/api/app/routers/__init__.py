@@ -1,6 +1,6 @@
+import asyncio
 import logging
 import logging.config
-import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,10 +26,10 @@ from app.services.model_usage import (
 )
 from app.services.resource_job_worker import run_persistent_job_worker
 
-from .airalogy_api import router as airalogy_router
 from .access import router as access_router
-from .airalogy_files import router as airalogy_files_router
 from .aira_imports import router as aira_imports_router
+from .airalogy_api import router as airalogy_router
+from .airalogy_files import router as airalogy_files_router
 from .answers import router as answers_router
 from .attachments import router as attachments_router
 from .chats import router as chats_router
@@ -52,14 +52,19 @@ from .protocols import router as protocols_router
 from .questions import router as questions_router
 from .record_exports import router as record_exports_router
 from .records import router as records_router
+from .research_log import router as research_log_router
 from .research_tasks import (
     approvals_router as research_approvals_router,
+)
+from .research_tasks import (
     router as research_tasks_router,
+)
+from .research_tasks import (
     work_items_router as research_work_items_router,
 )
 from .resources import router as resources_router
-from .search import router as search_router
 from .schema_governance import router as schema_governance_router
+from .search import router as search_router
 from .seo import router as seo_router
 from .stars import router as stars_router
 from .system import router as system_router
@@ -265,6 +270,7 @@ app.include_router(record_exports_router)
 app.include_router(research_tasks_router)
 app.include_router(research_work_items_router)
 app.include_router(research_approvals_router)
+app.include_router(research_log_router)
 app.include_router(knowledge_router)
 app.include_router(resources_router)
 app.include_router(airalogy_files_router)

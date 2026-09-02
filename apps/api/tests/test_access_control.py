@@ -4,19 +4,19 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from app.main import app
 from app.models.access_control import AccessSubjectType
 from app.models.group import OrganizationalUnitType
 from app.models.project import ProjectRole
-from app.main import app
 from app.routers.access import (
     GrantParams,
     GrantUpdateParams,
     OrganizationalUnitCreateParams,
 )
 from app.services.access_control import (
+    ROLE_CAPABILITIES,
     AccessDecision,
     AccessSource,
-    ROLE_CAPABILITIES,
     can_delegate,
     role_catalog,
 )
@@ -55,6 +55,10 @@ def test_role_catalog_exposes_stable_capability_sets():
         "knowledge.read",
         "knowledge.restricted.read",
     ]
+    assert catalog["lab_log_publisher"]["capabilities"] == ["log.read", "log.write"]
+    assert "log.write" in catalog["recorder"]["capabilities"]
+    assert "log.read" in catalog["viewer"]["capabilities"]
+    assert "log.write" not in catalog["viewer"]["capabilities"]
 
 
 def test_openapi_exposes_only_canonical_organizational_unit_contract():

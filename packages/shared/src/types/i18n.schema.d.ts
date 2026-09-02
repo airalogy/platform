@@ -1060,7 +1060,66 @@ declare namespace I18n {
       }
       recordDiary: {
         tab: string
+        title: string
+        description: string
         empty: string
+        logEmpty: string
+        newLog: string
+        editLog: string
+        logScope: string
+        logKind: string
+        logTitle: string
+        logBody: string
+        logGoal: string
+        completedItems: string
+        evidence: string
+        risks: string
+        nextSteps: string
+        assetLinks: string
+        assetId: string
+        assetLabel: string
+        addAssetLink: string
+        assetType: {
+          paper: string
+          protocol: string
+          record: string
+          knowledge: string
+          research_task: string
+          data_asset: string
+          external: string
+        }
+        changeSummary: string
+        onePerLine: string
+        logPreviewHint: string
+        previewLog: string
+        confirmLog: string
+        logSaved: string
+        viewAsset: string
+        kindProgress: string
+        kindMeeting: string
+        kindReflection: string
+        kindBlocker: string
+        kindMilestone: string
+        scope: {
+          personal: string
+          lab: string
+          project: string
+        }
+        source: {
+          all: string
+          manual: string
+          record: string
+          protocol: string
+          knowledge: string
+          research: string
+        }
+        event: {
+          record_submitted: string
+          record_revised: string
+          protocol_version_created: string
+          knowledge_created: string
+          knowledge_reviewed: string
+        }
         recordTitle: string
         recordFallback: string
         version: string

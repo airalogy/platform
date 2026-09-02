@@ -32,6 +32,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     research_knowledge_revision = import_module(
         "migrations.versions.0012_research_environment_knowledge"
     )
+    research_log_revision = import_module("migrations.versions.0013_research_log")
     import_models()
 
     later_tables = {
@@ -46,6 +47,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(research_revision.TABLE_NAMES)
     later_tables.update(knowledge_revision.TABLE_NAMES)
     later_tables.update(research_knowledge_revision.TABLE_NAMES)
+    later_tables.update(research_log_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables
