@@ -305,6 +305,9 @@ export interface ResearchTaskSummary {
   scientific_outcome?: string | null
   conclusion: string
   result_package: ResearchResultPackage | Record<string, never>
+  deadline_at?: string | null
+  budget_limit?: string | null
+  budget_currency?: string | null
   owner_user_id: string
   owner: ResearchUser
   created_by_user_id: string
@@ -351,6 +354,10 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   protocols: ResearchProtocolRef[]
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
+  permissions: {
+    can_run: boolean
+    can_approve: boolean
+  }
 }
 
 export interface ResearchWorkItemDetail extends ResearchHumanWorkItem {
@@ -381,6 +388,9 @@ export interface ResearchTaskDraft {
   tool_keys: string[]
   knowledge_ids: string[]
   resource_type_ids: string[]
+  deadline_at?: string
+  budget_limit?: string
+  budget_currency?: string
   owner_user_id?: string
   ai_model?: string
 }
@@ -401,6 +411,11 @@ export interface ResearchTaskPreview {
   executor_bindings: ResearchEnvironmentExecutorBinding[]
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
+  operational_limits: {
+    deadline_at?: string | null
+    budget_limit?: string | null
+    budget_currency?: string | null
+  }
   effects: string[]
   warnings: string[]
   ai_instance_available: boolean

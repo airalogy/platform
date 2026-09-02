@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
@@ -41,7 +42,6 @@ from app.models.research import (
     ResearchTaskStatus,
     ScientificOutcome,
 )
-from app.models.resource import ResourceType, ResourceTypeRevision
 from app.models.research_asset import (
     ClaimState,
     EvidenceKind,
@@ -57,11 +57,16 @@ from app.models.research_execution import (
     ResearchWaitEvent,
     ResearchWaitEventStatus,
 )
+from app.models.resource import ResourceType, ResourceTypeRevision
 from app.models.user import User
 from app.routers.depends import CurrentUser
-from app.services.access_control import resolve_resource_access, resolve_structured_access
+from app.services.access_control import (
+    resolve_resource_access,
+    resolve_structured_access,
+)
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.research_assets import research_asset_bundle
+from app.services.research_budget import normalize_currency, reached_operational_limit
 from app.services.research_capabilities import (
     protocol_capability,
     resource_capability,
@@ -70,6 +75,11 @@ from app.services.research_capabilities import (
 from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
     resolve_executor_binding,
+)
+from app.services.research_resources import (
+    ResearchResourceError,
+    activate_aira_resource_action,
+    release_research_run_reservations,
 )
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
@@ -80,6 +90,7 @@ from app.services.research_runtime import (
     create_plan_version,
     emit_research_event,
     enqueue_research_advance,
+    has_research_capability,
     initial_aira_state,
     require_research_capability,
     research_environment_has_ai_path,
@@ -87,11 +98,6 @@ from app.services.research_runtime import (
     task_protocol_rows,
     utcnow,
     workflow_info_for_task,
-)
-from app.services.research_resources import (
-    ResearchResourceError,
-    activate_aira_resource_action,
-    release_research_run_reservations,
 )
 
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
@@ -118,6 +124,11 @@ class ResearchTaskDraft(BaseModel):
     resource_type_ids: list[UUID] = Field(default_factory=list, max_length=100)
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
+    deadline_at: datetime | None = None
+    budget_limit: Decimal | None = Field(
+        default=None, gt=0, max_digits=38, decimal_places=18
+    )
+    budget_currency: str | None = Field(default=None, min_length=1, max_length=16)
 
     @model_validator(mode="after")
     def normalize_text(self):
@@ -140,6 +151,15 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Knowledge selection contains duplicates")
         if len(set(self.resource_type_ids)) != len(self.resource_type_ids):
             raise ValueError("Resource requirement selection contains duplicates")
+        if (self.budget_limit is None) != (self.budget_currency is None):
+            raise ValueError("Budget limit and currency must be provided together")
+        if self.budget_currency is not None:
+            self.budget_currency = normalize_currency(self.budget_currency)
+        if self.deadline_at is not None:
+            if self.deadline_at.tzinfo is None:
+                self.deadline_at = self.deadline_at.replace(tzinfo=UTC)
+            if self.deadline_at <= utcnow():
+                raise ValueError("Research Task deadline must be in the future")
         return self
 
 
@@ -482,6 +502,9 @@ async def _validate_task_draft(
             }
             for resource_type, revision in resources
         ],
+        deadline_at=draft.deadline_at,
+        budget_limit=draft.budget_limit,
+        budget_currency=draft.budget_currency,
         owner_user_id=owner.id,
         ai_model=draft.ai_model,
     )
@@ -552,12 +575,18 @@ def _task_preview(
             resource_capability(resource_type, revision).payload()
             for resource_type, revision in resources
         ],
+        "operational_limits": {
+            "deadline_at": command["deadline_at"],
+            "budget_limit": command["budget_limit"],
+            "budget_currency": command["budget_currency"],
+        },
         "effects": [
             "Create a versioned Research Task and draft Research Run",
             "Pin the selected Protocol versions in the Research Environment",
             "Pin the selected digital Tool versions in the Research Environment",
             "Pin reviewed Knowledge revisions in the Research Environment",
             "Pin selected resource-type revisions as explicit requirements",
+            "Enforce the confirmed deadline and budget as runtime stop boundaries",
             (
                 "Use AIRA after the Task is started"
                 if ai_path_available
@@ -620,6 +649,10 @@ async def _task_summary(
     )
     return {
         **task.as_dict(),
+        "deadline_at": task.deadline_at.isoformat() if task.deadline_at else None,
+        "budget_limit": (
+            str(task.budget_limit) if task.budget_limit is not None else None
+        ),
         "owner": _user_data(owner),
         "project": {
             "id": str(project.id),
@@ -728,6 +761,7 @@ async def _task_detail(
     task: ResearchTask,
     project: Project,
     lab: Lab,
+    current_user: User,
 ) -> dict[str, Any]:
     summary = await _task_summary(db_session, task, project=project, lab=lab)
     runs = list(
@@ -837,6 +871,20 @@ async def _task_detail(
         "protocols": protocols,
         "knowledge": knowledge,
         "resources": resources,
+        "permissions": {
+            "can_run": await has_research_capability(
+                db_session,
+                user=current_user,
+                project=project,
+                capability="research.run",
+            ),
+            "can_approve": await has_research_capability(
+                db_session,
+                user=current_user,
+                project=project,
+                capability="research.approve",
+            ),
+        },
     }
 
 
@@ -903,6 +951,9 @@ async def create_research_task(
         stop_conditions=command["stop_conditions"],
         autonomy_level=command["autonomy_level"],
         ai_model=command["ai_model"],
+        deadline_at=params.deadline_at,
+        budget_limit=params.budget_limit,
+        budget_currency=params.budget_currency,
         owner_user_id=owner.id,
         created_by_user_id=current_user.id,
         status=ResearchTaskStatus.DRAFT.value,
@@ -991,6 +1042,13 @@ async def create_research_task(
         "knowledge": pinned_knowledge,
         "ai_available_at_capture": config.effective_ai_enabled,
         "autonomy_level": task.autonomy_level,
+        "operational_limits": {
+            "deadline_at": task.deadline_at.isoformat() if task.deadline_at else None,
+            "budget_limit": (
+                str(task.budget_limit) if task.budget_limit is not None else None
+            ),
+            "budget_currency": task.budget_currency,
+        },
     }
     run.environment_snapshot = environment_snapshot
     await create_plan_version(
@@ -1021,7 +1079,7 @@ async def create_research_task(
         idempotency_key=f"task:{task.id}:created",
     )
     await db_session.commit()
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 @router.get("")
@@ -1105,7 +1163,7 @@ async def get_research_task(
     db_session: DBSession,
 ):
     task, project, lab = await _task_context(db_session, current_user, task_id)
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 @router.post("/{task_id}/start")
@@ -1125,6 +1183,12 @@ async def start_research_task(
     run = await _latest_run(db_session, task.id)
     if run is None or run.status != ResearchRunStatus.DRAFT.value:
         raise HTTPException(status_code=409, detail="Draft Research Run not found")
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
+        )
 
     now = utcnow()
     ai_path_available = bool(
@@ -1165,7 +1229,7 @@ async def start_research_task(
             idempotency_key=f"run:{run.id}:manual:start",
         )
     await db_session.commit()
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 @router.post("/{task_id}/pause")
@@ -1199,7 +1263,7 @@ async def pause_research_task(
         payload={"reason": params.reason},
     )
     await db_session.commit()
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 @router.post("/{task_id}/resume")
@@ -1220,6 +1284,12 @@ async def resume_research_task(
         ResearchRunStatus.FAILED.value,
     }:
         raise HTTPException(status_code=409, detail="Research Run cannot be resumed")
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
+        )
     open_work_item = (
         await db_session.scalars(
             select(ResearchHumanWorkItem)
@@ -1253,7 +1323,7 @@ async def resume_research_task(
         payload={"reason": params.reason},
     )
     await db_session.commit()
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 @router.post("/{task_id}/cancel")
@@ -1414,7 +1484,7 @@ async def cancel_research_task(
         },
     )
     await db_session.commit()
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 @router.post("/{task_id}/complete")
@@ -1561,7 +1631,7 @@ async def complete_research_task(
         },
     )
     await db_session.commit()
-    return await _task_detail(db_session, task, project, lab)
+    return await _task_detail(db_session, task, project, lab, current_user)
 
 
 async def _manual_action_context(
@@ -1594,6 +1664,12 @@ async def _manual_action_context(
         ResearchRunStatus.CANCELLED.value,
     }:
         raise HTTPException(status_code=409, detail="Active Research Run not found")
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
+        )
     protocol = await Protocol.find_by(
         db_session,
         [
@@ -2075,6 +2151,12 @@ async def start_research_work_item(
     if item.assignee_user_id != current_user.id:
         raise HTTPException(
             status_code=403, detail="Only the assignee can start this work"
+        )
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
         )
     if item.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Human Work Item has changed")
@@ -2604,6 +2686,12 @@ async def approve_research_action(
         raise HTTPException(
             status_code=409,
             detail="Resume the active Research Run before approving this Action",
+        )
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
         )
     if action.kind not in {
         ResearchActionKind.PROTOCOL_RUN.value,

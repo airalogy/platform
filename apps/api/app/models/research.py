@@ -7,14 +7,17 @@ human, approval, and artifact semantics out of an unbounded JSON blob.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -116,6 +119,13 @@ class ResearchTaskOutcome(StrEnum):
 class ResearchTask(Base):
     __tablename__ = "research_tasks"
     __table_args__ = (
+        CheckConstraint(
+            "((budget_limit IS NULL AND budget_currency IS NULL) OR "
+            "(budget_limit > 0 AND budget_currency IS NOT NULL AND "
+            "length(budget_currency) = 3 AND "
+            "budget_currency = upper(budget_currency)))",
+            name="ck_research_tasks_budget_pair",
+        ),
         Index("ix_research_tasks_project_status", "project_id", "status"),
         Index("ix_research_tasks_owner_status", "owner_user_id", "status"),
     )
@@ -144,6 +154,9 @@ class ResearchTask(Base):
     conclusion: Mapped[str] = mapped_column(Text, nullable=False, default="")
     result_package: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     ai_model: Mapped[str | None] = mapped_column(String(128))
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    budget_limit: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    budget_currency: Mapped[str | None] = mapped_column(String(3))
     owner_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )

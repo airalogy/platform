@@ -63,6 +63,38 @@
             :placeholder="$t('page.research.stopPlaceholder')"
           />
         </n-form-item>
+        <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
+          <n-form-item
+            :label="$t('page.research.deadline')"
+            :validation-status="deadlineInvalid ? 'error' : undefined"
+            :feedback="deadlineInvalid ? $t('page.research.deadlineFuture') : undefined"
+          >
+            <n-date-picker
+              v-model:value="deadlineAt"
+              type="datetime"
+              clearable
+              class="w-full"
+              :placeholder="$t('page.research.deadlinePlaceholder')"
+              :is-date-disabled="isDeadlineDisabled"
+            />
+          </n-form-item>
+          <n-form-item :label="$t('page.research.budgetLimit')">
+            <n-input-group>
+              <n-input
+                v-model:value="form.budget_limit"
+                inputmode="decimal"
+                :placeholder="$t('page.research.budgetLimitPlaceholder')"
+              />
+              <n-select
+                v-model:value="form.budget_currency"
+                class="w-28"
+                :options="currencyOptions"
+                filterable
+                tag
+              />
+            </n-input-group>
+          </n-form-item>
+        </div>
         <n-form-item :label="$t('page.research.methods')">
           <n-select
             v-model:value="form.protocol_ids"
@@ -135,7 +167,9 @@
           }}
         </n-alert>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.saveDestination") }}</div>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.saveDestination") }}
+          </div>
           <div class="aira-type-card-title mt-2">
             {{ preview.destination.lab.name }} / {{ preview.destination.project.name }}
           </div>
@@ -144,7 +178,29 @@
           </p>
         </section>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.pinnedDigitalCapabilities") }}</div>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.operationalLimits") }}
+          </div>
+          <div class="aira-type-body aira-text-secondary mt-2 space-y-1">
+            <div>
+              {{ $t("page.research.deadline") }} ·
+              {{ preview.operational_limits.deadline_at ? new Date(preview.operational_limits.deadline_at).toLocaleString() : $t("page.research.noLimit") }}
+            </div>
+            <div>
+              {{ $t("page.research.budgetLimit") }} ·
+              <template v-if="preview.operational_limits.budget_limit">
+                {{ preview.operational_limits.budget_limit }} {{ preview.operational_limits.budget_currency }}
+              </template>
+              <template v-else>
+                {{ $t("page.research.noLimit") }}
+              </template>
+            </div>
+          </div>
+        </section>
+        <section class="research-preview-card">
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.pinnedDigitalCapabilities") }}
+          </div>
           <div v-if="preview.tools.length" class="mt-3 flex flex-wrap gap-2">
             <n-tag v-for="tool in preview.tools" :key="tool.key" round type="info">
               {{ tool.name }} · v{{ tool.version }}
@@ -155,12 +211,16 @@
           </p>
         </section>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.resolvedExecutors") }}</div>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.resolvedExecutors") }}
+          </div>
           <div v-if="preview.executor_bindings.length" class="mt-3 space-y-2">
             <div v-for="binding in preview.executor_bindings" :key="binding.capability_key" class="flex flex-wrap items-center justify-between gap-2">
               <span class="aira-type-label break-all">{{ binding.capability_key }}</span>
               <div class="flex flex-wrap gap-2">
-                <n-tag size="small" round>{{ executorBindingLabel(binding.executor_type) }}</n-tag>
+                <n-tag size="small" round>
+                  {{ executorBindingLabel(binding.executor_type) }}
+                </n-tag>
                 <n-tag size="small" round :type="binding.approval_policy === 'allow_read_only' ? 'success' : 'warning'">
                   {{ executorPolicyLabel(binding.approval_policy) }}
                 </n-tag>
@@ -169,7 +229,9 @@
           </div>
         </section>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.pinnedKnowledge") }}</div>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.pinnedKnowledge") }}
+          </div>
           <div v-if="preview.knowledge.length" class="mt-3 flex flex-wrap gap-2">
             <n-tag v-for="item in preview.knowledge" :key="item.id" round type="success">
               {{ item.title }} · r{{ item.revision }}
@@ -180,7 +242,9 @@
           </p>
         </section>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.resourceRequirements") }}</div>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.resourceRequirements") }}
+          </div>
           <div v-if="preview.resources.length" class="mt-3 flex flex-wrap gap-2">
             <n-tag v-for="item in preview.resources" :key="item.key" round type="warning">
               {{ item.name }} · r{{ item.version }}
@@ -191,7 +255,9 @@
           </p>
         </section>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.confirmedMethods") }}</div>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.confirmedMethods") }}
+          </div>
           <div v-if="preview.protocols.length" class="mt-3 flex flex-wrap gap-2">
             <n-tag v-for="protocol in preview.protocols" :key="protocol.id" round>
               {{ protocol.name }} · v{{ protocol.version }}
@@ -202,9 +268,13 @@
           </p>
         </section>
         <section class="research-preview-card">
-          <div class="aira-type-eyebrow">{{ $t("page.research.effects") }}</div>
-          <ul class="mb-0 mt-2 pl-5 aira-type-body aira-text-secondary">
-            <li v-for="effect in localizedEffects" :key="effect">{{ effect }}</li>
+          <div class="aira-type-eyebrow">
+            {{ $t("page.research.effects") }}
+          </div>
+          <ul class="aira-type-body aira-text-secondary mb-0 mt-2 pl-5">
+            <li v-for="effect in localizedEffects" :key="effect">
+              {{ effect }}
+            </li>
           </ul>
         </section>
         <n-alert v-for="warning in localizedWarnings" :key="warning" type="warning">
@@ -284,6 +354,7 @@ const resourceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
+const deadlineAt = ref<number | null>(null)
 const RESEARCH_CREATOR_PROJECT_ROLES = new Set([1, 20, 30, 35])
 
 function emptyForm(): ResearchTaskDraft {
@@ -298,6 +369,8 @@ function emptyForm(): ResearchTaskDraft {
     tool_keys: [],
     knowledge_ids: [],
     resource_type_ids: [],
+    budget_limit: "",
+    budget_currency: "USD",
   }
 }
 const form = reactive<ResearchTaskDraft>(emptyForm())
@@ -337,11 +410,18 @@ const autonomyOptions = computed(() => [
   { label: $t("page.research.autonomyBounded"), value: "bounded_autopilot" },
   { label: $t("page.research.autonomyPolicy"), value: "autonomous_within_policy" },
 ])
+const currencyOptions = ["USD", "CNY", "EUR", "GBP", "JPY"].map(value => ({
+  label: value,
+  value,
+}))
+const deadlineInvalid = computed(() => Boolean(deadlineAt.value && deadlineAt.value <= Date.now()))
 const isValid = computed(() => Boolean(
   form.project_id
   && form.title.trim()
   && form.goal.trim()
-  && lines(criteriaText.value).length,
+  && lines(criteriaText.value).length
+  && !deadlineInvalid.value
+  && (!form.budget_limit || Number(form.budget_limit) > 0),
 ))
 const localizedEffects = computed(() => preview.value
   ? [
@@ -380,6 +460,10 @@ function lines(value: string) {
   return value.split("\n").map(item => item.trim()).filter(Boolean)
 }
 
+function isDeadlineDisabled(timestamp: number) {
+  return timestamp < new Date().setHours(0, 0, 0, 0)
+}
+
 function payload(): ResearchTaskDraft {
   return {
     ...form,
@@ -387,6 +471,9 @@ function payload(): ResearchTaskDraft {
     goal: form.goal.trim(),
     success_criteria: lines(criteriaText.value),
     stop_conditions: lines(stopText.value),
+    deadline_at: deadlineAt.value ? new Date(deadlineAt.value).toISOString() : undefined,
+    budget_limit: form.budget_limit?.trim() || undefined,
+    budget_currency: form.budget_limit?.trim() ? form.budget_currency : undefined,
   }
 }
 

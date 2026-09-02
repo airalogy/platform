@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -51,6 +52,10 @@ from app.services.access_control import resolve_structured_access
 from app.services.model_usage import create_usage_context
 from app.services.persistent_jobs import enqueue_job
 from app.services.research_assets import research_asset_bundle
+from app.services.research_budget import (
+    reached_operational_limit,
+    research_budget_snapshot,
+)
 from app.services.research_planner import (
     AIRA_WAIT_TEMPLATES,
     AiraActionProposal,
@@ -163,6 +168,9 @@ def research_task_command(
     executor_binding_refs: list[dict[str, Any]],
     knowledge_refs: list[dict[str, Any]],
     resource_refs: list[dict[str, Any]],
+    deadline_at: datetime | None,
+    budget_limit: Decimal | None,
+    budget_currency: str | None,
     owner_user_id: UUID,
     ai_model: str | None,
 ) -> dict[str, Any]:
@@ -201,6 +209,9 @@ def research_task_command(
             }
             for item in resource_refs
         ],
+        "deadline_at": deadline_at.isoformat() if deadline_at else None,
+        "budget_limit": str(budget_limit) if budget_limit is not None else None,
+        "budget_currency": budget_currency,
         "owner_user_id": str(owner_user_id),
         "ai_model": ai_model.strip() if ai_model else None,
     }
@@ -219,14 +230,28 @@ async def require_research_capability(
     work items, Records, and conclusions remain member-only.
     """
 
+    if await has_research_capability(
+        db_session, user=user, project=project, capability=capability
+    ):
+        return
+    raise HTTPException(status_code=403, detail="Research Task access denied")
+
+
+async def has_research_capability(
+    db_session: AsyncSession,
+    *,
+    user: User,
+    project: Project,
+    capability: str,
+) -> bool:
     membership = await LabUser.find_by(
         db_session,
         [LabUser.lab_id == project.lab_id, LabUser.user_id == user.id],
     )
     if membership is None:
-        raise HTTPException(status_code=403, detail="Research Task access denied")
+        return False
     if membership.role <= LabRole.MANAGER:
-        return
+        return True
 
     decision = await resolve_structured_access(
         db_session,
@@ -235,8 +260,7 @@ async def require_research_capability(
         project,
         include_legacy=True,
     )
-    if not decision.allows(capability):
-        raise HTTPException(status_code=403, detail="Research Task access denied")
+    return decision.allows(capability)
 
 
 async def task_protocol_rows(
@@ -994,6 +1018,9 @@ def _aira_planner_context(
         "resource_requirements": list(
             (run.environment_snapshot or {}).get("resources") or []
         ),
+        "operational_limits": dict(
+            (run.environment_snapshot or {}).get("operational_limits") or {}
+        ),
         "completed_actions": [
             {
                 "sequence": action.sequence,
@@ -1074,10 +1101,10 @@ async def _materialize_aira_digital_action(
     )
 
     if proposal.decision == "tool":
+        from app.services.research_capabilities import pinned_tool_definition
         from app.services.research_tools import (
             validate_tool_arguments,
         )
-        from app.services.research_capabilities import pinned_tool_definition
 
         definition = pinned_tool_definition(
             run.environment_snapshot or {}, proposal.tool_key or ""
@@ -1359,6 +1386,7 @@ async def _result_package(
         and (item.artifact_type, item.artifact_id, item.artifact_version)
         not in registered_evidence
     ]
+    budget = await research_budget_snapshot(db_session, task=task)
     return {
         "schema": "airalogy.research-result-package.v1",
         "task_id": str(task.id),
@@ -1394,6 +1422,7 @@ async def _result_package(
             "environment_snapshot": run.environment_snapshot,
             "plan_version": run.plan_version,
         },
+        "budget": budget,
         "generated_at": utcnow().isoformat(),
     }
 
@@ -1458,6 +1487,29 @@ async def process_research_run_advance(
             ResearchRunStatus.WAITING_FOR_EVENT.value,
         }:
             return {"status": run.status}
+        operational_limit = await reached_operational_limit(db_session, task=task)
+        if operational_limit is not None:
+            limit_kind, limit_snapshot = operational_limit
+            run.status = ResearchRunStatus.PAUSED.value
+            run.last_error = f"Research Task {limit_kind} limit reached"
+            task.status = ResearchTaskStatus.PAUSED.value
+            task.outcome = (
+                ResearchTaskOutcome.STOPPED_TIME.value
+                if limit_kind == "time"
+                else ResearchTaskOutcome.STOPPED_BUDGET.value
+            )
+            task.revision += 1
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                kind="run.operational_limit_reached",
+                actor_user_id=None,
+                payload={"limit": limit_kind, "snapshot": limit_snapshot},
+                idempotency_key=f"run:{run.id}:limit:{limit_kind}",
+            )
+            await db_session.commit()
+            return {"status": run.status, "limit": limit_kind}
         if run.aira_state.get("path_status") == "waiting_for_record":
             action = await _materialize_human_protocol_action(
                 db_session, run=run, task=task, rows=rows

@@ -32,6 +32,8 @@ from app.models.research_execution import (
 )
 from app.models.user import User
 from app.routers.depends import CurrentUser
+from app.services.research_budget import reached_operational_limit
+from app.services.research_capabilities import pinned_tool_definition
 from app.services.research_runtime import (
     activate_tool_action,
     activate_wait_event_action,
@@ -42,7 +44,6 @@ from app.services.research_runtime import (
     require_research_capability,
     utcnow,
 )
-from app.services.research_capabilities import pinned_tool_definition
 from app.services.research_tools import (
     research_tool_catalog,
     validate_tool_arguments,
@@ -134,6 +135,7 @@ async def _active_task_context(
     current_user: User,
     task_id: UUID,
     capability: str = "research.run",
+    enforce_limits: bool = False,
 ) -> tuple[ResearchTask, Project, Lab, ResearchRun]:
     task = await db_session.get(ResearchTask, task_id)
     if task is None or task.archived_at is not None:
@@ -161,6 +163,13 @@ async def _active_task_context(
         ResearchRunStatus.CANCELLED.value,
     }:
         raise HTTPException(status_code=409, detail="Active Research Run not found")
+    if enforce_limits:
+        operational_limit = await reached_operational_limit(db_session, task=task)
+        if operational_limit is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Research Task {operational_limit[0]} limit has been reached",
+            )
     return task, project, lab, run
 
 
@@ -292,7 +301,7 @@ async def preview_tool_action(
     db_session: DBSession,
 ):
     task, project, lab, run = await _active_task_context(
-        db_session, current_user, task_id
+        db_session, current_user, task_id, enforce_limits=True
     )
     try:
         command = _tool_command(task=task, run=run, params=params)
@@ -321,8 +330,8 @@ async def create_tool_action(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    task, project, lab, run = await _active_task_context(
-        db_session, current_user, task_id
+    task, _project, _lab, run = await _active_task_context(
+        db_session, current_user, task_id, enforce_limits=True
     )
     try:
         command = _tool_command(task=task, run=run, params=params)
@@ -417,7 +426,7 @@ async def preview_wait_action(
     db_session: DBSession,
 ):
     task, project, lab, run = await _active_task_context(
-        db_session, current_user, task_id
+        db_session, current_user, task_id, enforce_limits=True
     )
     command = _wait_command(task=task, run=run, params=params)
     return {
@@ -439,8 +448,8 @@ async def create_wait_action(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    task, project, lab, run = await _active_task_context(
-        db_session, current_user, task_id
+    task, _project, _lab, run = await _active_task_context(
+        db_session, current_user, task_id, enforce_limits=True
     )
     command = _wait_command(task=task, run=run, params=params)
     digest = canonical_digest(command)

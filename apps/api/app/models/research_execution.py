@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -54,6 +55,66 @@ class ResearchResourceReservationStatus(StrEnum):
     REJECTED = "rejected"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
+
+
+class ResearchBudgetEntryKind(StrEnum):
+    RESERVE = "reserve"
+    RELEASE = "release"
+    EXPENSE = "expense"
+    CREDIT = "credit"
+
+
+class ResearchBudgetEntry(Base):
+    """Immutable reservation and actual-cost ledger for one Research Task."""
+
+    __tablename__ = "research_budget_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id", "idempotency_key", name="uq_research_budget_entry_idempotency"
+        ),
+        CheckConstraint("amount > 0", name="ck_research_budget_entry_positive"),
+        CheckConstraint(
+            "kind IN ('reserve', 'release', 'expense', 'credit')",
+            name="ck_research_budget_entry_kind",
+        ),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_research_budget_entry_currency",
+        ),
+        CheckConstraint(
+            "length(command_digest) = 64",
+            name="ck_research_budget_entry_digest",
+        ),
+        Index("ix_research_budget_entries_task_created", "task_id", "created_at"),
+        Index("ix_research_budget_entries_run", "run_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_runs.id", ondelete="SET NULL")
+    )
+    action_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="SET NULL")
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
+    source_ref: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    command_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class ResearchResourceReservation(Base):

@@ -138,6 +138,8 @@ Aira may create proposals and Suggested Knowledge. It never silently edits a pub
 
 Planning reserves resources; execution confirms consumption or release. A Task now pins the selected Lab resource-type revisions as requirements without pretending that transient availability is part of the method. For a manual Action, the user selects and preview-confirms a concrete resource. Aira may instead request only a pinned resource type, exact inventory quantity and unit, or equipment window; Platform deterministically selects a concrete candidate within the requesting user's permissions, then always asks for approval. Approval revalidates the selected revision, access, balance version or booking window under the authoritative ledger before committing anything. The reservation is linked one-to-one to the Research Action while the existing inventory and booking ledgers remain authoritative. Balance-version changes, insufficient stock, schema drift, booking conflicts, and unauthorized Restricted resources fail closed. Equipment policies may leave the Action waiting for a second, resource-custodian approval; synchronization resumes the Run from the authoritative booking state. Explicit release and Task terminal transitions return outstanding commitments with audit events.
 
+A Task may also pin a deadline and a single-currency budget ceiling. Budget changes append immutable reserve, release, expense, or credit entries through a revision- and digest-bound preview-confirm flow; reservations and actual costs remain separate so the audit trail does not erase prior commitments. Platform recomputes the ledger at confirmation and before every new Protocol, Tool, Wait, or Resource Action. A stale preview, mismatched currency, negative balance, or over-budget entry fails closed. Exhausting the ceiling through a budget entry pauses the active Run immediately; a reached deadline or budget detected elsewhere pauses it at the next runtime boundary with an explicit `stopped_time` or `stopped_budget` outcome. Existing Records and ledger history remain intact; continuing requires an explicit future amendment flow rather than silent limit expansion.
+
 Inventory includes lots, expiry, location, containers, quantity, and sample lineage. Equipment includes capability, schedule, calibration/maintenance, risk, and output formats. Budgets distinguish total, reserved, and actual cost. People are constrained by skills, certification, availability, workload, permissions, and approval authority.
 
 Platform does not need to replace a complete ERP or LIMS. Small Labs can use minimal native modules; mature organizations can connect existing systems. Platform owns normalized references, requirements, reservations, Action links, authorization, and audit.
@@ -184,8 +186,9 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - governed, Lab-configurable Protocol/Tool Executor Bindings and availability resolution (delivered)
 - revision-pinned resource requirements plus inventory/equipment reservation and release Actions (delivered)
 - Aira resource requests, deterministic candidate resolution, approval, and stale-state rejection (delivered)
+- Task deadlines, budget ceilings, immutable budget ledger, and execution stop gates (delivered)
 - people, instrument, and external-service Executor Binding adapters
-- people and skills, sample semantics, budget, and compute
+- people and skills, sample semantics, compute, and automatic cost ingestion
 - consumption completion, risk policy, approval thresholds, and resource-aware replanning
 
 ### P3: instruments, RaaS, and self-improvement

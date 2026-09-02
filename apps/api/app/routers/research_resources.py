@@ -44,6 +44,7 @@ from app.models.resource import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
+from app.services.research_budget import reached_operational_limit
 from app.services.research_runtime import (
     canonical_digest,
     create_plan_version,
@@ -174,6 +175,12 @@ async def _active_task_context(
         ResearchRunStatus.CANCELLED.value,
     }:
         raise HTTPException(status_code=409, detail="Active Research Run not found")
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
+        )
     return task, project, lab, run
 
 
@@ -470,7 +477,7 @@ async def create_resource_action(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    task, project, lab, run = await _active_task_context(
+    task, _project, lab, run = await _active_task_context(
         db_session, current_user, task_id
     )
     existing = await ResearchAction.find_by(

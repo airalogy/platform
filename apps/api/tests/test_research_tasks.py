@@ -60,6 +60,9 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         resource_refs=[
             {"id": str(uuid4()), "revision_id": str(uuid4()), "revision": 3}
         ],
+        deadline_at=None,
+        budget_limit=None,
+        budget_currency=None,
         owner_user_id=owner_id,
         ai_model="  qwen3.5-flash  ",
     )
@@ -85,6 +88,9 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         ],
         "knowledge_refs": [ANY],
         "resource_refs": [ANY],
+        "deadline_at": None,
+        "budget_limit": None,
+        "budget_currency": None,
         "owner_user_id": str(owner_id),
         "ai_model": "qwen3.5-flash",
     }

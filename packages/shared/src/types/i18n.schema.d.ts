@@ -917,6 +917,36 @@ declare namespace I18n {
         knowledgePlaceholder: string
         knowledgeHint: string
         resourceRequirements: string
+        deadline: string
+        deadlinePlaceholder: string
+        budgetLimit: string
+        budgetLimitPlaceholder: string
+        operationalLimits: string
+        noLimit: string
+        timeAndBudget: string
+        budgetCommitted: string
+        budgetReserved: string
+        budgetActual: string
+        budgetRemaining: string
+        noBudgetLimit: string
+        budgetLedger: string
+        recordBudgetEntry: string
+        budgetEntryHint: string
+        budgetEntryKind: string
+        amount: string
+        budgetDescription: string
+        afterConfirmation: string
+        previewBudgetEntry: string
+        confirmBudgetEntry: string
+        budgetEntryRecorded: string
+        budgetLoadError: string
+        deadlineFuture: string
+        budgetEntryKinds: {
+          reserve: string
+          release: string
+          expense: string
+          credit: string
+        }
         resourceRequirementsPlaceholder: string
         resourceRequirementsHint: string
         noResourceRequirements: string

@@ -5,7 +5,7 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 ## Start a Research Task
 
 1. Open **Research** and create a Task in the correct Project.
-2. State a testable goal, success criteria, and stop conditions.
+2. State a testable goal, success criteria, and stop conditions. Add a deadline and one-currency budget ceiling when the Task must operate inside hard time or cost boundaries.
 3. Select any Protocol versions, digital tools, reviewed Knowledge, and Lab resource types that may guide or constrain the work. A Protocol is optional when the research path only needs governed digital tools or an external result.
 4. Preview the destination and captured environment, then confirm creation.
 5. Start the Task. If Aira is available, it can advance the plan until it reaches a human, approval, tool, external-result, or final-review boundary. If AI is unavailable, the same Task remains usable through explicit Actions.
@@ -20,6 +20,12 @@ Changing a Protocol or Knowledge item later does not silently change the capture
 - **Reserve resource** resolves a concrete resource from a resource type pinned in the Research Environment. For inventory, select a container, exact quantity, UCUM unit, and optional expiry. For equipment, select the booking window. Platform previews current availability and policy, rejects stale or conflicting confirmation, and records the authoritative inventory reservation or equipment booking behind the Action.
 
 Aira can request a pinned resource type, quantity, unit, or equipment window, but it cannot pick an arbitrary hidden resource or reserve it directly. Platform selects an accessible candidate deterministically and presents the exact impact for approval. If inventory, permissions, the resource revision, or a booking window changes before approval, the proposal is rejected and must be replanned.
+
+## Control time and budget
+
+The Task page shows the pinned deadline and the budget's reserved, actual, committed, and remaining amounts. Users with research approval capability can record a reservation, release, expense, or credit. Each entry must be previewed and confirmed against the current Task revision and cannot be edited afterward. Release only an existing reservation; credit only an existing actual expense. Record the offset and the replacement as separate entries when correcting a mistake.
+
+Platform checks these limits in the API before any new manual or Aira-created Protocol, Tool, Wait, or Resource Action. It rejects stale or over-limit writes, pauses immediately when a confirmed budget entry exhausts the ceiling, and otherwise pauses at the next runtime boundary after a deadline or budget limit is detected. The current version does not infer monetary cost from model, compute, inventory, or external-service usage; record those actual costs explicitly until an authoritative provider integration supplies them.
 
 Search candidates remain Action output. Platform does not silently approve them as Knowledge, Evidence, or Claims.
 

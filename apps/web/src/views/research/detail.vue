@@ -338,6 +338,15 @@
           </div>
 
           <aside class="space-y-5">
+            <research-budget-panel
+              :task-id="task.id"
+              :task-revision="task.revision"
+              :deadline-at="task.deadline_at"
+              :budget-limit="task.budget_limit"
+              :budget-currency="task.budget_currency"
+              :can-manage="canManageBudget"
+              @changed="() => loadTask(true)"
+            />
             <section class="research-panel">
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.definitionOfDone") }}
@@ -609,6 +618,7 @@ import { useRoute, useRouter } from "vue-router"
 import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
+import ResearchBudgetPanel from "./components/research-budget-panel.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
 import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
@@ -664,6 +674,9 @@ const canReview = computed(() => Boolean(
   && task.value.open_work_items === 0
   && task.value.pending_approvals === 0
   && ["review_required", "active", "paused", "failed"].includes(task.value.status),
+))
+const canManageBudget = computed(() => Boolean(
+  task.value?.permissions.can_approve,
 ))
 const openActions = computed(() => (task.value?.actions || []).filter(action =>
   action.work_item && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),
