@@ -122,6 +122,8 @@ Execution state and scientific outcome are separate. A correctly executed experi
 
 Aira cannot declare success by itself. Validation records Schema/QC, Protocol compliance, calibration, controls, sample size, statistical thresholds, replication, deviations, and failed attempts. Structured phased and final conclusions include Claims, supporting and contradicting Evidence, uncertainty, anomalies, goal progress, capability gaps, and proposed next actions.
 
+Before human completion, an optional independent Reviewer Agent receives the exact current Task, latest Run, Action ledger, Result Package, and scientific assets through a separate deep-model prompt. The model call does not hold a database transaction; Platform rechecks the Task revision and full context digest after it returns. Evidence references outside the available context are rejected, and the immutable recommendation explicitly separates support, contradiction, uncertainty, missing checks, and risk flags. It is advisory only: it cannot approve, mutate, or complete the Task. An authorized owner or research approver must deliberately copy it into the editable review, may change any field, and remains the recorded scientific decision-maker. With AI disabled, the ordinary human review path is unchanged.
+
 The final `Research Result Package` contains the summary, goal status, Claims and confidence, Evidence, pinned Protocol versions, Records, DataAssets, candidate Knowledge, Protocol improvement proposals, failed attempts, validation reports, unresolved questions, and a reproducibility manifest. Human-readable reports are views over that structured package.
 
 ## Knowledge, Log, and feedback loops
@@ -204,7 +206,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - Instrument Gateway and tiered control
 - quotes, SLA, logistics, chain of custody, and result receipt for external research services
 - evidence-backed, reviewed Protocol improvement proposals and exact new-version lineage (delivered without AI dependency)
-- independent Reviewer Agent, parallel/multi-agent execution, and reproduction evaluation
+- independent advisory Reviewer Agent (delivered), parallel/multi-agent execution, and reproduction evaluation
 - protein-purification method evolution and OT-2 governance benchmarks
 
 ## Definition of complete

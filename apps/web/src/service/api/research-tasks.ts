@@ -359,6 +359,26 @@ export interface ResearchPlanVersion {
   created_at: string
 }
 
+export interface ResearchReviewRecommendation {
+  id: string
+  task_id: string
+  run_id?: string | null
+  task_revision: number
+  context_digest: string
+  model_name: string
+  recommendation: "accept" | "revise" | "collect_more_evidence"
+  recommended_task_outcome: string
+  recommended_scientific_outcome: string
+  summary: string
+  supporting_evidence_ids: string[]
+  contradicting_evidence_ids: string[]
+  uncertainties: string[]
+  missing_checks: string[]
+  risk_flags: string[]
+  requested_by_user_id: string
+  created_at: string
+}
+
 export interface ResearchTaskDetail extends ResearchTaskSummary {
   runs: ResearchRun[]
   actions: ResearchAction[]
@@ -367,6 +387,7 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   protocols: ResearchProtocolRef[]
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
+  review_recommendations: ResearchReviewRecommendation[]
   permissions: {
     can_run: boolean
     can_approve: boolean
@@ -569,12 +590,24 @@ export function completeResearchTask(taskId: string, payload: {
   outcome: string
   scientific_outcome: string
   conclusion: string
+  review_recommendation_id?: string
   reason?: string
 }) {
   return getData<ResearchTaskDetail>({
     url: `/research-tasks/${taskId}/complete`,
     method: "POST",
     data: payload,
+  })
+}
+
+export function generateResearchReviewRecommendation(
+  taskId: string,
+  expectedTaskRevision: number,
+) {
+  return getData<ResearchReviewRecommendation>({
+    url: `/research-tasks/${taskId}/review-recommendations`,
+    method: "POST",
+    data: { expected_task_revision: expectedTaskRevision },
   })
 }
 

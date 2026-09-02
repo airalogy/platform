@@ -615,6 +615,54 @@
       <n-alert type="warning" class="mb-4">
         {{ $t("page.research.reviewResponsibility") }}
       </n-alert>
+      <section v-if="instanceStore.aiEnabled" class="reviewer-panel mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div class="aira-type-label">{{ $t("page.research.independentReviewer") }}</div>
+            <div class="aira-type-meta mt-1">{{ $t("page.research.independentReviewerHint") }}</div>
+          </div>
+          <n-button size="small" type="info" secondary :loading="reviewGenerating" @click="requestReviewRecommendation">
+            {{ $t("page.research.runIndependentReview") }}
+          </n-button>
+        </div>
+        <div v-if="reviewRecommendation" class="mt-3 border-t border-blue-100 pt-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <n-tag size="small" type="info" round>
+              {{ reviewerRecommendationLabel(reviewRecommendation.recommendation) }}
+            </n-tag>
+            <span class="aira-type-meta">{{ reviewRecommendation.model_name }}</span>
+            <span class="aira-type-meta">
+              {{ $t("page.research.reviewerEvidenceCounts", { supporting: reviewRecommendation.supporting_evidence_ids.length, contradicting: reviewRecommendation.contradicting_evidence_ids.length }) }}
+            </span>
+          </div>
+          <p class="aira-type-body mb-0 mt-2 whitespace-pre-wrap">{{ reviewRecommendation.summary }}</p>
+          <div v-if="reviewRecommendation.uncertainties.length || reviewRecommendation.missing_checks.length || reviewRecommendation.risk_flags.length" class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div v-if="reviewRecommendation.uncertainties.length">
+              <div class="aira-type-eyebrow">{{ $t("page.research.reviewerUncertainties") }}</div>
+              <ul class="reviewer-list">
+                <li v-for="item in reviewRecommendation.uncertainties" :key="item">{{ item }}</li>
+              </ul>
+            </div>
+            <div v-if="reviewRecommendation.missing_checks.length">
+              <div class="aira-type-eyebrow">{{ $t("page.research.reviewerMissingChecks") }}</div>
+              <ul class="reviewer-list">
+                <li v-for="item in reviewRecommendation.missing_checks" :key="item">{{ item }}</li>
+              </ul>
+            </div>
+            <div v-if="reviewRecommendation.risk_flags.length">
+              <div class="aira-type-eyebrow">{{ $t("page.research.reviewerRiskFlags") }}</div>
+              <ul class="reviewer-list">
+                <li v-for="item in reviewRecommendation.risk_flags" :key="item">{{ item }}</li>
+              </ul>
+            </div>
+          </div>
+          <div class="mt-3 flex justify-end">
+            <n-button size="small" type="primary" secondary @click="useReviewRecommendation">
+              {{ $t("page.research.useReviewerDraft") }}
+            </n-button>
+          </div>
+        </div>
+      </section>
       <n-form label-placement="top">
         <n-form-item :label="$t('page.research.goalAssessment')" required>
           <n-select v-model:value="review.outcome" :options="outcomeOptions" />
@@ -631,7 +679,7 @@
           <n-button @click="reviewModalVisible = false">
             {{ $t("common.cancel") }}
           </n-button>
-          <n-button type="primary" :disabled="!review.conclusion.trim()" :loading="mutating" @click="completeTask">
+          <n-button type="primary" :disabled="!review.conclusion.trim() || reviewGenerating" :loading="mutating" @click="completeTask">
             {{ $t("page.research.confirmReview") }}
           </n-button>
         </div>
@@ -650,6 +698,7 @@ import type {
   ResearchActionStatus,
   ResearchEnvironmentExecutorBinding,
   ResearchProtocolRef,
+  ResearchReviewRecommendation,
   ResearchRun,
   ResearchRunOrigin,
   ResearchRunStatus,
@@ -664,6 +713,7 @@ import {
   completeResearchTask,
   createManualProtocolAction,
   fetchResearchTask,
+  generateResearchReviewRecommendation,
   pauseResearchTask,
   previewManualProtocolAction,
   resumeResearchTask,
@@ -671,6 +721,7 @@ import {
   startResearchWorkItem,
 } from "@/service/api/research-tasks"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
@@ -689,6 +740,7 @@ const route = useRoute()
 const router = useRouter()
 const dialog = useDialog()
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
 const task = ref<ResearchTaskDetail | null>(null)
 const loading = ref(false)
 const loadError = ref(false)
@@ -697,6 +749,9 @@ const startingWorkItemId = ref("")
 const actionModalVisible = ref(false)
 const actionPreview = ref<ManualProtocolActionPreview | null>(null)
 const reviewModalVisible = ref(false)
+const reviewGenerating = ref(false)
+const reviewRecommendation = ref<ResearchReviewRecommendation | null>(null)
+const selectedReviewRecommendationId = ref("")
 const projectProtocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const initialValuesText = ref("{}")
 const actionDraft = reactive<ManualProtocolActionDraft>({
@@ -960,7 +1015,35 @@ function openReviewModal() {
   review.outcome = task.value.outcome || "goal_met"
   review.scientific_outcome = task.value.scientific_outcome || "inconclusive"
   review.conclusion = resultConclusion.value
+  reviewRecommendation.value = (task.value.review_recommendations || [])[0] || null
+  selectedReviewRecommendationId.value = ""
   reviewModalVisible.value = true
+}
+
+async function requestReviewRecommendation() {
+  if (!task.value)
+    return
+  reviewGenerating.value = true
+  try {
+    const recommendation = await generateResearchReviewRecommendation(task.value.id, task.value.revision)
+    reviewRecommendation.value = recommendation
+    task.value.review_recommendations ||= []
+    if (!task.value.review_recommendations.some(item => item.id === recommendation.id))
+      task.value.review_recommendations.unshift(recommendation)
+    window.$message?.success($t("page.research.independentReviewReady"))
+  }
+  finally {
+    reviewGenerating.value = false
+  }
+}
+
+function useReviewRecommendation() {
+  if (!reviewRecommendation.value)
+    return
+  review.outcome = reviewRecommendation.value.recommended_task_outcome
+  review.scientific_outcome = reviewRecommendation.value.recommended_scientific_outcome
+  review.conclusion = reviewRecommendation.value.summary
+  selectedReviewRecommendationId.value = reviewRecommendation.value.id
 }
 
 async function completeTask() {
@@ -973,6 +1056,7 @@ async function completeTask() {
       outcome: review.outcome,
       scientific_outcome: review.scientific_outcome,
       conclusion: review.conclusion.trim(),
+      review_recommendation_id: selectedReviewRecommendationId.value || undefined,
     })
     reviewModalVisible.value = false
     window.$message?.success($t("page.research.reviewCompleted"))
@@ -980,6 +1064,10 @@ async function completeTask() {
   finally {
     mutating.value = false
   }
+}
+
+function reviewerRecommendationLabel(value: ResearchReviewRecommendation["recommendation"]) {
+  return $t(`page.research.reviewerRecommendation.${value}` as I18n.I18nKey)
 }
 
 function goBack() {
@@ -1282,6 +1370,21 @@ onUnmounted(() => {
 
 .research-modal {
   width: min(44rem, calc(100vw - 2rem));
+}
+
+.reviewer-panel {
+  border: 1px solid rgb(191 219 254);
+  border-radius: 0.75rem;
+  background: rgb(239 246 255 / 65%);
+  padding: 1rem;
+}
+
+.reviewer-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: rgb(75 85 99);
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 48rem) {

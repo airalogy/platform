@@ -346,6 +346,76 @@ class ResearchPlanVersion(Base):
     )
 
 
+class ResearchReviewRecommendation(Base):
+    """Immutable advisory review of one exact Research Task result context."""
+
+    __tablename__ = "research_review_recommendations"
+    __table_args__ = (
+        CheckConstraint(
+            "recommendation IN ('accept', 'revise', 'collect_more_evidence')",
+            name="ck_research_review_recommendation",
+        ),
+        CheckConstraint(
+            "recommended_task_outcome IN "
+            "('goal_met', 'goal_not_met_but_conclusive', 'inconclusive', "
+            "'blocked_missing_capability', 'stopped_budget', 'stopped_time', "
+            "'stopped_safety', 'cancelled')",
+            name="ck_research_review_task_outcome",
+        ),
+        CheckConstraint(
+            "recommended_scientific_outcome IN "
+            "('supports_hypothesis', 'contradicts_hypothesis', 'inconclusive', "
+            "'unexpected', 'not_applicable')",
+            name="ck_research_review_scientific_outcome",
+        ),
+        UniqueConstraint(
+            "task_id",
+            "context_digest",
+            "model_name",
+            name="uq_research_review_context_model",
+        ),
+        Index(
+            "ix_research_review_task_created",
+            "task_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_runs.id", ondelete="SET NULL"), index=True
+    )
+    task_revision: Mapped[int] = mapped_column(nullable=False)
+    context_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    recommendation: Mapped[str] = mapped_column(String(32), nullable=False)
+    recommended_task_outcome: Mapped[str] = mapped_column(String(64), nullable=False)
+    recommended_scientific_outcome: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    supporting_evidence_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    contradicting_evidence_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    uncertainties: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    missing_checks: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    risk_flags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchAction(Base):
     __tablename__ = "research_actions"
     __table_args__ = (

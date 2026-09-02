@@ -1149,6 +1149,20 @@ declare namespace I18n {
         scientificOutcome: string
         reviewedConclusion: string
         reviewResponsibility: string
+        independentReviewer: string
+        independentReviewerHint: string
+        runIndependentReview: string
+        independentReviewReady: string
+        reviewerEvidenceCounts: string
+        reviewerUncertainties: string
+        reviewerMissingChecks: string
+        reviewerRiskFlags: string
+        useReviewerDraft: string
+        reviewerRecommendation: {
+          accept: string
+          revise: string
+          collect_more_evidence: string
+        }
         confirmReview: string
         reviewCompleted: string
         scientificAssets: string

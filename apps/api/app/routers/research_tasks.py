@@ -33,6 +33,7 @@ from app.models.research import (
     ResearchHumanWorkItem,
     ResearchPlanVersion,
     ResearchProtocolRun,
+    ResearchReviewRecommendation,
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
@@ -66,6 +67,7 @@ from app.services.access_control import (
     resolve_structured_access,
 )
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
+from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
 from app.services.research_budget import normalize_currency, reached_operational_limit
 from app.services.research_capabilities import (
@@ -82,6 +84,7 @@ from app.services.research_resources import (
     activate_aira_resource_action,
     release_research_run_reservations,
 )
+from app.services.research_review import generate_research_review
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
     TERMINAL_RUN_STATUSES,
@@ -204,6 +207,13 @@ class TaskCompleteParams(TaskTransitionParams):
     outcome: ResearchTaskOutcome
     scientific_outcome: ScientificOutcome
     conclusion: str = Field(min_length=1, max_length=100_000)
+    review_recommendation_id: UUID | None = None
+
+
+class ResearchReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_task_revision: int = Field(ge=1)
 
 
 class ManualProtocolActionDraft(BaseModel):
@@ -867,6 +877,79 @@ async def _approval_summary(
     }
 
 
+async def _research_review_context(
+    db_session: DBSession,
+    task: ResearchTask,
+    *,
+    scientific_assets: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], ResearchRun | None]:
+    run = await _latest_run(db_session, task.id)
+    actions = (
+        list(
+            (
+                await db_session.scalars(
+                    select(ResearchAction)
+                    .where(ResearchAction.run_id == run.id)
+                    .order_by(ResearchAction.sequence)
+                )
+            ).all()
+        )
+        if run is not None
+        else []
+    )
+    assets = scientific_assets or await research_asset_bundle(
+        db_session, task_id=task.id
+    )
+    return (
+        {
+            "schema": "airalogy.research-review-context.v1",
+            "task": {
+                "id": str(task.id),
+                "revision": task.revision,
+                "goal": task.goal,
+                "success_criteria": task.success_criteria,
+                "stop_conditions": task.stop_conditions,
+                "status": task.status,
+                "existing_outcome": task.outcome,
+                "existing_scientific_outcome": task.scientific_outcome,
+            },
+            "result_package": task.result_package or {},
+            "latest_run": (
+                {
+                    "id": str(run.id),
+                    "run_number": run.run_number,
+                    "status": run.status,
+                    "last_error": run.last_error,
+                    "result_package": run.result_package or {},
+                    "environment_digest": canonical_digest(
+                        run.environment_snapshot or {}
+                    ),
+                }
+                if run is not None
+                else None
+            ),
+            "actions": [
+                {
+                    "id": str(action.id),
+                    "sequence": action.sequence,
+                    "kind": action.kind,
+                    "status": action.status,
+                    "title": action.title,
+                    "output": action.output_data,
+                    "error": action.error,
+                }
+                for action in actions
+            ],
+            "available_evidence": assets["evidence"],
+            "claims": assets["claims"],
+            "data_assets": assets["data_assets"],
+            "knowledge_items": assets["knowledge_items"],
+            "protocol_improvements": assets["protocol_improvements"],
+        },
+        run,
+    )
+
+
 async def _task_detail(
     db_session: DBSession,
     task: ResearchTask,
@@ -970,6 +1053,16 @@ async def _task_detail(
             ).all()
         )
     ]
+    review_recommendations = list(
+        (
+            await db_session.scalars(
+                select(ResearchReviewRecommendation)
+                .where(ResearchReviewRecommendation.task_id == task.id)
+                .order_by(ResearchReviewRecommendation.created_at.desc())
+                .limit(10)
+            )
+        ).all()
+    )
     return {
         **summary,
         "runs": [run.as_dict() for run in runs],
@@ -982,6 +1075,7 @@ async def _task_detail(
         "protocols": protocols,
         "knowledge": knowledge,
         "resources": resources,
+        "review_recommendations": [item.as_dict() for item in review_recommendations],
         "permissions": {
             "can_run": await has_research_capability(
                 db_session,
@@ -1758,6 +1852,141 @@ async def cancel_research_task(
     return await _task_detail(db_session, task, project, lab, current_user)
 
 
+@router.post("/{task_id}/review-recommendations")
+async def generate_review_recommendation(
+    task_id: UUID,
+    params: ResearchReviewRequest,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    if not config.effective_ai_enabled:
+        raise HTTPException(status_code=503, detail="Reviewer Agent is not available")
+    task, project, lab = await _task_context(
+        db_session, current_user, task_id, "research.read"
+    )
+    if task.revision != params.expected_task_revision:
+        raise HTTPException(status_code=409, detail="Research Task has changed")
+    if task.status in {
+        ResearchTaskStatus.COMPLETED.value,
+        ResearchTaskStatus.CANCELLED.value,
+        ResearchTaskStatus.ARCHIVED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Reviewer Agent only evaluates a Task before final completion",
+        )
+    if current_user.id != task.owner_user_id:
+        await require_research_capability(
+            db_session,
+            user=current_user,
+            project=project,
+            capability="research.approve",
+        )
+    review_context, _run = await _research_review_context(db_session, task)
+    context_digest = canonical_digest(review_context)
+    model_name = config.CHAT_MODEL_DEEP
+    existing = await ResearchReviewRecommendation.find_by(
+        db_session,
+        [
+            ResearchReviewRecommendation.task_id == task.id,
+            ResearchReviewRecommendation.context_digest == context_digest,
+            ResearchReviewRecommendation.model_name == model_name,
+        ],
+    )
+    if existing is not None:
+        return existing.as_dict()
+    usage_context = create_usage_context(
+        feature="research.review.recommendation",
+        user_id=current_user.id,
+        lab_id=lab.id,
+        project_id=project.id,
+        attributes={
+            "task_id": str(task.id),
+            "task_revision": str(task.revision),
+            "context_digest": context_digest,
+        },
+    )
+    # Model latency must not keep a database transaction open.
+    await db_session.commit()
+    output = await generate_research_review(
+        context=review_context,
+        model_name=model_name,
+        usage_context=usage_context,
+    )
+
+    current_task, current_project, _current_lab = await _task_context(
+        db_session, current_user, task_id, "research.read"
+    )
+    if current_user.id != current_task.owner_user_id:
+        await require_research_capability(
+            db_session,
+            user=current_user,
+            project=current_project,
+            capability="research.approve",
+        )
+    current_context, current_run = await _research_review_context(
+        db_session, current_task
+    )
+    if (
+        current_task.revision != params.expected_task_revision
+        or canonical_digest(current_context) != context_digest
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Research results changed while Reviewer Agent was evaluating them",
+        )
+    recommendation = ResearchReviewRecommendation(
+        task_id=current_task.id,
+        run_id=current_run.id if current_run else None,
+        task_revision=current_task.revision,
+        context_digest=context_digest,
+        model_name=model_name,
+        recommendation=output.recommendation,
+        recommended_task_outcome=output.recommended_task_outcome.value,
+        recommended_scientific_outcome=(output.recommended_scientific_outcome.value),
+        summary=output.summary,
+        supporting_evidence_ids=output.supporting_evidence_ids,
+        contradicting_evidence_ids=output.contradicting_evidence_ids,
+        uncertainties=output.uncertainties,
+        missing_checks=output.missing_checks,
+        risk_flags=output.risk_flags,
+        requested_by_user_id=current_user.id,
+    )
+    db_session.add(recommendation)
+    try:
+        await db_session.flush()
+    except IntegrityError:
+        await db_session.rollback()
+        concurrent = await ResearchReviewRecommendation.find_by(
+            db_session,
+            [
+                ResearchReviewRecommendation.task_id == task_id,
+                ResearchReviewRecommendation.context_digest == context_digest,
+                ResearchReviewRecommendation.model_name == model_name,
+            ],
+        )
+        if concurrent is None:
+            raise
+        return concurrent.as_dict()
+    await emit_research_event(
+        db_session,
+        task_id=current_task.id,
+        run_id=current_run.id if current_run else None,
+        kind="review.recommendation_generated",
+        actor_user_id=None,
+        payload={
+            "recommendation_id": str(recommendation.id),
+            "recommendation": recommendation.recommendation,
+            "model": model_name,
+            "requested_by_user_id": str(current_user.id),
+            "context_digest": context_digest,
+        },
+        idempotency_key=f"review-recommendation:{recommendation.id}",
+    )
+    await db_session.commit()
+    return recommendation.as_dict()
+
+
 @router.post("/{task_id}/complete")
 async def complete_research_task(
     task_id: UUID,
@@ -1802,6 +2031,30 @@ async def complete_research_task(
             ),
         )
     scientific_assets = await research_asset_bundle(db_session, task_id=task.id)
+    review_recommendation = None
+    if params.review_recommendation_id is not None:
+        review_recommendation = await db_session.get(
+            ResearchReviewRecommendation, params.review_recommendation_id
+        )
+        if review_recommendation is None or review_recommendation.task_id != task.id:
+            raise HTTPException(
+                status_code=422,
+                detail="Review recommendation does not belong to this Research Task",
+            )
+        current_review_context, _review_run = await _research_review_context(
+            db_session,
+            task,
+            scientific_assets=scientific_assets,
+        )
+        if (
+            review_recommendation.task_revision != task.revision
+            or review_recommendation.context_digest
+            != canonical_digest(current_review_context)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Review recommendation is stale; generate or review it again",
+            )
     active_items = await db_session.scalar(
         select(func.count())
         .select_from(ResearchHumanWorkItem)
@@ -1880,6 +2133,11 @@ async def complete_research_task(
         "reviewed_conclusion": task.conclusion,
         "reviewed_by_user_id": str(current_user.id),
         "reviewed_at": now.isoformat(),
+        "review_recommendation": (
+            review_recommendation.as_dict()
+            if review_recommendation is not None
+            else None
+        ),
     }
     if run is not None:
         run.result_package = task.result_package

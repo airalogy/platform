@@ -1,8 +1,13 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.main import app
 from app.models.research_asset import (
     DataAsset,
@@ -32,9 +37,6 @@ from app.services.research_protocol_improvements import (
     verify_generation_receipt,
 )
 from app.services.research_runtime import canonical_digest
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -349,8 +351,7 @@ def test_aira_protocol_improvement_receipt_is_user_and_context_bound():
         )
 
 
-@pytest.mark.asyncio
-async def test_aira_protocol_improvement_uses_strict_structured_output(monkeypatch):
+def test_aira_protocol_improvement_uses_strict_structured_output(monkeypatch):
     async def fake_proposal(prompt, model_name, *, usage_context):
         assert "Do not claim approval" in prompt
         assert model_name == "qwen3.5-plus"
@@ -365,11 +366,13 @@ async def test_aira_protocol_improvement_uses_strict_structured_output(monkeypat
         fake_proposal,
     )
 
-    output = await generate_protocol_improvement(
-        context={"task": {"goal": "Reduce variance"}},
-        instruction="Prefer a minimal safe change",
-        model_name="qwen3.5-plus",
-        usage_context=None,
+    output = asyncio.run(
+        generate_protocol_improvement(
+            context={"task": {"goal": "Reduce variance"}},
+            instruction="Prefer a minimal safe change",
+            model_name="qwen3.5-plus",
+            usage_context=None,
+        )
     )
 
     assert output.title == "Tighten incubation timing"

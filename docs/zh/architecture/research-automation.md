@@ -142,6 +142,8 @@ P0 采用有意的失败关闭策略：手工创建的 Protocol Action 只在确
 
 Aira 不能自行宣布成功。验证层必须记录 Schema/QC、Protocol 符合性、校准、对照、样本量、统计阈值、重复、偏差和失败尝试。
 
+人员确认完成 Task 前，可选的独立 Reviewer Agent 会通过与执行 Agent 分离的深度模型提示，审查当前 Task、最新 Run、Action 账本、Result Package 和科研资产组成的准确上下文。模型调用期间不保持数据库事务；返回后 Platform 会重新检查 Task 修订和完整上下文摘要。引用上下文外 Evidence 的输出会被拒绝，不可变建议会分别保存支持证据、反证、不确定性、缺失检查和风险。Reviewer 只提供建议，不能审批、改写或完成 Task；Task Owner 或科研审批人必须主动把建议复制为可编辑审核草稿，可修改任何字段，并作为最终科学判断的记录责任人。AI 关闭时，普通人工审核路径不受影响。
+
 ## 证据与结果包
 
 AIRA 的阶段性和最终结论不只保存为 Markdown。结构化状态至少包含：
@@ -236,7 +238,7 @@ Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，
 - Instrument Gateway 与分级设备控制；
 - 外部研究服务的报价、SLA、物流、交接和结果接收；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
-- 独立 Reviewer Agent、并行/多 Agent 执行和复现评估；
+- 独立建议型 Reviewer Agent（已交付）、并行/多 Agent 执行和复现评估；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性
