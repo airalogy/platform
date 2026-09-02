@@ -46,9 +46,33 @@ def upgrade() -> None:
     from app.models.base import Base
 
     Base.metadata.create_all(bind=bind, tables=_tables(Base.metadata))
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION public.prevent_research_file_audit_mutation()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+            RAISE EXCEPTION 'research_file_access_audits is append-only';
+        END;
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER research_file_access_audits_append_only
+        BEFORE UPDATE OR DELETE ON public.research_file_access_audits
+        FOR EACH ROW EXECUTE FUNCTION public.prevent_research_file_audit_mutation()
+        """
+    )
 
 
 def downgrade() -> None:
+    op.execute(
+        "DROP TRIGGER IF EXISTS research_file_access_audits_append_only "
+        "ON public.research_file_access_audits"
+    )
+    op.execute("DROP FUNCTION IF EXISTS public.prevent_research_file_audit_mutation()")
     bind = op.get_bind()
     import_models()
     from app.models.base import Base

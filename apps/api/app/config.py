@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     OSS_BUCKET: str = ""
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""
+    KNOWLEDGE_PDF_MAX_BYTES: int = 25 * 1024 * 1024
+    KNOWLEDGE_USER_STORAGE_QUOTA_BYTES: int = 500 * 1024 * 1024
+    KNOWLEDGE_USER_FILE_COUNT_LIMIT: int = 100
+    KNOWLEDGE_PREVIEW_TOKEN_TTL_SECONDS: int = 600
+    LITERATURE_PROVIDER: Literal["none", "scholar"] = "none"
+    SCHOLAR_BASE_URL: str = ""
+    SCHOLAR_API_TOKEN: str = ""
 
     # Alibaba Cloud SMS config
     # None auto-detects SMS capabilities from the provider settings. False

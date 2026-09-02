@@ -31,6 +31,7 @@ Target initial version: `0.1.0`.
 - Added an explicit trademark and customer-data boundary for public Community Edition distributions.
 - Added a unified, Airalogy-branded bilingual VitePress documentation system for the public site and version-matched Single-Lab images, plus a deployment-aware in-product Help Center with role-relevant user, Lab administration, self-hosting, and managed-support entry points.
 - Added durable Research Tasks and Runs with an in-product task, assigned-work, and approval workbench; versioned Research Environments; typed Protocol Actions; digest-bound `allow / ask / deny` policy gates; validated Record-form handoff and return; append-only provenance events; restart-safe Aira advancement; manual execution when AI is unavailable; and explicit human review of scientific outcomes.
+- Added Knowledge Core and a private scoped Paper Library with DOI normalization, explicit no-DOI duplicate decisions, DOI/PDF/URL/BibTeX/RIS preview-confirm imports, content-hash storage without permission inheritance, real PDF and quota validation, full-text search, collections and Project links, BibTeX/RIS exports, reviewed Knowledge revisions and lineage-preserving Personal-to-Project/Project-to-Lab publishing, short-lived reauthorized file access with append-only audits, object-level Restricted access, and an optional read-only Scholar literature provider.
 
 ### Changed
 

@@ -1,5 +1,7 @@
+import inspect
 from importlib import import_module
 
+import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
@@ -9,6 +11,13 @@ from app.models.knowledge import (
     PaperLibraryEntry,
     ResearchFile,
     ResearchFileAccessAudit,
+)
+from app.services.knowledge import (
+    is_pdf,
+    normalize_doi,
+    paper_fingerprint,
+    parse_paper_source,
+    safe_download_filename,
 )
 
 
@@ -58,3 +67,81 @@ def test_knowledge_migration_is_chained_and_complete():
         "paper_import_drafts",
         "research_file_access_audits",
     }.issubset(set(migration.TABLE_NAMES))
+    source = inspect.getsource(migration)
+    assert "research_file_access_audits_append_only" in source
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("10.1000/ABC.Def", "10.1000/abc.def"),
+        ("doi: 10.1000/ABC.Def", "10.1000/abc.def"),
+        ("https://doi.org/10.1000/ABC.Def", "10.1000/abc.def"),
+        ("doi:https://dx.doi.org/10.1000/ABC.Def", "10.1000/abc.def"),
+    ],
+)
+def test_doi_normalization_accepts_common_forms(value, expected):
+    assert normalize_doi(value) == expected
+
+
+def test_doi_normalization_rejects_malformed_identifiers():
+    with pytest.raises(ValueError, match="Invalid DOI"):
+        normalize_doi("not-a-doi")
+
+
+def test_no_doi_fingerprint_normalizes_case_punctuation_and_whitespace():
+    first = paper_fingerprint("A Study: of Cells", 2026, "Alice Smith")
+    second = paper_fingerprint("  a study of cells ", 2026, "ALICE  SMITH")
+
+    assert first == second
+    assert len(first) == 64
+
+
+def test_bibtex_and_ris_imports_produce_the_same_canonical_shape():
+    bibtex = parse_paper_source(
+        "bibtex",
+        """@article{smith2026,
+          title={A reproducible result},
+          author={Alice Smith and Bob Li},
+          year={2026},
+          doi={https://doi.org/10.1234/ABC},
+          journal={Airalogy Research}
+        }""",
+    )
+    ris = parse_paper_source(
+        "ris",
+        """TY  - JOUR
+TI  - A reproducible result
+AU  - Alice Smith
+AU  - Bob Li
+PY  - 2026
+DO  - 10.1234/abc
+JO  - Airalogy Research
+ER  -""",
+    )
+
+    for key in ("title", "authors", "publication_year", "doi", "venue"):
+        assert bibtex[key] == ris[key]
+    assert bibtex["candidate_fingerprint"] == ris["candidate_fingerprint"]
+    assert bibtex["metadata_json"] == {}
+    assert ris["metadata_json"] == {}
+
+
+def test_pdf_detection_uses_file_signature_and_filename_is_header_safe():
+    assert is_pdf(b"%PDF-1.7\n")
+    assert not is_pdf(b"<html>not a pdf</html>")
+    assert safe_download_filename("../../paper\r\nInjected.pdf") == "paperInjected.pdf"
+
+
+def test_openapi_exposes_preview_confirm_and_short_lived_file_access():
+    from app.main import app
+
+    paths = app.openapi()["paths"]
+    assert "/knowledge/papers/import/preview" in paths
+    assert "/knowledge/papers/import/{draft_id}/confirm" in paths
+    assert "/knowledge/papers/import/pdf/preview" in paths
+    assert "/knowledge/files/{file_id}/token" in paths
+    assert "/knowledge/files/{file_id}/content" in paths
+    assert "/knowledge/collections/{collection_id}/entries/{entry_id}" in paths
+    assert "/knowledge/items/{item_id}/publish/preview" in paths
+    assert "/knowledge/items/{item_id}/publish/confirm" in paths

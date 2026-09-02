@@ -38,6 +38,7 @@ from .groups import router as groups_router
 from .health import router as health_router
 from .hub import router as hub_router
 from .instance import router as instance_router
+from .knowledge import router as knowledge_router
 from .labs import router as labs_router
 from .login import router as login_router
 from .oauth import router as oauth_router
@@ -264,6 +265,7 @@ app.include_router(record_exports_router)
 app.include_router(research_tasks_router)
 app.include_router(research_work_items_router)
 app.include_router(research_approvals_router)
+app.include_router(knowledge_router)
 app.include_router(resources_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)

@@ -22,6 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -121,13 +122,26 @@ class PaperLibraryEntry(Base):
     __tablename__ = "paper_library_entries"
     __table_args__ = (
         CheckConstraint(SCOPE_CHECK, name="ck_paper_library_entries_scope"),
-        UniqueConstraint(
+        Index(
+            "uq_paper_library_entries_personal_paper",
             "paper_id",
-            "scope_type",
             "owner_user_id",
+            unique=True,
+            postgresql_where=text("scope_type = 'personal' AND archived_at IS NULL"),
+        ),
+        Index(
+            "uq_paper_library_entries_lab_paper",
+            "paper_id",
             "lab_id",
+            unique=True,
+            postgresql_where=text("scope_type = 'lab' AND archived_at IS NULL"),
+        ),
+        Index(
+            "uq_paper_library_entries_project_paper",
+            "paper_id",
             "project_id",
-            name="uq_paper_library_entry_scope",
+            unique=True,
+            postgresql_where=text("scope_type = 'project' AND archived_at IS NULL"),
         ),
         Index("ix_paper_library_entries_personal", "owner_user_id", "archived_at"),
         Index("ix_paper_library_entries_lab", "lab_id", "archived_at"),
@@ -155,6 +169,7 @@ class PaperLibraryEntry(Base):
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(2048))
+    source_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     imported_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -269,6 +284,7 @@ class ResearchFileBlob(Base):
     storage_object_key: Mapped[str] = mapped_column(
         String(1024), nullable=False, unique=True
     )
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -484,9 +500,7 @@ class KnowledgeAccessGrant(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    permission: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="read"
-    )
+    permission: Mapped[str] = mapped_column(String(16), nullable=False, default="read")
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -531,6 +545,9 @@ class PaperImportDraft(Base):
     staged_research_file_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("research_files.id", ondelete="SET NULL")
     )
+    result_library_entry_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("paper_library_entries.id", ondelete="SET NULL")
+    )
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -574,7 +591,11 @@ class ResearchFileAccessToken(Base):
 class ResearchFileAccessAudit(Base):
     __tablename__ = "research_file_access_audits"
     __table_args__ = (
-        Index("ix_research_file_access_audits_file_created", "research_file_id", "created_at"),
+        Index(
+            "ix_research_file_access_audits_file_created",
+            "research_file_id",
+            "created_at",
+        ),
         Index("ix_research_file_access_audits_lab_created", "lab_id", "created_at"),
     )
 
