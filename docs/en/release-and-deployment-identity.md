@@ -17,9 +17,9 @@ Platform does not send deployment identity, customer data, or runtime status bac
 
 ## Formal releases
 
-`VERSION` is the canonical product version. A formal release synchronizes the root, API, and Web versions; moves both changelogs out of `Unreleased`; and creates an annotated `v<version>` tag from a clean verified commit.
+`VERSION` is the canonical product version. A formal release synchronizes the root, API, Web, and Instrument Gateway package versions; moves both changelogs out of `Unreleased`; and creates an annotated `v<version>` tag from a clean verified commit.
 
-The tag-triggered Release workflow runs backend, frontend, deployment, and release checks; builds multi-architecture API, Web, Protocol Executor, and PostgreSQL images; generates SBOM and provenance attestations; and assembles an immutable release package. Production uses `image:version@sha256:digest`, never `latest` as its sole identity.
+The tag-triggered Release workflow runs backend, frontend, Instrument Gateway, deployment, and release checks; builds multi-architecture API, Web, Protocol Executor, and PostgreSQL images; builds the version-matched Instrument Gateway wheel and source distribution; generates SBOM and provenance attestations; and assembles an immutable release package. Production uses `image:version@sha256:digest`, never `latest` as its sole identity. Equipment hosts install the Gateway artifact attached to the same GitHub release and verify its release provenance before adding a local hardware adapter.
 
 A source checkout remains suitable for development and evaluation. It may be marked dirty and does not carry the verification meaning of a formal release manifest.
 

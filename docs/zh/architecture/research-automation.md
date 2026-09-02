@@ -190,13 +190,15 @@ Task 还可固定截止时间和单一币种的预算上限。预算变化必须
 
 Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，成熟组织可连接既有系统；Platform 统一保存资源引用、需求、预留、Action 关联、权限和审计。
 
-设备集成从数据导入、引导执行、需设备端确认的辅助控制，再到策略内闭环自动化逐级升级。Aira 不直接向设备发送任意指令；本地 Instrument Gateway 只接收签名、结构化且列入允许清单的作业，并提供状态校验、审计和紧急停止。
+设备集成从数据导入、引导执行、需设备端确认的辅助控制，再到策略内闭环自动化逐级升级。Aira 不直接向设备发送任意指令；本地 Instrument Gateway 只接收签名、结构化且列入允许清单的作业，并提供状态校验、审计和受治理的停止请求。
 
 首个 Gateway 安全边界和执行闭环已实现。Lab Owner 或 Manager 需先预览再确认注册 Gateway，高熵密钥只显示一次，Platform 仅保存摘要；密钥轮换会使旧值立即失效，且 Gateway 持有活动租约时禁止轮换。每条允许指令都绑定某个设备 Resource 的准确修订和带版本指令标识，并固定仅本地引用的输入/结果 JSON Schema、超时、风险级别；中高风险操作必须在物理设备端确认。所有配置变更均产生不可变审计快照，停用 Gateway 或指令会阻止之后的作业领取。
 
 Instrument Job 必须同时引用 Research Environment 中已固定的资源类型、白名单指令的准确修订和一条已批准且未过期的设备预约。Gateway 独立鉴权，在单任务短租约下主动领取规范化签名信封；必须在预约时段内启动，上报必要的设备本地确认引用，持续心跳续租，并回传符合已固定输出 Schema 的结果。Platform 绝不自动重试物理操作。执行中租约过期、超时、预约结束、显式停止、Task 暂停、失败或取消都会暂停 Run，并要求 Gateway 确认和人工检查设备。这是受治理的远程停止协议，不等同于软件可保证物理急停；硬件联锁仍是最终安全边界。
 
-运行时契约仅允许 Gateway 在 TLS 下主动领取。Gateway 使用 `X-Airalogy-Gateway-Token` 鉴权并调用 `POST /instrument-gateway/v1/jobs/lease`；成功响应包含规范化 `airalogy.instrument-job.v1` 信封、单次租约密钥和 HMAC-SHA256 签名。Gateway 以 `SHA256(Gateway 密钥)` 作为 HMAC 密钥验签，之后只通过 `X-Airalogy-Instrument-Lease` 传递租约密钥，调用 `start`、`heartbeat`、`complete`、`fail` 或 `stopped`。密钥不允许出现在查询参数或设备指令载荷中。心跳返回 `stop_requested: true` 时，适配器必须调用设备特定的安全停止程序，然后确认 `stopped`。
+运行时契约仅允许 Gateway 在 TLS 下主动领取。Gateway 使用 `X-Airalogy-Gateway-Token` 鉴权并调用 `POST /instrument-gateway/v1/jobs/lease`；成功响应包含规范化 `airalogy.instrument-job.v1` 信封、作业专用租约密钥和 HMAC-SHA256 签名。Gateway 以 `SHA256(Gateway 密钥)` 作为 HMAC 密钥验签，之后只通过 `X-Airalogy-Instrument-Lease` 传递租约密钥，调用 `start`、`heartbeat`、`complete`、`fail` 或 `stopped`。密钥不允许出现在查询参数或设备指令载荷中。心跳返回 `stop_requested: true` 时，适配器必须调用设备特定的安全停止程序，然后确认 `stopped`。
+
+仓库在 `apps/instrument-gateway` 提供独立、仅依赖 Python 标准库的 Gateway 运行时和适配器 SDK。它拒绝跨源重定向、无效签名、过期信封，以及未被本地独立安装适配器按准确版本允许的指令。设备启动前，唯一活动租约会以仅属主可读权限原子记录；完成、失败和停止确认可在网络结果不确定时幂等重放。进程若在物理执行可能仍在进行时重启，必须先调用适配器的幂等安全停止，再与 Platform 对账。关机、控制链路中断、安全停止失败或执行线程无法停止时，进程都不得领取下一项作业。Platform 下发代码和任意 shell 执行不属于此边界。
 
 ## 责任边界
 

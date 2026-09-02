@@ -28,6 +28,7 @@ Enterprise 扩展不应直接混入这个仓库，除非该能力对开源版也
 platform/
 ├── apps/
 │   ├── api/    # FastAPI backend、migrations、Docker Compose stack
+│   ├── instrument-gateway/ # 部署在科研设备旁的只拉取本地运行时
 │   ├── web/    # Vue 3 Web 应用
 │   └── admin/  # 为后续管理端预留的 workspace
 ├── packages/
@@ -160,6 +161,7 @@ Community Edition 当前提供两种托管对象存储 backend：本地/自托�
 
 ```bash
 pnpm api:check
+pnpm gateway:test
 ```
 
 前端：

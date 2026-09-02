@@ -2,7 +2,6 @@ from pathlib import Path
 
 from app.routers import app
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -19,6 +18,9 @@ def test_release_workflow_builds_the_complete_component_set():
     assert 'tags:\n      - "v*.*.*"' in workflow
     for component in ("api", "web", "protocol-executor", "postgres"):
         assert f"- component: {component}" in workflow
+    assert "gateway-package:" in workflow
+    assert "uv --directory apps/instrument-gateway build --locked" in workflow
+    assert "instrument-gateway-package/*" in workflow
     assert "release-manifest.json" in workflow
     assert "attest-build-provenance" in workflow
 

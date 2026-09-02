@@ -9,6 +9,7 @@
     "api:dev": "uv --directory apps/api run fastapi dev app --host 0.0.0.0 --port 4000 --reload",
     "api:check": "uv --directory apps/api run --no-sync python -m py_compile app/main.py",
     "api:test": "uv --directory apps/api run --with pytest python -m pytest tests",
+    "gateway:test": "PYTHONPATH=apps/instrument-gateway/src python3 -m unittest discover -s apps/instrument-gateway/tests",
     "dev:prepare": "pnpm --filter @airalogy/components prepare",
     "dev": "pnpm run docs:build:web && pnpm --filter @airalogy/web dev",
     "build:prepare": "pnpm --filter @airalogy/components build",

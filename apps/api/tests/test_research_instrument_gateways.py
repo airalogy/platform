@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
@@ -322,3 +323,81 @@ def test_expired_instrument_leases_recover_only_undelivered_work(monkeypatch):
     assert running_run.status == "paused"
     assert running_task.status == "paused"
     assert emit.await_count == 2
+
+
+def test_terminal_gateway_callbacks_are_idempotent_and_conflict_safe(monkeypatch):
+    routes = import_module("app.routers.research_instrument_jobs")
+    completed = SimpleNamespace(status="completed", result={"value": 42})
+    failed = SimpleNamespace(status="failed", error="device fault")
+    stopped = SimpleNamespace(status="stopped", stop_reason="operator stop")
+    context_tail = (
+        SimpleNamespace(),
+        SimpleNamespace(),
+        SimpleNamespace(),
+    )
+    db_session = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(
+        routes,
+        "_authenticate_gateway",
+        AsyncMock(return_value=SimpleNamespace(id=uuid4())),
+    )
+
+    monkeypatch.setattr(
+        routes,
+        "_gateway_job_context",
+        AsyncMock(return_value=(completed, *context_tail)),
+    )
+    result = asyncio.run(
+        routes.complete_instrument_job(
+            uuid4(),
+            routes.GatewayComplete(result={"value": 42}),
+            "aigw_token",
+            "aijl_token",
+            db_session,
+        )
+    )
+    assert result == {"status": "completed"}
+    with pytest.raises(HTTPException) as conflict:
+        asyncio.run(
+            routes.complete_instrument_job(
+                uuid4(),
+                routes.GatewayComplete(result={"value": 43}),
+                "aigw_token",
+                "aijl_token",
+                db_session,
+            )
+        )
+    assert conflict.value.status_code == 409
+
+    monkeypatch.setattr(
+        routes,
+        "_gateway_job_context",
+        AsyncMock(return_value=(failed, *context_tail)),
+    )
+    result = asyncio.run(
+        routes.fail_instrument_job(
+            uuid4(),
+            routes.GatewayFail(error="device fault"),
+            "aigw_token",
+            "aijl_token",
+            db_session,
+        )
+    )
+    assert result == {"status": "failed"}
+
+    monkeypatch.setattr(
+        routes,
+        "_gateway_job_context",
+        AsyncMock(return_value=(stopped, *context_tail)),
+    )
+    result = asyncio.run(
+        routes.acknowledge_instrument_job_stopped(
+            uuid4(),
+            routes.GatewayStopped(reason="operator stop"),
+            "aigw_token",
+            "aijl_token",
+            db_session,
+        )
+    )
+    assert result == {"status": "stopped"}
+    assert db_session.commit.await_count == 3

@@ -1,0 +1,54 @@
+name: Instrument Gateway
+
+on:
+  push:
+    paths:
+      - "apps/instrument-gateway/**"
+      - ".github/workflows/instrument-gateway.yml"
+  pull_request:
+    paths:
+      - "apps/instrument-gateway/**"
+      - ".github/workflows/instrument-gateway.yml"
+
+concurrency:
+  group: instrument-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/instrument-gateway
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.4"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Verify lockfile
+        run: uv lock --check
+
+      - name: Run tests
+        run: PYTHONPATH=src python -m unittest discover -s tests
+
+      - name: Compile package
+        run: python -m compileall -q src tests
+
+      - name: Build package
+        run: uv build --locked
+
+      - name: Verify wheel installation
+        run: |
+          python -m venv "$RUNNER_TEMP/instrument-gateway-wheel"
+          "$RUNNER_TEMP/instrument-gateway-wheel/bin/pip" install --no-deps dist/*.whl
+          "$RUNNER_TEMP/instrument-gateway-wheel/bin/python" -c \
+            "import airalogy_instrument_gateway, importlib.metadata; print(importlib.metadata.version('airalogy-instrument-gateway'))"

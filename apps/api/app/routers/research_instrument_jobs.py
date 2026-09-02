@@ -816,7 +816,6 @@ async def _pause_for_instrument_failure(
     job.status = ResearchInstrumentJobStatus.FAILED.value
     job.error = error
     job.completed_at = now
-    job.lease_token_digest = None
     job.lease_expires_at = None
     job.revision += 1
     if task.status != ResearchTaskStatus.CANCELLED.value:
@@ -1190,6 +1189,14 @@ async def complete_instrument_job(
         job_id=job_id,
         lease_token=lease_token,
     )
+    if job.status == ResearchInstrumentJobStatus.COMPLETED.value:
+        if job.result != params.result:
+            raise HTTPException(
+                status_code=409,
+                detail="Instrument Job was already completed with a different result",
+            )
+        await db_session.commit()
+        return {"status": job.status}
     if job.status != ResearchInstrumentJobStatus.RUNNING.value:
         raise HTTPException(status_code=409, detail="Instrument Job is not running")
     _ensure_live_lease(job)
@@ -1204,7 +1211,6 @@ async def complete_instrument_job(
     job.result = params.result
     job.error = None
     job.completed_at = now
-    job.lease_token_digest = None
     job.lease_expires_at = None
     job.revision += 1
     action.status = ResearchActionStatus.COMPLETED.value
@@ -1286,9 +1292,18 @@ async def fail_instrument_job(
         job_id=job_id,
         lease_token=lease_token,
     )
+    if job.status == ResearchInstrumentJobStatus.FAILED.value:
+        if job.error != params.error:
+            raise HTTPException(
+                status_code=409,
+                detail="Instrument Job was already failed with a different reason",
+            )
+        await db_session.commit()
+        return {"status": job.status}
     if job.status not in {
         ResearchInstrumentJobStatus.LEASED.value,
         ResearchInstrumentJobStatus.RUNNING.value,
+        ResearchInstrumentJobStatus.STOP_REQUESTED.value,
     }:
         raise HTTPException(status_code=409, detail="Instrument Job is not active")
     await _pause_for_instrument_failure(
@@ -1323,12 +1338,25 @@ async def acknowledge_instrument_job_stopped(
         job_id=job_id,
         lease_token=lease_token,
     )
-    if job.status != ResearchInstrumentJobStatus.STOP_REQUESTED.value:
-        raise HTTPException(status_code=409, detail="Instrument stop was not requested")
+    if job.status == ResearchInstrumentJobStatus.STOPPED.value:
+        if params.reason and job.stop_reason != params.reason:
+            raise HTTPException(
+                status_code=409,
+                detail="Instrument Job was already stopped with a different reason",
+            )
+        await db_session.commit()
+        return {"status": job.status}
+    if job.status not in {
+        ResearchInstrumentJobStatus.RUNNING.value,
+        ResearchInstrumentJobStatus.STOP_REQUESTED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Instrument Job cannot acknowledge a safe stop",
+        )
     now = utcnow()
     job.status = ResearchInstrumentJobStatus.STOPPED.value
     job.completed_at = now
-    job.lease_token_digest = None
     job.lease_expires_at = None
     job.stop_reason = params.reason or job.stop_reason
     job.revision += 1

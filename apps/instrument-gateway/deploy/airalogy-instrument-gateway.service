@@ -1,0 +1,25 @@
+[Unit]
+Description=Airalogy Instrument Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=airalogy-instrument
+Group=airalogy-instrument
+WorkingDirectory=/opt/airalogy-instrument-gateway
+EnvironmentFile=/etc/airalogy/instrument-gateway.env
+ExecStart=/opt/airalogy-instrument-gateway/.venv/bin/airalogy-instrument-gateway
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=90s
+UMask=0077
+StateDirectory=airalogy-instrument-gateway
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/airalogy-instrument-gateway
+
+[Install]
+WantedBy=multi-user.target

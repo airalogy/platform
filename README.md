@@ -28,6 +28,7 @@ Formal releases, immutable image identity, support diagnostics, and the boundary
 platform/
 ├── apps/
 │   ├── api/    # FastAPI backend, migrations, Docker Compose stack
+│   ├── instrument-gateway/ # Pull-only local runtime beside laboratory equipment
 │   ├── web/    # Vue 3 web application
 │   └── admin/  # Reserved workspace slot for future admin surfaces
 ├── packages/
@@ -160,6 +161,7 @@ Backend checks:
 
 ```bash
 pnpm api:check
+pnpm gateway:test
 ```
 
 Frontend checks:

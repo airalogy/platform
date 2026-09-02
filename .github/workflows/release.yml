@@ -45,15 +45,44 @@ jobs:
           python-version: "3.13"
       - run: pnpm install --frozen-lockfile
       - run: uv --directory apps/api sync --locked --dev
+      - run: uv --directory apps/instrument-gateway lock --check
       - run: pnpm version:check
       - run: pnpm release:metadata:test
       - run: pnpm deployment:identity:test
       - run: uv --directory apps/api run --with pytest python -m pytest tests
+      - run: pnpm gateway:test
       - run: pnpm lint
       - run: pnpm type-check
       - run: pnpm build
       - run: bash -n deploy/single-lab/platformctl deploy/single-lab/scripts/*.sh
       - run: pnpm release:check -- "$RELEASE_TAG"
+
+  gateway-package:
+    needs: verify
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.4"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: uv --directory apps/instrument-gateway build --locked
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        if: github.event.repository.visibility == 'public'
+        with:
+          subject-path: apps/instrument-gateway/dist/*
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: platform-instrument-gateway-package
+          path: apps/instrument-gateway/dist/*
+          if-no-files-found: error
 
   images:
     needs: verify
@@ -143,7 +172,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: images
+    needs: [images, gateway-package]
     permissions:
       attestations: write
       contents: write
@@ -166,6 +195,10 @@ jobs:
           pattern: platform-*-image-metadata
           path: image-metadata
           merge-multiple: true
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: platform-instrument-gateway-package
+          path: instrument-gateway-package
       - name: Assemble immutable Platform release
         run: |
           mkdir -p release-stage/deploy release-stage/docs/zh release-stage/docs/en
@@ -232,4 +265,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
-          gh release create "$GITHUB_REF_NAME" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256" "airalogy-platform-release-${GITHUB_REF_NAME}.json" "airalogy-platform-release-${GITHUB_REF_NAME}.env" --generate-notes --verify-tag
+          gh release create "$GITHUB_REF_NAME" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256" "airalogy-platform-release-${GITHUB_REF_NAME}.json" "airalogy-platform-release-${GITHUB_REF_NAME}.env" instrument-gateway-package/* --generate-notes --verify-tag

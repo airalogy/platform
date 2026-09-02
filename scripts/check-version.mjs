@@ -16,12 +16,14 @@ for (const packageFile of ["package.json", "apps/web/package.json"]) {
   }
 }
 
-const backendProject = await readText("apps/api/pyproject.toml")
-const backendVersion = /^version\s*=\s*"([^"]+)"$/mu.exec(backendProject)?.[1]
-if (backendVersion !== version) {
-  throw new Error(
-    `apps/api/pyproject.toml has version ${backendVersion ?? "missing"}; expected ${version}`,
-  )
+for (const projectFile of ["apps/api/pyproject.toml", "apps/instrument-gateway/pyproject.toml"]) {
+  const project = await readText(projectFile)
+  const projectVersion = /^version\s*=\s*"([^"]+)"$/mu.exec(project)?.[1]
+  if (projectVersion !== version) {
+    throw new Error(
+      `${projectFile} has version ${projectVersion ?? "missing"}; expected ${version}`,
+    )
+  }
 }
 
 const deploymentEnvironment = await readText("deploy/single-lab/.env.example")

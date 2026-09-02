@@ -31,6 +31,12 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "api:test"],
   },
+  gatewayTests: {
+    id: "gateway-tests",
+    label: "Instrument Gateway tests",
+    command: "corepack",
+    args: ["pnpm", "gateway:test"],
+  },
   docs: {
     id: "docs",
     label: "documentation production build",
@@ -81,6 +87,8 @@ const AI_E2E_PREFIXES = [
   "apps/web/src/views/editor/",
 ]
 
+const GATEWAY_FILES = new Set([".github/workflows/instrument-gateway.yml"])
+
 function hasPath(files, exactFiles, prefixes = []) {
   return files.some(
     file => exactFiles.has(file) || prefixes.some(prefix => file.startsWith(prefix)),
@@ -94,6 +102,10 @@ export function buildCheckPlan(files, fullRequested = false) {
     plan.push(checks.apiTests)
   }
 
+  if (hasPath(files, GATEWAY_FILES, ["apps/instrument-gateway/"])) {
+    plan.push(checks.gatewayTests)
+  }
+
   if (hasPath(files, DOCS_FILES, ["docs/"])) {
     plan.push(checks.docs)
   }
@@ -101,8 +113,7 @@ export function buildCheckPlan(files, fullRequested = false) {
   const needsFullE2e = fullRequested || hasPath(files, FULL_E2E_FILES, ["tests/e2e/"])
   if (needsFullE2e) {
     plan.push(checks.fullE2e)
-  }
-  else if (hasPath(files, AI_E2E_FILES, AI_E2E_PREFIXES)) {
+  } else if (hasPath(files, AI_E2E_FILES, AI_E2E_PREFIXES)) {
     plan.push(checks.aiE2e)
   }
 
@@ -121,8 +132,7 @@ function diffFiles(from, to) {
 function baseForNewBranch(localSha) {
   try {
     return runGit(["merge-base", localSha, "origin/main"])
-  }
-  catch {
+  } catch {
     return runGit(["rev-list", "--max-parents=0", localSha]).split("\n")[0]
   }
 }
@@ -150,8 +160,7 @@ function filesFromUpstream() {
   try {
     const upstream = runGit(["rev-parse", "--verify", "@{upstream}"])
     return diffFiles(upstream, "HEAD").sort()
-  }
-  catch {
+  } catch {
     const root = runGit(["rev-list", "--max-parents=0", "HEAD"]).split("\n")[0]
     return diffFiles(root, "HEAD").sort()
   }

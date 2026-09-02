@@ -52,6 +52,8 @@ Aira can request a pinned resource type, quantity, unit, or equipment window, bu
 
 Lab Owners and Managers can open **Lab resource library → Instrument gateways** to establish the local device boundary. Create a Gateway, preview the impact, confirm, then copy its one-time credential into the on-premises Gateway process. Platform never shows that credential again. Rotating it invalidates the old value immediately, so update the local process before resuming device work.
 
+Install and supervise the reference process from `apps/instrument-gateway`, store the credential in the local service manager rather than source control, and keep its persistent state directory private. Configure the Platform `/api` URL, credential, a locally installed adapter name, adapter configuration, and state path. Production connections require HTTPS. The built-in `mock` adapter is for integration testing only; a hardware adapter must independently allow exact command versions and implement an idempotent safe-stop that returns only after the device reaches its safe state.
+
 Select the Gateway and add only the commands it may perform. Every command selects a concrete active equipment Resource, captures its current revision, and defines a versioned key, input and result JSON Schemas, risk, timeout, and device-confirmation requirement. Medium- and high-risk commands always require physical-device confirmation. Schema changes create a new audited allowlist revision; existing jobs retain their original contract. Disable a command or Gateway to block future leasing.
 
 ## Run an instrument

@@ -1,0 +1,15 @@
+{
+  "commands": [
+    {
+      "key": "mock.measure",
+      "version": "1",
+      "result": {
+        "status": "ok",
+        "value": 42,
+        "unit": "1"
+      },
+      "delay_seconds": 2,
+      "confirmation_reference": "mock-device-panel:confirmed"
+    }
+  ]
+}
