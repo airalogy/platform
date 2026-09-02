@@ -45,6 +45,16 @@ def test_role_catalog_exposes_stable_capability_sets():
     assert "research.run" in catalog["recorder"]["capabilities"]
     assert "research.assign" in catalog["protocol_editor"]["capabilities"]
     assert "research.approve" in catalog["project_manager"]["capabilities"]
+    assert "knowledge.restricted.read" in catalog["lab_owner"]["capabilities"]
+    assert "knowledge.restricted.read" not in catalog["lab_admin"]["capabilities"]
+    assert "knowledge.restricted.read" not in catalog["project_manager"]["capabilities"]
+    assert "knowledge.manage" in catalog["knowledge_librarian"]["capabilities"]
+    assert "knowledge.review" in catalog["knowledge_reviewer"]["capabilities"]
+    assert catalog["knowledge_restricted_reader"]["capabilities"] == [
+        "knowledge.export",
+        "knowledge.read",
+        "knowledge.restricted.read",
+    ]
 
 
 def test_openapi_exposes_only_canonical_organizational_unit_contract():

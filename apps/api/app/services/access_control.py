@@ -48,14 +48,28 @@ ALL_CAPABILITIES = frozenset(
         "research.run",
         "research.assign",
         "research.approve",
+        "knowledge.read",
+        "knowledge.create",
+        "knowledge.manage",
+        "knowledge.review",
+        "knowledge.publish",
+        "knowledge.import",
+        "knowledge.export",
+        "knowledge.restricted.read",
     }
 )
 
 ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
     "lab_owner": ALL_CAPABILITIES,
-    "lab_admin": ALL_CAPABILITIES - {"lab.own"},
+    "lab_admin": ALL_CAPABILITIES - {"lab.own", "knowledge.restricted.read"},
     "project_manager": ALL_CAPABILITIES
-    - {"lab.own", "team.manage", "access.audit.read", "role.assign.manager"},
+    - {
+        "lab.own",
+        "team.manage",
+        "access.audit.read",
+        "role.assign.manager",
+        "knowledge.restricted.read",
+    },
     "protocol_editor": frozenset(
         {
             "protocol.create",
@@ -71,6 +85,10 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.create",
             "research.run",
             "research.assign",
+            "knowledge.read",
+            "knowledge.create",
+            "knowledge.import",
+            "knowledge.export",
         }
     ),
     "contributor": frozenset(
@@ -83,6 +101,10 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.read",
             "research.create",
             "research.run",
+            "knowledge.read",
+            "knowledge.create",
+            "knowledge.import",
+            "knowledge.export",
         }
     ),
     "recorder": frozenset(
@@ -94,9 +116,42 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "record.read",
             "research.read",
             "research.run",
+            "knowledge.read",
+            "knowledge.create",
+            "knowledge.import",
+            "knowledge.export",
         }
     ),
-    "viewer": frozenset({"protocol.read", "record.read", "research.read"}),
+    "viewer": frozenset(
+        {
+            "protocol.read",
+            "record.read",
+            "research.read",
+            "knowledge.read",
+            "knowledge.export",
+        }
+    ),
+    "knowledge_librarian": frozenset(
+        {
+            "knowledge.read",
+            "knowledge.create",
+            "knowledge.manage",
+            "knowledge.import",
+            "knowledge.export",
+        }
+    ),
+    "knowledge_reviewer": frozenset(
+        {
+            "knowledge.read",
+            "knowledge.create",
+            "knowledge.review",
+            "knowledge.publish",
+            "knowledge.export",
+        }
+    ),
+    "knowledge_restricted_reader": frozenset(
+        {"knowledge.read", "knowledge.restricted.read", "knowledge.export"}
+    ),
     "resource_manager": frozenset(
         {
             "resource.read",
@@ -146,6 +201,9 @@ ROLE_LABELS = {
     "resource_custodian": "Resource custodian",
     "resource_operator": "Resource operator",
     "resource_viewer": "Resource viewer",
+    "knowledge_librarian": "Knowledge librarian",
+    "knowledge_reviewer": "Knowledge reviewer",
+    "knowledge_restricted_reader": "Restricted knowledge reader",
 }
 
 ROLE_LEGACY_PROJECT_ROLE = {
@@ -205,6 +263,14 @@ ACTION_CAPABILITY = {
     "run_research": "research.run",
     "assign_research": "research.assign",
     "approve_research": "research.approve",
+    "read_knowledge": "knowledge.read",
+    "create_knowledge": "knowledge.create",
+    "manage_knowledge": "knowledge.manage",
+    "review_knowledge": "knowledge.review",
+    "publish_knowledge": "knowledge.publish",
+    "import_knowledge": "knowledge.import",
+    "export_knowledge": "knowledge.export",
+    "read_restricted_knowledge": "knowledge.restricted.read",
 }
 
 
