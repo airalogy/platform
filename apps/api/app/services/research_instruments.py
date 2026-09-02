@@ -9,9 +9,10 @@ import re
 import secrets
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from jsonschema import Draft202012Validator, SchemaError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.research import (
@@ -28,10 +29,24 @@ from app.models.research_execution import (
     ResearchInstrumentJob,
     ResearchInstrumentJobStatus,
 )
+from app.models.resource import (
+    BookingStatus,
+    EquipmentBooking,
+    Resource,
+    ResourceRevision,
+    ResourceStatus,
+)
+from app.services.access_control import resolve_resource_access
 
 COMMAND_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,127}$")
 TOKEN_PREFIX = "aigw_"
 LEASE_TOKEN_PREFIX = "aijl_"
+ACTIVE_INSTRUMENT_JOB_STATUSES = {
+    ResearchInstrumentJobStatus.QUEUED.value,
+    ResearchInstrumentJobStatus.LEASED.value,
+    ResearchInstrumentJobStatus.RUNNING.value,
+    ResearchInstrumentJobStatus.STOP_REQUESTED.value,
+}
 
 
 def generate_gateway_token() -> str:
@@ -148,9 +163,242 @@ def validate_schema_payload(
         return payload
     issue = issues[0]
     path = ".".join(str(item) for item in issue.absolute_path)
-    raise ValueError(
-        f"Invalid {label}{f' at {path}' if path else ''}: {issue.message}"
+    raise ValueError(f"Invalid {label}{f' at {path}' if path else ''}: {issue.message}")
+
+
+def resource_type_is_pinned(run: ResearchRun, resource: Resource) -> bool:
+    """Keep mutable equipment behind the Task's pinned Resource Type boundary."""
+
+    return any(
+        str(item.get("source_id") or "") == str(resource.resource_type_id)
+        for item in list((run.environment_snapshot or {}).get("resources") or [])
     )
+
+
+async def available_instrument_command_options(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    user_id: UUID,
+    exclude_job_id: UUID | None = None,
+) -> list[dict[str, Any]]:
+    """Resolve only commands the requester can execute with an approved booking."""
+
+    rows = list(
+        (
+            await db_session.execute(
+                select(ResearchInstrumentCommand, ResearchInstrumentGateway)
+                .join(
+                    ResearchInstrumentGateway,
+                    ResearchInstrumentGateway.id
+                    == ResearchInstrumentCommand.gateway_id,
+                )
+                .where(
+                    ResearchInstrumentCommand.lab_id == task.lab_id,
+                    ResearchInstrumentCommand.enabled.is_(True),
+                    ResearchInstrumentCommand.archived_at.is_(None),
+                    ResearchInstrumentGateway.enabled.is_(True),
+                    ResearchInstrumentGateway.revoked_at.is_(None),
+                )
+                .order_by(
+                    ResearchInstrumentCommand.name,
+                    ResearchInstrumentCommand.command_key,
+                    ResearchInstrumentCommand.id,
+                )
+            )
+        ).all()
+    )
+    now = datetime.now(UTC)
+    items: list[dict[str, Any]] = []
+    for command, gateway in rows:
+        resource = await db_session.get(Resource, command.resource_id)
+        revision = await db_session.get(ResourceRevision, command.resource_revision_id)
+        if (
+            resource is None
+            or revision is None
+            or resource.lab_id != task.lab_id
+            or resource.archived_at is not None
+            or resource.status != ResourceStatus.ACTIVE.value
+            or resource.current_revision_id != revision.id
+            or revision.revision != command.resource_revision
+            or not resource_type_is_pinned(run, resource)
+        ):
+            continue
+        access = await resolve_resource_access(
+            db_session,
+            user_id,
+            task.lab_id,
+            resource_type_id=resource.resource_type_id,
+            resource_id=resource.id,
+        )
+        if not access.allows("equipment.book"):
+            continue
+        bookings = list(
+            (
+                await db_session.scalars(
+                    select(EquipmentBooking)
+                    .where(
+                        EquipmentBooking.lab_id == task.lab_id,
+                        EquipmentBooking.resource_id == resource.id,
+                        EquipmentBooking.user_id == user_id,
+                        EquipmentBooking.status == BookingStatus.APPROVED.value,
+                        EquipmentBooking.ends_at > now,
+                    )
+                    .order_by(EquipmentBooking.starts_at, EquipmentBooking.id)
+                )
+            ).all()
+        )
+        if bookings:
+            active_statement = select(ResearchInstrumentJob.equipment_booking_id).where(
+                ResearchInstrumentJob.equipment_booking_id.in_(
+                    [booking.id for booking in bookings]
+                ),
+                ResearchInstrumentJob.status.in_(ACTIVE_INSTRUMENT_JOB_STATUSES),
+            )
+            if exclude_job_id is not None:
+                active_statement = active_statement.where(
+                    ResearchInstrumentJob.id != exclude_job_id
+                )
+            active_booking_ids = set((await db_session.scalars(active_statement)).all())
+            bookings = [
+                booking for booking in bookings if booking.id not in active_booking_ids
+            ]
+        if not bookings:
+            continue
+        items.append(
+            {
+                **command_snapshot(command),
+                "available": True,
+                "gateway": {"id": str(gateway.id), "name": gateway.name},
+                "resource": {
+                    "id": str(resource.id),
+                    "name": resource.name,
+                    "code": resource.code,
+                },
+                "bookings": [booking.as_dict() for booking in bookings],
+            }
+        )
+    return items
+
+
+async def activate_aira_instrument_action(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+) -> dict[str, Any]:
+    """Re-resolve an approved Aira proposal before it can reach a Gateway."""
+
+    job = await ResearchInstrumentJob.find_by(
+        db_session, [ResearchInstrumentJob.action_id == action.id]
+    )
+    if job is None:
+        raise ValueError("Instrument Job not found")
+    if (
+        action.status != ResearchActionStatus.PROPOSED.value
+        or job.status != ResearchInstrumentJobStatus.QUEUED.value
+    ):
+        raise ValueError("Instrument Action is no longer awaiting approval")
+    locked_context = []
+    for model, item_id in (
+        (ResearchInstrumentCommand, job.command_id),
+        (ResearchInstrumentGateway, job.gateway_id),
+        (Resource, job.resource_id),
+        (EquipmentBooking, job.equipment_booking_id),
+    ):
+        item = (
+            await db_session.scalars(
+                select(model).where(model.id == item_id).with_for_update()
+            )
+        ).first()
+        locked_context.append(item)
+    if any(item is None for item in locked_context):
+        raise ValueError("Instrument command, device, or booking no longer exists")
+    options = await available_instrument_command_options(
+        db_session,
+        task=task,
+        run=run,
+        user_id=run.requested_by_user_id,
+        exclude_job_id=job.id,
+    )
+    option = next(
+        (item for item in options if str(item.get("id")) == str(job.command_id)),
+        None,
+    )
+    if option is None:
+        raise ValueError(
+            "Instrument command or requester access is no longer available"
+        )
+    booking = next(
+        (
+            item
+            for item in list(option.get("bookings") or [])
+            if str(item.get("id")) == str(job.equipment_booking_id)
+        ),
+        None,
+    )
+    if booking is None:
+        raise ValueError("The approved equipment booking is no longer available")
+    pinned_fields = {
+        "gateway_id": job.gateway_id,
+        "resource_id": job.resource_id,
+        "resource_revision_id": job.resource_revision_id,
+        "resource_revision": job.resource_revision,
+        "command_key": job.command_key,
+        "command_version": job.command_version,
+        "command_revision": job.command_revision,
+        "input_schema": job.input_schema,
+        "output_schema": job.output_schema,
+        "risk": job.risk,
+        "device_confirmation_required": job.device_confirmation_required,
+        "timeout_seconds": job.timeout_seconds,
+    }
+    current_fields = {
+        "gateway_id": option["gateway_id"],
+        "resource_id": option["resource_id"],
+        "resource_revision_id": option["resource_revision_id"],
+        "resource_revision": option["resource_revision"],
+        "command_key": option["command_key"],
+        "command_version": option["command_version"],
+        "command_revision": option["revision"],
+        "input_schema": option["input_schema"],
+        "output_schema": option["output_schema"],
+        "risk": option["risk"],
+        "device_confirmation_required": option["device_confirmation_required"],
+        "timeout_seconds": option["timeout_seconds"],
+    }
+    if json.dumps(pinned_fields, sort_keys=True, default=str) != json.dumps(
+        current_fields, sort_keys=True, default=str
+    ):
+        raise ValueError("Instrument command changed after the approval preview")
+    validate_schema_payload(job.input_schema, job.arguments, "Instrument arguments")
+    booking_in_use = await db_session.scalar(
+        select(func.count())
+        .select_from(ResearchInstrumentJob)
+        .where(
+            ResearchInstrumentJob.equipment_booking_id == job.equipment_booking_id,
+            ResearchInstrumentJob.id != job.id,
+            ResearchInstrumentJob.status.in_(ACTIVE_INSTRUMENT_JOB_STATUSES),
+        )
+    )
+    if booking_in_use:
+        raise ValueError("This equipment booking already has an active Instrument Job")
+    action.status = ResearchActionStatus.QUEUED.value
+    action.error = None
+    action.revision += 1
+    run.status = ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
+    run.last_error = None
+    run.advance_generation += 1
+    await db_session.flush()
+    return {
+        "instrument_job_id": str(job.id),
+        "gateway_id": str(job.gateway_id),
+        "command_key": job.command_key,
+        "command_version": job.command_version,
+        "equipment_booking_id": str(job.equipment_booking_id),
+    }
 
 
 async def reconcile_expired_instrument_leases(

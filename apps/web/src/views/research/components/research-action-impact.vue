@@ -7,6 +7,9 @@
       <span v-if="action.tool_job" class="aira-type-meta">
         {{ action.tool_job.tool_key }} · v{{ action.tool_job.tool_version }}
       </span>
+      <span v-else-if="action.instrument_job" class="aira-type-meta">
+        {{ action.instrument_job.command_key }} · v{{ action.instrument_job.command_version }} · r{{ action.instrument_job.command_revision }}
+      </span>
       <span v-else-if="action.wait_event" class="aira-type-meta">
         {{ action.wait_event.expected_event_type }}
       </span>
@@ -24,6 +27,25 @@
     <div v-if="action.tool_job" class="mt-2">
       <div class="aira-type-meta">{{ $t("page.research.toolArguments") }}</div>
       <pre>{{ formatted(action.tool_job.arguments) }}</pre>
+    </div>
+    <div v-else-if="action.instrument_job" class="mt-2 space-y-2">
+      <div class="flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+        <span>{{ $t("page.research.equipment") }} · {{ instrumentResource }}</span>
+        <span>{{ $t("page.research.gateway") }} · {{ action.input_data.gateway_name || action.instrument_job.gateway_id }}</span>
+        <span>{{ $t("page.research.approvedBooking") }} · {{ action.instrument_job.equipment_booking_id }}</span>
+        <span>{{ $t(`page.resourceLibrary.risk.${action.instrument_job.risk}` as I18n.I18nKey) }}</span>
+        <span>
+          {{ formatDate(bookingWindow.starts_at) }} – {{ formatDate(bookingWindow.ends_at) }}
+        </span>
+      </div>
+      <div class="aira-type-meta">
+        {{ $t("page.research.deviceConfirmation") }} ·
+        {{ action.instrument_job.device_confirmation_required ? $t("page.research.deviceConfirmationRequired") : $t("page.research.deviceConfirmationNotRequired") }}
+      </div>
+      <div>
+        <div class="aira-type-meta">{{ $t("page.research.instrumentArguments") }}</div>
+        <pre>{{ formatted(action.instrument_job.arguments) }}</pre>
+      </div>
     </div>
     <div v-else-if="action.wait_event" class="mt-2">
       <div class="aira-type-meta">{{ $t("page.research.expectedPayload") }}</div>
@@ -58,7 +80,7 @@ import { $t } from "@airalogy/shared/locales"
 const props = defineProps<{ action: ResearchAction }>()
 
 const kindLabel = computed(() => {
-  const known = ["protocol_run", "tool_job", "resource_reservation", "wait_event", "human_work_item"]
+  const known = ["protocol_run", "tool_job", "instrument_job", "resource_reservation", "wait_event", "human_work_item"]
   return known.includes(props.action.kind)
     ? $t(`page.research.actionKind.${props.action.kind}` as I18n.I18nKey)
     : props.action.kind.replaceAll("_", " ")
@@ -69,6 +91,8 @@ const kindTagType = computed<TagProps["type"]>(() => {
     return "info"
   if (props.action.kind === "wait_event")
     return "warning"
+  if (props.action.kind === "instrument_job")
+    return "warning"
   if (props.action.kind === "resource_reservation")
     return "warning"
   return "default"
@@ -77,6 +101,16 @@ const kindTagType = computed<TagProps["type"]>(() => {
 const resolvedResource = computed(() => (
   (props.action.input_data?.resolved || {}) as Record<string, string>
 ))
+
+const bookingWindow = computed(() => (
+  (props.action.requirements?.booking_window || {}) as Record<string, string>
+))
+
+const instrumentResource = computed(() => {
+  const name = String(props.action.input_data?.resource_name || props.action.instrument_job?.resource_id || "")
+  const code = String(props.action.input_data?.resource_code || "")
+  return code ? `${name} · ${code}` : name
+})
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString() : "—"

@@ -272,11 +272,7 @@ async def _command_context(
     if lock:
         statement = statement.with_for_update()
     command = (await db_session.scalars(statement)).first()
-    if (
-        command is None
-        or command.lab_id != task.lab_id
-        or not command.enabled
-    ):
+    if command is None or command.lab_id != task.lab_id or not command.enabled:
         raise HTTPException(status_code=422, detail="Instrument command is unavailable")
     gateway = await db_session.get(ResearchInstrumentGateway, command.gateway_id)
     if gateway is None or gateway.revoked_at is not None or not gateway.enabled:
@@ -534,8 +530,13 @@ async def create_instrument_action(
             db_session, [ResearchInstrumentJob.action_id == existing.id]
         )
         if existing_job is None:
-            raise HTTPException(status_code=409, detail="Instrument Action is incomplete")
-        return {**existing.as_dict(), "instrument_job": instrument_job_snapshot(existing_job)}
+            raise HTTPException(
+                status_code=409, detail="Instrument Action is incomplete"
+            )
+        return {
+            **existing.as_dict(),
+            "instrument_job": instrument_job_snapshot(existing_job),
+        }
     booking_in_use = await db_session.scalar(
         select(func.count())
         .select_from(ResearchInstrumentJob)
@@ -640,7 +641,9 @@ async def _user_job_context(
     job_id: UUID,
     *,
     lock: bool,
-) -> tuple[ResearchInstrumentJob, ResearchAction, ResearchRun, ResearchTask, Project, Lab]:
+) -> tuple[
+    ResearchInstrumentJob, ResearchAction, ResearchRun, ResearchTask, Project, Lab
+]:
     statement = select(ResearchInstrumentJob).where(ResearchInstrumentJob.id == job_id)
     if lock:
         statement = statement.with_for_update()
@@ -660,7 +663,9 @@ async def _user_job_context(
     return job, action, run, task, project, lab
 
 
-def _stop_command(job: ResearchInstrumentJob, params: InstrumentStopDraft) -> dict[str, Any]:
+def _stop_command(
+    job: ResearchInstrumentJob, params: InstrumentStopDraft
+) -> dict[str, Any]:
     return {
         "operation": "stop_instrument_job",
         "instrument_job_id": str(job.id),
@@ -759,7 +764,9 @@ async def _authenticate_gateway(
     token: str,
 ) -> ResearchInstrumentGateway:
     if not token or not token.startswith("aigw_"):
-        raise HTTPException(status_code=401, detail="Invalid Instrument Gateway credential")
+        raise HTTPException(
+            status_code=401, detail="Invalid Instrument Gateway credential"
+        )
     digest = gateway_token_digest(token)
     gateway = await ResearchInstrumentGateway.find_by(
         db_session,
@@ -769,7 +776,9 @@ async def _authenticate_gateway(
         ],
     )
     if gateway is None or not hmac.compare_digest(gateway.token_digest, digest):
-        raise HTTPException(status_code=401, detail="Invalid Instrument Gateway credential")
+        raise HTTPException(
+            status_code=401, detail="Invalid Instrument Gateway credential"
+        )
     gateway.last_seen_at = utcnow()
     return gateway
 
@@ -875,12 +884,18 @@ async def lease_instrument_job(
         await db_session.scalars(
             select(ResearchInstrumentJob)
             .join(
+                ResearchAction,
+                ResearchAction.id == ResearchInstrumentJob.action_id,
+            )
+            .join(
                 EquipmentBooking,
                 EquipmentBooking.id == ResearchInstrumentJob.equipment_booking_id,
             )
             .where(
                 ResearchInstrumentJob.gateway_id == gateway.id,
-                ResearchInstrumentJob.status == ResearchInstrumentJobStatus.QUEUED.value,
+                ResearchInstrumentJob.status
+                == ResearchInstrumentJobStatus.QUEUED.value,
+                ResearchAction.status == ResearchActionStatus.QUEUED.value,
                 EquipmentBooking.status == BookingStatus.APPROVED.value,
                 EquipmentBooking.starts_at <= now,
                 EquipmentBooking.ends_at > now,

@@ -20,6 +20,8 @@ from app.models.research_execution import (
 )
 from app.routers.research_instrument_gateways import InstrumentCommandDraft
 from app.services.research_instruments import (
+    activate_aira_instrument_action,
+    available_instrument_command_options,
     gateway_snapshot,
     gateway_token_digest,
     generate_gateway_token,
@@ -209,7 +211,10 @@ def test_instrument_job_lease_and_payload_contracts_fail_closed():
     envelope = {
         "schema": "airalogy.instrument-job.v1",
         "job_id": str(uuid4()),
-        "command": {"key": "incubator.set-temperature", "arguments": {"temperature": 37}},
+        "command": {
+            "key": "incubator.set-temperature",
+            "arguments": {"temperature": 37},
+        },
     }
 
     assert lease.startswith("aijl_")
@@ -285,12 +290,8 @@ def test_expired_instrument_leases_recover_only_undelivered_work(monkeypatch):
         status="waiting_for_instrument",
         last_error=None,
     )
-    leased_task = SimpleNamespace(
-        id=leased_run.task_id, status="active", revision=1
-    )
-    running_task = SimpleNamespace(
-        id=running_run.task_id, status="active", revision=1
-    )
+    leased_task = SimpleNamespace(id=leased_run.task_id, status="active", revision=1)
+    running_task = SimpleNamespace(id=running_run.task_id, status="active", revision=1)
     values = {
         leased.action_id: leased_action,
         running.action_id: running_action,
@@ -323,6 +324,211 @@ def test_expired_instrument_leases_recover_only_undelivered_work(monkeypatch):
     assert running_run.status == "paused"
     assert running_task.status == "paused"
     assert emit.await_count == 2
+
+
+def test_aira_instrument_activation_rechecks_pins_and_approved_booking(monkeypatch):
+    from app.services import research_instruments
+
+    gateway_id = uuid4()
+    command_id = uuid4()
+    resource_id = uuid4()
+    resource_revision_id = uuid4()
+    booking_id = uuid4()
+    job = SimpleNamespace(
+        id=uuid4(),
+        action_id=uuid4(),
+        gateway_id=gateway_id,
+        command_id=command_id,
+        resource_id=resource_id,
+        resource_revision_id=resource_revision_id,
+        resource_revision=4,
+        equipment_booking_id=booking_id,
+        command_key="incubator.set-temperature",
+        command_version="1",
+        command_revision=3,
+        arguments={"temperature": 37},
+        input_schema=object_schema(),
+        output_schema={"type": "object", "additionalProperties": True},
+        risk="high",
+        device_confirmation_required=True,
+        timeout_seconds=300,
+        status="queued",
+    )
+    action = SimpleNamespace(
+        id=job.action_id,
+        status="proposed",
+        error="pending",
+        revision=1,
+    )
+    run = SimpleNamespace(
+        requested_by_user_id=uuid4(),
+        status="waiting_for_approval",
+        last_error="pending",
+        advance_generation=5,
+    )
+    task = SimpleNamespace(id=uuid4(), lab_id=uuid4())
+    option = {
+        "id": str(command_id),
+        "gateway_id": str(gateway_id),
+        "resource_id": str(resource_id),
+        "resource_revision_id": str(resource_revision_id),
+        "resource_revision": 4,
+        "command_key": job.command_key,
+        "command_version": job.command_version,
+        "revision": 3,
+        "input_schema": job.input_schema,
+        "output_schema": job.output_schema,
+        "risk": job.risk,
+        "device_confirmation_required": True,
+        "timeout_seconds": 300,
+        "bookings": [{"id": str(booking_id)}],
+    }
+    monkeypatch.setattr(ResearchInstrumentJob, "find_by", AsyncMock(return_value=job))
+    available = AsyncMock(return_value=[option])
+    monkeypatch.setattr(
+        research_instruments,
+        "available_instrument_command_options",
+        available,
+    )
+    locked = SimpleNamespace(first=lambda: SimpleNamespace())
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(side_effect=[locked, locked, locked, locked] * 2),
+        scalar=AsyncMock(return_value=0),
+        flush=AsyncMock(),
+    )
+
+    payload = asyncio.run(
+        activate_aira_instrument_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+        )
+    )
+
+    assert payload["instrument_job_id"] == str(job.id)
+    assert action.status == "queued"
+    assert run.status == "waiting_for_instrument"
+    assert run.advance_generation == 6
+    available.assert_awaited_once()
+    db_session.flush.assert_awaited_once()
+
+    action.status = "proposed"
+    run.status = "waiting_for_approval"
+    option["command_version"] = "2"
+    with pytest.raises(ValueError, match="changed after the approval preview"):
+        asyncio.run(
+            activate_aira_instrument_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+            )
+        )
+
+
+def test_aira_sees_only_pinned_accessible_commands_with_unused_bookings(monkeypatch):
+    from app.services import research_instruments
+
+    lab_id = uuid4()
+    user_id = uuid4()
+    resource_type_id = uuid4()
+    resource_id = uuid4()
+    resource_revision_id = uuid4()
+    gateway_id = uuid4()
+    booking_id = uuid4()
+    command = SimpleNamespace(
+        id=uuid4(),
+        gateway_id=gateway_id,
+        lab_id=lab_id,
+        resource_id=resource_id,
+        resource_revision_id=resource_revision_id,
+        resource_revision=4,
+        command_key="incubator.set-temperature",
+        command_version="1",
+        name="Set temperature",
+        description="Set an approved incubator target",
+        input_schema=object_schema(),
+        output_schema={"type": "object"},
+        risk="high",
+        device_confirmation_required=True,
+        timeout_seconds=300,
+        enabled=True,
+        revision=3,
+        archived_at=None,
+    )
+    gateway = SimpleNamespace(id=gateway_id, name="Incubator Gateway")
+    resource = SimpleNamespace(
+        id=resource_id,
+        lab_id=lab_id,
+        resource_type_id=resource_type_id,
+        current_revision_id=resource_revision_id,
+        archived_at=None,
+        status="active",
+        name="Incubator 01",
+        code="INC-01",
+    )
+    revision = SimpleNamespace(id=resource_revision_id, revision=4)
+    booking = SimpleNamespace(
+        id=booking_id,
+        as_dict=lambda: {
+            "id": str(booking_id),
+            "starts_at": datetime.now(UTC),
+            "ends_at": datetime.now(UTC) + timedelta(hours=1),
+        },
+    )
+
+    async def get_model(model, _item_id):
+        return {"Resource": resource, "ResourceRevision": revision}[model.__name__]
+
+    rows = SimpleNamespace(all=lambda: [(command, gateway)])
+    bookings = SimpleNamespace(all=lambda: [booking])
+    no_active_bookings = SimpleNamespace(all=list)
+    db_session = SimpleNamespace(
+        execute=AsyncMock(return_value=rows),
+        get=AsyncMock(side_effect=get_model),
+        scalars=AsyncMock(side_effect=[bookings, no_active_bookings]),
+    )
+    monkeypatch.setattr(
+        research_instruments,
+        "resolve_resource_access",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                allows=lambda capability: capability == "equipment.book"
+            )
+        ),
+    )
+    task = SimpleNamespace(lab_id=lab_id)
+    run = SimpleNamespace(
+        environment_snapshot={"resources": [{"source_id": str(resource_type_id)}]}
+    )
+
+    options = asyncio.run(
+        available_instrument_command_options(
+            db_session,
+            task=task,
+            run=run,
+            user_id=user_id,
+        )
+    )
+
+    assert options[0]["id"] == str(command.id)
+    assert options[0]["bookings"][0]["id"] == str(booking_id)
+
+    db_session.scalars = AsyncMock(
+        side_effect=[bookings, SimpleNamespace(all=lambda: [booking_id])]
+    )
+    assert (
+        asyncio.run(
+            available_instrument_command_options(
+                db_session,
+                task=task,
+                run=run,
+                user_id=user_id,
+            )
+        )
+        == []
+    )
 
 
 def test_terminal_gateway_callbacks_are_idempotent_and_conflict_safe(monkeypatch):

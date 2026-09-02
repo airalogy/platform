@@ -81,6 +81,7 @@ from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
     resolve_executor_binding,
 )
+from app.services.research_instruments import activate_aira_instrument_action
 from app.services.research_resources import (
     ResearchResourceError,
     activate_aira_resource_action,
@@ -1650,9 +1651,7 @@ async def pause_research_task(
         ResearchInstrumentJobStatus.RUNNING.value,
     }:
         now = utcnow()
-        active_instrument_job.status = (
-            ResearchInstrumentJobStatus.STOP_REQUESTED.value
-        )
+        active_instrument_job.status = ResearchInstrumentJobStatus.STOP_REQUESTED.value
         active_instrument_job.stop_reason = params.reason or "Research Task paused"
         active_instrument_job.stop_requested_at = now
         active_instrument_job.revision += 1
@@ -1896,10 +1895,7 @@ async def cancel_research_task(
                 instrument_job.stop_reason = params.reason or "Task cancelled"
                 instrument_job.stop_requested_at = now
                 instrument_job.revision += 1
-                if (
-                    instrument_job.status
-                    == ResearchInstrumentJobStatus.QUEUED.value
-                ):
+                if instrument_job.status == ResearchInstrumentJobStatus.QUEUED.value:
                     instrument_job.status = ResearchInstrumentJobStatus.CANCELLED.value
                     instrument_job.completed_at = now
                 else:
@@ -3356,6 +3352,7 @@ async def approve_research_action(
         ResearchActionKind.PROTOCOL_RUN.value,
         ResearchActionKind.TOOL_JOB.value,
         ResearchActionKind.RESOURCE_RESERVATION.value,
+        ResearchActionKind.INSTRUMENT_JOB.value,
         ResearchActionKind.WAIT_EVENT.value,
     }:
         raise HTTPException(
@@ -3369,7 +3366,7 @@ async def approve_research_action(
     approval.decided_at = now
     approval.revision += 1
     action.policy_decision = "allow"
-    resource_event: tuple[str, dict[str, Any]] | None = None
+    activation_event: tuple[str, dict[str, Any]] | None = None
     if action.kind == ResearchActionKind.PROTOCOL_RUN.value:
         protocol_run = await ResearchProtocolRun.find_by(
             db_session, [ResearchProtocolRun.action_id == action.id]
@@ -3408,7 +3405,7 @@ async def approve_research_action(
             raise HTTPException(status_code=409, detail=str(error)) from error
     elif action.kind == ResearchActionKind.RESOURCE_RESERVATION.value:
         try:
-            resource_event = await activate_aira_resource_action(
+            activation_event = await activate_aira_resource_action(
                 db_session,
                 task=task,
                 run=run,
@@ -3425,6 +3422,18 @@ async def approve_research_action(
             raise HTTPException(status_code=409, detail=detail) from error
         if action.status == ResearchActionStatus.COMPLETED.value:
             await enqueue_research_advance(db_session, task=task, run=run)
+    elif action.kind == ResearchActionKind.INSTRUMENT_JOB.value:
+        try:
+            instrument_payload = await activate_aira_instrument_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+            )
+        except ValueError as error:
+            await db_session.rollback()
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        activation_event = ("instrument_job.queued", instrument_payload)
     else:
         try:
             await activate_wait_event_action(
@@ -3437,8 +3446,8 @@ async def approve_research_action(
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
     task.revision += 1
-    if resource_event is not None:
-        event_kind, event_payload = resource_event
+    if activation_event is not None:
+        event_kind, event_payload = activation_event
         await emit_research_event(
             db_session,
             task_id=task.id,
@@ -3447,7 +3456,11 @@ async def approve_research_action(
             kind=event_kind,
             actor_user_id=current_user.id,
             payload=event_payload,
-            idempotency_key=f"research-resource:{event_payload['reservation_id']}:created",
+            idempotency_key=(
+                f"instrument-job:{event_payload['instrument_job_id']}:queued"
+                if event_kind == "instrument_job.queued"
+                else f"research-resource:{event_payload['reservation_id']}:created"
+            ),
         )
     await emit_research_event(
         db_session,
@@ -3524,6 +3537,16 @@ async def reject_research_action(
     ):
         resource_reservation.status = ResearchResourceReservationStatus.REJECTED.value
         resource_reservation.revision += 1
+    instrument_job = await ResearchInstrumentJob.find_by(
+        db_session, [ResearchInstrumentJob.action_id == action.id]
+    )
+    if (
+        instrument_job is not None
+        and instrument_job.status == ResearchInstrumentJobStatus.QUEUED.value
+    ):
+        instrument_job.status = ResearchInstrumentJobStatus.CANCELLED.value
+        instrument_job.completed_at = now
+        instrument_job.revision += 1
 
     state = dict(run.aira_state or initial_aira_state(task.goal))
     run.aira_state = {

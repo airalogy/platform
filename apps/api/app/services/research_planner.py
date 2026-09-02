@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
+from uuid import UUID
 
 from masterbrain.usage import UsageContext
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -58,15 +59,19 @@ class AiraActionProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    decision: Literal["protocol", "tool", "resource", "wait", "finish"]
+    decision: Literal["protocol", "tool", "resource", "instrument", "wait", "finish"]
     thought: str = Field(default="", max_length=4000)
     tool_key: str | None = Field(default=None, max_length=128)
+    instrument_command_id: UUID | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
-    wait_template_key: Literal[
-        "data_asset.ready",
-        "research_file.received",
-        "external_service.finished",
-    ] | None = None
+    wait_template_key: (
+        Literal[
+            "data_asset.ready",
+            "research_file.received",
+            "external_service.finished",
+        ]
+        | None
+    ) = None
     wait_title: str | None = Field(default=None, max_length=255)
     wait_description: str | None = Field(default=None, max_length=20_000)
     resource_request: AiraResourceRequest | None = None
@@ -81,8 +86,18 @@ class AiraActionProposal(BaseModel):
         )
         if self.decision == "tool" and not self.tool_key:
             raise ValueError("A tool proposal requires tool_key")
-        if self.decision != "tool" and (self.tool_key or self.arguments):
-            raise ValueError("Tool fields are only valid for a tool proposal")
+        if self.decision == "instrument" and self.instrument_command_id is None:
+            raise ValueError("An instrument proposal requires instrument_command_id")
+        if self.decision != "tool" and self.tool_key:
+            raise ValueError("tool_key is only valid for a tool proposal")
+        if self.decision != "instrument" and self.instrument_command_id is not None:
+            raise ValueError(
+                "instrument_command_id is only valid for an instrument proposal"
+            )
+        if self.decision not in {"tool", "instrument"} and self.arguments:
+            raise ValueError(
+                "arguments are only valid for a tool or instrument proposal"
+            )
         if self.decision == "wait" and not self.wait_template_key:
             raise ValueError("A wait proposal requires wait_template_key")
         if self.decision != "wait" and any(
@@ -116,9 +131,7 @@ AIRA_WAIT_TEMPLATES: dict[str, dict[str, Any]] = {
             "type": "object",
             "additionalProperties": False,
             "required": ["research_file_id"],
-            "properties": {
-                "research_file_id": {"type": "string", "minLength": 1}
-            },
+            "properties": {"research_file_id": {"type": "string", "minLength": 1}},
         },
     },
     "external_service.finished": {
@@ -177,11 +190,28 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         for item in list(context.get("resource_requirements") or [])
         if item.get("available", True)
     ]
+    instrument_commands = [
+        {
+            "id": item.get("id"),
+            "command_key": item.get("command_key"),
+            "command_version": item.get("command_version"),
+            "name": item.get("name"),
+            "description": item.get("description"),
+            "input_schema": item.get("input_schema") or {},
+            "risk": item.get("risk"),
+            "device_confirmation_required": item.get("device_confirmation_required"),
+            "resource": item.get("resource") or {},
+            "approved_booking_windows": item.get("approved_booking_windows") or [],
+        }
+        for item in list(context.get("instrument_commands") or [])
+        if item.get("available", True)
+    ]
     decision_schema = {
-        "decision": "protocol | tool | resource | wait | finish",
+        "decision": "protocol | tool | resource | instrument | wait | finish",
         "thought": "short scientific reason",
         "tool_key": "required only for tool",
-        "arguments": "required only for tool; must match its input_schema",
+        "instrument_command_id": "required only for instrument; choose one listed ID",
+        "arguments": "tool or instrument arguments; must match its input_schema",
         "resource_request": {
             "resource_type_key": "required pinned Resource key",
             "kind": "inventory | equipment",
@@ -198,10 +228,11 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, resource, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, resource, instrument, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
+            "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "Wait only when progress truly depends on an external result that is not available yet.",
             "Finish only when the research path can proceed to its final evidence-based conclusion.",
             "Do not repeat a completed Tool with equivalent arguments unless new evidence requires it.",
@@ -210,6 +241,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             f"OUTPUT_SCHEMA={_bounded_json(decision_schema)}",
             f"AVAILABLE_TOOLS={_bounded_json(tools)}",
             f"AVAILABLE_RESOURCE_REQUIREMENTS={_bounded_json(resources)}",
+            f"AVAILABLE_INSTRUMENT_COMMANDS={_bounded_json(instrument_commands)}",
             f"WAIT_TEMPLATES={_bounded_json(AIRA_WAIT_TEMPLATES)}",
             f"RESEARCH_CONTEXT={_bounded_json(context)}",
         ]
@@ -268,7 +300,32 @@ async def plan_next_research_action(
             raise ValueError("Aira proposed a Resource type outside the environment")
         capabilities = dict((pinned.get("metadata") or {}).get("capabilities") or {})
         if request.kind == "inventory" and not capabilities.get("inventory"):
-            raise ValueError("Aira proposed inventory for a non-inventory Resource type")
+            raise ValueError(
+                "Aira proposed inventory for a non-inventory Resource type"
+            )
         if request.kind == "equipment" and not capabilities.get("booking"):
             raise ValueError("Aira proposed equipment for a non-bookable Resource type")
+    if proposal.decision == "instrument":
+        from app.services.research_instruments import validate_schema_payload
+
+        pinned = next(
+            (
+                item
+                for item in list(context.get("instrument_commands") or [])
+                if str(item.get("id") or "")
+                == str(proposal.instrument_command_id or "")
+            ),
+            None,
+        )
+        if pinned is None:
+            raise ValueError(
+                "Aira proposed an Instrument command outside the environment"
+            )
+        if not pinned.get("available", True):
+            raise ValueError("Aira proposed an unavailable Instrument command")
+        validate_schema_payload(
+            dict(pinned.get("input_schema") or {}),
+            proposal.arguments,
+            "Instrument arguments",
+        )
     return proposal

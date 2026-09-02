@@ -41,6 +41,8 @@ from app.models.research import (
     ResearchTaskStatus,
 )
 from app.models.research_execution import (
+    ResearchInstrumentJob,
+    ResearchInstrumentJobStatus,
     ResearchResourceReservation,
     ResearchToolJob,
     ResearchToolJobStatus,
@@ -56,6 +58,7 @@ from app.services.research_budget import (
     reached_operational_limit,
     research_budget_snapshot,
 )
+from app.services.research_instruments import available_instrument_command_options
 from app.services.research_planner import (
     AIRA_WAIT_TEMPLATES,
     AiraActionProposal,
@@ -142,6 +145,7 @@ def research_environment_has_ai_path(environment_snapshot: dict[str, Any]) -> bo
     return bool(
         list(environment_snapshot.get("protocols") or [])
         or list(environment_snapshot.get("tools") or [])
+        or list(environment_snapshot.get("resources") or [])
     )
 
 
@@ -558,7 +562,7 @@ async def create_plan_version(
         run_id=run.id,
         version=run.plan_version,
         kind=kind,
-        plan=plan,
+        plan=jsonable_encoder(plan),
         digest=canonical_digest(plan),
         summary=summary,
         created_by_user_id=run.requested_by_user_id,
@@ -1037,7 +1041,8 @@ async def _request_action_approval(
     return approval
 
 
-def _aira_planner_context(
+async def _aira_planner_context(
+    db_session: AsyncSession,
     *,
     task: ResearchTask,
     run: ResearchRun,
@@ -1045,6 +1050,12 @@ def _aira_planner_context(
     actions: list[ResearchAction],
 ) -> dict[str, Any]:
     strategy = _latest_step(run.aira_state, "add_research_strategy")
+    instrument_options = await available_instrument_command_options(
+        db_session,
+        task=task,
+        run=run,
+        user_id=run.requested_by_user_id,
+    )
     return {
         "goal": task.goal,
         "success_criteria": task.success_criteria,
@@ -1063,6 +1074,28 @@ def _aira_planner_context(
         "resource_requirements": list(
             (run.environment_snapshot or {}).get("resources") or []
         ),
+        "instrument_commands": [
+            {
+                "id": item["id"],
+                "command_key": item["command_key"],
+                "command_version": item["command_version"],
+                "name": item["name"],
+                "description": item["description"],
+                "input_schema": item["input_schema"],
+                "risk": item["risk"],
+                "device_confirmation_required": item["device_confirmation_required"],
+                "resource": item["resource"],
+                "approved_booking_windows": [
+                    {
+                        "starts_at": jsonable_encoder(booking.get("starts_at")),
+                        "ends_at": jsonable_encoder(booking.get("ends_at")),
+                    }
+                    for booking in list(item.get("bookings") or [])
+                ],
+                "available": True,
+            }
+            for item in instrument_options[:30]
+        ],
         "operational_limits": dict(
             (run.environment_snapshot or {}).get("operational_limits") or {}
         ),
@@ -1098,7 +1131,7 @@ def _aira_planner_context(
     }
 
 
-async def _materialize_aira_digital_action(
+async def _materialize_aira_action(
     db_session: AsyncSession,
     *,
     task: ResearchTask,
@@ -1108,9 +1141,9 @@ async def _materialize_aira_digital_action(
 ) -> ResearchAction:
     """Turn one validated Aira decision into a governed typed Action."""
 
-    if proposal.decision not in {"tool", "resource", "wait"}:
-        raise ValueError("Only digital Aira proposals can be materialized here")
-    proposal_data = proposal.model_dump(exclude_none=True)
+    if proposal.decision not in {"tool", "resource", "instrument", "wait"}:
+        raise ValueError("This Aira proposal cannot be materialized here")
+    proposal_data = proposal.model_dump(mode="json", exclude_none=True)
     proposal_digest = canonical_digest(proposal_data)
     idempotency_key = (
         f"aira-planner:{step_index}:{proposal.decision}:{proposal_digest[:24]}"
@@ -1224,6 +1257,70 @@ async def _materialize_aira_digital_action(
             "source": "aira",
             "resume_run": True,
         }
+    elif proposal.decision == "instrument":
+        instrument_options = await available_instrument_command_options(
+            db_session,
+            task=task,
+            run=run,
+            user_id=run.requested_by_user_id,
+        )
+        instrument = next(
+            (
+                item
+                for item in instrument_options
+                if str(item["id"]) == str(proposal.instrument_command_id)
+            ),
+            None,
+        )
+        if instrument is None:
+            raise ValueError(
+                "Aira Instrument command or approved booking is no longer available"
+            )
+        bookings = list(instrument.get("bookings") or [])
+        if not bookings:
+            raise ValueError("Aira Instrument command has no approved booking")
+        booking = bookings[0]
+        from app.services.research_instruments import validate_schema_payload
+
+        validate_schema_payload(
+            instrument["input_schema"],
+            proposal.arguments,
+            "Instrument arguments",
+        )
+        booking_window = {
+            "starts_at": jsonable_encoder(booking.get("starts_at")),
+            "ends_at": jsonable_encoder(booking.get("ends_at")),
+        }
+        requirements = {
+            "risk": instrument["risk"],
+            "approval_policy": "always_ask",
+            "device_confirmation_required": instrument["device_confirmation_required"],
+            "input_schema": instrument["input_schema"],
+            "output_schema": instrument["output_schema"],
+            "booking_window": booking_window,
+            "deterministic_resolution": True,
+        }
+        executor_type = "instrument_gateway"
+        kind = ResearchActionKind.INSTRUMENT_JOB.value
+        title = instrument["name"]
+        description = proposal.thought
+        input_data = {
+            "command_id": instrument["id"],
+            "command_key": instrument["command_key"],
+            "command_version": instrument["command_version"],
+            "command_revision": instrument["revision"],
+            "gateway_id": instrument["gateway_id"],
+            "gateway_name": instrument["gateway"]["name"],
+            "resource_id": instrument["resource_id"],
+            "resource_name": instrument["resource"]["name"],
+            "resource_code": instrument["resource"]["code"],
+            "resource_revision_id": instrument["resource_revision_id"],
+            "resource_revision": instrument["resource_revision"],
+            "equipment_booking_id": str(booking["id"]),
+            "arguments": proposal.arguments,
+            "source": "aira",
+            "resume_run": True,
+        }
     else:
         template = AIRA_WAIT_TEMPLATES[proposal.wait_template_key]
         requirements = {"payload_schema": template["payload_schema"]}
@@ -1314,6 +1411,27 @@ async def _materialize_aira_digital_action(
             purpose=resolved["purpose"],
         )
         db_session.add(typed_reservation)
+    elif proposal.decision == "instrument":
+        instrument_job = ResearchInstrumentJob(
+            action_id=action.id,
+            gateway_id=UUID(instrument["gateway_id"]),
+            command_id=UUID(instrument["id"]),
+            resource_id=UUID(instrument["resource_id"]),
+            resource_revision_id=UUID(instrument["resource_revision_id"]),
+            resource_revision=int(instrument["resource_revision"]),
+            equipment_booking_id=UUID(str(booking["id"])),
+            command_key=instrument["command_key"],
+            command_version=instrument["command_version"],
+            command_revision=int(instrument["revision"]),
+            arguments=proposal.arguments,
+            input_schema=instrument["input_schema"],
+            output_schema=instrument["output_schema"],
+            risk=instrument["risk"],
+            device_confirmation_required=instrument["device_confirmation_required"],
+            timeout_seconds=int(instrument["timeout_seconds"]),
+            status=ResearchInstrumentJobStatus.QUEUED.value,
+        )
+        db_session.add(instrument_job)
     else:
         wait_event = ResearchWaitEvent(
             action_id=action.id,
@@ -1365,7 +1483,9 @@ async def _materialize_aira_digital_action(
             actor_user_id=None,
         )
     else:
-        raise ValueError("Aira Resource Actions must be approved before activation")
+        raise ValueError(
+            "Aira Resource and Instrument Actions require approval before activation"
+        )
     return action
 
 
@@ -1603,7 +1723,8 @@ async def process_research_run_advance(
                     )
                 ).all()
             )
-            planner_context = _aira_planner_context(
+            planner_context = await _aira_planner_context(
+                db_session,
                 task=task,
                 run=run,
                 rows=rows,
@@ -1635,7 +1756,7 @@ async def process_research_run_advance(
                     await db_session.commit()
                 raise
             planner_decision = proposal.decision
-            if proposal.decision in {"tool", "resource", "wait"}:
+            if proposal.decision in {"tool", "resource", "instrument", "wait"}:
                 current_run = (
                     await db_session.execute(
                         select(ResearchRun)
@@ -1650,7 +1771,7 @@ async def process_research_run_advance(
                     await db_session.rollback()
                     continue
                 current_task = await db_session.get(ResearchTask, current_run.task_id)
-                action = await _materialize_aira_digital_action(
+                action = await _materialize_aira_action(
                     db_session,
                     task=current_task,
                     run=current_run,

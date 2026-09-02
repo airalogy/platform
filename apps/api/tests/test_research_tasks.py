@@ -34,6 +34,7 @@ from app.services.research_runtime import (
     execution_context_for_prompt,
     initial_aira_state,
     path_status_after_step,
+    research_environment_has_ai_path,
     research_task_command,
 )
 
@@ -136,7 +137,10 @@ def test_new_research_run_command_pins_source_lineage_and_environment():
     source_run = SimpleNamespace(
         id=source_run_id,
         run_number=2,
-        environment_snapshot={"schema": "airalogy.research-environment.v2", "tools": []},
+        environment_snapshot={
+            "schema": "airalogy.research-environment.v2",
+            "tools": [],
+        },
         result_package={"scientific_outcome": "supports_hypothesis"},
     )
     params = ResearchRunDraft(
@@ -416,6 +420,15 @@ def test_research_action_policy_fails_closed_for_aira_execution():
     )
     assert (
         evaluate_research_action_policy(
+            autonomy_level="bounded_autopilot",
+            source="aira",
+            executor_type="instrument_gateway",
+            requirements={"risk": "read_only", "approval_policy": "always_ask"},
+        )[0]
+        == "ask"
+    )
+    assert (
+        evaluate_research_action_policy(
             autonomy_level="autonomous_within_policy",
             source="aira",
             executor_type="human",
@@ -465,6 +478,11 @@ def test_research_action_policy_fails_closed_for_aira_execution():
         )[0]
         == "ask"
     )
+
+
+def test_resource_only_environment_can_enter_aira_planning():
+    assert research_environment_has_ai_path({"resources": [{"key": "equipment"}]})
+    assert not research_environment_has_ai_path({"resources": []})
 
 
 def test_persistent_worker_dispatches_research_run(monkeypatch):
