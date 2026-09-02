@@ -136,7 +136,9 @@ Aira may create proposals and Suggested Knowledge. It never silently edits a pub
 
 ## Resources, instruments, and external services
 
-Planning reserves resources; execution confirms consumption or release. Inventory includes lots, expiry, location, containers, quantity, and sample lineage. Equipment includes capability, schedule, calibration/maintenance, risk, and output formats. Budgets distinguish total, reserved, and actual cost. People are constrained by skills, certification, availability, workload, permissions, and approval authority.
+Planning reserves resources; execution confirms consumption or release. A Task now pins the selected Lab resource-type revisions as requirements without pretending that transient availability is part of the method. At Action time, Platform resolves a concrete resource, verifies its revision and object-level access, then preview-confirms either an exact inventory container and quantity or an equipment window. The reservation is linked one-to-one to the Research Action while the existing inventory and booking ledgers remain authoritative. Balance-version changes, insufficient stock, schema drift, booking conflicts, and unauthorized Restricted resources fail closed. Equipment policies may leave the Action waiting for custodian approval; synchronization resumes the Run from the authoritative booking state. Explicit release and Task terminal transitions return outstanding commitments with audit events.
+
+Inventory includes lots, expiry, location, containers, quantity, and sample lineage. Equipment includes capability, schedule, calibration/maintenance, risk, and output formats. Budgets distinguish total, reserved, and actual cost. People are constrained by skills, certification, availability, workload, permissions, and approval authority.
 
 Platform does not need to replace a complete ERP or LIMS. Small Labs can use minimal native modules; mature organizations can connect existing systems. Platform owns normalized references, requirements, reservations, Action links, authorization, and audit.
 
@@ -180,9 +182,10 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 
 - derived Capability Registry and task-scoped version pinning (delivered)
 - governed, Lab-configurable Protocol/Tool Executor Bindings and availability resolution (delivered)
+- revision-pinned resource requirements plus inventory/equipment reservation and release Actions (delivered)
 - people, instrument, and external-service Executor Binding adapters
-- people and skills, equipment, inventory/samples, budget, and compute
-- reservation/consumption, risk policy, approval thresholds, and replanning
+- people and skills, sample semantics, budget, and compute
+- consumption completion, risk policy, approval thresholds, and resource-aware replanning
 
 ### P3: instruments, RaaS, and self-improvement
 

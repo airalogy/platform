@@ -161,6 +161,7 @@ def research_task_command(
     tool_refs: list[dict[str, Any]],
     executor_binding_refs: list[dict[str, Any]],
     knowledge_refs: list[dict[str, Any]],
+    resource_refs: list[dict[str, Any]],
     owner_user_id: UUID,
     ai_model: str | None,
 ) -> dict[str, Any]:
@@ -190,6 +191,14 @@ def research_task_command(
         "knowledge_refs": [
             {"id": str(item["id"]), "revision": int(item["revision"])}
             for item in knowledge_refs
+        ],
+        "resource_refs": [
+            {
+                "id": str(item["id"]),
+                "revision_id": str(item["revision_id"]),
+                "revision": int(item["revision"]),
+            }
+            for item in resource_refs
         ],
         "owner_user_id": str(owner_user_id),
         "ai_model": ai_model.strip() if ai_model else None,
@@ -981,6 +990,9 @@ def _aira_planner_context(
             for task_protocol, protocol, version in rows
         ],
         "tools": list((run.environment_snapshot or {}).get("tools") or []),
+        "resource_requirements": list(
+            (run.environment_snapshot or {}).get("resources") or []
+        ),
         "completed_actions": [
             {
                 "sequence": action.sequence,

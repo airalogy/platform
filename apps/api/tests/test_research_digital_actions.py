@@ -13,11 +13,17 @@ from sqlalchemy.schema import CreateTable
 from app.models.research_execution import (
     ResearchExecutorBinding,
     ResearchExecutorBindingAudit,
+    ResearchResourceReservation,
     ResearchToolJob,
     ResearchWaitEvent,
 )
 from app.routers.research_executor_bindings import ExecutorBindingDraft
 from app.routers.research_actions import WaitEventDraft
+from app.routers.research_resources import (
+    ResourceActionDraft,
+    _pinned_requirement,
+    _resource_command,
+)
 from app.services import resource_job_worker
 from app.models.research import (
     ResearchActionStatus,
@@ -43,6 +49,7 @@ from app.services.research_executor_bindings import (
 from app.services.research_runtime import (
     activate_tool_action,
     activate_wait_event_action,
+    canonical_digest,
 )
 from pydantic import ValidationError
 
@@ -130,6 +137,106 @@ def test_executor_binding_contract_rejects_cross_type_dispatch():
         )
 
 
+def test_resource_reservations_are_typed_and_follow_executor_bindings():
+    ddl = compile_table(ResearchResourceReservation)
+
+    assert "UNIQUE (action_id)" in ddl
+    assert "inventory_reservation_id" in ddl
+    assert "equipment_booking_id" in ddl
+    assert "resource_revision_id" in ddl
+    assert "quantity" in ddl
+
+    migration = import_module(
+        "migrations.versions.0017_research_resource_reservations"
+    )
+    assert migration.down_revision == "0016_research_executor_bindings"
+    assert migration.TABLE_NAMES == (
+        "research_task_resource_requirements",
+        "research_resource_reservations",
+    )
+
+
+def test_resource_action_contract_separates_inventory_and_equipment():
+    inventory = ResourceActionDraft(
+        kind="inventory",
+        resource_id=uuid4(),
+        container_id=uuid4(),
+        quantity="2.5",
+        unit="mg",
+        purpose="Reserve reagent for assay",
+        idempotency_key="resource-action-inventory",
+    )
+    assert str(inventory.quantity) == "2.5"
+
+    equipment = ResourceActionDraft(
+        kind="equipment",
+        resource_id=uuid4(),
+        starts_at=datetime.now(UTC) + timedelta(hours=1),
+        ends_at=datetime.now(UTC) + timedelta(hours=2),
+        purpose="Book the microscope",
+        idempotency_key="resource-action-equipment",
+    )
+    assert equipment.container_id is None
+
+    with pytest.raises(ValidationError, match="cannot include a booking window"):
+        ResourceActionDraft(
+            kind="inventory",
+            resource_id=uuid4(),
+            container_id=uuid4(),
+            quantity="1",
+            unit="mL",
+            starts_at=datetime.now(UTC) + timedelta(hours=1),
+            ends_at=datetime.now(UTC) + timedelta(hours=2),
+            purpose="Invalid mixed reservation",
+            idempotency_key="resource-action-invalid",
+        )
+
+
+def test_resource_action_preview_is_bound_to_inventory_and_environment_revisions():
+    resource_type_id = uuid4()
+    requirement = {
+        "key": f"resource:{resource_type_id}",
+        "version": "4",
+        "source_id": str(resource_type_id),
+        "source_revision_id": str(uuid4()),
+    }
+    run = SimpleNamespace(
+        id=uuid4(),
+        plan_version=2,
+        environment_snapshot={"resources": [requirement]},
+    )
+    assert _pinned_requirement(run, resource_type_id) == requirement
+
+    params = ResourceActionDraft(
+        kind="inventory",
+        resource_id=uuid4(),
+        container_id=uuid4(),
+        quantity="2.5",
+        unit="mg",
+        purpose="Reserve reagent for assay",
+        idempotency_key="resource-action-revision",
+    )
+    task = SimpleNamespace(id=uuid4(), revision=3)
+    context = {
+        "resource": SimpleNamespace(
+            id=params.resource_id, resource_type_id=resource_type_id
+        ),
+        "resource_revision": SimpleNamespace(id=uuid4(), revision=7),
+        "requirement": requirement,
+        "balance": SimpleNamespace(version=5, available=10, unit="mg"),
+        "requested_in_balance_unit": params.quantity,
+    }
+    command = _resource_command(
+        task=task, run=run, params=params, context=context
+    )
+    digest = canonical_digest(command)
+    context["balance"] = SimpleNamespace(version=6, available=7.5, unit="mg")
+
+    assert command["resource_revision"] == 7
+    assert command["inventory"]["balance_version"] == 5
+    assert digest != canonical_digest(
+        _resource_command(task=task, run=run, params=params, context=context)
+    )
 def test_executor_binding_scope_constraints_fail_closed():
     allowed_project = uuid4()
     binding = {
@@ -300,6 +407,13 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
     assert "/research-executor-bindings" in paths
     assert "/research-executor-bindings/preview" in paths
     assert "/research-executor-bindings/{binding_id}/preview" in paths
+    assert "/research-tasks/{task_id}/resource-actions/preview" in paths
+    assert "/research-tasks/{task_id}/resource-actions" in paths
+    assert "/research-resource-reservations/{reservation_id}/sync" in paths
+    assert (
+        "/research-resource-reservations/{reservation_id}/release/preview" in paths
+    )
+    assert "/research-resource-reservations/{reservation_id}/release" in paths
 
 
 def test_approved_tool_action_is_queued_at_a_durable_boundary(monkeypatch):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -41,6 +43,78 @@ class ResearchExecutorBindingPolicy(StrEnum):
     ALWAYS_ASK = "always_ask"
     ALLOW_READ_ONLY = "allow_read_only"
     DENY = "deny"
+
+
+class ResearchResourceReservationStatus(StrEnum):
+    PROPOSED = "proposed"
+    ACTIVE = "active"
+    PENDING_APPROVAL = "pending_approval"
+    APPROVED = "approved"
+    RELEASED = "released"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+class ResearchResourceReservation(Base):
+    __tablename__ = "research_resource_reservations"
+    __table_args__ = (
+        UniqueConstraint(
+            "action_id", name="uq_research_resource_reservation_action"
+        ),
+        Index(
+            "ix_research_resource_reservations_resource_status",
+            "resource_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    resource_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    resource_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resource_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    resource_revision: Mapped[int] = mapped_column(nullable=False)
+    container_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resource_containers.id", ondelete="RESTRICT")
+    )
+    inventory_reservation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("inventory_reservations.id", ondelete="SET NULL"), unique=True
+    )
+    equipment_booking_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("equipment_bookings.id", ondelete="SET NULL"), unique=True
+    )
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    unit: Mapped[str | None] = mapped_column(String(32))
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ResearchResourceReservationStatus.PROPOSED.value,
+    )
+    purpose: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class ResearchExecutorBinding(Base):

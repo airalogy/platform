@@ -108,6 +108,44 @@ export interface ResearchEnvironmentExecutorBinding {
   priority: number
 }
 
+export interface ResearchResourceRequirement {
+  key: string
+  version: string
+  kind: "resource"
+  name: string
+  description: string
+  source_id: string
+  source_revision_id: string
+  available: boolean
+  metadata: {
+    code?: string
+    capabilities?: Record<string, boolean>
+    booking_policy?: string
+  }
+  position?: number
+}
+
+export interface ResearchResourceReservation {
+  id: string
+  action_id: string
+  kind: "inventory" | "equipment"
+  resource_id: string
+  resource_revision_id: string
+  resource_revision: number
+  container_id?: string | null
+  inventory_reservation_id?: string | null
+  equipment_booking_id?: string | null
+  quantity?: string | null
+  unit?: string | null
+  starts_at?: string | null
+  ends_at?: string | null
+  status: string
+  purpose: string
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
 export interface ResearchRun {
   id: string
   task_id: string
@@ -231,6 +269,7 @@ export interface ResearchAction {
   work_item?: ResearchHumanWorkItem | null
   tool_job?: ResearchToolJob | null
   wait_event?: ResearchWaitEvent | null
+  resource_reservation?: ResearchResourceReservation | null
   approval?: ResearchApproval | null
 }
 
@@ -311,6 +350,7 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   plan_versions: ResearchPlanVersion[]
   protocols: ResearchProtocolRef[]
   knowledge: ResearchKnowledgeRef[]
+  resources: ResearchResourceRequirement[]
 }
 
 export interface ResearchWorkItemDetail extends ResearchHumanWorkItem {
@@ -340,6 +380,7 @@ export interface ResearchTaskDraft {
   protocol_ids: string[]
   tool_keys: string[]
   knowledge_ids: string[]
+  resource_type_ids: string[]
   owner_user_id?: string
   ai_model?: string
 }
@@ -359,6 +400,7 @@ export interface ResearchTaskPreview {
   }>
   executor_bindings: ResearchEnvironmentExecutorBinding[]
   knowledge: ResearchKnowledgeRef[]
+  resources: ResearchResourceRequirement[]
   effects: string[]
   warnings: string[]
   ai_instance_available: boolean

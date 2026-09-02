@@ -16,6 +16,7 @@ from app.models.research import (
     ResearchApprovalStatus,
     ResearchRunStatus,
     ResearchTaskKnowledge,
+    ResearchTaskResourceRequirement,
     ResearchTaskStatus,
 )
 from app.routers.research_tasks import ResearchTaskDraft
@@ -56,6 +57,9 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
             }
         ],
         knowledge_refs=[{"id": str(uuid4()), "revision": 2}],
+        resource_refs=[
+            {"id": str(uuid4()), "revision_id": str(uuid4()), "revision": 3}
+        ],
         owner_user_id=owner_id,
         ai_model="  qwen3.5-flash  ",
     )
@@ -80,6 +84,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
             }
         ],
         "knowledge_refs": [ANY],
+        "resource_refs": [ANY],
         "owner_user_id": str(owner_id),
         "ai_model": "qwen3.5-flash",
     }
@@ -191,6 +196,19 @@ def test_research_runtime_has_explicit_review_and_human_states():
     assert ResearchActionKind.PROTOCOL_RUN.value == "protocol_run"
     assert ResearchActionKind.HUMAN_WORK_ITEM.value == "human_work_item"
     assert ResearchApprovalStatus.PENDING.value == "pending"
+
+
+def test_research_task_resource_requirements_pin_type_revisions():
+    ddl = str(
+        CreateTable(ResearchTaskResourceRequirement.__table__).compile(
+            dialect=postgresql.dialect()
+        )
+    )
+
+    assert "resource_type_revision_id" in ddl
+    assert "resource_type_revision" in ddl
+    assert "snapshot" in ddl
+    assert "uq_research_task_resource_requirement_type" in ddl
 
 
 def test_research_approval_table_records_the_decider_and_stale_guard_revision():

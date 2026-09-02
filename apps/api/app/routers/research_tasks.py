@@ -36,9 +36,11 @@ from app.models.research import (
     ResearchTaskKnowledge,
     ResearchTaskOutcome,
     ResearchTaskProtocol,
+    ResearchTaskResourceRequirement,
     ResearchTaskStatus,
     ScientificOutcome,
 )
+from app.models.resource import ResourceType, ResourceTypeRevision
 from app.models.research_asset import (
     ClaimState,
     EvidenceKind,
@@ -47,6 +49,7 @@ from app.models.research_asset import (
     ResearchEvidence,
 )
 from app.models.research_execution import (
+    ResearchResourceReservation,
     ResearchToolJob,
     ResearchToolJobStatus,
     ResearchWaitEvent,
@@ -54,11 +57,12 @@ from app.models.research_execution import (
 )
 from app.models.user import User
 from app.routers.depends import CurrentUser
-from app.services.access_control import resolve_structured_access
+from app.services.access_control import resolve_resource_access, resolve_structured_access
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.research_assets import research_asset_bundle
 from app.services.research_capabilities import (
     protocol_capability,
+    resource_capability,
     tool_capability,
 )
 from app.services.research_executor_bindings import (
@@ -82,6 +86,7 @@ from app.services.research_runtime import (
     utcnow,
     workflow_info_for_task,
 )
+from app.services.research_resources import release_research_run_reservations
 
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
 work_items_router = APIRouter(
@@ -104,6 +109,7 @@ class ResearchTaskDraft(BaseModel):
     protocol_ids: list[UUID] = Field(default_factory=list, max_length=100)
     tool_keys: list[str] = Field(default_factory=list, max_length=50)
     knowledge_ids: list[UUID] = Field(default_factory=list, max_length=50)
+    resource_type_ids: list[UUID] = Field(default_factory=list, max_length=100)
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
 
@@ -126,6 +132,8 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Research Tool selection contains duplicates")
         if len(set(self.knowledge_ids)) != len(self.knowledge_ids):
             raise ValueError("Knowledge selection contains duplicates")
+        if len(set(self.resource_type_ids)) != len(self.resource_type_ids):
+            raise ValueError("Resource requirement selection contains duplicates")
         return self
 
 
@@ -245,6 +253,7 @@ async def _validate_task_draft(
     list[Any],
     list[dict[str, Any]],
     list[KnowledgeItem],
+    list[tuple[ResourceType, ResourceTypeRevision]],
 ]:
     project = await _project(db_session, draft.project_id)
     await require_research_capability(
@@ -403,6 +412,46 @@ async def _validate_task_draft(
             )
         knowledge_items.append(item)
 
+    resources: list[tuple[ResourceType, ResourceTypeRevision]] = []
+    for resource_type_id in draft.resource_type_ids:
+        resource_type = await ResourceType.find_by(
+            db_session,
+            [
+                ResourceType.id == resource_type_id,
+                ResourceType.lab_id == lab.id,
+                ResourceType.archived_at.is_(None),
+            ],
+        )
+        if resource_type is None or resource_type.current_revision_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Resource type {resource_type_id} is unavailable in this Lab",
+            )
+        revision = await db_session.get(
+            ResourceTypeRevision, resource_type.current_revision_id
+        )
+        if revision is None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Resource type {resource_type.name} has no current revision",
+            )
+        for user in {current_user.id: current_user, owner.id: owner}.values():
+            access = await resolve_resource_access(
+                db_session,
+                user.id,
+                lab.id,
+                resource_type_id=resource_type.id,
+            )
+            if not access.allows("resource.read"):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"{user.name or user.username} cannot read the selected "
+                        f"Resource type {resource_type.name}"
+                    ),
+                )
+        resources.append((resource_type, revision))
+
     command = research_task_command(
         project_id=project.id,
         title=draft.title,
@@ -419,6 +468,14 @@ async def _validate_task_draft(
         knowledge_refs=[
             {"id": item.id, "revision": item.revision} for item in knowledge_items
         ],
+        resource_refs=[
+            {
+                "id": resource_type.id,
+                "revision_id": revision.id,
+                "revision": revision.revision,
+            }
+            for resource_type, revision in resources
+        ],
         owner_user_id=owner.id,
         ai_model=draft.ai_model,
     )
@@ -431,6 +488,7 @@ async def _validate_task_draft(
         tools,
         executor_bindings,
         knowledge_items,
+        resources,
     )
 
 
@@ -444,6 +502,7 @@ def _task_preview(
     tools: list[Any],
     executor_bindings: list[dict[str, Any]],
     knowledge_items: list[KnowledgeItem],
+    resources: list[tuple[ResourceType, ResourceTypeRevision]],
 ) -> dict[str, Any]:
     ai_path_available = config.effective_ai_enabled and bool(protocols or tools)
     return {
@@ -483,11 +542,16 @@ def _task_preview(
             }
             for item in knowledge_items
         ],
+        "resources": [
+            resource_capability(resource_type, revision).payload()
+            for resource_type, revision in resources
+        ],
         "effects": [
             "Create a versioned Research Task and draft Research Run",
             "Pin the selected Protocol versions in the Research Environment",
             "Pin the selected digital Tool versions in the Research Environment",
             "Pin reviewed Knowledge revisions in the Research Environment",
+            "Pin selected resource-type revisions as explicit requirements",
             (
                 "Use AIRA after the Task is started"
                 if ai_path_available
@@ -592,6 +656,9 @@ async def _action_data(
     wait_event = await ResearchWaitEvent.find_by(
         db_session, [ResearchWaitEvent.action_id == action.id]
     )
+    resource_reservation = await ResearchResourceReservation.find_by(
+        db_session, [ResearchResourceReservation.action_id == action.id]
+    )
     approval = (
         await db_session.scalars(
             select(ResearchApproval)
@@ -620,6 +687,9 @@ async def _action_data(
         "work_item": work_item.as_dict() if work_item else None,
         "tool_job": tool_job.as_dict() if tool_job else None,
         "wait_event": wait_event.as_dict() if wait_event else None,
+        "resource_reservation": (
+            resource_reservation.as_dict() if resource_reservation else None
+        ),
         "approval": (
             await _approval_summary(db_session, approval)
             if approval is not None
@@ -734,6 +804,21 @@ async def _task_detail(
             ).all()
         )
     ]
+    resources = [
+        {
+            **row.snapshot,
+            "position": row.position,
+        }
+        for row in list(
+            (
+                await db_session.scalars(
+                    select(ResearchTaskResourceRequirement)
+                    .where(ResearchTaskResourceRequirement.task_id == task.id)
+                    .order_by(ResearchTaskResourceRequirement.position)
+                )
+            ).all()
+        )
+    ]
     return {
         **summary,
         "runs": [run.as_dict() for run in runs],
@@ -745,6 +830,7 @@ async def _task_detail(
         "plan_versions": [plan.as_dict() for plan in plans],
         "protocols": protocols,
         "knowledge": knowledge,
+        "resources": resources,
     }
 
 
@@ -763,6 +849,7 @@ async def preview_research_task(
         tools,
         executor_bindings,
         knowledge_items,
+        resources,
     ) = await _validate_task_draft(db_session, current_user, params)
     return _task_preview(
         command=command,
@@ -773,6 +860,7 @@ async def preview_research_task(
         tools=tools,
         executor_bindings=executor_bindings,
         knowledge_items=knowledge_items,
+        resources=resources,
     )
 
 
@@ -791,6 +879,7 @@ async def create_research_task(
         tools,
         executor_bindings,
         knowledge_items,
+        resources,
     ) = await _validate_task_draft(db_session, current_user, params)
     expected_digest = canonical_digest(command)
     if params.preview_digest != expected_digest:
@@ -841,6 +930,20 @@ async def create_research_task(
                 snapshot=snapshot,
             )
         )
+    pinned_resources: list[dict[str, Any]] = []
+    for position, (resource_type, revision) in enumerate(resources, start=1):
+        snapshot = resource_capability(resource_type, revision).payload()
+        pinned_resources.append(snapshot)
+        db_session.add(
+            ResearchTaskResourceRequirement(
+                task_id=task.id,
+                resource_type_id=resource_type.id,
+                resource_type_revision_id=revision.id,
+                resource_type_revision=revision.revision,
+                position=position,
+                snapshot=snapshot,
+            )
+        )
     run = ResearchRun(
         task_id=task.id,
         run_number=1,
@@ -872,7 +975,12 @@ async def create_research_task(
             for _task_protocol, protocol, version in rows
         ],
         "tools": [definition.payload() for definition in tools],
-        "capabilities": [*protocol_capabilities, *tool_capabilities],
+        "resources": pinned_resources,
+        "capabilities": [
+            *protocol_capabilities,
+            *tool_capabilities,
+            *pinned_resources,
+        ],
         "executor_bindings": executor_bindings,
         "knowledge": pinned_knowledge,
         "ai_available_at_capture": config.effective_ai_enabled,
@@ -1163,6 +1271,12 @@ async def cancel_research_task(
     run = await _latest_run(db_session, task.id)
     now = utcnow()
     if run is not None:
+        released_resource_ids = await release_research_run_reservations(
+            db_session,
+            run_id=run.id,
+            actor_user_id=current_user.id,
+            reason=params.reason or "Research Task cancelled",
+        )
         run.status = ResearchRunStatus.CANCELLED.value
         run.cancel_reason = params.reason
         run.completed_at = now
@@ -1266,7 +1380,14 @@ async def cancel_research_task(
         run_id=run.id if run else None,
         kind="task.cancelled",
         actor_user_id=current_user.id,
-        payload={"reason": params.reason},
+        payload={
+            "reason": params.reason,
+            "released_resource_reservation_ids": [
+                str(item) for item in released_resource_ids
+            ]
+            if run
+            else [],
+        },
     )
     await db_session.commit()
     return await _task_detail(db_session, task, project, lab)
@@ -1373,6 +1494,12 @@ async def complete_research_task(
     run = await _latest_run(db_session, task.id)
     now = utcnow()
     if run is not None:
+        released_resource_ids = await release_research_run_reservations(
+            db_session,
+            run_id=run.id,
+            actor_user_id=current_user.id,
+            reason=params.reason or "Research Task completed",
+        )
         run.status = ResearchRunStatus.COMPLETED.value
         run.completed_at = run.completed_at or now
     task.status = ResearchTaskStatus.COMPLETED.value
@@ -1402,6 +1529,11 @@ async def complete_research_task(
             "outcome": task.outcome,
             "scientific_outcome": task.scientific_outcome,
             "reason": params.reason,
+            "released_resource_reservation_ids": [
+                str(item) for item in released_resource_ids
+            ]
+            if run
+            else [],
         },
     )
     await db_session.commit()

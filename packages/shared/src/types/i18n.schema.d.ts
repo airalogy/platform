@@ -916,6 +916,36 @@ declare namespace I18n {
         knowledgeContext: string
         knowledgePlaceholder: string
         knowledgeHint: string
+        resourceRequirements: string
+        resourceRequirementsPlaceholder: string
+        resourceRequirementsHint: string
+        noResourceRequirements: string
+        reserveResource: string
+        resourceReservationHint: string
+        resourceRequirement: string
+        resource: string
+        reservationKind: string
+        inventoryContainer: string
+        quantity: string
+        unit: string
+        reservationExpiry: string
+        bookingStarts: string
+        bookingEnds: string
+        reservationPurpose: string
+        resourcePreviewHint: string
+        resourceRevision: string
+        previewReservation: string
+        confirmReservation: string
+        resourceReserved: string
+        inventoryReservation: string
+        equipmentBooking: string
+        syncBooking: string
+        releaseReservation: string
+        releaseReservationHint: string
+        releaseReason: string
+        previewRelease: string
+        confirmRelease: string
+        reservationReleased: string
         aiOffHint: string
         previewTask: string
         confirmCreate: string

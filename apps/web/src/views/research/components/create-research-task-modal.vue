@@ -92,6 +92,21 @@
             {{ $t("page.research.digitalCapabilitiesHint") }}
           </template>
         </n-form-item>
+        <n-form-item :label="$t('page.research.resourceRequirements')">
+          <n-select
+            v-model:value="form.resource_type_ids"
+            :options="resourceOptions"
+            :loading="capabilitiesLoading"
+            :disabled="!form.project_id"
+            multiple
+            filterable
+            clearable
+            :placeholder="$t('page.research.resourceRequirementsPlaceholder')"
+          />
+          <template #feedback>
+            {{ $t("page.research.resourceRequirementsHint") }}
+          </template>
+        </n-form-item>
         <n-form-item :label="$t('page.research.knowledgeContext')">
           <n-select
             v-model:value="form.knowledge_ids"
@@ -162,6 +177,17 @@
           </div>
           <p v-else class="aira-type-body aira-text-muted mb-0 mt-2">
             {{ $t("page.research.noKnowledge") }}
+          </p>
+        </section>
+        <section class="research-preview-card">
+          <div class="aira-type-eyebrow">{{ $t("page.research.resourceRequirements") }}</div>
+          <div v-if="preview.resources.length" class="mt-3 flex flex-wrap gap-2">
+            <n-tag v-for="item in preview.resources" :key="item.key" round type="warning">
+              {{ item.name }} · r{{ item.version }}
+            </n-tag>
+          </div>
+          <p v-else class="aira-type-body aira-text-muted mb-0 mt-2">
+            {{ $t("page.research.noResourceRequirements") }}
           </p>
         </section>
         <section class="research-preview-card">
@@ -254,6 +280,7 @@ const projects = ref<Api.Project.MyProjectInfo[]>([])
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const knowledgeItems = ref<KnowledgeItem[]>([])
 const toolCapabilities = ref<ResearchCapabilityDescriptor[]>([])
+const resourceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
@@ -270,6 +297,7 @@ function emptyForm(): ResearchTaskDraft {
     protocol_ids: [],
     tool_keys: [],
     knowledge_ids: [],
+    resource_type_ids: [],
   }
 }
 const form = reactive<ResearchTaskDraft>(emptyForm())
@@ -297,6 +325,11 @@ const knowledgeOptions = computed(() => knowledgeItems.value.map(item => ({
 const toolOptions = computed(() => toolCapabilities.value.map(item => ({
   label: `${item.name} · v${item.version}`,
   value: String(item.metadata.tool_key || item.source_id),
+  disabled: !item.available,
+})))
+const resourceOptions = computed(() => resourceCapabilities.value.map(item => ({
+  label: `${item.name} · r${item.version}`,
+  value: item.source_id,
   disabled: !item.available,
 })))
 const autonomyOptions = computed(() => [
@@ -387,13 +420,16 @@ async function loadProjects() {
 
 async function loadCapabilities(projectId: string) {
   toolCapabilities.value = []
+  resourceCapabilities.value = []
   form.tool_keys = []
+  form.resource_type_ids = []
   if (!projectId)
     return
   capabilitiesLoading.value = true
   try {
     const catalog = await fetchResearchCapabilities(projectId)
     toolCapabilities.value = catalog.tools
+    resourceCapabilities.value = catalog.resources
     const internalSearch = catalog.tools.find(item =>
       item.available && item.source_id === "knowledge.search",
     )

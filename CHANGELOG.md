@@ -40,6 +40,7 @@ Target initial version: `0.1.0`.
 - Added a Platform-governed Aira Action Planner that chooses among pinned Protocols, allowlisted versioned Tools, typed external Waits, and finishing a research path; AI proposals are schema-validated, digest-bound, approval-gated, auditable, and can operate on tool-only Research Tasks without misrepresenting tools as Protocols.
 - Added a derived Capability Registry over Project Protocols, allowlisted Tools, and Lab resource definitions; Research Task creation now explicitly selects and version-pins digital capabilities and captures initial executor bindings, while Aira and manual Tool Actions fail closed when a capability is outside the Research Environment or its pinned version is unavailable.
 - Added Lab-governed, revisioned Executor Bindings for Protocol and Tool capabilities with Owner/Manager-only preview-confirm configuration, immutable audit snapshots, Project/autonomy/per-Run constraints, deterministic priority resolution, fail-closed denials, and narrowly scoped auto-approval for internal read-only Tools; active Runs retain their pinned executor policy.
+- Added Research resource requirements and governed Resource Reservation Actions: Tasks pin Lab resource-type revisions, users preview-confirm exact inventory quantities or equipment windows, Platform reuses the existing permissioned inventory and booking ledgers, stale availability and conflicts fail closed, pending equipment approval can be synchronized, releases are audited, and terminal Tasks return outstanding commitments automatically.
 
 ### Changed
 

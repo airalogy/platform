@@ -224,6 +224,44 @@ class ResearchTaskKnowledge(Base):
     )
 
 
+class ResearchTaskResourceRequirement(Base):
+    __tablename__ = "research_task_resource_requirements"
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id",
+            "position",
+            name="uq_research_task_resource_requirement_position",
+        ),
+        UniqueConstraint(
+            "task_id",
+            "resource_type_id",
+            name="uq_research_task_resource_requirement_type",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    resource_type_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resource_types.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    resource_type_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resource_type_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    resource_type_revision: Mapped[int] = mapped_column(nullable=False)
+    position: Mapped[int] = mapped_column(nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchRun(Base):
     __tablename__ = "research_runs"
     __table_args__ = (

@@ -53,6 +53,13 @@
               :task-id="task.id"
               @created="() => loadTask(true)"
             />
+            <research-resource-action-modal
+              v-if="canAddDigitalAction && task.resources.length"
+              :task-id="task.id"
+              :lab-id="task.lab_id"
+              :requirements="task.resources"
+              @created="() => loadTask(true)"
+            />
             <n-button v-if="task.status === 'active'" :loading="mutating" @click="pauseTask">
               {{ $t("page.research.pause") }}
             </n-button>
@@ -275,6 +282,30 @@
                       </div>
                       <pre v-if="action.wait_event.status === 'received'">{{ formatPayload(action.wait_event.received_payload) }}</pre>
                     </div>
+                    <div v-if="action.resource_reservation" class="research-digital-result mt-3">
+                      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="aira-type-label">
+                              {{ resourceKindLabel(action.resource_reservation.kind) }}
+                            </span>
+                            <n-tag size="small" round>
+                              {{ action.resource_reservation.status.replaceAll("_", " ") }}
+                            </n-tag>
+                          </div>
+                          <div v-if="action.resource_reservation.kind === 'inventory'" class="aira-type-meta mt-1">
+                            {{ action.resource_reservation.quantity }} {{ action.resource_reservation.unit }}
+                          </div>
+                          <div v-else class="aira-type-meta mt-1">
+                            {{ formatDateTime(action.resource_reservation.starts_at) }} – {{ formatDateTime(action.resource_reservation.ends_at) }}
+                          </div>
+                        </div>
+                        <research-resource-reservation-actions
+                          :reservation="action.resource_reservation"
+                          @changed="() => loadTask(true)"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -364,6 +395,19 @@
               </div>
               <p v-else class="aira-type-meta aira-text-muted mb-0 mt-3">
                 {{ $t("page.research.noDigitalCapabilities") }}
+              </p>
+              <n-divider />
+              <h2 class="aira-type-card-title mb-0">
+                {{ $t("page.research.resourceRequirements") }}
+              </h2>
+              <div v-if="task.resources.length" class="mt-3 space-y-2">
+                <div v-for="resource in task.resources" :key="`${resource.source_id}:${resource.version}`" class="research-method">
+                  <span class="aira-type-label">{{ resource.name }}</span>
+                  <span class="aira-type-meta">r{{ resource.version }}</span>
+                </div>
+              </div>
+              <p v-else class="aira-type-meta aira-text-muted mb-0 mt-3">
+                {{ $t("page.research.noResourceRequirements") }}
               </p>
               <n-divider />
               <h2 class="aira-type-card-title mb-0">
@@ -566,6 +610,8 @@ import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
+import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
+import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
 import ResearchWaitEventSignal from "./components/research-wait-event-signal.vue"
 
 const route = useRoute()
@@ -690,6 +736,16 @@ async function mutate(operation: (current: ResearchTaskDetail) => Promise<Resear
 
 function startTask() {
   void mutate(current => startResearchTask(current.id, current.revision))
+}
+
+function resourceKindLabel(kind: "inventory" | "equipment") {
+  return kind === "inventory"
+    ? $t("page.research.inventoryReservation")
+    : $t("page.research.equipmentBooking")
+}
+
+function formatDateTime(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : "—"
 }
 
 function pauseTask() {

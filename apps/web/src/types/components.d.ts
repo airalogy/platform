@@ -186,6 +186,7 @@ declare module 'vue' {
     IconTablerArrowLeft: typeof import('~icons/tabler/arrow-left')['default']
     IconTablerArrowsDiff: typeof import('~icons/tabler/arrows-diff')['default']
     IconTablerArrowUp: typeof import('~icons/tabler/arrow-up')['default']
+    IconTablerCalendarPlus: typeof import('~icons/tabler/calendar-plus')['default']
     IconTablerCheck: typeof import('~icons/tabler/check')['default']
     IconTablerChecks: typeof import('~icons/tabler/checks')['default']
     IconTablerChevronDown: typeof import('~icons/tabler/chevron-down')['default']
