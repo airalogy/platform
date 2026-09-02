@@ -1077,6 +1077,43 @@ declare namespace I18n {
         addDigitalAction: string
         toolAction: string
         toolActionHint: string
+        instrumentAction: string
+        instrumentActionHint: string
+        instrumentCommand: string
+        selectInstrumentCommand: string
+        noInstrumentCommands: string
+        approvedBooking: string
+        selectApprovedBooking: string
+        instrumentBookingHint: string
+        instrumentArguments: string
+        instrumentSchemaHint: string
+        invalidJsonObject: string
+        equipment: string
+        gateway: string
+        deviceConfirmation: string
+        deviceConfirmationRequired: string
+        deviceConfirmationNotRequired: string
+        instrumentNoAutomaticRetry: string
+        instrumentAttempt: string
+        lastGatewayHeartbeat: string
+        requestInstrumentStop: string
+        instrumentStopHint: string
+        stopReason: string
+        instrumentStopConfirm: string
+        instrumentStopImpactPause: string
+        instrumentStopImpactAcknowledge: string
+        confirmInstrumentStop: string
+        instrumentStopRequested: string
+        instrumentJobStatus: {
+          queued: string
+          leased: string
+          running: string
+          stop_requested: string
+          completed: string
+          failed: string
+          cancelled: string
+          stopped: string
+        }
         researchTool: string
         toolArguments: string
         expectedPayload: string
@@ -1350,6 +1387,7 @@ declare namespace I18n {
           running: string
           waiting_for_human: string
           waiting_for_tool: string
+          waiting_for_instrument: string
           waiting_for_event: string
           waiting_for_approval: string
           validating: string
@@ -1375,6 +1413,7 @@ declare namespace I18n {
           protocol_run: string
           tool_job: string
           human_work_item: string
+          instrument_job: string
           resource_reservation: string
           wait_event: string
         }

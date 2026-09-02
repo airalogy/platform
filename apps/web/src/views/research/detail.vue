@@ -319,6 +319,38 @@
                         </div>
                       </div>
                     </div>
+                    <div v-if="action.instrument_job" class="research-digital-result mt-3">
+                      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="aira-type-label">
+                              {{ $t("page.research.instrumentCommand") }} · {{ action.instrument_job.command_key }} · v{{ action.instrument_job.command_version }}
+                            </span>
+                            <n-tag size="small" round>
+                              {{ instrumentJobStatusLabel(action.instrument_job.status) }}
+                            </n-tag>
+                            <n-tag :type="instrumentRiskType(action.instrument_job.risk)" size="small" round>
+                              {{ $t(`page.resourceLibrary.risk.${action.instrument_job.risk}` as I18n.I18nKey) }}
+                            </n-tag>
+                          </div>
+                          <div class="aira-type-meta mt-1">
+                            {{ $t("page.research.instrumentAttempt", { count: action.instrument_job.attempt_count }) }}
+                            · {{ $t("page.research.resourceRevision", { revision: action.instrument_job.resource_revision }) }}
+                          </div>
+                          <div v-if="action.instrument_job.heartbeat_at" class="aira-type-meta mt-1">
+                            {{ $t("page.research.lastGatewayHeartbeat") }} · {{ formatDateTime(action.instrument_job.heartbeat_at) }}
+                          </div>
+                        </div>
+                        <research-instrument-stop
+                          :job="action.instrument_job"
+                          @stopped="() => loadTask(true)"
+                        />
+                      </div>
+                      <n-alert v-if="action.instrument_job.error || action.instrument_job.stop_reason" type="error" class="mt-2">
+                        {{ action.instrument_job.error || action.instrument_job.stop_reason }}
+                      </n-alert>
+                      <pre v-if="Object.keys(action.instrument_job.result || {}).length" class="mt-3">{{ formatPayload(action.instrument_job.result) }}</pre>
+                    </div>
                     <div v-if="action.wait_event" class="research-digital-result mt-3">
                       <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
@@ -732,6 +764,7 @@ import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
 import ResearchBudgetPanel from "./components/research-budget-panel.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
+import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
 import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
 import ResearchWaitEventSignal from "./components/research-wait-event-signal.vue"
@@ -1009,6 +1042,18 @@ function canExecuteAction(action: ResearchAction) {
   )
 }
 
+function instrumentRiskType(risk: "read_only" | "low" | "medium" | "high") {
+  if (risk === "high")
+    return "error"
+  if (risk === "medium")
+    return "warning"
+  return "info"
+}
+
+function instrumentJobStatusLabel(status: string) {
+  return $t(`page.research.instrumentJobStatus.${status}` as I18n.I18nKey)
+}
+
 function openReviewModal() {
   if (!task.value)
     return
@@ -1224,6 +1269,13 @@ function eventLabel(kind: string) {
     "tool_job.started",
     "tool_job.completed",
     "tool_job.failed",
+    "instrument_job.queued",
+    "instrument_job.leased",
+    "instrument_job.started",
+    "instrument_job.stop_requested",
+    "instrument_job.completed",
+    "instrument_job.failed",
+    "instrument_job.stopped",
     "wait_event.created",
     "wait_event.received",
   ]

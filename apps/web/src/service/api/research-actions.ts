@@ -1,4 +1,5 @@
 import type { ResearchAction } from "./research-tasks"
+import type { EquipmentBooking } from "./resources"
 import { request } from "../request"
 
 export interface ResearchToolDefinition {
@@ -45,6 +46,41 @@ export interface WaitEventSignalDraft {
   payload: Record<string, unknown>
 }
 
+export interface ResearchInstrumentCommandOption {
+  id: string
+  gateway_id: string
+  resource_id: string
+  resource_revision_id: string
+  resource_revision: number
+  command_key: string
+  command_version: string
+  name: string
+  description: string
+  input_schema: Record<string, any>
+  output_schema: Record<string, any>
+  risk: "read_only" | "low" | "medium" | "high"
+  device_confirmation_required: boolean
+  timeout_seconds: number
+  revision: number
+  gateway: { id: string, name: string }
+  resource: { id: string, name: string, code: string }
+  bookings: EquipmentBooking[]
+}
+
+export interface InstrumentActionDraft {
+  command_id: string
+  equipment_booking_id: string
+  arguments: Record<string, unknown>
+  title: string
+  description: string
+  idempotency_key: string
+}
+
+export interface InstrumentStopDraft {
+  expected_revision: number
+  reason: string
+}
+
 export interface DigitalActionPreview<T> {
   preview_digest: string
   command: T
@@ -52,6 +88,7 @@ export interface DigitalActionPreview<T> {
   effects?: string[]
   effect?: string
   tool?: ResearchToolDefinition
+  instrument?: ResearchInstrumentCommandOption & { booking: EquipmentBooking }
   action?: { id: string, title: string }
 }
 
@@ -124,6 +161,52 @@ export function signalWaitEvent(
 ) {
   return getData<ResearchAction>({
     url: `/research-wait-events/${waitEventId}/signal`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function fetchResearchInstrumentCommands(taskId: string) {
+  return getData<{ items: ResearchInstrumentCommandOption[] }>({
+    url: "/research-instrument-commands",
+    params: { task_id: taskId },
+    metadata: { showError: false },
+  })
+}
+
+export function previewInstrumentAction(taskId: string, payload: InstrumentActionDraft) {
+  return getData<DigitalActionPreview<InstrumentActionDraft>>({
+    url: `/research-tasks/${taskId}/instrument-actions/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createInstrumentAction(
+  taskId: string,
+  payload: InstrumentActionDraft & { preview_digest: string },
+) {
+  return getData<ResearchAction>({
+    url: `/research-tasks/${taskId}/instrument-actions`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function previewInstrumentStop(jobId: string, payload: InstrumentStopDraft) {
+  return getData<DigitalActionPreview<InstrumentStopDraft>>({
+    url: `/research-instrument-jobs/${jobId}/stop/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function stopInstrumentJob(
+  jobId: string,
+  payload: InstrumentStopDraft & { preview_digest: string },
+) {
+  return getData<ResearchAction>({
+    url: `/research-instrument-jobs/${jobId}/stop`,
     method: "POST",
     data: payload,
   })

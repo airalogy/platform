@@ -52,7 +52,13 @@ Aira can request a pinned resource type, quantity, unit, or equipment window, bu
 
 Lab Owners and Managers can open **Lab resource library → Instrument gateways** to establish the local device boundary. Create a Gateway, preview the impact, confirm, then copy its one-time credential into the on-premises Gateway process. Platform never shows that credential again. Rotating it invalidates the old value immediately, so update the local process before resuming device work.
 
-Select the Gateway and add only the commands it may perform. Every command selects a concrete active equipment Resource, captures its current revision, and defines a versioned key, input and result JSON Schemas, risk, timeout, and device-confirmation requirement. Medium- and high-risk commands always require physical-device confirmation. Schema changes create a new audited allowlist revision; existing jobs will retain their original contract. Disable a command or Gateway to block future dispatch. Registration alone does not start equipment or grant Aira direct device access; the Instrument Job runtime uses this allowlist in the next execution layer.
+Select the Gateway and add only the commands it may perform. Every command selects a concrete active equipment Resource, captures its current revision, and defines a versioned key, input and result JSON Schemas, risk, timeout, and device-confirmation requirement. Medium- and high-risk commands always require physical-device confirmation. Schema changes create a new audited allowlist revision; existing jobs retain their original contract. Disable a command or Gateway to block future leasing.
+
+## Run an instrument
+
+First pin the relevant equipment Resource type when creating the Research Task, and create or obtain an approved booking assigned to you in the Lab resource library. In an active Task, choose **Add Action → Run an instrument**. Select the allowlisted command and your approved booking, enter the command input as a JSON object, then preview the exact command revision, equipment, booking window, risk, and device-confirmation requirement before confirming.
+
+The job stays queued until its booking window opens. The local Gateway pulls a signed short lease, confirms the device locally when required, heartbeats while working, and returns a result that Platform validates against the pinned output Schema. The workbench shows delivery attempts, last heartbeat, result, and failures. Use **Request stop** with a reason when necessary. A delivered job is not considered stopped until the Gateway acknowledges it. Pausing or cancelling a Task also requests a stop for delivered physical work. Platform never retries a physical operation automatically; inspect the equipment before resuming a paused Run.
 
 ## Control time and budget
 

@@ -16,6 +16,7 @@ export type ResearchRunStatus =
   | "running"
   | "waiting_for_human"
   | "waiting_for_tool"
+  | "waiting_for_instrument"
   | "waiting_for_event"
   | "waiting_for_approval"
   | "validating"
@@ -253,6 +254,47 @@ export interface ResearchWaitEvent {
   received_by_user_id?: string | null
 }
 
+export interface ResearchInstrumentJob {
+  id: string
+  action_id: string
+  gateway_id: string
+  command_id: string
+  resource_id: string
+  resource_revision_id: string
+  resource_revision: number
+  equipment_booking_id: string
+  command_key: string
+  command_version: string
+  command_revision: number
+  arguments: Record<string, unknown>
+  input_schema: Record<string, unknown>
+  output_schema: Record<string, unknown>
+  risk: "read_only" | "low" | "medium" | "high"
+  device_confirmation_required: boolean
+  timeout_seconds: number
+  status:
+    | "queued"
+    | "leased"
+    | "running"
+    | "stop_requested"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "stopped"
+  attempt_count: number
+  device_confirmation: Record<string, unknown>
+  result: Record<string, unknown>
+  error?: string | null
+  stop_reason?: string | null
+  revision: number
+  created_at: string
+  leased_at?: string | null
+  started_at?: string | null
+  heartbeat_at?: string | null
+  stop_requested_at?: string | null
+  completed_at?: string | null
+}
+
 export interface ResearchAction {
   id: string
   run_id: string
@@ -281,6 +323,7 @@ export interface ResearchAction {
   protocol?: ResearchProtocolRef | null
   work_item?: ResearchHumanWorkItem | null
   tool_job?: ResearchToolJob | null
+  instrument_job?: ResearchInstrumentJob | null
   wait_event?: ResearchWaitEvent | null
   resource_reservation?: ResearchResourceReservation | null
   approval?: ResearchApproval | null

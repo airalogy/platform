@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database import DBSession
 from app.models.lab import Lab, LabRole, LabUser
@@ -15,6 +15,8 @@ from app.models.research_execution import (
     ResearchInstrumentCommand,
     ResearchInstrumentGateway,
     ResearchInstrumentGatewayAudit,
+    ResearchInstrumentJob,
+    ResearchInstrumentJobStatus,
 )
 from app.models.resource import (
     Resource,
@@ -548,6 +550,28 @@ async def rotate_gateway_credential(
     if canonical_digest(command) != params.preview_digest:
         raise HTTPException(
             status_code=409, detail="Credential rotation preview changed"
+        )
+    active_job_count = await db_session.scalar(
+        select(func.count())
+        .select_from(ResearchInstrumentJob)
+        .where(
+            ResearchInstrumentJob.gateway_id == gateway.id,
+            ResearchInstrumentJob.status.in_(
+                [
+                    ResearchInstrumentJobStatus.LEASED.value,
+                    ResearchInstrumentJobStatus.RUNNING.value,
+                    ResearchInstrumentJobStatus.STOP_REQUESTED.value,
+                ]
+            ),
+        )
+    )
+    if active_job_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Stop or finish active Instrument Jobs before rotating the "
+                "Gateway credential"
+            ),
         )
     credential = generate_gateway_token()
     gateway.token_digest = gateway_token_digest(credential)

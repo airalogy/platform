@@ -52,6 +52,8 @@ from app.models.research_asset import (
     ResearchEvidence,
 )
 from app.models.research_execution import (
+    ResearchInstrumentJob,
+    ResearchInstrumentJobStatus,
     ResearchResourceReservation,
     ResearchResourceReservationStatus,
     ResearchToolJob,
@@ -817,6 +819,9 @@ async def _action_data(
     tool_job = await ResearchToolJob.find_by(
         db_session, [ResearchToolJob.action_id == action.id]
     )
+    instrument_job = await ResearchInstrumentJob.find_by(
+        db_session, [ResearchInstrumentJob.action_id == action.id]
+    )
     wait_event = await ResearchWaitEvent.find_by(
         db_session, [ResearchWaitEvent.action_id == action.id]
     )
@@ -850,6 +855,7 @@ async def _action_data(
         "protocol": protocol_data,
         "work_item": work_item.as_dict() if work_item else None,
         "tool_job": tool_job.as_dict() if tool_job else None,
+        "instrument_job": instrument_job.as_dict() if instrument_job else None,
         "wait_event": wait_event.as_dict() if wait_event else None,
         "resource_reservation": (
             resource_reservation.as_dict() if resource_reservation else None
@@ -1620,6 +1626,61 @@ async def pause_research_task(
         ResearchRunStatus.CANCELLED.value,
     }:
         raise HTTPException(status_code=409, detail="Research Run cannot be paused")
+    active_instrument_job = (
+        await db_session.scalars(
+            select(ResearchInstrumentJob)
+            .join(ResearchAction, ResearchAction.id == ResearchInstrumentJob.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchInstrumentJob.status.in_(
+                    [
+                        ResearchInstrumentJobStatus.QUEUED.value,
+                        ResearchInstrumentJobStatus.LEASED.value,
+                        ResearchInstrumentJobStatus.RUNNING.value,
+                        ResearchInstrumentJobStatus.STOP_REQUESTED.value,
+                    ]
+                ),
+            )
+            .limit(1)
+            .with_for_update()
+        )
+    ).first()
+    if active_instrument_job is not None and active_instrument_job.status in {
+        ResearchInstrumentJobStatus.LEASED.value,
+        ResearchInstrumentJobStatus.RUNNING.value,
+    }:
+        now = utcnow()
+        active_instrument_job.status = (
+            ResearchInstrumentJobStatus.STOP_REQUESTED.value
+        )
+        active_instrument_job.stop_reason = params.reason or "Research Task paused"
+        active_instrument_job.stop_requested_at = now
+        active_instrument_job.revision += 1
+        instrument_action = await db_session.get(
+            ResearchAction, active_instrument_job.action_id
+        )
+        if instrument_action is not None:
+            instrument_action.status = ResearchActionStatus.WAITING.value
+            instrument_action.error = (
+                f"Stop requested: {active_instrument_job.stop_reason}"
+            )
+            instrument_action.revision += 1
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=active_instrument_job.action_id,
+            kind="instrument_job.stop_requested",
+            actor_user_id=current_user.id,
+            payload={
+                "instrument_job_id": str(active_instrument_job.id),
+                "reason": active_instrument_job.stop_reason,
+            },
+            idempotency_key=(
+                f"instrument-job:{active_instrument_job.id}:pause:"
+                f"{active_instrument_job.revision}"
+            ),
+        )
     run.status = ResearchRunStatus.PAUSED.value
     task.status = ResearchTaskStatus.PAUSED.value
     task.revision += 1
@@ -1670,6 +1731,36 @@ async def resume_research_task(
             .limit(1)
         )
     ).first()
+    active_instrument_job = (
+        await db_session.scalars(
+            select(ResearchInstrumentJob)
+            .join(ResearchAction, ResearchAction.id == ResearchInstrumentJob.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchInstrumentJob.status.in_(
+                    [
+                        ResearchInstrumentJobStatus.QUEUED.value,
+                        ResearchInstrumentJobStatus.LEASED.value,
+                        ResearchInstrumentJobStatus.RUNNING.value,
+                        ResearchInstrumentJobStatus.STOP_REQUESTED.value,
+                    ]
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
+    if (
+        active_instrument_job is not None
+        and active_instrument_job.status
+        == ResearchInstrumentJobStatus.STOP_REQUESTED.value
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Wait for the Instrument Gateway to acknowledge the stop and inspect "
+                "the equipment before resuming"
+            ),
+        )
     task.status = ResearchTaskStatus.ACTIVE.value
     task.outcome = None
     task.revision += 1
@@ -1677,6 +1768,8 @@ async def resume_research_task(
     run.completed_at = None
     if open_work_item is not None:
         run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
+    elif active_instrument_job is not None:
+        run.status = ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
     else:
         run.status = ResearchRunStatus.RUNNING.value
         if config.effective_ai_enabled and research_environment_has_ai_path(
@@ -1780,6 +1873,39 @@ async def cancel_research_task(
             for tool_job in tool_jobs:
                 tool_job.status = ResearchToolJobStatus.CANCELLED.value
                 tool_job.completed_at = now
+            instrument_jobs = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchInstrumentJob).where(
+                            ResearchInstrumentJob.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchInstrumentJob.status.in_(
+                                [
+                                    ResearchInstrumentJobStatus.QUEUED.value,
+                                    ResearchInstrumentJobStatus.LEASED.value,
+                                    ResearchInstrumentJobStatus.RUNNING.value,
+                                    ResearchInstrumentJobStatus.STOP_REQUESTED.value,
+                                ]
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            for instrument_job in instrument_jobs:
+                instrument_job.stop_reason = params.reason or "Task cancelled"
+                instrument_job.stop_requested_at = now
+                instrument_job.revision += 1
+                if (
+                    instrument_job.status
+                    == ResearchInstrumentJobStatus.QUEUED.value
+                ):
+                    instrument_job.status = ResearchInstrumentJobStatus.CANCELLED.value
+                    instrument_job.completed_at = now
+                else:
+                    instrument_job.status = (
+                        ResearchInstrumentJobStatus.STOP_REQUESTED.value
+                    )
             wait_events = list(
                 (
                     await db_session.scalars(

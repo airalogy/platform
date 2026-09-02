@@ -51,6 +51,59 @@
           </n-form>
         </n-tab-pane>
 
+        <n-tab-pane name="instrument" :tab="$t('page.research.instrumentAction')">
+          <n-alert type="warning" class="mb-4">
+            {{ $t("page.research.instrumentActionHint") }}
+          </n-alert>
+          <n-form label-placement="top">
+            <n-form-item :label="$t('page.research.instrumentCommand')" required>
+              <n-select
+                v-model:value="instrumentDraft.command_id"
+                :options="instrumentOptions"
+                :loading="instrumentsLoading"
+                :placeholder="$t('page.research.selectInstrumentCommand')"
+              />
+              <template #feedback>
+                {{ selectedInstrument?.description || $t("page.research.noInstrumentCommands") }}
+              </template>
+            </n-form-item>
+            <n-form-item :label="$t('page.research.approvedBooking')" required>
+              <n-select
+                v-model:value="instrumentDraft.equipment_booking_id"
+                :options="bookingOptions"
+                :disabled="!selectedInstrument"
+                :placeholder="$t('page.research.selectApprovedBooking')"
+              />
+              <template #feedback>
+                {{ $t("page.research.instrumentBookingHint") }}
+              </template>
+            </n-form-item>
+            <n-form-item
+              :label="$t('page.research.instrumentArguments')"
+              required
+              :validation-status="instrumentArgumentsValid ? undefined : 'error'"
+              :feedback="instrumentArgumentsValid ? $t('page.research.instrumentSchemaHint') : $t('page.research.invalidJsonObject')"
+            >
+              <n-input
+                v-model:value="instrumentArgumentsText"
+                type="textarea"
+                :autosize="{ minRows: 4, maxRows: 12 }"
+                class="font-mono"
+              />
+            </n-form-item>
+            <n-form-item :label="$t('page.research.actionTitle')">
+              <n-input v-model:value="instrumentDraft.title" />
+            </n-form-item>
+            <n-form-item :label="$t('page.research.actionDescription')">
+              <n-input
+                v-model:value="instrumentDraft.description"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 6 }"
+              />
+            </n-form-item>
+          </n-form>
+        </n-tab-pane>
+
         <n-tab-pane name="wait" :tab="$t('page.research.waitEventAction')">
           <n-alert type="warning" class="mb-4">
             {{ $t("page.research.waitEventHint") }}
@@ -115,6 +168,42 @@
             {{ $t("page.research.toolResultsStayDraft") }}
           </p>
         </template>
+        <template v-else-if="previewKind === 'instrument'">
+          <div class="mt-4 flex flex-wrap items-center gap-2">
+            <n-tag type="warning" round>
+              {{ preview.instrument?.name }}
+            </n-tag>
+            <n-tag :type="instrumentRiskType(preview.instrument?.risk)" size="small" round>
+              {{ instrumentRiskLabel(preview.instrument?.risk) }}
+            </n-tag>
+          </div>
+          <dl class="digital-preview__facts mt-3">
+            <div>
+              <dt>{{ $t("page.research.equipment") }}</dt>
+              <dd>{{ preview.instrument?.resource.name }} · {{ preview.instrument?.resource.code }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t("page.research.gateway") }}</dt>
+              <dd>{{ preview.instrument?.gateway.name }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t("page.research.approvedBooking") }}</dt>
+              <dd>
+                {{ formatBooking(preview.instrument?.booking) }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ $t("page.research.deviceConfirmation") }}</dt>
+              <dd>
+                {{ preview.instrument?.device_confirmation_required ? $t("page.research.deviceConfirmationRequired") : $t("page.research.deviceConfirmationNotRequired") }}
+              </dd>
+            </div>
+          </dl>
+          <pre class="mt-3">{{ JSON.stringify(preview.command.arguments, null, 2) }}</pre>
+          <n-alert type="warning" class="mt-3">
+            {{ $t("page.research.instrumentNoAutomaticRetry") }}
+          </n-alert>
+        </template>
         <template v-else>
           <div class="mt-4 flex flex-wrap items-center gap-2">
             <n-tag type="warning" round>
@@ -164,14 +253,20 @@
 <script setup lang="ts">
 import type {
   DigitalActionPreview,
+  InstrumentActionDraft,
+  ResearchInstrumentCommandOption,
   ResearchToolDefinition,
   ToolActionDraft,
   WaitActionDraft,
 } from "@/service/api/research-actions"
+import type { EquipmentBooking } from "@/service/api/resources"
 import {
+  createInstrumentAction,
   createToolAction,
   createWaitAction,
+  fetchResearchInstrumentCommands,
   fetchResearchTools,
+  previewInstrumentAction,
   previewToolAction,
   previewWaitAction,
 } from "@/service/api/research-actions"
@@ -181,7 +276,7 @@ import { nanoid } from "nanoid"
 const props = defineProps<{ taskId: string }>()
 const emit = defineEmits<{ created: [] }>()
 
-type Mode = "tool" | "wait"
+type Mode = "tool" | "instrument" | "wait"
 type WaitPreset = "data_asset" | "research_file" | "external_service"
 
 const visible = ref(false)
@@ -190,11 +285,14 @@ const previewKind = ref<Mode>("tool")
 const preview = ref<DigitalActionPreview<any> | null>(null)
 const submitting = ref(false)
 const toolsLoading = ref(false)
+const instrumentsLoading = ref(false)
 const tools = ref<ResearchToolDefinition[]>([])
+const instruments = ref<ResearchInstrumentCommandOption[]>([])
 const toolQuery = ref("")
 const toolLimit = ref(20)
 const waitPreset = ref<WaitPreset>("data_asset")
 const waitDueAt = ref<number | null>(null)
+const instrumentArgumentsText = ref("{}")
 
 const toolDraft = reactive<ToolActionDraft>({
   tool_key: "",
@@ -210,6 +308,14 @@ const waitDraft = reactive<WaitActionDraft>({
   expected_event_type: "",
   payload_schema: {},
   due_at: null,
+  idempotency_key: "",
+})
+const instrumentDraft = reactive<InstrumentActionDraft>({
+  command_id: "",
+  equipment_booking_id: "",
+  arguments: {},
+  title: "",
+  description: "",
   idempotency_key: "",
 })
 
@@ -261,6 +367,32 @@ const toolOptions = computed(() =>
   })),
 )
 const selectedTool = computed(() => tools.value.find(item => item.key === toolDraft.tool_key))
+const selectedInstrument = computed(() =>
+  instruments.value.find(item => item.id === instrumentDraft.command_id),
+)
+const instrumentOptions = computed(() =>
+  instruments.value.map(item => ({
+    label: `${item.name} · ${item.resource.name} · v${item.command_version}`,
+    value: item.id,
+    disabled: !item.bookings.length,
+  })),
+)
+const bookingOptions = computed(() =>
+  (selectedInstrument.value?.bookings || []).map(item => ({
+    label: formatBooking(item),
+    value: item.id,
+  })),
+)
+const instrumentArguments = computed<Record<string, unknown> | null>(() => {
+  try {
+    const value = JSON.parse(instrumentArgumentsText.value)
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null
+  }
+  catch {
+    return null
+  }
+})
+const instrumentArgumentsValid = computed(() => instrumentArguments.value !== null)
 const waitPresetOptions = computed(() => [
   { label: $t("page.research.waitDataAsset"), value: "data_asset" },
   { label: $t("page.research.waitResearchFile"), value: "research_file" },
@@ -269,7 +401,13 @@ const waitPresetOptions = computed(() => [
 const canPreview = computed(() =>
   mode.value === "tool"
     ? Boolean(toolDraft.tool_key && toolQuery.value.trim())
-    : Boolean(waitDraft.title.trim() && (!waitDueAt.value || waitDueAt.value > Date.now())),
+    : mode.value === "instrument"
+      ? Boolean(
+        instrumentDraft.command_id
+        && instrumentDraft.equipment_booking_id
+        && instrumentArgumentsValid.value,
+      )
+      : Boolean(waitDraft.title.trim() && (!waitDueAt.value || waitDueAt.value > Date.now())),
 )
 
 async function loadTools() {
@@ -283,6 +421,44 @@ async function loadTools() {
   }
 }
 
+async function loadInstruments() {
+  instrumentsLoading.value = true
+  try {
+    instruments.value = (await fetchResearchInstrumentCommands(props.taskId)).items
+    instrumentDraft.command_id ||= instruments.value.find(item => item.bookings.length)?.id || ""
+    selectDefaultBooking()
+  }
+  finally {
+    instrumentsLoading.value = false
+  }
+}
+
+function selectDefaultBooking() {
+  const bookings = selectedInstrument.value?.bookings || []
+  if (!bookings.some(item => item.id === instrumentDraft.equipment_booking_id))
+    instrumentDraft.equipment_booking_id = bookings[0]?.id || ""
+}
+
+function formatBooking(booking?: EquipmentBooking) {
+  if (!booking)
+    return "—"
+  return `${new Date(booking.starts_at).toLocaleString()} – ${new Date(booking.ends_at).toLocaleString()}`
+}
+
+function instrumentRiskType(risk?: ResearchInstrumentCommandOption["risk"]) {
+  if (risk === "high")
+    return "error"
+  if (risk === "medium")
+    return "warning"
+  return "info"
+}
+
+function instrumentRiskLabel(risk?: ResearchInstrumentCommandOption["risk"]) {
+  return risk
+    ? $t(`page.resourceLibrary.risk.${risk}` as I18n.I18nKey)
+    : "—"
+}
+
 function applyWaitPreset() {
   const definition = waitDefinitions[waitPreset.value]
   waitDraft.expected_event_type = definition.eventType
@@ -293,6 +469,8 @@ function open() {
   visible.value = true
   if (!tools.value.length)
     void loadTools()
+  if (!instruments.value.length)
+    void loadInstruments()
 }
 
 function reset() {
@@ -311,6 +489,13 @@ function reset() {
   waitDraft.event_key = ""
   waitDraft.idempotency_key = ""
   waitDraft.due_at = null
+  instrumentDraft.command_id = ""
+  instrumentDraft.equipment_booking_id = ""
+  instrumentDraft.arguments = {}
+  instrumentDraft.title = ""
+  instrumentDraft.description = ""
+  instrumentDraft.idempotency_key = ""
+  instrumentArgumentsText.value = "{}"
   applyWaitPreset()
 }
 
@@ -328,6 +513,11 @@ async function previewAction() {
       toolDraft.arguments = { query: toolQuery.value.trim(), limit: toolLimit.value }
       toolDraft.idempotency_key ||= `tool-${nanoid(16)}`
       preview.value = await previewToolAction(props.taskId, { ...toolDraft })
+    }
+    else if (mode.value === "instrument") {
+      instrumentDraft.arguments = instrumentArguments.value || {}
+      instrumentDraft.idempotency_key ||= `instrument-${nanoid(16)}`
+      preview.value = await previewInstrumentAction(props.taskId, { ...instrumentDraft })
     }
     else {
       applyWaitPreset()
@@ -353,6 +543,12 @@ async function confirmAction() {
         preview_digest: preview.value.preview_digest,
       })
     }
+    else if (previewKind.value === "instrument") {
+      await createInstrumentAction(props.taskId, {
+        ...instrumentDraft,
+        preview_digest: preview.value.preview_digest,
+      })
+    }
     else {
       await createWaitAction(props.taskId, {
         ...waitDraft,
@@ -369,6 +565,7 @@ async function confirmAction() {
 }
 
 watch(waitPreset, applyWaitPreset, { immediate: true })
+watch(() => instrumentDraft.command_id, selectDefaultBooking)
 </script>
 
 <style scoped>

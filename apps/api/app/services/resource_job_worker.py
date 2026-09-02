@@ -33,6 +33,7 @@ from app.services.record_exports import (
     mark_record_export_failed,
     process_record_export,
 )
+from app.services.research_instruments import reconcile_expired_instrument_leases
 from app.services.research_notifications import (
     process_research_notification_delivery,
     record_research_notification_delivery_failure,
@@ -334,6 +335,7 @@ async def run_persistent_job_worker(
                 async with db_session.begin():
                     await release_expired_inventory_reservations(db_session)
                     await expire_record_exports(db_session)
+                    await reconcile_expired_instrument_leases(db_session)
                     job = await claim_job(
                         db_session,
                         worker_id=worker_id,

@@ -1525,6 +1525,7 @@ async def process_research_run_advance(
         if run.status in TERMINAL_RUN_STATUSES or run.status in {
             ResearchRunStatus.PAUSED.value,
             ResearchRunStatus.WAITING_FOR_TOOL.value,
+            ResearchRunStatus.WAITING_FOR_INSTRUMENT.value,
             ResearchRunStatus.WAITING_FOR_EVENT.value,
         }:
             return {"status": run.status}

@@ -79,6 +79,17 @@ class ResearchInstrumentRisk(StrEnum):
     HIGH = "high"
 
 
+class ResearchInstrumentJobStatus(StrEnum):
+    QUEUED = "queued"
+    LEASED = "leased"
+    RUNNING = "running"
+    STOP_REQUESTED = "stop_requested"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    STOPPED = "stopped"
+
+
 class ResearchBudgetEntry(Base):
     """Immutable reservation and actual-cost ledger for one Research Task."""
 
@@ -523,6 +534,112 @@ class ResearchInstrumentCommand(Base):
         onupdate=func.now(),
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchInstrumentJob(Base):
+    """A version-pinned physical command leased to one Instrument Gateway."""
+
+    __tablename__ = "research_instrument_jobs"
+    __table_args__ = (
+        UniqueConstraint("action_id", name="uq_research_instrument_job_action"),
+        CheckConstraint(
+            "status IN ('queued', 'leased', 'running', 'stop_requested', "
+            "'completed', 'failed', 'cancelled', 'stopped')",
+            name="ck_research_instrument_job_status",
+        ),
+        CheckConstraint(
+            "lease_token_digest IS NULL OR length(lease_token_digest) = 64",
+            name="ck_research_instrument_job_lease_digest",
+        ),
+        CheckConstraint(
+            "risk IN ('read_only', 'low', 'medium', 'high')",
+            name="ck_research_instrument_job_risk",
+        ),
+        CheckConstraint(
+            "timeout_seconds BETWEEN 1 AND 86400",
+            name="ck_research_instrument_job_timeout",
+        ),
+        Index(
+            "ix_research_instrument_jobs_gateway_status_created",
+            "gateway_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_research_instrument_jobs_booking_status",
+            "equipment_booking_id",
+            "status",
+        ),
+        Index(
+            "ix_research_instrument_jobs_status_lease",
+            "status",
+            "lease_expires_at",
+        ),
+    )
+
+    json_exclude_fields: ClassVar[list[str]] = ["lease_token_digest"]
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    gateway_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_instrument_gateways.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    command_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_instrument_commands.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    resource_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    resource_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resource_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    resource_revision: Mapped[int] = mapped_column(nullable=False)
+    equipment_booking_id: Mapped[UUID] = mapped_column(
+        ForeignKey("equipment_bookings.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    command_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    command_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    command_revision: Mapped[int] = mapped_column(nullable=False)
+    arguments: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    input_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    output_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    risk: Mapped[str] = mapped_column(String(32), nullable=False)
+    device_confirmation_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    timeout_seconds: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ResearchInstrumentJobStatus.QUEUED.value
+    )
+    lease_token_digest: Mapped[str | None] = mapped_column(String(64))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    device_confirmation: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    stop_reason: Mapped[str | None] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    leased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stop_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ResearchInstrumentGatewayAudit(Base):

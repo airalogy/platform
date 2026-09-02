@@ -45,6 +45,7 @@ class ResearchRunStatus(StrEnum):
     RUNNING = "running"
     WAITING_FOR_HUMAN = "waiting_for_human"
     WAITING_FOR_TOOL = "waiting_for_tool"
+    WAITING_FOR_INSTRUMENT = "waiting_for_instrument"
     WAITING_FOR_EVENT = "waiting_for_event"
     WAITING_FOR_APPROVAL = "waiting_for_approval"
     VALIDATING = "validating"
