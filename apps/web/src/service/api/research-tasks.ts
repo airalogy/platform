@@ -69,6 +69,18 @@ export interface ResearchProtocolRef extends ResearchScope {
   project_uid?: string
 }
 
+export interface ResearchKnowledgeRef {
+  id: string
+  title: string
+  kind: string
+  state?: string
+  scope_type: "lab" | "project"
+  revision: number
+  position?: number
+  body?: string
+  tags?: string[]
+}
+
 export interface ResearchRun {
   id: string
   task_id: string
@@ -239,6 +251,7 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   events: ResearchEvent[]
   plan_versions: ResearchPlanVersion[]
   protocols: ResearchProtocolRef[]
+  knowledge: ResearchKnowledgeRef[]
 }
 
 export interface ResearchWorkItemDetail extends ResearchHumanWorkItem {
@@ -266,6 +279,7 @@ export interface ResearchTaskDraft {
   stop_conditions: string[]
   autonomy_level: ResearchTaskSummary["autonomy_level"]
   protocol_ids: string[]
+  knowledge_ids: string[]
   owner_user_id?: string
   ai_model?: string
 }
@@ -276,6 +290,7 @@ export interface ResearchTaskPreview {
   destination: { lab: ResearchScope, project: ResearchScope }
   owner: ResearchUser
   protocols: ResearchProtocolRef[]
+  knowledge: ResearchKnowledgeRef[]
   effects: string[]
   warnings: string[]
   ai_path_available: boolean

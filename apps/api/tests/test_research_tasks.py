@@ -15,6 +15,7 @@ from app.models.research import (
     ResearchApproval,
     ResearchApprovalStatus,
     ResearchRunStatus,
+    ResearchTaskKnowledge,
     ResearchTaskStatus,
 )
 from app.routers.research_tasks import ResearchTaskDraft
@@ -42,6 +43,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         stop_conditions=[" Safety threshold exceeded "],
         autonomy_level="assisted",
         protocol_ids=[protocol_id],
+        knowledge_refs=[{"id": str(uuid4()), "revision": 2}],
         owner_user_id=owner_id,
         ai_model="  qwen3.5-flash  ",
     )
@@ -54,6 +56,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         "stop_conditions": ["Safety threshold exceeded"],
         "autonomy_level": "assisted",
         "protocol_ids": [str(protocol_id)],
+        "knowledge_refs": [ANY],
         "owner_user_id": str(owner_id),
         "ai_model": "qwen3.5-flash",
     }
@@ -77,6 +80,29 @@ def test_research_task_draft_rejects_missing_criteria_and_duplicate_protocols():
         ResearchTaskDraft(**{**payload, "success_criteria": [" "]})
     with pytest.raises(ValidationError):
         ResearchTaskDraft(**{**payload, "protocol_ids": [protocol_id, protocol_id]})
+    knowledge_id = uuid4()
+    with pytest.raises(ValidationError):
+        ResearchTaskDraft(
+            **{**payload, "knowledge_ids": [knowledge_id, knowledge_id]}
+        )
+
+
+def test_research_environment_knowledge_is_revision_pinned():
+    ddl = str(
+        CreateTable(ResearchTaskKnowledge.__table__).compile(
+            dialect=postgresql.dialect()
+        )
+    )
+
+    assert "knowledge_item_id" in ddl
+    assert "knowledge_revision" in ddl
+    assert "snapshot" in ddl
+
+    migration = import_module(
+        "migrations.versions.0012_research_environment_knowledge"
+    )
+    assert migration.down_revision == "0011_knowledge_core"
+    assert migration.TABLE_NAMES == ("research_task_knowledge",)
 
 
 def test_aira_path_transitions_preserve_human_record_boundary():

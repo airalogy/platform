@@ -242,6 +242,27 @@
                 </button>
               </div>
               <n-empty v-else class="py-5" :description="$t('page.research.noMethods')" />
+              <n-divider />
+              <h2 class="aira-type-card-title mb-0">{{ $t("page.research.pinnedKnowledge") }}</h2>
+              <n-collapse v-if="task.knowledge.length" class="mt-3">
+                <n-collapse-item
+                  v-for="item in task.knowledge"
+                  :key="`${item.id}:${item.revision}`"
+                  :title="item.title"
+                  :name="item.id"
+                >
+                  <div class="flex flex-wrap gap-2">
+                    <n-tag size="small" type="success">{{ item.kind }}</n-tag>
+                    <n-tag size="small">r{{ item.revision }}</n-tag>
+                  </div>
+                  <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
+                    {{ item.body }}
+                  </p>
+                </n-collapse-item>
+              </n-collapse>
+              <p v-else class="aira-type-meta aira-text-muted mb-0 mt-3">
+                {{ $t("page.research.noKnowledge") }}
+              </p>
               <div class="aira-type-meta mt-3">
                 {{ $t("page.research.autonomy") }} · {{ autonomyLabel(task.autonomy_level) }}
               </div>

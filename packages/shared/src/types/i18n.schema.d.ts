@@ -878,12 +878,16 @@ declare namespace I18n {
         method: string
         methodsPlaceholder: string
         methodsHint: string
+        knowledgeContext: string
+        knowledgePlaceholder: string
+        knowledgeHint: string
         aiOffHint: string
         previewTask: string
         confirmCreate: string
         backToEdit: string
         saveDestination: string
         confirmedMethods: string
+        pinnedKnowledge: string
         effects: string
         effectCreate: string
         effectPin: string
@@ -893,6 +897,7 @@ declare namespace I18n {
         previewAiPath: string
         previewManualPath: string
         noMethods: string
+        noKnowledge: string
         created: string
         refresh: string
         loadError: string

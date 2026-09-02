@@ -192,6 +192,36 @@ class ResearchTaskProtocol(Base):
     )
 
 
+class ResearchTaskKnowledge(Base):
+    __tablename__ = "research_task_knowledge"
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id", "position", name="uq_research_task_knowledge_position"
+        ),
+        UniqueConstraint(
+            "task_id", "knowledge_item_id", name="uq_research_task_knowledge_item"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    knowledge_item_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_items.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    knowledge_revision: Mapped[int] = mapped_column(nullable=False)
+    position: Mapped[int] = mapped_column(nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchRun(Base):
     __tablename__ = "research_runs"
     __table_args__ = (

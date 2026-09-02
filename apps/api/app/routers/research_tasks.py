@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, select
 
 from app.config import config
 from app.database import DBSession
+from app.models.knowledge import KnowledgeItem, KnowledgeState, Visibility
 from app.models.lab import Lab
 from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
@@ -32,6 +33,7 @@ from app.models.research import (
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
+    ResearchTaskKnowledge,
     ResearchTaskOutcome,
     ResearchTaskProtocol,
     ResearchTaskStatus,
@@ -40,6 +42,7 @@ from app.models.research import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_structured_access
+from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
     activate_protocol_action,
@@ -74,6 +77,7 @@ class ResearchTaskDraft(BaseModel):
         "assisted", "bounded_autopilot", "autonomous_within_policy"
     ] = "assisted"
     protocol_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    knowledge_ids: list[UUID] = Field(default_factory=list, max_length=50)
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
 
@@ -91,6 +95,8 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Title, goal, and success criteria are required")
         if len(set(self.protocol_ids)) != len(self.protocol_ids):
             raise ValueError("Protocol selection contains duplicates")
+        if len(set(self.knowledge_ids)) != len(self.knowledge_ids):
+            raise ValueError("Knowledge selection contains duplicates")
         return self
 
 
@@ -207,6 +213,7 @@ async def _validate_task_draft(
     Lab,
     User,
     list[tuple[Protocol, ProtocolVersion]],
+    list[KnowledgeItem],
 ]:
     project = await _project(db_session, draft.project_id)
     await require_research_capability(
@@ -260,6 +267,38 @@ async def _validate_task_draft(
             )
         protocols.append((protocol, version))
 
+    knowledge_items: list[KnowledgeItem] = []
+    for knowledge_id in draft.knowledge_ids:
+        item = await db_session.get(KnowledgeItem, knowledge_id)
+        if item is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Knowledge {knowledge_id} is not available",
+            )
+        await authorize_knowledge_item(db_session, current_user, item)
+        belongs_to_environment = (
+            item.scope_type == "project" and item.project_id == project.id
+        ) or (item.scope_type == "lab" and item.lab_id == lab.id)
+        if not belongs_to_environment:
+            raise HTTPException(
+                status_code=422,
+                detail="Knowledge must belong to this Project or its Lab",
+            )
+        if item.visibility == Visibility.RESTRICTED.value:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Restricted Knowledge cannot be placed in a shared Research "
+                    "Environment; publish a scoped non-restricted derivative first"
+                ),
+            )
+        if item.state != KnowledgeState.REVIEWED.value:
+            raise HTTPException(
+                status_code=422,
+                detail="Only reviewed Knowledge can be pinned to a Research Task",
+            )
+        knowledge_items.append(item)
+
     command = research_task_command(
         project_id=project.id,
         title=draft.title,
@@ -268,10 +307,13 @@ async def _validate_task_draft(
         stop_conditions=draft.stop_conditions,
         autonomy_level=draft.autonomy_level,
         protocol_ids=[protocol.id for protocol, _version in protocols],
+        knowledge_refs=[
+            {"id": item.id, "revision": item.revision} for item in knowledge_items
+        ],
         owner_user_id=owner.id,
         ai_model=draft.ai_model,
     )
-    return command, project, lab, owner, protocols
+    return command, project, lab, owner, protocols, knowledge_items
 
 
 def _task_preview(
@@ -281,6 +323,7 @@ def _task_preview(
     lab: Lab,
     owner: User,
     protocols: list[tuple[Protocol, ProtocolVersion]],
+    knowledge_items: list[KnowledgeItem],
 ) -> dict[str, Any]:
     ai_path_available = config.effective_ai_enabled and bool(protocols)
     return {
@@ -308,9 +351,20 @@ def _task_preview(
             }
             for protocol, version in protocols
         ],
+        "knowledge": [
+            {
+                "id": str(item.id),
+                "title": item.title,
+                "kind": item.kind,
+                "revision": item.revision,
+                "scope_type": item.scope_type,
+            }
+            for item in knowledge_items
+        ],
         "effects": [
             "Create a versioned Research Task and draft Research Run",
             "Pin the selected Protocol versions in the Research Environment",
+            "Pin reviewed Knowledge revisions in the Research Environment",
             (
                 "Use AIRA after the Task is started"
                 if ai_path_available
@@ -522,6 +576,23 @@ async def _task_detail(
             db_session, task.id
         )
     ]
+    knowledge = [
+        {
+            **row.snapshot,
+            "id": str(row.knowledge_item_id),
+            "revision": row.knowledge_revision,
+            "position": row.position,
+        }
+        for row in list(
+            (
+                await db_session.scalars(
+                    select(ResearchTaskKnowledge)
+                    .where(ResearchTaskKnowledge.task_id == task.id)
+                    .order_by(ResearchTaskKnowledge.position)
+                )
+            ).all()
+        )
+    ]
     return {
         **summary,
         "runs": [run.as_dict() for run in runs],
@@ -532,6 +603,7 @@ async def _task_detail(
         "events": [event.as_dict() for event in events],
         "plan_versions": [plan.as_dict() for plan in plans],
         "protocols": protocols,
+        "knowledge": knowledge,
     }
 
 
@@ -541,7 +613,7 @@ async def preview_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, project, lab, owner, protocols = await _validate_task_draft(
+    command, project, lab, owner, protocols, knowledge_items = await _validate_task_draft(
         db_session, current_user, params
     )
     return _task_preview(
@@ -550,6 +622,7 @@ async def preview_research_task(
         lab=lab,
         owner=owner,
         protocols=protocols,
+        knowledge_items=knowledge_items,
     )
 
 
@@ -559,7 +632,7 @@ async def create_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, project, lab, owner, protocols = await _validate_task_draft(
+    command, project, lab, owner, protocols, knowledge_items = await _validate_task_draft(
         db_session, current_user, params
     )
     expected_digest = canonical_digest(command)
@@ -594,6 +667,23 @@ async def create_research_task(
                 position=position,
             )
         )
+    pinned_knowledge: list[dict[str, Any]] = []
+    for position, item in enumerate(knowledge_items, start=1):
+        snapshot = {
+            **snapshot_knowledge(item),
+            "id": str(item.id),
+            "scope_type": item.scope_type,
+        }
+        pinned_knowledge.append(snapshot)
+        db_session.add(
+            ResearchTaskKnowledge(
+                task_id=task.id,
+                knowledge_item_id=item.id,
+                knowledge_revision=item.revision,
+                position=position,
+                snapshot=snapshot,
+            )
+        )
     run = ResearchRun(
         task_id=task.id,
         run_number=1,
@@ -619,6 +709,7 @@ async def create_research_task(
             }
             for _task_protocol, protocol, version in rows
         ],
+        "knowledge": pinned_knowledge,
         "ai_available_at_capture": config.effective_ai_enabled,
         "autonomy_level": task.autonomy_level,
     }
@@ -629,7 +720,9 @@ async def create_research_task(
         run=run,
         kind="initial",
         plan={
-            "workflow": workflow_info_for_task(task, project, lab, rows),
+            "workflow": workflow_info_for_task(
+                task, project, lab, rows, knowledge_context=pinned_knowledge
+            ),
             "success_criteria": task.success_criteria,
             "stop_conditions": task.stop_conditions,
         },

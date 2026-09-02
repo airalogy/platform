@@ -78,6 +78,21 @@
             {{ $t("page.research.methodsHint") }}
           </template>
         </n-form-item>
+        <n-form-item :label="$t('page.research.knowledgeContext')">
+          <n-select
+            v-model:value="form.knowledge_ids"
+            :options="knowledgeOptions"
+            :loading="knowledgeLoading"
+            :disabled="!form.project_id"
+            multiple
+            filterable
+            clearable
+            :placeholder="$t('page.research.knowledgePlaceholder')"
+          />
+          <template #feedback>
+            {{ $t("page.research.knowledgeHint") }}
+          </template>
+        </n-form-item>
       </n-form>
     </template>
 
@@ -97,6 +112,17 @@
           </div>
           <p class="aira-type-body aira-text-secondary mb-0 mt-2">
             {{ form.title }}
+          </p>
+        </section>
+        <section class="research-preview-card">
+          <div class="aira-type-eyebrow">{{ $t("page.research.pinnedKnowledge") }}</div>
+          <div v-if="preview.knowledge.length" class="mt-3 flex flex-wrap gap-2">
+            <n-tag v-for="item in preview.knowledge" :key="item.id" round type="success">
+              {{ item.title }} · r{{ item.revision }}
+            </n-tag>
+          </div>
+          <p v-else class="aira-type-body aira-text-muted mb-0 mt-2">
+            {{ $t("page.research.noKnowledge") }}
           </p>
         </section>
         <section class="research-preview-card">
@@ -146,11 +172,15 @@
 
 <script setup lang="ts">
 import type {
+  KnowledgeItem,
+} from "@/service/api/knowledge"
+import type {
   ResearchTaskDetail,
   ResearchTaskDraft,
   ResearchTaskPreview,
 } from "@/service/api/research-tasks"
 import type { ProtocolModels } from "@airalogy/shared/types"
+import { fetchKnowledgeItems } from "@/service/api/knowledge"
 import { fetchProtocols } from "@/service/api/project-protocols"
 import { createResearchTask, previewResearchTask } from "@/service/api/research-tasks"
 import { fetchUserProjects } from "@/service/api/users"
@@ -163,6 +193,7 @@ interface ProjectContext {
   uid: string
   name: string
   lab_uid: string
+  lab_id?: string | number
   lab_name?: string
 }
 
@@ -174,9 +205,11 @@ const instanceStore = useInstanceStore()
 const visible = ref(false)
 const projectsLoading = ref(false)
 const protocolsLoading = ref(false)
+const knowledgeLoading = ref(false)
 const submitting = ref(false)
 const projects = ref<Api.Project.MyProjectInfo[]>([])
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
+const knowledgeItems = ref<KnowledgeItem[]>([])
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
@@ -191,6 +224,7 @@ function emptyForm(): ResearchTaskDraft {
     stop_conditions: [],
     autonomy_level: "assisted",
     protocol_ids: [],
+    knowledge_ids: [],
   }
 }
 const form = reactive<ResearchTaskDraft>(emptyForm())
@@ -210,6 +244,10 @@ const projectOptions = computed(() => {
 const protocolOptions = computed(() => protocols.value.map(protocol => ({
   label: `${protocol.name} · v${protocol.latest_version}`,
   value: String(protocol.id),
+})))
+const knowledgeOptions = computed(() => knowledgeItems.value.map(item => ({
+  label: `${item.scope_type === "lab" ? $t("page.knowledge.scopeLab") : $t("page.knowledge.scopeProject")} · ${item.title} · r${item.revision}`,
+  value: item.id,
 })))
 const autonomyOptions = computed(() => [
   { label: $t("page.research.autonomyAssisted"), value: "assisted" },
@@ -265,7 +303,7 @@ async function loadProjects() {
     )
     if (projects.value.length === 1) {
       form.project_id = String(projects.value[0].id)
-      await loadProtocols(form.project_id)
+      await Promise.all([loadProtocols(form.project_id), loadKnowledge(form.project_id)])
     }
   }
   finally {
@@ -290,17 +328,53 @@ async function loadProtocols(projectId: string) {
   }
 }
 
+async function loadKnowledge(projectId: string) {
+  knowledgeItems.value = []
+  form.knowledge_ids = []
+  if (!projectId)
+    return
+  const project = props.project && String(props.project.id) === projectId
+    ? props.project
+    : projects.value.find(item => String(item.id) === projectId)
+  if (!project?.lab_id)
+    return
+  knowledgeLoading.value = true
+  try {
+    const [projectKnowledge, labKnowledge] = await Promise.all([
+      fetchKnowledgeItems({
+        scope_type: "project",
+        project_id: projectId,
+        state: "reviewed",
+        page: 1,
+        pageSize: 100,
+      }),
+      fetchKnowledgeItems({
+        scope_type: "lab",
+        lab_id: String(project.lab_id),
+        state: "reviewed",
+        page: 1,
+        pageSize: 100,
+      }),
+    ])
+    knowledgeItems.value = [...projectKnowledge.items, ...labKnowledge.items]
+      .filter(item => item.visibility !== "restricted")
+  }
+  finally {
+    knowledgeLoading.value = false
+  }
+}
+
 async function handleProjectChange(value: string) {
   resetPreview()
-  await loadProtocols(value)
+  await Promise.all([loadProtocols(value), loadKnowledge(value)])
 }
 
 async function openModal() {
   visible.value = true
   if (props.project) {
     form.project_id = String(props.project.id)
-    if (!protocols.value.length)
-      await loadProtocols(form.project_id)
+    if (!protocols.value.length && !knowledgeItems.value.length)
+      await Promise.all([loadProtocols(form.project_id), loadKnowledge(form.project_id)])
   }
   else if (!projects.value.length) {
     await loadProjects()
