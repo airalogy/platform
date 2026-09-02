@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import ClassVar
 from uuid import UUID
 
 from sqlalchemy import (
@@ -69,6 +70,13 @@ class ResearchNotificationDeliveryStatus(StrEnum):
     SENT = "sent"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+class ResearchInstrumentRisk(StrEnum):
+    READ_ONLY = "read_only"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class ResearchBudgetEntry(Base):
@@ -374,6 +382,182 @@ class ResearchHumanExecutorProfileAudit(Base):
     )
     revision: Mapped[int] = mapped_column(nullable=False)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchInstrumentGateway(Base):
+    """Lab-owned credential boundary for an on-premises Instrument Gateway."""
+
+    __tablename__ = "research_instrument_gateways"
+    __table_args__ = (
+        UniqueConstraint("lab_id", "name", name="uq_research_instrument_gateway_name"),
+        CheckConstraint(
+            "length(token_digest) = 64",
+            name="ck_research_instrument_gateway_token_digest",
+        ),
+        Index(
+            "ix_research_instrument_gateways_lab_enabled",
+            "lab_id",
+            "enabled",
+        ),
+    )
+
+    json_exclude_fields: ClassVar[list[str]] = ["token_digest"]
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    token_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    token_hint: Mapped[str] = mapped_column(String(16), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchInstrumentCommand(Base):
+    """One versioned, schema-bounded command allowed on one equipment Resource."""
+
+    __tablename__ = "research_instrument_commands"
+    __table_args__ = (
+        UniqueConstraint(
+            "gateway_id",
+            "resource_id",
+            "command_key",
+            "command_version",
+            name="uq_research_instrument_command_identity",
+        ),
+        CheckConstraint(
+            "risk IN ('read_only', 'low', 'medium', 'high')",
+            name="ck_research_instrument_command_risk",
+        ),
+        CheckConstraint(
+            "timeout_seconds BETWEEN 1 AND 86400",
+            name="ck_research_instrument_command_timeout",
+        ),
+        Index(
+            "ix_research_instrument_commands_gateway_enabled",
+            "gateway_id",
+            "enabled",
+        ),
+        Index(
+            "ix_research_instrument_commands_resource_enabled",
+            "resource_id",
+            "enabled",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    gateway_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_instrument_gateways.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    resource_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    resource_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resource_revisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    resource_revision: Mapped[int] = mapped_column(nullable=False)
+    command_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    command_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    input_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    output_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    risk: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ResearchInstrumentRisk.MEDIUM.value
+    )
+    device_confirmation_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    timeout_seconds: Mapped[int] = mapped_column(nullable=False, default=3600)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchInstrumentGatewayAudit(Base):
+    """Immutable configuration history without credential material."""
+
+    __tablename__ = "research_instrument_gateway_audits"
+    __table_args__ = (
+        Index(
+            "ix_research_instrument_gateway_audits_gateway_created",
+            "gateway_id",
+            "created_at",
+        ),
+        Index(
+            "ix_research_instrument_gateway_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    gateway_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_instrument_gateways.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    command_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_instrument_commands.id", ondelete="SET NULL"), index=True
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
     snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     actor_user_id: Mapped[UUID] = mapped_column(

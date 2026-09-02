@@ -48,6 +48,12 @@ The new Run preserves every earlier execution and scientific asset and inherits 
 
 Aira can request a pinned resource type, quantity, unit, or equipment window, but it cannot pick an arbitrary hidden resource or reserve it directly. Platform selects an accessible candidate deterministically and presents the exact impact for approval. If inventory, permissions, the resource revision, or a booking window changes before approval, the proposal is rejected and must be replanned.
 
+## Register an Instrument Gateway
+
+Lab Owners and Managers can open **Lab resource library → Instrument gateways** to establish the local device boundary. Create a Gateway, preview the impact, confirm, then copy its one-time credential into the on-premises Gateway process. Platform never shows that credential again. Rotating it invalidates the old value immediately, so update the local process before resuming device work.
+
+Select the Gateway and add only the commands it may perform. Every command selects a concrete active equipment Resource, captures its current revision, and defines a versioned key, input and result JSON Schemas, risk, timeout, and device-confirmation requirement. Medium- and high-risk commands always require physical-device confirmation. Schema changes create a new audited allowlist revision; existing jobs will retain their original contract. Disable a command or Gateway to block future dispatch. Registration alone does not start equipment or grant Aira direct device access; the Instrument Job runtime uses this allowlist in the next execution layer.
+
 ## Control time and budget
 
 The Task page shows the pinned deadline and the budget's reserved, actual, committed, and remaining amounts. Users with research approval capability can record a reservation, release, expense, or credit. Each entry must be previewed and confirmed against the current Task revision and cannot be edited afterward. Release only an existing reservation; credit only an existing actual expense. Record the offset and the replacement as separate entries when correcting a mistake.

@@ -2564,6 +2564,50 @@ declare namespace I18n {
         reminders: string
         events: string
         types: string
+        instrumentGateways: string
+        instrumentGatewaysHint: string
+        addInstrumentGateway: string
+        editInstrumentGateway: string
+        instrumentGatewaySecurityHint: string
+        gatewayAccessDenied: string
+        gatewayAccessDeniedHint: string
+        enabled: string
+        disabled: string
+        enable: string
+        disable: string
+        noDescription: string
+        credentialHint: string
+        neverConnected: string
+        noInstrumentGateways: string
+        allowedCommands: string
+        allowedCommandsHint: string
+        addAllowedCommand: string
+        editAllowedCommand: string
+        noAllowedCommands: string
+        changeReason: string
+        gatewayCreateImpact: string
+        gatewayUpdateImpact: string
+        rotateCredential: string
+        rotateCredentialImpact: string
+        gatewayCredential: string
+        gatewayCredentialOnce: string
+        copyCredential: string
+        credentialCopied: string
+        commandKey: string
+        commandVersion: string
+        riskLevel: string
+        commandTimeout: string
+        deviceConfirmationRequired: string
+        inputSchema: string
+        outputSchema: string
+        commandChangeImpact: string
+        commandToggleImpact: string
+        risk: {
+          read_only: string
+          low: string
+          medium: string
+          high: string
+        }
         scan: string
         scanHint: string
         scanPlaceholder: string

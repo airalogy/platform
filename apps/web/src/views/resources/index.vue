@@ -37,7 +37,7 @@
       @update:value="navigateSection"
     >
       <n-tab
-        v-for="section in sections"
+        v-for="section in visibleSections"
         :key="section.value"
         :name="section.value"
         :data-testid="`resource-tab-${section.value}`"
@@ -209,6 +209,20 @@
           </div>
           <n-data-table :columns="bookingColumns" :data="bookings" :bordered="false" :single-line="false" :scroll-x="980" />
         </section>
+      </template>
+
+      <template v-else-if="activeSection === 'gateways'">
+        <research-instrument-gateways-panel
+          v-if="canServiceEquipment"
+          :lab-id="labId"
+          :equipment-options="equipmentOptions"
+        />
+        <n-result
+          v-else
+          status="403"
+          :title="$t('page.resourceLibrary.gatewayAccessDenied')"
+          :description="$t('page.resourceLibrary.gatewayAccessDeniedHint')"
+        />
       </template>
 
       <template v-else-if="activeSection === 'reminders'">
@@ -971,6 +985,7 @@ const sections = [
   { value: "inventory" as const, label: $t("page.resourceLibrary.inventory") },
   { value: "locations" as const, label: $t("page.resourceLibrary.locations") },
   { value: "bookings" as const, label: $t("page.resourceLibrary.bookings") },
+  { value: "gateways" as const, label: $t("page.resourceLibrary.instrumentGateways") },
   { value: "reminders" as const, label: $t("page.resourceLibrary.reminders") },
   { value: "events" as const, label: $t("page.resourceLibrary.events") },
   { value: "types" as const, label: $t("page.resourceLibrary.types") },
@@ -1009,6 +1024,9 @@ const canManageResources = computed(() => hasResourceCapability("resource.manage
 const canBookEquipment = computed(() => hasResourceCapability("equipment.book"))
 const canCustodyResources = computed(() => hasResourceCapability("resource.custody"))
 const canServiceEquipment = computed(() => hasResourceCapability("equipment.service"))
+const visibleSections = computed(() => sections.filter(
+  section => section.value !== "gateways" || canServiceEquipment.value,
+))
 
 const overviewCards = computed(() => [
   { key: "resources", label: $t("page.resourceLibrary.resources"), value: overview.resources, hint: $t("page.resourceLibrary.resourcesHint") },
@@ -1244,6 +1262,10 @@ async function loadSection() {
     else if (activeSection.value === "bookings") {
       await loadResources()
       bookings.value = (await fetchEquipmentBookings(labId.value)).items
+    }
+    else if (activeSection.value === "gateways") {
+      if (canServiceEquipment.value)
+        await loadResources()
     }
     else if (activeSection.value === "reminders") {
       notifications.value = (await fetchResourceNotifications(labId.value)).items

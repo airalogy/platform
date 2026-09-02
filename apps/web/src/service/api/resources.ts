@@ -6,6 +6,7 @@ export type ResourceLibrarySection =
   | "inventory"
   | "locations"
   | "bookings"
+  | "gateways"
   | "reminders"
   | "events"
   | "types"

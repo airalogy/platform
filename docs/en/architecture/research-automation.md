@@ -160,6 +160,8 @@ Platform does not need to replace a complete ERP or LIMS. Small Labs can use min
 
 Instrument integration progresses through data import, guided execution, device-confirmed assisted control, and policy-bounded closed-loop automation. Aira never sends arbitrary commands directly to equipment. A local Instrument Gateway accepts signed, structured, allowlisted jobs and provides state checks, audit, and emergency stop.
 
+The first Gateway boundary is now implemented. A Lab Owner or Manager registers a Gateway through preview-confirm and receives a high-entropy credential only once. The stored credential is a digest; rotation invalidates the previous value. Each allowed command is tied to one exact equipment Resource revision and versioned command key, with local-only JSON Schemas for inputs and results, a timeout, a risk level, and mandatory physical-device confirmation for medium- and high-risk operations. All configuration changes create immutable audit snapshots, and disabling a Gateway or command blocks future dispatch. Job leasing, heartbeat, result receipt, cancellation, and emergency stop build on this boundary rather than weakening it.
+
 ## Responsibility boundaries
 
 | Subsystem | Authoritative responsibility |
@@ -207,7 +209,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 
 ### P3: instruments, RaaS, and self-improvement
 
-- Instrument Gateway and tiered control
+- Instrument Gateway registration and governed command allowlists (delivered); signed job leasing, result receipt, emergency stop, and tiered control
 - quotes, SLA, logistics, chain of custody, and result receipt for external research services
 - evidence-backed, reviewed Protocol improvement proposals and exact new-version lineage (delivered without AI dependency)
 - independent advisory Reviewer Agent (delivered), parallel/multi-agent execution, and reproduction evaluation
