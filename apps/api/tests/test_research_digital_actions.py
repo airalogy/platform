@@ -24,6 +24,12 @@ from app.services.research_tools import (
     validate_tool_arguments,
 )
 from app.services import research_runtime
+from app.services.research_capabilities import (
+    executor_bindings_for_environment,
+    pinned_tool_definition,
+    protocol_capability,
+    tool_capability,
+)
 from app.services.research_runtime import (
     activate_tool_action,
     activate_wait_event_action,
@@ -75,6 +81,49 @@ def test_tool_catalog_is_allowlisted_versioned_and_schema_validated():
         )
     with pytest.raises(ValueError, match="Unknown Research Tool"):
         get_research_tool("shell.run")
+
+
+def test_tool_execution_is_limited_to_the_pinned_environment():
+    environment = {
+        "schema": "airalogy.research-environment.v2",
+        "tools": [research_tool_catalog()["knowledge.search"].payload()],
+    }
+
+    assert pinned_tool_definition(environment, "knowledge.search").version == "1"
+    with pytest.raises(ValueError, match="not pinned"):
+        pinned_tool_definition(environment, "literature.search")
+
+
+def test_capability_registry_is_derived_and_executor_bindings_are_explicit():
+    protocol_id = uuid4()
+    version_id = uuid4()
+    protocol = SimpleNamespace(
+        id=protocol_id,
+        uid="rna_assay",
+        name="RNA assay",
+        description="Measure RNA",
+    )
+    version = SimpleNamespace(
+        id=version_id,
+        version="1.2.0",
+        json_schema={"type": "object"},
+    )
+    protocol_item = protocol_capability(protocol, version).payload()
+    tool_item = tool_capability(
+        research_tool_catalog()["knowledge.search"]
+    ).payload()
+    bindings = executor_bindings_for_environment(
+        protocol_capabilities=[protocol_item],
+        tool_capabilities=[tool_item],
+        owner_user_id=str(uuid4()),
+    )
+
+    assert protocol_item["key"] == f"protocol:{protocol_id}"
+    assert protocol_item["source_revision_id"] == str(version_id)
+    assert tool_item["key"] == "tool:knowledge.search"
+    assert bindings[0]["mode"] == "protocol_record"
+    assert bindings[1]["mode"] == "durable_job"
+    assert all(item["policy"] == "approval_required_for_aira" for item in bindings)
 
 
 def test_wait_event_draft_validates_contract_and_normalizes_naive_deadline():

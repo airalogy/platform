@@ -323,6 +323,7 @@ export interface ResearchTaskDraft {
   stop_conditions: string[]
   autonomy_level: ResearchTaskSummary["autonomy_level"]
   protocol_ids: string[]
+  tool_keys: string[]
   knowledge_ids: string[]
   owner_user_id?: string
   ai_model?: string
@@ -334,9 +335,17 @@ export interface ResearchTaskPreview {
   destination: { lab: ResearchScope, project: ResearchScope }
   owner: ResearchUser
   protocols: ResearchProtocolRef[]
+  tools: Array<{
+    key: string
+    version: string
+    name: string
+    description: string
+    risk: string
+  }>
   knowledge: ResearchKnowledgeRef[]
   effects: string[]
   warnings: string[]
+  ai_instance_available: boolean
   ai_path_available: boolean
 }
 

@@ -64,9 +64,10 @@ async function getData<T>(options: Parameters<typeof request<T>>[0]): Promise<T>
   return data
 }
 
-export function fetchResearchTools() {
+export function fetchResearchTools(taskId?: string) {
   return getData<{ tools: ResearchToolDefinition[] }>({
     url: "/research-tools",
+    params: { task_id: taskId },
     metadata: { showError: false },
   })
 }

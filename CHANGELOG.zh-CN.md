@@ -38,6 +38,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增白名单与版本锁定的数字 Research Action：Tool Job 在 Schema 校验后通过可重试的持久化工作器限时执行并保留来源记录；类型化 Wait Event 会暂停 Run，只有经授权、预览确认且满足锁定载荷契约的外部信号才能恢复；AI 关闭时安全回到手工控制。
 - Research Task 工作台新增数字 Action 控件，支持预览确认的工具检索、外部结果边界、根据契约生成的信号表单、结果查看、中英文完整状态和产品内使用指南。
 - 新增由 Platform 治理的 Aira Action Planner，可在固定版本 Protocol、白名单且固定版本的 Tool、类型化外部 Wait 与结束研究路径之间选择；AI 提案必须经过 Schema 校验、摘要绑定、审批与完整留痕，也能在未预选 Protocol 的纯数字科研任务中运行，不会把 Tool 伪装成 Protocol。
+- 新增由 Project Protocol、白名单 Tool 与 Lab 资源定义派生的 Capability Registry；创建 Research Task 时现需明确选择并固定数字能力版本，记录初始 Executor Binding，Aira 和手工 Tool Action 对 Research Environment 之外的能力或已不可用的固定版本必须失败关闭。
 
 ### 变更
 

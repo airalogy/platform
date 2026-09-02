@@ -43,13 +43,15 @@ A `Research Action` provides a common orchestration envelope without collapsing 
 - Resource Reservation
 - Wait Event
 
-P0 delivers Protocol Run and Human Work Item first. Later types follow the same lifecycle contract.
+Protocol Run, Human Work Item, Tool Job, and Wait Event now use this lifecycle contract. Instrument, external-service, approval-request, and resource-reservation types extend the same boundary as their executor integrations arrive.
 
 ### Protocol and Capability
 
 A `Protocol` is a repeatable, scientifically meaningful, versioned method with defined inputs, outputs, evidence requirements, and validation rules. It may describe experimental, literature, computational, data-processing, analytical, evaluation, or reporting methods.
 
 `Capability` does not replace Protocol. The Capability Registry is a current, composed view over Protocols, tools, people and skills, equipment, services, resources, availability, and policy. It is not a second method source of truth.
+
+Platform derives the first registry view from the Project's current Protocol versions, the instance's allowlisted digital tools, and the Lab's current resource-type revisions. Creating a Research Task explicitly selects Protocol and Tool capabilities, pins their source versions in `airalogy.research-environment.v2`, and records the initial human or Platform-worker executor binding. The runtime and manual controls both reject a Tool that is absent from that snapshot or whose implementation version is no longer available. Resource definitions are discoverable but remain requirements, not executable methods; concrete reservation and consumption are resolved at Action time.
 
 Assets, coordination objects, resources, notifications, approvals, reservations, waits, audit events, and payments are not forced into Protocols. Platform supports progressive formalization:
 
@@ -174,7 +176,8 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 
 ### P2: operational resources and governance
 
-- Capability Registry and Executor Binding
+- derived Capability Registry and task-scoped version pinning (delivered)
+- governed, Lab-configurable Executor Bindings and availability resolution
 - people and skills, equipment, inventory/samples, budget, and compute
 - reservation/consumption, risk policy, approval thresholds, and replanning
 

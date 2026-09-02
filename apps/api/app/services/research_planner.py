@@ -108,19 +108,16 @@ def _bounded_json(value: Any, limit: int = 30_000) -> str:
 
 
 def aira_action_planner_prompt(context: dict[str, Any]) -> str:
-    from app.services.research_tools import research_tool_catalog
-
-    catalog = research_tool_catalog()
     tools = [
         {
-            "key": item.key,
-            "version": item.version,
-            "description": item.description,
-            "input_schema": item.input_schema,
-            "risk": item.risk,
+            "key": item.get("key"),
+            "version": item.get("version"),
+            "description": item.get("description"),
+            "input_schema": item.get("input_schema") or {},
+            "risk": item.get("risk"),
         }
-        for item in catalog.values()
-        if item.available
+        for item in list(context.get("tools") or [])
+        if item.get("available", True)
     ]
     decision_schema = {
         "decision": "protocol | tool | wait | finish",
@@ -170,8 +167,20 @@ async def plan_next_research_action(
     if proposal.decision == "protocol" and not context.get("protocols"):
         raise ValueError("Aira proposed a Protocol but none is available")
     if proposal.decision == "tool":
+        pinned = next(
+            (
+                item
+                for item in list(context.get("tools") or [])
+                if item.get("key") == proposal.tool_key
+            ),
+            None,
+        )
         definition = research_tool_catalog().get(proposal.tool_key or "")
+        if pinned is None:
+            raise ValueError("Aira proposed a Research Tool outside the environment")
         if definition is None or not definition.available:
             raise ValueError("Aira proposed an unavailable Research Tool")
+        if definition.version != str(pinned.get("version") or ""):
+            raise ValueError("Aira proposed an unavailable Research Tool version")
         validate_tool_arguments(definition, proposal.arguments)
     return proposal

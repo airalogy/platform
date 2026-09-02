@@ -42,8 +42,8 @@ from app.services.research_runtime import (
     require_research_capability,
     utcnow,
 )
+from app.services.research_capabilities import pinned_tool_definition
 from app.services.research_tools import (
-    get_research_tool,
     research_tool_catalog,
     validate_tool_arguments,
 )
@@ -181,7 +181,7 @@ def _tool_command(
     run: ResearchRun,
     params: ToolActionDraft,
 ) -> dict[str, Any]:
-    definition = get_research_tool(params.tool_key)
+    definition = pinned_tool_definition(run.environment_snapshot or {}, params.tool_key)
     validate_tool_arguments(definition, params.arguments)
     return {
         "task_id": str(task.id),
@@ -250,11 +250,38 @@ def _digital_action_payload(
 async def list_research_tools(
     current_user: CurrentUser,
     db_session: DBSession,
+    task_id: UUID | None = None,
 ):
     # Authentication is intentional even though definitions are instance-wide:
     # availability can reveal private deployment integrations.
-    _ = current_user, db_session
-    return {"tools": [item.payload() for item in research_tool_catalog().values()]}
+    if task_id is None:
+        return {
+            "tools": [item.payload() for item in research_tool_catalog().values()]
+        }
+    _task, _project, _lab, run = await _active_task_context(
+        db_session, current_user, task_id, capability="research.read"
+    )
+    catalog = research_tool_catalog()
+    tools = []
+    for pinned in list((run.environment_snapshot or {}).get("tools") or []):
+        definition = catalog.get(str(pinned.get("key") or ""))
+        if definition is None:
+            tools.append(
+                {
+                    **pinned,
+                    "available": False,
+                    "unavailable_reason": "Pinned Research Tool is no longer registered",
+                }
+            )
+            continue
+        payload = definition.payload()
+        if definition.version != str(pinned.get("version") or ""):
+            payload["available"] = False
+            payload["unavailable_reason"] = (
+                "Pinned Research Tool version is unavailable"
+            )
+        tools.append(payload)
+    return {"tools": tools}
 
 
 @router.post("/research-tasks/{task_id}/tool-actions/preview")
@@ -269,7 +296,9 @@ async def preview_tool_action(
     )
     try:
         command = _tool_command(task=task, run=run, params=params)
-        definition = get_research_tool(params.tool_key)
+        definition = pinned_tool_definition(
+            run.environment_snapshot or {}, params.tool_key
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return {
@@ -297,7 +326,9 @@ async def create_tool_action(
     )
     try:
         command = _tool_command(task=task, run=run, params=params)
-        definition = get_research_tool(params.tool_key)
+        definition = pinned_tool_definition(
+            run.environment_snapshot or {}, params.tool_key
+        )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     digest = canonical_digest(command)

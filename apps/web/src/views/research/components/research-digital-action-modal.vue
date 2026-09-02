@@ -275,7 +275,7 @@ const canPreview = computed(() =>
 async function loadTools() {
   toolsLoading.value = true
   try {
-    tools.value = (await fetchResearchTools()).tools
+    tools.value = (await fetchResearchTools(props.taskId)).tools
     toolDraft.tool_key ||= tools.value.find(item => item.available)?.key || ""
   }
   finally {

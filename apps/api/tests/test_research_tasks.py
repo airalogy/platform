@@ -44,6 +44,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         stop_conditions=[" Safety threshold exceeded "],
         autonomy_level="assisted",
         protocol_ids=[protocol_id],
+        tool_refs=[{"key": "knowledge.search", "version": "1"}],
         knowledge_refs=[{"id": str(uuid4()), "revision": 2}],
         owner_user_id=owner_id,
         ai_model="  qwen3.5-flash  ",
@@ -57,6 +58,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         "stop_conditions": ["Safety threshold exceeded"],
         "autonomy_level": "assisted",
         "protocol_ids": [str(protocol_id)],
+        "tool_refs": [{"key": "knowledge.search", "version": "1"}],
         "knowledge_refs": [ANY],
         "owner_user_id": str(owner_id),
         "ai_model": "qwen3.5-flash",
@@ -81,6 +83,10 @@ def test_research_task_draft_rejects_missing_criteria_and_duplicate_protocols():
         ResearchTaskDraft(**{**payload, "success_criteria": [" "]})
     with pytest.raises(ValidationError):
         ResearchTaskDraft(**{**payload, "protocol_ids": [protocol_id, protocol_id]})
+    with pytest.raises(ValidationError):
+        ResearchTaskDraft(
+            **{**payload, "tool_keys": ["knowledge.search", " knowledge.search "]}
+        )
     knowledge_id = uuid4()
     with pytest.raises(ValidationError):
         ResearchTaskDraft(
@@ -339,6 +345,7 @@ def test_openapi_exposes_research_task_and_human_work_contracts():
     paths = app.openapi()["paths"]
 
     assert "/research-tasks/preview" in paths
+    assert "/research-capabilities" in paths
     assert "/research-tasks" in paths
     assert "/research-tasks/{task_id}" in paths
     assert "/research-tasks/{task_id}/start" in paths

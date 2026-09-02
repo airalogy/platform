@@ -57,6 +57,11 @@ from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_structured_access
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.research_assets import research_asset_bundle
+from app.services.research_capabilities import (
+    executor_bindings_for_environment,
+    protocol_capability,
+    tool_capability,
+)
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
     activate_protocol_action,
@@ -68,6 +73,7 @@ from app.services.research_runtime import (
     enqueue_research_advance,
     initial_aira_state,
     require_research_capability,
+    research_environment_has_ai_path,
     research_task_command,
     task_protocol_rows,
     utcnow,
@@ -93,6 +99,7 @@ class ResearchTaskDraft(BaseModel):
         "assisted", "bounded_autopilot", "autonomous_within_policy"
     ] = "assisted"
     protocol_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    tool_keys: list[str] = Field(default_factory=list, max_length=50)
     knowledge_ids: list[UUID] = Field(default_factory=list, max_length=50)
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
@@ -111,6 +118,9 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Title, goal, and success criteria are required")
         if len(set(self.protocol_ids)) != len(self.protocol_ids):
             raise ValueError("Protocol selection contains duplicates")
+        self.tool_keys = [item.strip() for item in self.tool_keys if item.strip()]
+        if len(set(self.tool_keys)) != len(self.tool_keys):
+            raise ValueError("Research Tool selection contains duplicates")
         if len(set(self.knowledge_ids)) != len(self.knowledge_ids):
             raise ValueError("Knowledge selection contains duplicates")
         return self
@@ -229,6 +239,7 @@ async def _validate_task_draft(
     Lab,
     User,
     list[tuple[Protocol, ProtocolVersion]],
+    list[Any],
     list[KnowledgeItem],
 ]:
     project = await _project(db_session, draft.project_id)
@@ -283,6 +294,15 @@ async def _validate_task_draft(
             )
         protocols.append((protocol, version))
 
+    from app.services.research_tools import get_research_tool
+
+    tools = []
+    for tool_key in draft.tool_keys:
+        try:
+            tools.append(get_research_tool(tool_key))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
     knowledge_items: list[KnowledgeItem] = []
     for knowledge_id in draft.knowledge_ids:
         item = await db_session.get(KnowledgeItem, knowledge_id)
@@ -323,13 +343,17 @@ async def _validate_task_draft(
         stop_conditions=draft.stop_conditions,
         autonomy_level=draft.autonomy_level,
         protocol_ids=[protocol.id for protocol, _version in protocols],
+        tool_refs=[
+            {"key": definition.key, "version": definition.version}
+            for definition in tools
+        ],
         knowledge_refs=[
             {"id": item.id, "revision": item.revision} for item in knowledge_items
         ],
         owner_user_id=owner.id,
         ai_model=draft.ai_model,
     )
-    return command, project, lab, owner, protocols, knowledge_items
+    return command, project, lab, owner, protocols, tools, knowledge_items
 
 
 def _task_preview(
@@ -339,9 +363,10 @@ def _task_preview(
     lab: Lab,
     owner: User,
     protocols: list[tuple[Protocol, ProtocolVersion]],
+    tools: list[Any],
     knowledge_items: list[KnowledgeItem],
 ) -> dict[str, Any]:
-    ai_path_available = config.effective_ai_enabled
+    ai_path_available = config.effective_ai_enabled and bool(protocols or tools)
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
@@ -367,6 +392,7 @@ def _task_preview(
             }
             for protocol, version in protocols
         ],
+        "tools": [definition.payload() for definition in tools],
         "knowledge": [
             {
                 "id": str(item.id),
@@ -380,6 +406,7 @@ def _task_preview(
         "effects": [
             "Create a versioned Research Task and draft Research Run",
             "Pin the selected Protocol versions in the Research Environment",
+            "Pin the selected digital Tool versions in the Research Environment",
             "Pin reviewed Knowledge revisions in the Research Environment",
             (
                 "Use AIRA after the Task is started"
@@ -391,9 +418,15 @@ def _task_preview(
             []
             if ai_path_available
             else [
-                "Aira is unavailable. The Task remains fully usable through manual Protocol and digital Actions."
+                (
+                    "Aira is unavailable. The Task remains fully usable through "
+                    "manual Protocol and digital Actions."
+                    if not config.effective_ai_enabled
+                    else "No executable capability is selected for Aira."
+                )
             ]
         ),
+        "ai_instance_available": config.effective_ai_enabled,
         "ai_path_available": ai_path_available,
     }
 
@@ -447,7 +480,11 @@ async def _task_summary(
         "latest_run": run.as_dict() if run is not None else None,
         "open_work_items": open_items or 0,
         "pending_approvals": pending_approvals or 0,
-        "ai_available": config.effective_ai_enabled,
+        "ai_available": bool(
+            config.effective_ai_enabled
+            and run is not None
+            and research_environment_has_ai_path(run.environment_snapshot or {})
+        ),
     }
 
 
@@ -637,8 +674,8 @@ async def preview_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, project, lab, owner, protocols, knowledge_items = await _validate_task_draft(
-        db_session, current_user, params
+    command, project, lab, owner, protocols, tools, knowledge_items = (
+        await _validate_task_draft(db_session, current_user, params)
     )
     return _task_preview(
         command=command,
@@ -646,6 +683,7 @@ async def preview_research_task(
         lab=lab,
         owner=owner,
         protocols=protocols,
+        tools=tools,
         knowledge_items=knowledge_items,
     )
 
@@ -656,8 +694,8 @@ async def create_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, project, lab, owner, protocols, knowledge_items = await _validate_task_draft(
-        db_session, current_user, params
+    command, project, lab, owner, protocols, tools, knowledge_items = (
+        await _validate_task_draft(db_session, current_user, params)
     )
     expected_digest = canonical_digest(command)
     if params.preview_digest != expected_digest:
@@ -718,8 +756,15 @@ async def create_research_task(
     db_session.add(run)
     await db_session.flush()
     rows = await task_protocol_rows(db_session, task.id)
+    protocol_capabilities = [
+        protocol_capability(protocol, version).payload()
+        for _task_protocol, protocol, version in rows
+    ]
+    tool_capabilities = [
+        tool_capability(definition).payload() for definition in tools
+    ]
     environment_snapshot = {
-        "schema": "airalogy.research-environment.v1",
+        "schema": "airalogy.research-environment.v2",
         "captured_at": utcnow().isoformat(),
         "lab": {"id": str(lab.id), "uid": lab.uid},
         "project": {"id": str(project.id), "uid": project.uid},
@@ -733,6 +778,13 @@ async def create_research_task(
             }
             for _task_protocol, protocol, version in rows
         ],
+        "tools": [definition.payload() for definition in tools],
+        "capabilities": [*protocol_capabilities, *tool_capabilities],
+        "executor_bindings": executor_bindings_for_environment(
+            protocol_capabilities=protocol_capabilities,
+            tool_capabilities=tool_capabilities,
+            owner_user_id=str(owner.id),
+        ),
         "knowledge": pinned_knowledge,
         "ai_available_at_capture": config.effective_ai_enabled,
         "autonomy_level": task.autonomy_level,
@@ -872,9 +924,13 @@ async def start_research_task(
         raise HTTPException(status_code=409, detail="Draft Research Run not found")
 
     now = utcnow()
+    ai_path_available = bool(
+        config.effective_ai_enabled
+        and research_environment_has_ai_path(run.environment_snapshot or {})
+    )
     run.status = (
         ResearchRunStatus.PLANNING.value
-        if config.effective_ai_enabled
+        if ai_path_available
         else ResearchRunStatus.RUNNING.value
     )
     run.started_at = now
@@ -888,12 +944,12 @@ async def start_research_task(
         kind="run.started",
         actor_user_id=current_user.id,
         payload={
-            "ai": config.effective_ai_enabled,
+            "ai": ai_path_available,
             "reason": params.reason,
         },
         idempotency_key=f"run:{run.id}:started",
     )
-    if config.effective_ai_enabled:
+    if ai_path_available:
         await enqueue_research_advance(db_session, task=task, run=run)
     else:
         await emit_research_event(
@@ -902,7 +958,7 @@ async def start_research_task(
             run_id=run.id,
             kind="run.manual_control_required",
             actor_user_id=current_user.id,
-            payload={"reason": "ai_unavailable"},
+            payload={"reason": "ai_unavailable_or_no_capability"},
             idempotency_key=f"run:{run.id}:manual:start",
         )
     await db_session.commit()
@@ -981,7 +1037,9 @@ async def resume_research_task(
         run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
     else:
         run.status = ResearchRunStatus.RUNNING.value
-        if config.effective_ai_enabled:
+        if config.effective_ai_enabled and research_environment_has_ai_path(
+            run.environment_snapshot or {}
+        ):
             await enqueue_research_advance(db_session, task=task, run=run)
     await emit_research_event(
         db_session,
@@ -2104,7 +2162,9 @@ async def submit_research_work_item(
         },
         idempotency_key=(f"work-item:{item.id}:record:{record.id}:v{record.version}"),
     )
-    if config.effective_ai_enabled:
+    if config.effective_ai_enabled and research_environment_has_ai_path(
+        run.environment_snapshot or {}
+    ):
         await enqueue_research_advance(db_session, task=task, run=run)
     else:
         await emit_research_event(
@@ -2113,7 +2173,7 @@ async def submit_research_work_item(
             run_id=run.id,
             kind="run.manual_control_required",
             actor_user_id=current_user.id,
-            payload={"reason": "ai_disabled_after_record"},
+            payload={"reason": "ai_disabled_or_no_capability_after_record"},
             idempotency_key=f"run:{run.id}:manual:record:{record.id}:v{record.version}",
         )
     await db_session.commit()
@@ -2458,7 +2518,9 @@ async def reject_research_action(
         },
         idempotency_key=f"approval:{approval.id}:rejected",
     )
-    if config.effective_ai_enabled:
+    if config.effective_ai_enabled and research_environment_has_ai_path(
+        run.environment_snapshot or {}
+    ):
         await enqueue_research_advance(db_session, task=task, run=run)
     else:
         await emit_research_event(

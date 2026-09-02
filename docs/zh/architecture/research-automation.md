@@ -49,13 +49,15 @@ AI 是智能编排层，不是系统记录或权限系统。Platform 仍是所�
 - Resource Reservation
 - Wait Event
 
-P0 首先交付 Protocol Run 与 Human Work Item，其他类型按相同生命周期逐步增加。
+Protocol Run、Human Work Item、Tool Job 和 Wait Event 已使用这套生命周期。Instrument、外部服务、审批请求和资源预留类型会在对应 Executor 接入时沿用同一边界。
 
 ### Protocol 与 Capability
 
 `Protocol` 是可重复、有科学意义、可版本化的方法，应定义输入、输出、证据要求和验证规则。它可表示实验、文献综述、计算、数据处理、分析、评估或报告方法。
 
 `Capability` 不取代 Protocol。Capability Registry 是根据 Protocol、工具、人员技能、设备、外部服务、资源、可用性和策略组合得到的当前能力视图，不是第二套方法来源。
+
+Platform 的第一版 Registry 由 Project 当前 Protocol 版本、实例白名单数字工具和 Lab 当前 Resource Type 修订派生。创建 Research Task 时必须明确选择 Protocol 和 Tool 能力，并在 `airalogy.research-environment.v2` 中固定来源版本及初始人员或 Platform Worker 执行绑定。Aira 和手工控件都不能执行快照之外的 Tool，版本已不可用时也必须失败关闭。Resource Type 只作为可发现的执行需求，不被伪装成可执行方法；具体预约和消耗在 Action 执行时解析。
 
 下列内容不应被强制建模为 Protocol：
 
@@ -210,7 +212,8 @@ Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，
 
 ### P2：现实资源与治理
 
-- Capability Registry 和 Executor Binding；
+- 派生的 Capability Registry 与任务级版本固定（已交付）；
+- Lab 可配置的受治理 Executor Binding 与可用性解析；
 - 人员技能、设备、库存/样品、预算和计算资源；
 - 预留/消耗、风险策略、审批阈值和计划重排。
 

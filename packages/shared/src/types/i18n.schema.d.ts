@@ -878,6 +878,11 @@ declare namespace I18n {
         method: string
         methodsPlaceholder: string
         methodsHint: string
+        digitalCapabilities: string
+        digitalCapabilitiesPlaceholder: string
+        digitalCapabilitiesHint: string
+        pinnedDigitalCapabilities: string
+        noDigitalCapabilities: string
         knowledgeContext: string
         knowledgePlaceholder: string
         knowledgeHint: string
@@ -894,6 +899,7 @@ declare namespace I18n {
         effectAi: string
         effectManual: string
         warningManual: string
+        warningNoCapability: string
         previewAiPath: string
         previewManualPath: string
         noMethods: string

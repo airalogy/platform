@@ -120,6 +120,15 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def research_environment_has_ai_path(environment_snapshot: dict[str, Any]) -> bool:
+    """AI needs at least one explicitly pinned executable capability."""
+
+    return bool(
+        list(environment_snapshot.get("protocols") or [])
+        or list(environment_snapshot.get("tools") or [])
+    )
+
+
 def canonical_digest(value: Any) -> str:
     payload = json.dumps(
         jsonable_encoder(value),
@@ -139,6 +148,7 @@ def research_task_command(
     stop_conditions: list[str],
     autonomy_level: str,
     protocol_ids: list[UUID],
+    tool_refs: list[dict[str, Any]],
     knowledge_refs: list[dict[str, Any]],
     owner_user_id: UUID,
     ai_model: str | None,
@@ -151,6 +161,10 @@ def research_task_command(
         "stop_conditions": [item.strip() for item in stop_conditions if item.strip()],
         "autonomy_level": autonomy_level,
         "protocol_ids": [str(item) for item in protocol_ids],
+        "tool_refs": [
+            {"key": str(item["key"]), "version": str(item["version"])}
+            for item in tool_refs
+        ],
         "knowledge_refs": [
             {"id": str(item["id"]), "revision": int(item["revision"])}
             for item in knowledge_refs
@@ -910,6 +924,7 @@ def _aira_planner_context(
             }
             for task_protocol, protocol, version in rows
         ],
+        "tools": list((run.environment_snapshot or {}).get("tools") or []),
         "completed_actions": [
             {
                 "sequence": action.sequence,
@@ -993,11 +1008,13 @@ async def _materialize_aira_digital_action(
 
     if proposal.decision == "tool":
         from app.services.research_tools import (
-            get_research_tool,
             validate_tool_arguments,
         )
+        from app.services.research_capabilities import pinned_tool_definition
 
-        definition = get_research_tool(proposal.tool_key)
+        definition = pinned_tool_definition(
+            run.environment_snapshot or {}, proposal.tool_key or ""
+        )
         validate_tool_arguments(definition, proposal.arguments)
         requirements = {"risk": definition.risk, "read_only": True}
         executor_type = definition.executor_type
@@ -1297,16 +1314,21 @@ async def process_research_run_advance(
             return {"status": run.status, "action_id": str(action.id)}
         if run.aira_state.get("path_status") == "completed":
             return await _finish_aira_run(db_session, task=task, run=run)
-        if not config.effective_ai_enabled:
+        if not config.effective_ai_enabled or not research_environment_has_ai_path(
+            run.environment_snapshot or {}
+        ):
             run.status = ResearchRunStatus.RUNNING.value
-            run.last_error = "AI is disabled; continue this Research Task manually."
+            run.last_error = (
+                "AI is disabled or no executable capability is pinned; "
+                "continue this Research Task manually."
+            )
             await emit_research_event(
                 db_session,
                 task_id=task.id,
                 run_id=run.id,
                 kind="run.manual_control_required",
                 actor_user_id=None,
-                payload={"reason": "ai_disabled"},
+                payload={"reason": "ai_disabled_or_no_capability"},
                 idempotency_key=f"run:{run.id}:manual:{generation}",
             )
             await db_session.commit()

@@ -43,7 +43,7 @@
           </div>
           <div class="flex shrink-0 flex-wrap items-center gap-2">
             <n-button v-if="task.status === 'draft'" type="primary" :loading="mutating" @click="startTask">
-              {{ task.ai_available && task.protocols.length ? $t("page.research.startWithAira") : $t("page.research.startTask") }}
+              {{ task.ai_available && hasAiraCapabilities ? $t("page.research.startWithAira") : $t("page.research.startTask") }}
             </n-button>
             <n-button v-if="canAddAction" secondary @click="openActionModal">
               {{ $t("page.research.addHumanWork") }}
@@ -354,6 +354,19 @@
               <n-empty v-else class="py-5" :description="$t('page.research.noMethods')" />
               <n-divider />
               <h2 class="aira-type-card-title mb-0">
+                {{ $t("page.research.pinnedDigitalCapabilities") }}
+              </h2>
+              <div v-if="pinnedTools.length" class="mt-3 space-y-2">
+                <div v-for="tool in pinnedTools" :key="`${tool.key}:${tool.version}`" class="research-method">
+                  <span class="aira-type-label">{{ tool.name }}</span>
+                  <span class="aira-type-meta">v{{ tool.version }}</span>
+                </div>
+              </div>
+              <p v-else class="aira-type-meta aira-text-muted mb-0 mt-3">
+                {{ $t("page.research.noDigitalCapabilities") }}
+              </p>
+              <n-divider />
+              <h2 class="aira-type-card-title mb-0">
                 {{ $t("page.research.pinnedKnowledge") }}
               </h2>
               <n-collapse v-if="task.knowledge.length" class="mt-3">
@@ -507,6 +520,7 @@
 </template>
 
 <script setup lang="ts">
+import type { ResearchToolDefinition } from "@/service/api/research-actions"
 import type {
   HumanWorkItemStatus,
   ManualProtocolActionDraft,
@@ -572,6 +586,13 @@ const review = reactive({
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
 const latestRun = computed(() => task.value?.latest_run || task.value?.runs[0] || null)
+const pinnedTools = computed<ResearchToolDefinition[]>(() => {
+  const tools = latestRun.value?.environment_snapshot?.tools
+  return Array.isArray(tools) ? tools as ResearchToolDefinition[] : []
+})
+const hasAiraCapabilities = computed(() => Boolean(
+  task.value?.protocols.length || pinnedTools.value.some(item => item.available),
+))
 const canAddAction = computed(() => ["active", "paused"].includes(task.value?.status || ""))
 const canAddDigitalAction = computed(() => task.value?.status === "active")
 const canCancel = computed(() => !["completed", "cancelled", "archived"].includes(task.value?.status || ""))

@@ -78,6 +78,20 @@
             {{ $t("page.research.methodsHint") }}
           </template>
         </n-form-item>
+        <n-form-item :label="$t('page.research.digitalCapabilities')">
+          <n-select
+            v-model:value="form.tool_keys"
+            :options="toolOptions"
+            :loading="capabilitiesLoading"
+            :disabled="!form.project_id"
+            multiple
+            clearable
+            :placeholder="$t('page.research.digitalCapabilitiesPlaceholder')"
+          />
+          <template #feedback>
+            {{ $t("page.research.digitalCapabilitiesHint") }}
+          </template>
+        </n-form-item>
         <n-form-item :label="$t('page.research.knowledgeContext')">
           <n-select
             v-model:value="form.knowledge_ids"
@@ -112,6 +126,17 @@
           </div>
           <p class="aira-type-body aira-text-secondary mb-0 mt-2">
             {{ form.title }}
+          </p>
+        </section>
+        <section class="research-preview-card">
+          <div class="aira-type-eyebrow">{{ $t("page.research.pinnedDigitalCapabilities") }}</div>
+          <div v-if="preview.tools.length" class="mt-3 flex flex-wrap gap-2">
+            <n-tag v-for="tool in preview.tools" :key="tool.key" round type="info">
+              {{ tool.name }} · v{{ tool.version }}
+            </n-tag>
+          </div>
+          <p v-else class="aira-type-body aira-text-muted mb-0 mt-2">
+            {{ $t("page.research.noDigitalCapabilities") }}
           </p>
         </section>
         <section class="research-preview-card">
@@ -174,6 +199,7 @@
 import type {
   KnowledgeItem,
 } from "@/service/api/knowledge"
+import type { ResearchCapabilityDescriptor } from "@/service/api/research-capabilities"
 import type {
   ResearchTaskDetail,
   ResearchTaskDraft,
@@ -182,6 +208,7 @@ import type {
 import type { ProtocolModels } from "@airalogy/shared/types"
 import { fetchKnowledgeItems } from "@/service/api/knowledge"
 import { fetchProtocols } from "@/service/api/project-protocols"
+import { fetchResearchCapabilities } from "@/service/api/research-capabilities"
 import { createResearchTask, previewResearchTask } from "@/service/api/research-tasks"
 import { fetchUserProjects } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
@@ -206,10 +233,12 @@ const visible = ref(false)
 const projectsLoading = ref(false)
 const protocolsLoading = ref(false)
 const knowledgeLoading = ref(false)
+const capabilitiesLoading = ref(false)
 const submitting = ref(false)
 const projects = ref<Api.Project.MyProjectInfo[]>([])
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const knowledgeItems = ref<KnowledgeItem[]>([])
+const toolCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
@@ -224,6 +253,7 @@ function emptyForm(): ResearchTaskDraft {
     stop_conditions: [],
     autonomy_level: "assisted",
     protocol_ids: [],
+    tool_keys: [],
     knowledge_ids: [],
   }
 }
@@ -249,6 +279,11 @@ const knowledgeOptions = computed(() => knowledgeItems.value.map(item => ({
   label: `${item.scope_type === "lab" ? $t("page.knowledge.scopeLab") : $t("page.knowledge.scopeProject")} · ${item.title} · r${item.revision}`,
   value: item.id,
 })))
+const toolOptions = computed(() => toolCapabilities.value.map(item => ({
+  label: `${item.name} · v${item.version}`,
+  value: String(item.metadata.tool_key || item.source_id),
+  disabled: !item.available,
+})))
 const autonomyOptions = computed(() => [
   { label: $t("page.research.autonomyAssisted"), value: "assisted" },
   { label: $t("page.research.autonomyBounded"), value: "bounded_autopilot" },
@@ -269,9 +304,15 @@ const localizedEffects = computed(() => preview.value
         : $t("page.research.effectManual"),
     ]
   : [])
-const localizedWarnings = computed(() => preview.value?.warnings.length
-  ? [$t("page.research.warningManual")]
-  : [])
+const localizedWarnings = computed(() => {
+  if (!preview.value?.warnings.length)
+    return []
+  return [
+    preview.value.ai_instance_available
+      ? $t("page.research.warningNoCapability")
+      : $t("page.research.warningManual"),
+  ]
+})
 
 function lines(value: string) {
   return value.split("\n").map(item => item.trim()).filter(Boolean)
@@ -303,11 +344,35 @@ async function loadProjects() {
     )
     if (projects.value.length === 1) {
       form.project_id = String(projects.value[0].id)
-      await Promise.all([loadProtocols(form.project_id), loadKnowledge(form.project_id)])
+      await Promise.all([
+        loadProtocols(form.project_id),
+        loadCapabilities(form.project_id),
+        loadKnowledge(form.project_id),
+      ])
     }
   }
   finally {
     projectsLoading.value = false
+  }
+}
+
+async function loadCapabilities(projectId: string) {
+  toolCapabilities.value = []
+  form.tool_keys = []
+  if (!projectId)
+    return
+  capabilitiesLoading.value = true
+  try {
+    const catalog = await fetchResearchCapabilities(projectId)
+    toolCapabilities.value = catalog.tools
+    const internalSearch = catalog.tools.find(item =>
+      item.available && item.source_id === "knowledge.search",
+    )
+    if (internalSearch)
+      form.tool_keys = [internalSearch.source_id]
+  }
+  finally {
+    capabilitiesLoading.value = false
   }
 }
 
@@ -366,15 +431,20 @@ async function loadKnowledge(projectId: string) {
 
 async function handleProjectChange(value: string) {
   resetPreview()
-  await Promise.all([loadProtocols(value), loadKnowledge(value)])
+  await Promise.all([loadProtocols(value), loadCapabilities(value), loadKnowledge(value)])
 }
 
 async function openModal() {
   visible.value = true
   if (props.project) {
     form.project_id = String(props.project.id)
-    if (!protocols.value.length && !knowledgeItems.value.length)
-      await Promise.all([loadProtocols(form.project_id), loadKnowledge(form.project_id)])
+    if (!protocols.value.length && !knowledgeItems.value.length) {
+      await Promise.all([
+        loadProtocols(form.project_id),
+        loadCapabilities(form.project_id),
+        loadKnowledge(form.project_id),
+      ])
+    }
   }
   else if (!projects.value.length) {
     await loadProjects()
