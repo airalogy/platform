@@ -33,6 +33,10 @@ from app.services.record_exports import (
     mark_record_export_failed,
     process_record_export,
 )
+from app.services.research_notifications import (
+    process_research_notification_delivery,
+    record_research_notification_delivery_failure,
+)
 from app.services.research_runtime import (
     mark_research_run_job_failure,
     process_research_run_advance,
@@ -300,6 +304,12 @@ async def process_persistent_job(
             db_session,
             tool_job_id=UUID(str(job.payload["tool_job_id"])),
         )
+    if job.kind == "research_notification_delivery":
+        return await process_research_notification_delivery(
+            db_session,
+            delivery_id=UUID(str(job.payload["delivery_id"])),
+            attempt_number=job.attempts,
+        )
     if job.kind == "record_export":
         return await process_record_export(
             db_session, UUID(str(job.payload["export_id"]))
@@ -331,6 +341,7 @@ async def run_persistent_job_worker(
                             "record_export",
                             "record_projection",
                             "research_run_advance",
+                            "research_notification_delivery",
                             "research_tool_job",
                             "resource_schema_migration",
                         },
@@ -403,6 +414,15 @@ async def run_persistent_job_worker(
                             await mark_research_tool_job_failure(
                                 db_session,
                                 tool_job_id=UUID(str(job.payload["tool_job_id"])),
+                                error=str(error),
+                                terminal=job.status == JobStatus.FAILED.value,
+                            )
+                        elif job.kind == "research_notification_delivery":
+                            delivery_id = UUID(str(job.payload["delivery_id"]))
+                            await record_research_notification_delivery_failure(
+                                db_session,
+                                delivery_id=delivery_id,
+                                attempt_number=job.attempts,
                                 error=str(error),
                                 terminal=job.status == JobStatus.FAILED.value,
                             )

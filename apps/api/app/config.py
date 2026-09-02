@@ -111,6 +111,17 @@ class Settings(BaseSettings):
     SCHOLAR_BASE_URL: str = ""
     SCHOLAR_API_TOKEN: str = ""
 
+    # Research attention is always available in-app. Email is an optional
+    # secondary delivery channel and never controls task execution.
+    RESEARCH_EMAIL_NOTIFICATIONS_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_ADDRESS: str = ""
+    SMTP_SECURITY: Literal["starttls", "ssl", "none"] = "starttls"
+    SMTP_TIMEOUT_SECONDS: int = 10
+
     # Alibaba Cloud SMS config
     # None auto-detects SMS capabilities from the provider settings. False
     # disables the specific capability; True requires a complete provider
@@ -174,6 +185,25 @@ class Settings(BaseSettings):
         if self.is_single_lab:
             return False
         return self.sms_provider_configured
+
+    @property
+    def research_email_missing_fields(self) -> list[str]:
+        missing = [
+            field_name
+            for field_name in ("SMTP_HOST", "SMTP_FROM_ADDRESS")
+            if not getattr(self, field_name).strip()
+        ]
+        if bool(self.SMTP_USERNAME.strip()) != bool(self.SMTP_PASSWORD.strip()):
+            missing.append(
+                "SMTP_PASSWORD" if self.SMTP_USERNAME.strip() else "SMTP_USERNAME"
+            )
+        return missing
+
+    @property
+    def effective_research_email_notifications_enabled(self) -> bool:
+        return self.RESEARCH_EMAIL_NOTIFICATIONS_ENABLED and not (
+            self.research_email_missing_fields
+        )
 
     # inner api key
     INNER_API_KEY: str = ""
@@ -263,6 +293,10 @@ class Settings(BaseSettings):
             raise ValueError("LOG_MAX_BYTES must be positive")
         if self.LOG_BACKUP_COUNT <= 0:
             raise ValueError("LOG_BACKUP_COUNT must be positive")
+        if not 1 <= self.SMTP_PORT <= 65535:
+            raise ValueError("SMTP_PORT must be between 1 and 65535")
+        if self.SMTP_TIMEOUT_SECONDS <= 0:
+            raise ValueError("SMTP_TIMEOUT_SECONDS must be positive")
 
         if (
             self.ENABLE_GPT_MODEL
@@ -289,6 +323,15 @@ class Settings(BaseSettings):
                 "SMS_SIGNUP_REQUIRED=true requires complete SMS provider "
                 "configuration; missing: "
                 + ", ".join(self.sms_provider_missing_fields)
+            )
+        if (
+            self.RESEARCH_EMAIL_NOTIFICATIONS_ENABLED
+            and self.research_email_missing_fields
+        ):
+            raise ValueError(
+                "RESEARCH_EMAIL_NOTIFICATIONS_ENABLED=true requires complete SMTP "
+                "configuration; missing: "
+                + ", ".join(self.research_email_missing_fields)
             )
 
         parsed_site_url = urlparse(self.SITE_URL)
@@ -351,6 +394,14 @@ class Settings(BaseSettings):
                 and parsed_site_url.hostname not in {"localhost", "127.0.0.1", "::1"}
             ):
                 raise ValueError("SITE_URL must use HTTPS for non-local production hosts")
+            if (
+                self.RESEARCH_EMAIL_NOTIFICATIONS_ENABLED
+                and self.SMTP_SECURITY == "none"
+                and parsed_site_url.hostname not in {"localhost", "127.0.0.1", "::1"}
+            ):
+                raise ValueError(
+                    "SMTP_SECURITY=none is not allowed for non-local production hosts"
+                )
         return self
 
 

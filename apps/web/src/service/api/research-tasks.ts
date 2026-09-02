@@ -411,6 +411,39 @@ export interface ResearchApprovalDetail extends ResearchApproval {
   lab: ResearchScope
 }
 
+export interface ResearchNotificationDelivery {
+  id: string
+  channel: "email"
+  destination: string
+  status: "pending" | "sent" | "failed" | "skipped"
+  attempt_count: number
+  delivered_at?: string | null
+  updated_at: string
+}
+
+export interface ResearchNotification {
+  id: string
+  lab_id: string
+  project_id: string
+  task_id: string
+  action_id?: string | null
+  work_item_id?: string | null
+  approval_id?: string | null
+  recipient_user_id: string
+  kind: "work_item_assigned" | "approval_requested"
+  priority: "normal" | "high"
+  title: string
+  message: string
+  target_path: string
+  read_at?: string | null
+  created_at: string
+  updated_at: string
+  deliveries: ResearchNotificationDelivery[]
+  task: Pick<ResearchTaskSummary, "id" | "title" | "status">
+  project: ResearchScope
+  lab: ResearchScope
+}
+
 export interface ResearchTaskDraft {
   project_id: string
   title: string
@@ -696,6 +729,33 @@ export function fetchResearchApprovals(params: {
       page_size: params.pageSize || 20,
     },
     metadata: { showError: false },
+  })
+}
+
+export function fetchResearchNotifications(params: {
+  unreadOnly?: boolean
+  page?: number
+  pageSize?: number
+} = {}) {
+  return getData<{
+    notifications: ResearchNotification[]
+    total_count: number
+    unread_count: number
+  }>({
+    url: "/research-notifications",
+    params: {
+      unread_only: params.unreadOnly || undefined,
+      page: params.page || 1,
+      page_size: params.pageSize || 20,
+    },
+    metadata: { showError: false },
+  })
+}
+
+export function readResearchNotification(notificationId: string) {
+  return getData<ResearchNotification>({
+    url: `/research-notifications/${notificationId}/read`,
+    method: "POST",
   })
 }
 

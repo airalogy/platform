@@ -501,6 +501,24 @@ async def emit_research_event(
     )
     db_session.add(event)
     await db_session.flush()
+    if kind in {"work_item.assigned", "approval.requested"}:
+        from app.services.research_notifications import (
+            materialize_research_attention_notification,
+        )
+
+        await materialize_research_attention_notification(db_session, event=event)
+    elif kind in {
+        "work_item.started",
+        "work_item.completed",
+        "approval.approved",
+        "approval.rejected",
+        "task.cancelled",
+    }:
+        from app.services.research_notifications import (
+            resolve_research_attention_notifications,
+        )
+
+        await resolve_research_attention_notifications(db_session, event=event)
     return event
 
 

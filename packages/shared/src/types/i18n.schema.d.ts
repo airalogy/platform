@@ -865,6 +865,19 @@ declare namespace I18n {
         tasks: string
         workItems: string
         approvals: string
+        notifications: string
+        notificationWorkItem: string
+        notificationApproval: string
+        noNotifications: string
+        reviewAttention: string
+        emailDelivery: string
+        emailDeliveryFailedHint: string
+        deliveryStatus: {
+          pending: string
+          sent: string
+          failed: string
+          skipped: string
+        }
         createTask: string
         createTitle: string
         taskName: string

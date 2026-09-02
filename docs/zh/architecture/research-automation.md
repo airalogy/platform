@@ -65,6 +65,8 @@ Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Execut
 
 每次 Binding 和档案变更都需先预览再确认，并追加不可变审计快照。Binding 可要求审批、禁止使用，或仅放行 Platform 内部只读 Tool；也可限制 Project、自主等级、每次 Run 的 Action 数和人员最低技能等级。之后的策略或档案修改不会改写正在运行的 Run。正式派发人工工作前，Platform 会加锁并复核固定人员的当前 Lab 成员身份、`research.run` 权限、可用性、已验证资质和剩余容量；权限撤销、资质过期或容量耗尽时均失败关闭。不使用 AI 时，仍可手工选择 Task 负责人或具体成员。
 
+需要处理的交接会由仅追加的 `work_item.assigned` 与 `approval.requested` 事件在同一数据库事务中投影到私有 Research 待处理通知。开始或完成工作、作出审批决定、取消任务或重新指派时，会在同一事务中关闭对应的过期待办。站内通知是权威提醒路径，读取时仍会按当前 Research 权限过滤，已经离开的成员不能通过旧通知查看任务上下文。可选 SMTP 通道使用独立的持久投递记录和可重试后台任务；真正发送前会再次检查待办仍未解决、当前 Research 权限和用户现用邮箱，工作已处理、权限或身份已变化时均跳过旧投递。API 对收件地址脱敏，确定性 Message-ID 可降低重复邮件的展示概率，最终投递失败会明确显示，但不会改变或阻塞原工作项。邮件默认关闭，也不承载任何权限或执行授权。
+
 下列内容不应被强制建模为 Protocol：
 
 - Paper、Record、DataAsset、Knowledge、Claim、Report 等资产；

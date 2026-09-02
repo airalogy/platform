@@ -14,7 +14,9 @@
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
         <n-button quaternary :loading="loading" @click="loadCurrentView">
-          <template #icon><n-icon><icon-tabler-refresh /></n-icon></template>
+          <template #icon>
+            <n-icon><icon-tabler-refresh /></n-icon>
+          </template>
           {{ $t("page.research.refresh") }}
         </n-button>
         <research-executor-bindings v-if="projectContext" :project="projectContext" />
@@ -40,7 +42,9 @@
       class="mt-6"
       @update:value="handleViewChange"
     >
-      <n-tab name="tasks">{{ $t("page.research.tasks") }}</n-tab>
+      <n-tab name="tasks">
+        {{ $t("page.research.tasks") }}
+      </n-tab>
       <n-tab name="work-items">
         {{ $t("page.research.workItems") }}
         <n-badge v-if="workItemCount" :value="workItemCount" :max="99" class="ml-1" />
@@ -48,6 +52,10 @@
       <n-tab name="approvals">
         {{ $t("page.research.approvals") }}
         <n-badge v-if="approvalCount" :value="approvalCount" :max="99" class="ml-1" />
+      </n-tab>
+      <n-tab name="notifications">
+        {{ $t("page.research.notifications") }}
+        <n-badge v-if="notificationCount" :value="notificationCount" :max="99" class="ml-1" />
       </n-tab>
     </n-tabs>
 
@@ -66,7 +74,7 @@
                 <div class="aira-type-meta">
                   {{ task.lab.name }} / {{ task.project.name }}
                 </div>
-                <h2 class="aira-type-card-title mb-0 mt-1 line-clamp-2">
+                <h2 class="aira-type-card-title line-clamp-2 mb-0 mt-1">
                   {{ task.title }}
                 </h2>
               </div>
@@ -74,10 +82,10 @@
                 {{ taskStatusLabel(task.status) }}
               </n-tag>
             </div>
-            <p class="aira-type-body aira-text-secondary mb-0 mt-3 line-clamp-3">
+            <p class="aira-type-body aira-text-secondary line-clamp-3 mb-0 mt-3">
               {{ task.goal }}
             </p>
-            <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 aira-type-meta">
+            <div class="aira-type-meta mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
               <span>{{ $t("page.research.owner") }} · {{ task.owner?.name || task.owner?.username }}</span>
               <span v-if="task.open_work_items">
                 {{ $t("page.research.openWorkCount", { count: task.open_work_items }) }}
@@ -117,7 +125,7 @@
                 <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
                   {{ item.instructions || item.task.goal }}
                 </p>
-                <div class="mt-3 aira-type-meta">
+                <div class="aira-type-meta mt-3">
                   {{ $t("page.research.partOfTask") }} · {{ item.task.title }}
                   <template v-if="item.due_at">
                     · {{ $t("page.research.due") }} <n-time :time="new Date(item.due_at)" />
@@ -143,7 +151,7 @@
         <n-empty v-else-if="!loading" class="research-empty" :description="$t('page.research.noWorkItems')" />
       </template>
 
-      <template v-else>
+      <template v-else-if="activeView === 'approvals'">
         <div v-if="approvals.length" class="space-y-4">
           <article v-for="approval in approvals" :key="approval.id" class="research-card">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -165,7 +173,7 @@
                   {{ approval.action.description || approval.reason }}
                 </p>
                 <research-action-impact :action="approval.action" />
-                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+                <div class="aira-type-meta mt-3 flex flex-wrap gap-x-4 gap-y-1">
                   <span>{{ $t("page.research.partOfTask") }} · {{ approval.task.title }}</span>
                   <span v-if="approval.action.protocol">
                     {{ approval.action.protocol.name }} · v{{ approval.action.protocol.version }}
@@ -188,6 +196,55 @@
         </div>
         <n-empty v-else-if="!loading" class="research-empty" :description="$t('page.research.noApprovals')" />
       </template>
+
+      <template v-else>
+        <div v-if="notifications.length" class="space-y-4">
+          <article
+            v-for="notification in notifications"
+            :key="notification.id"
+            class="research-card"
+            :class="{ 'research-card--unread': !notification.read_at }"
+          >
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <n-tag :type="notification.kind === 'approval_requested' ? 'warning' : 'info'" round size="small">
+                    {{ notificationKindLabel(notification.kind) }}
+                  </n-tag>
+                  <span v-if="!notification.read_at" class="notification-unread-dot" />
+                  <span class="aira-type-meta">
+                    {{ notification.lab.name }} / {{ notification.project.name }}
+                  </span>
+                </div>
+                <button type="button" class="mt-2 text-left" @click="openNotification(notification)">
+                  <h2 class="aira-type-card-title mb-0 hover:text-primary">
+                    {{ notification.message || notification.title }}
+                  </h2>
+                </button>
+                <div class="aira-type-meta mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span>{{ $t("page.research.partOfTask") }} · {{ notification.task.title }}</span>
+                  <span><n-time :time="new Date(notification.created_at)" type="relative" /></span>
+                  <span v-for="delivery in notification.deliveries" :key="delivery.id">
+                    {{ $t("page.research.emailDelivery") }} · {{ deliveryStatusLabel(delivery.status) }}
+                    <template v-if="delivery.destination"> · {{ delivery.destination }}</template>
+                  </span>
+                </div>
+                <n-alert
+                  v-if="notification.deliveries.some(delivery => delivery.status === 'failed')"
+                  type="warning"
+                  class="mt-3"
+                >
+                  {{ $t("page.research.emailDeliveryFailedHint") }}
+                </n-alert>
+              </div>
+              <n-button type="primary" secondary @click="openNotification(notification)">
+                {{ $t("page.research.reviewAttention") }}
+              </n-button>
+            </div>
+          </article>
+        </div>
+        <n-empty v-else-if="!loading" class="research-empty" :description="$t('page.research.noNotifications')" />
+      </template>
     </n-spin>
 
     <div v-if="totalCount > pageSize" class="mt-6 flex justify-end">
@@ -205,6 +262,7 @@
 import type {
   HumanWorkItemStatus,
   ResearchApprovalDetail,
+  ResearchNotification,
   ResearchRunStatus,
   ResearchTaskDetail,
   ResearchTaskStatus,
@@ -215,8 +273,10 @@ import type { TagProps } from "naive-ui"
 import { getProjectInfo } from "@/service/api/projects"
 import {
   fetchResearchApprovals,
+  fetchResearchNotifications,
   fetchResearchTasks,
   fetchResearchWorkItems,
+  readResearchNotification,
   startResearchWorkItem,
 } from "@/service/api/research-tasks"
 import { $t } from "@airalogy/shared/locales"
@@ -233,19 +293,23 @@ const loadError = ref(false)
 const tasks = ref<ResearchTaskSummary[]>([])
 const workItems = ref<ResearchWorkItemDetail[]>([])
 const approvals = ref<ResearchApprovalDetail[]>([])
+const notifications = ref<ResearchNotification[]>([])
 const workItemCount = ref(0)
 const approvalCount = ref(0)
+const notificationCount = ref(0)
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = 20
 const startingId = ref("")
 const projectContext = ref<Api.Project.MyProjectInfo | null>(null)
 
-const activeView = computed<"tasks" | "work-items" | "approvals">(() => {
+const activeView = computed<"tasks" | "work-items" | "approvals" | "notifications">(() => {
   if (route.name === "research-work-items")
     return "work-items"
   if (route.name === "research-approvals")
     return "approvals"
+  if (route.name === "research-notifications")
+    return "notifications"
   return "tasks"
 })
 
@@ -272,12 +336,14 @@ async function loadCurrentView() {
       tasks.value = result.tasks
       totalCount.value = result.total_count
       if (!projectContext.value) {
-        const [assigned, pending] = await Promise.all([
+        const [assigned, pending, attention] = await Promise.all([
           fetchResearchWorkItems({ page: 1, pageSize: 1 }),
           fetchResearchApprovals({ page: 1, pageSize: 1 }),
+          fetchResearchNotifications({ unreadOnly: true, page: 1, pageSize: 1 }),
         ])
         workItemCount.value = assigned.total_count
         approvalCount.value = pending.total_count
+        notificationCount.value = attention.unread_count
       }
     }
     else if (activeView.value === "work-items") {
@@ -285,16 +351,36 @@ async function loadCurrentView() {
       workItems.value = result.work_items
       totalCount.value = result.total_count
       workItemCount.value = result.total_count
-      const pending = await fetchResearchApprovals({ page: 1, pageSize: 1 })
+      const [pending, attention] = await Promise.all([
+        fetchResearchApprovals({ page: 1, pageSize: 1 }),
+        fetchResearchNotifications({ unreadOnly: true, page: 1, pageSize: 1 }),
+      ])
       approvalCount.value = pending.total_count
+      notificationCount.value = attention.unread_count
     }
-    else {
+    else if (activeView.value === "approvals") {
       const result = await fetchResearchApprovals({ page: page.value, pageSize })
       approvals.value = result.approvals
       totalCount.value = result.total_count
       approvalCount.value = result.total_count
-      const assigned = await fetchResearchWorkItems({ page: 1, pageSize: 1 })
+      const [assigned, attention] = await Promise.all([
+        fetchResearchWorkItems({ page: 1, pageSize: 1 }),
+        fetchResearchNotifications({ unreadOnly: true, page: 1, pageSize: 1 }),
+      ])
       workItemCount.value = assigned.total_count
+      notificationCount.value = attention.unread_count
+    }
+    else {
+      const result = await fetchResearchNotifications({ page: page.value, pageSize })
+      notifications.value = result.notifications
+      totalCount.value = result.total_count
+      notificationCount.value = result.unread_count
+      const [assigned, pending] = await Promise.all([
+        fetchResearchWorkItems({ page: 1, pageSize: 1 }),
+        fetchResearchApprovals({ page: 1, pageSize: 1 }),
+      ])
+      workItemCount.value = assigned.total_count
+      approvalCount.value = pending.total_count
     }
   }
   catch {
@@ -305,13 +391,15 @@ async function loadCurrentView() {
   }
 }
 
-function handleViewChange(view: "tasks" | "work-items" | "approvals") {
+function handleViewChange(view: "tasks" | "work-items" | "approvals" | "notifications") {
   page.value = 1
   const name = view === "tasks"
     ? "research-tasks"
     : view === "work-items"
       ? "research-work-items"
-      : "research-approvals"
+      : view === "approvals"
+        ? "research-approvals"
+        : "research-notifications"
   void router.push({ name })
 }
 
@@ -321,6 +409,25 @@ function openTask(task: ResearchTaskSummary | ResearchTaskDetail) {
 
 function openTaskById(taskId: string) {
   void router.push({ name: "research-task-detail", params: { taskId } })
+}
+
+async function openNotification(notification: ResearchNotification) {
+  if (!notification.read_at) {
+    const updated = await readResearchNotification(notification.id)
+    notification.read_at = updated.read_at
+    notificationCount.value = Math.max(0, notificationCount.value - 1)
+  }
+  openTaskById(notification.task_id)
+}
+
+function notificationKindLabel(kind: ResearchNotification["kind"]) {
+  return kind === "approval_requested"
+    ? $t("page.research.notificationApproval")
+    : $t("page.research.notificationWorkItem")
+}
+
+function deliveryStatusLabel(status: ResearchNotification["deliveries"][number]["status"]) {
+  return $t(`page.research.deliveryStatus.${status}` as I18n.I18nKey)
 }
 
 function canExecute(item: ResearchWorkItemDetail) {
@@ -419,6 +526,18 @@ onMounted(loadCurrentView)
   padding: 1.25rem;
   text-align: left;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.research-card--unread {
+  border-color: rgb(var(--primary-color) / 35%);
+  background: linear-gradient(135deg, rgb(var(--primary-color) / 5%), white 52%);
+}
+
+.notification-unread-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgb(var(--primary-color));
 }
 
 button.research-card:hover,

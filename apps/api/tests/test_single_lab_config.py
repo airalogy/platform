@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from app.config import Settings
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -112,6 +111,32 @@ def test_ai_capability_is_auto_detected_and_can_be_disabled():
         settings(AI_ENABLED=False, DASHSCOPE_API_KEY="test-key").effective_ai_enabled
         is False
     )
+
+
+def test_research_email_notifications_are_opt_in_and_require_smtp():
+    assert settings().effective_research_email_notifications_enabled is False
+    with pytest.raises(
+        ValidationError,
+        match=r"RESEARCH_EMAIL_NOTIFICATIONS_ENABLED=true.*SMTP_HOST",
+    ):
+        settings(RESEARCH_EMAIL_NOTIFICATIONS_ENABLED=True)
+
+    value = settings(
+        RESEARCH_EMAIL_NOTIFICATIONS_ENABLED=True,
+        SMTP_HOST="smtp.example.org",
+        SMTP_FROM_ADDRESS="airalogy@example.org",
+    )
+    assert value.effective_research_email_notifications_enabled is True
+
+
+def test_research_email_smtp_credentials_must_be_complete():
+    with pytest.raises(ValidationError, match="SMTP_PASSWORD"):
+        settings(
+            RESEARCH_EMAIL_NOTIFICATIONS_ENABLED=True,
+            SMTP_HOST="smtp.example.org",
+            SMTP_FROM_ADDRESS="airalogy@example.org",
+            SMTP_USERNAME="airalogy",
+        )
 
 
 def test_explicit_ai_enable_requires_a_provider():
@@ -277,6 +302,8 @@ def test_single_lab_generated_config_disables_sms_login_by_default():
     assert "\nSMS_LOGIN_ENABLED=false\n" in generator
     assert "\nSMS_SIGNUP_REQUIRED=false\n" in env_example
     assert "\nSMS_SIGNUP_REQUIRED=false\n" in generator
+    assert "\nRESEARCH_EMAIL_NOTIFICATIONS_ENABLED=false\n" in env_example
+    assert "\nRESEARCH_EMAIL_NOTIFICATIONS_ENABLED=false\n" in generator
 
 
 def test_engine_image_uses_official_multiarch_immutable_release():

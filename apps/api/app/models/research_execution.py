@@ -64,6 +64,13 @@ class ResearchBudgetEntryKind(StrEnum):
     CREDIT = "credit"
 
 
+class ResearchNotificationDeliveryStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class ResearchBudgetEntry(Base):
     """Immutable reservation and actual-cost ledger for one Research Task."""
 
@@ -374,6 +381,129 @@ class ResearchHumanExecutorProfileAudit(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchNotification(Base):
+    """Private attention item derived from a durable Research event."""
+
+    __tablename__ = "research_notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "recipient_user_id",
+            "deduplication_key",
+            name="uq_research_notification_recipient_dedupe",
+        ),
+        CheckConstraint(
+            "kind IN ('work_item_assigned', 'approval_requested')",
+            name="ck_research_notification_kind",
+        ),
+        CheckConstraint(
+            "priority IN ('normal', 'high')",
+            name="ck_research_notification_priority",
+        ),
+        Index(
+            "ix_research_notifications_recipient_read",
+            "recipient_user_id",
+            "read_at",
+            "created_at",
+        ),
+        Index("ix_research_notifications_task_created", "task_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    action_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="SET NULL"), index=True
+    )
+    work_item_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_human_work_items.id", ondelete="SET NULL"), index=True
+    )
+    approval_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_approvals.id", ondelete="SET NULL"), index=True
+    )
+    recipient_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    target_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    deduplication_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ResearchNotificationDelivery(Base):
+    """Mutable delivery state; the persistent job keeps retry attempt history."""
+
+    __tablename__ = "research_notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "notification_id",
+            "channel",
+            name="uq_research_notification_delivery_channel",
+        ),
+        CheckConstraint(
+            "channel IN ('email')",
+            name="ck_research_notification_delivery_channel",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'sent', 'failed', 'skipped')",
+            name="ck_research_notification_delivery_status",
+        ),
+        Index(
+            "ix_research_notification_deliveries_status_updated",
+            "status",
+            "updated_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    notification_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_notifications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channel: Mapped[str] = mapped_column(String(32), nullable=False, default="email")
+    destination: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ResearchNotificationDeliveryStatus.PENDING.value,
+    )
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
 

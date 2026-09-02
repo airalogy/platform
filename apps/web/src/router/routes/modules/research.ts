@@ -46,6 +46,17 @@ export const researchRoute: CustomRoute<ResearchNameKey> = {
       },
     },
     {
+      path: "notifications",
+      name: "research-notifications",
+      component: () => import("@/views/research/index.vue"),
+      meta: {
+        title: "Research Notifications",
+        i18nKey: "page.research.notifications",
+        requiresAuth: true,
+        hideInMenu: true,
+      },
+    },
+    {
       path: "tasks/:taskId",
       name: "research-task-detail",
       component: () => import("@/views/research/detail.vue"),
