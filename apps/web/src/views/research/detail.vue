@@ -81,7 +81,7 @@
                   {{ runStatusLabel(latestRun.status) }}
                 </n-tag>
               </div>
-              <div v-if="latestRun" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div v-if="latestRun" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="research-metric">
                   <span class="aira-type-meta">{{ $t("page.research.planVersion") }}</span>
                   <strong class="aira-type-metric">v{{ latestRun.plan_version }}</strong>
@@ -91,9 +91,46 @@
                   <strong class="aira-type-metric">{{ task.open_work_items }}</strong>
                 </div>
                 <div class="research-metric">
+                  <span class="aira-type-meta">{{ $t("page.research.pendingApprovals") }}</span>
+                  <strong class="aira-type-metric">{{ task.pending_approvals }}</strong>
+                </div>
+                <div class="research-metric">
                   <span class="aira-type-meta">{{ $t("page.research.airaStage") }}</span>
                   <strong class="aira-type-label break-words">{{ airaStage }}</strong>
                 </div>
+              </div>
+            </section>
+
+            <section v-if="pendingApprovalActions.length" class="research-panel research-panel--attention">
+              <div class="aira-type-eyebrow">{{ $t("page.research.approvalGate") }}</div>
+              <h2 class="aira-type-section-title mb-0 mt-1">{{ $t("page.research.approvalRequired") }}</h2>
+              <div class="mt-4 space-y-3">
+                <article v-for="action in pendingApprovalActions" :key="action.id" class="research-action-card">
+                  <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <n-tag type="warning" round size="small">{{ $t("page.research.approvalPending") }}</n-tag>
+                        <span class="aira-type-meta">#{{ action.sequence }}</span>
+                        <span v-if="action.protocol" class="aira-type-meta">
+                          {{ action.protocol.name }} · v{{ action.protocol.version }}
+                        </span>
+                      </div>
+                      <h3 class="aira-type-card-title mb-0 mt-2">{{ action.title }}</h3>
+                      <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
+                        {{ action.description || action.approval?.reason }}
+                      </p>
+                      <div class="aira-type-meta mt-3 break-all">
+                        {{ $t("page.research.previewDigest") }} · {{ action.preview_digest }}
+                      </div>
+                    </div>
+                    <research-approval-actions
+                      v-if="action.approval"
+                      :approval="action.approval"
+                      :action-revision="action.revision"
+                      @decided="() => loadTask(true)"
+                    />
+                  </div>
+                </article>
               </div>
             </section>
 
@@ -343,6 +380,7 @@ import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { useRoute, useRouter } from "vue-router"
+import ResearchApprovalActions from "./components/research-approval-actions.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -380,10 +418,14 @@ const canReview = computed(() => Boolean(
   && task.value.status !== "completed"
   && task.value.status !== "cancelled"
   && task.value.open_work_items === 0
+  && task.value.pending_approvals === 0
   && ["review_required", "active", "paused", "failed"].includes(task.value.status),
 ))
 const openActions = computed(() => (task.value?.actions || []).filter(action =>
   action.work_item && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),
+))
+const pendingApprovalActions = computed(() => (task.value?.actions || []).filter(action =>
+  action.approval?.status === "pending" && action.status === "proposed",
 ))
 const hasResult = computed(() => Boolean(task.value?.conclusion || Object.keys(task.value?.result_package || {}).length))
 const resultConclusion = computed(() => task.value?.result_package.reviewed_conclusion
@@ -712,6 +754,9 @@ function eventLabel(kind: string) {
     "work_item.assigned",
     "work_item.started",
     "work_item.completed",
+    "approval.requested",
+    "approval.approved",
+    "approval.rejected",
     "run.manual_control_required",
   ]
   return known.includes(kind)
@@ -757,6 +802,11 @@ onUnmounted(() => {
   border-radius: 0.875rem;
   background: white;
   padding: 1.25rem;
+}
+
+.research-panel--attention {
+  border-color: rgb(251 191 36 / 55%);
+  background: rgb(255 251 235 / 72%);
 }
 
 .research-metric {

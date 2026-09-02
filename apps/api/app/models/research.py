@@ -165,7 +165,9 @@ class ResearchTask(Base):
 class ResearchTaskProtocol(Base):
     __tablename__ = "research_task_protocols"
     __table_args__ = (
-        UniqueConstraint("task_id", "position", name="uq_research_task_protocol_position"),
+        UniqueConstraint(
+            "task_id", "position", name="uq_research_task_protocol_position"
+        ),
         UniqueConstraint(
             "task_id", "protocol_version_id", name="uq_research_task_protocol_version"
         ),
@@ -326,7 +328,9 @@ class ResearchActionDependency(Base):
         primary_key=True, server_default=func.uuid_generate_v7()
     )
     action_id: Mapped[UUID] = mapped_column(
-        ForeignKey("research_actions.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     depends_on_action_id: Mapped[UUID] = mapped_column(
         ForeignKey("research_actions.id", ondelete="CASCADE"), nullable=False
@@ -344,7 +348,9 @@ class ResearchProtocolRun(Base):
         primary_key=True, server_default=func.uuid_generate_v7()
     )
     action_id: Mapped[UUID] = mapped_column(
-        ForeignKey("research_actions.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     protocol_id: Mapped[UUID] = mapped_column(
         ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -373,7 +379,9 @@ class ResearchHumanWorkItem(Base):
         primary_key=True, server_default=func.uuid_generate_v7()
     )
     action_id: Mapped[UUID] = mapped_column(
-        ForeignKey("research_actions.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     assignee_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -416,7 +424,9 @@ class ResearchApproval(Base):
         primary_key=True, server_default=func.uuid_generate_v7()
     )
     action_id: Mapped[UUID] = mapped_column(
-        ForeignKey("research_actions.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     approver_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -424,11 +434,16 @@ class ResearchApproval(Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+    decided_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=ResearchApprovalStatus.PENDING.value
     )
     preview_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    decision_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -497,7 +512,9 @@ class ResearchArtifactLink(Base):
     )
     artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
     artifact_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    artifact_version: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    artifact_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
     relation: Mapped[str] = mapped_column(
         String(64), nullable=False, default="produced"
     )

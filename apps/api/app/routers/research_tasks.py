@@ -22,6 +22,8 @@ from app.models.research import (
     ResearchAction,
     ResearchActionKind,
     ResearchActionStatus,
+    ResearchApproval,
+    ResearchApprovalStatus,
     ResearchArtifactLink,
     ResearchEvent,
     ResearchHumanWorkItem,
@@ -40,6 +42,7 @@ from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_structured_access
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
+    activate_protocol_action,
     canonical_digest,
     create_plan_version,
     emit_research_event,
@@ -52,11 +55,11 @@ from app.services.research_runtime import (
     workflow_info_for_task,
 )
 
-
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
 work_items_router = APIRouter(
     prefix="/research-work-items", tags=["research-work-items"]
 )
+approvals_router = APIRouter(prefix="/research-approvals", tags=["research-approvals"])
 
 
 class ResearchTaskDraft(BaseModel):
@@ -139,6 +142,19 @@ class WorkItemSubmitParams(WorkItemRevisionParams):
     record_id: UUID
     record_version: int | None = Field(default=None, ge=1)
     note: str = Field(default="", max_length=20_000)
+
+
+class ApprovalDecisionParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=1)
+    expected_action_revision: int = Field(ge=1)
+    preview_digest: str = Field(min_length=64, max_length=64)
+    reason: str = Field(default="", max_length=4_000)
+
+
+class ApprovalRejectParams(ApprovalDecisionParams):
+    reason: str = Field(min_length=1, max_length=4_000)
 
 
 async def _project(db_session: DBSession, project_id: UUID) -> Project:
@@ -339,6 +355,16 @@ async def _task_summary(
             ResearchHumanWorkItem.status.in_(ACTIVE_WORK_ITEM_STATUSES),
         )
     )
+    pending_approvals = await db_session.scalar(
+        select(func.count())
+        .select_from(ResearchApproval)
+        .join(ResearchAction, ResearchAction.id == ResearchApproval.action_id)
+        .join(ResearchRun, ResearchRun.id == ResearchAction.run_id)
+        .where(
+            ResearchRun.task_id == task.id,
+            ResearchApproval.status == ResearchApprovalStatus.PENDING.value,
+        )
+    )
     return {
         **task.as_dict(),
         "owner": _user_data(owner),
@@ -350,6 +376,7 @@ async def _task_summary(
         "lab": {"id": str(lab.id), "uid": lab.uid, "name": lab.name},
         "latest_run": run.as_dict() if run is not None else None,
         "open_work_items": open_items or 0,
+        "pending_approvals": pending_approvals or 0,
         "ai_available": config.effective_ai_enabled,
     }
 
@@ -372,6 +399,14 @@ async def _action_data(
     work_item = await ResearchHumanWorkItem.find_by(
         db_session, [ResearchHumanWorkItem.action_id == action.id]
     )
+    approval = (
+        await db_session.scalars(
+            select(ResearchApproval)
+            .where(ResearchApproval.action_id == action.id)
+            .order_by(ResearchApproval.requested_at.desc())
+            .limit(1)
+        )
+    ).first()
     protocol_data = None
     if protocol_run is not None:
         protocol = await db_session.get(Protocol, protocol_run.protocol_id)
@@ -390,6 +425,30 @@ async def _action_data(
         "protocol_run": protocol_run.as_dict() if protocol_run else None,
         "protocol": protocol_data,
         "work_item": work_item.as_dict() if work_item else None,
+        "approval": (
+            await _approval_summary(db_session, approval)
+            if approval is not None
+            else None
+        ),
+    }
+
+
+async def _approval_summary(
+    db_session: DBSession,
+    approval: ResearchApproval,
+) -> dict[str, Any]:
+    approver = await db_session.get(User, approval.approver_user_id)
+    requested_by = await db_session.get(User, approval.requested_by_user_id)
+    decided_by = (
+        await db_session.get(User, approval.decided_by_user_id)
+        if approval.decided_by_user_id
+        else None
+    )
+    return {
+        **approval.as_dict(),
+        "approver": _user_data(approver),
+        "requested_by": _user_data(requested_by),
+        "decided_by": _user_data(decided_by),
     }
 
 
@@ -399,9 +458,7 @@ async def _task_detail(
     project: Project,
     lab: Lab,
 ) -> dict[str, Any]:
-    summary = await _task_summary(
-        db_session, task, project=project, lab=lab
-    )
+    summary = await _task_summary(db_session, task, project=project, lab=lab)
     runs = list(
         (
             await db_session.scalars(
@@ -634,20 +691,35 @@ async def list_research_tasks(
             )
         )
 
-    total = await db_session.scalar(
-        select(func.count()).select_from(ResearchTask).where(*conditions)
-    )
-    tasks = list(
+    candidates = list(
         (
             await db_session.scalars(
                 select(ResearchTask)
                 .where(*conditions)
                 .order_by(ResearchTask.updated_at.desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
             )
         ).all()
     )
+    if project_id is not None:
+        visible_tasks = candidates
+    else:
+        visible_tasks = []
+        for task in candidates:
+            project = await _project(db_session, task.project_id)
+            try:
+                await require_research_capability(
+                    db_session,
+                    user=current_user,
+                    project=project,
+                    capability="research.read",
+                )
+            except HTTPException as error:
+                if error.status_code == 403:
+                    continue
+                raise
+            visible_tasks.append(task)
+    total = len(visible_tasks)
+    tasks = visible_tasks[(page - 1) * page_size : page * page_size]
     return {
         "tasks": [await _task_summary(db_session, task) for task in tasks],
         "total_count": total or 0,
@@ -660,9 +732,7 @@ async def get_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    task, project, lab = await _task_context(
-        db_session, current_user, task_id
-    )
+    task, project, lab = await _task_context(db_session, current_user, task_id)
     return await _task_detail(db_session, task, project, lab)
 
 
@@ -862,9 +932,7 @@ async def cancel_research_task(
                             ResearchHumanWorkItem.action_id.in_(
                                 [action.id for action in actions]
                             ),
-                            ResearchHumanWorkItem.status.in_(
-                                ACTIVE_WORK_ITEM_STATUSES
-                            ),
+                            ResearchHumanWorkItem.status.in_(ACTIVE_WORK_ITEM_STATUSES),
                         )
                     )
                 ).all()
@@ -872,6 +940,25 @@ async def cancel_research_task(
             for item in work_items:
                 item.status = HumanWorkItemStatus.CANCELLED.value
                 item.revision += 1
+            approvals = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchApproval).where(
+                            ResearchApproval.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchApproval.status
+                            == ResearchApprovalStatus.PENDING.value,
+                        )
+                    )
+                ).all()
+            )
+            for approval in approvals:
+                approval.status = ResearchApprovalStatus.REVOKED.value
+                approval.decision_reason = params.reason or "Task cancelled"
+                approval.decided_by_user_id = current_user.id
+                approval.decided_at = now
+                approval.revision += 1
     task.status = ResearchTaskStatus.CANCELLED.value
     task.outcome = ResearchTaskOutcome.CANCELLED.value
     task.completed_at = now
@@ -921,6 +1008,21 @@ async def complete_research_task(
         raise HTTPException(
             status_code=409,
             detail="Complete or cancel open Human Work Items first",
+        )
+    pending_approvals = await db_session.scalar(
+        select(func.count())
+        .select_from(ResearchApproval)
+        .join(ResearchAction, ResearchAction.id == ResearchApproval.action_id)
+        .join(ResearchRun, ResearchRun.id == ResearchAction.run_id)
+        .where(
+            ResearchRun.task_id == task.id,
+            ResearchApproval.status == ResearchApprovalStatus.PENDING.value,
+        )
+    )
+    if pending_approvals:
+        raise HTTPException(
+            status_code=409,
+            detail="Approve, reject, or cancel pending Research Actions first",
         )
     run = await _latest_run(db_session, task.id)
     now = utcnow()
@@ -999,7 +1101,9 @@ async def _manual_action_context(
         ],
     )
     if protocol is None:
-        raise HTTPException(status_code=404, detail="Protocol not found in this Project")
+        raise HTTPException(
+            status_code=404, detail="Protocol not found in this Project"
+        )
     task_protocol = await ResearchTaskProtocol.find_by(
         db_session,
         [
@@ -1020,9 +1124,7 @@ async def _manual_action_context(
     )
     if version is None:
         raise HTTPException(status_code=409, detail="Protocol version not found")
-    assignee = await db_session.get(
-        User, params.assignee_user_id or task.owner_user_id
-    )
+    assignee = await db_session.get(User, params.assignee_user_id or task.owner_user_id)
     if assignee is None:
         raise HTTPException(status_code=404, detail="Assignee not found")
     await require_research_capability(
@@ -1038,16 +1140,20 @@ async def _manual_action_context(
             project=project,
             capability="research.assign",
         )
-    position = task_protocol.position if task_protocol else (
-        (
-            await db_session.scalar(
-                select(func.max(ResearchTaskProtocol.position)).where(
-                    ResearchTaskProtocol.task_id == task.id
+    position = (
+        task_protocol.position
+        if task_protocol
+        else (
+            (
+                await db_session.scalar(
+                    select(func.max(ResearchTaskProtocol.position)).where(
+                        ResearchTaskProtocol.task_id == task.id
+                    )
                 )
+                or 0
             )
-            or 0
+            + 1
         )
-        + 1
     )
     command = {
         "task_id": str(task.id),
@@ -1221,7 +1327,7 @@ async def create_manual_protocol_action(
             "source": "manual",
         },
         requirements={"record_required": True},
-        policy_decision="ask",
+        policy_decision="allow",
         preview_digest=digest,
         idempotency_key=params.idempotency_key,
         due_at=params.due_at,
@@ -1412,14 +1518,7 @@ async def list_research_work_items(
     if status:
         conditions.append(ResearchHumanWorkItem.status.in_(status))
     else:
-        conditions.append(
-            ResearchHumanWorkItem.status.in_(ACTIVE_WORK_ITEM_STATUSES)
-        )
-    total = await db_session.scalar(
-        select(func.count())
-        .select_from(ResearchHumanWorkItem)
-        .where(*conditions)
-    )
+        conditions.append(ResearchHumanWorkItem.status.in_(ACTIVE_WORK_ITEM_STATUSES))
     items = list(
         (
             await db_session.scalars(
@@ -1429,16 +1528,23 @@ async def list_research_work_items(
                     ResearchHumanWorkItem.due_at.asc().nulls_last(),
                     ResearchHumanWorkItem.created_at.desc(),
                 )
-                .offset((page - 1) * page_size)
-                .limit(page_size)
             )
         ).all()
     )
     result = []
     for item in items:
-        context = await _work_item_context(db_session, current_user, item.id)
+        try:
+            context = await _work_item_context(db_session, current_user, item.id)
+        except HTTPException as error:
+            if error.status_code == 403:
+                continue
+            raise
         result.append(await _work_item_data(db_session, *context))
-    return {"work_items": result, "total_count": total or 0}
+    total = len(result)
+    return {
+        "work_items": result[(page - 1) * page_size : page * page_size],
+        "total_count": total,
+    }
 
 
 @work_items_router.get("/{work_item_id}")
@@ -1462,7 +1568,9 @@ async def start_research_work_item(
         db_session, current_user, work_item_id
     )
     if item.assignee_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the assignee can start this work")
+        raise HTTPException(
+            status_code=403, detail="Only the assignee can start this work"
+        )
     if item.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Human Work Item has changed")
     if item.status not in {
@@ -1486,9 +1594,7 @@ async def start_research_work_item(
         actor_user_id=current_user.id,
     )
     await db_session.commit()
-    return await _work_item_data(
-        db_session, item, action, run, task, project, lab
-    )
+    return await _work_item_data(db_session, item, action, run, task, project, lab)
 
 
 @work_items_router.post("/{work_item_id}/assign")
@@ -1510,7 +1616,9 @@ async def assign_research_work_item(
     if item.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Human Work Item has changed")
     if item.status not in ACTIVE_WORK_ITEM_STATUSES:
-        raise HTTPException(status_code=409, detail="Human Work Item cannot be assigned")
+        raise HTTPException(
+            status_code=409, detail="Human Work Item cannot be assigned"
+        )
     assignee = await db_session.get(User, params.assignee_user_id)
     if assignee is None:
         raise HTTPException(status_code=404, detail="Assignee not found")
@@ -1544,9 +1652,7 @@ async def assign_research_work_item(
         idempotency_key=f"work-item:{item.id}:assigned:{item.revision}",
     )
     await db_session.commit()
-    return await _work_item_data(
-        db_session, item, action, run, task, project, lab
-    )
+    return await _work_item_data(db_session, item, action, run, task, project, lab)
 
 
 def _record_payload(
@@ -1594,19 +1700,26 @@ async def submit_research_work_item(
         db_session, current_user, work_item_id
     )
     if item.assignee_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the assignee can submit this work")
+        raise HTTPException(
+            status_code=403, detail="Only the assignee can submit this work"
+        )
     if item.status == HumanWorkItemStatus.ACCEPTED.value:
         if item.record_id == params.record_id and (
-            params.record_version is None or item.record_version == params.record_version
+            params.record_version is None
+            or item.record_version == params.record_version
         ):
             return await _work_item_data(
                 db_session, item, action, run, task, project, lab
             )
-        raise HTTPException(status_code=409, detail="Human Work Item is already complete")
+        raise HTTPException(
+            status_code=409, detail="Human Work Item is already complete"
+        )
     if item.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Human Work Item has changed")
     if item.status not in ACTIVE_WORK_ITEM_STATUSES:
-        raise HTTPException(status_code=409, detail="Human Work Item cannot be submitted")
+        raise HTTPException(
+            status_code=409, detail="Human Work Item cannot be submitted"
+        )
     protocol_run = await ResearchProtocolRun.find_by(
         db_session, [ResearchProtocolRun.action_id == action.id]
     )
@@ -1621,10 +1734,7 @@ async def submit_research_work_item(
         conditions.append(Record.version == params.record_version)
     record = (
         await db_session.scalars(
-            select(Record)
-            .where(*conditions)
-            .order_by(Record.version.desc())
-            .limit(1)
+            select(Record).where(*conditions).order_by(Record.version.desc()).limit(1)
         )
     ).first()
     if record is None:
@@ -1747,9 +1857,7 @@ async def submit_research_work_item(
             "record_id": str(record.id),
             "record_version": record.version,
         },
-        idempotency_key=(
-            f"work-item:{item.id}:record:{record.id}:v{record.version}"
-        ),
+        idempotency_key=(f"work-item:{item.id}:record:{record.id}:v{record.version}"),
     )
     if config.effective_ai_enabled:
         await enqueue_research_advance(db_session, task=task, run=run)
@@ -1764,6 +1872,313 @@ async def submit_research_work_item(
             idempotency_key=f"run:{run.id}:manual:record:{record.id}:v{record.version}",
         )
     await db_session.commit()
-    return await _work_item_data(
-        db_session, item, action, run, task, project, lab
+    return await _work_item_data(db_session, item, action, run, task, project, lab)
+
+
+async def _approval_context(
+    db_session: DBSession,
+    current_user: User,
+    approval_id: UUID,
+    *,
+    lock: bool = False,
+) -> tuple[
+    ResearchApproval,
+    ResearchAction,
+    ResearchRun,
+    ResearchTask,
+    Project,
+    Lab,
+]:
+    statement = select(ResearchApproval).where(ResearchApproval.id == approval_id)
+    if lock:
+        statement = statement.with_for_update()
+    approval = (await db_session.scalars(statement)).first()
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Research Approval not found")
+    action = await db_session.get(ResearchAction, approval.action_id)
+    run = await db_session.get(ResearchRun, action.run_id) if action else None
+    task = await db_session.get(ResearchTask, run.task_id) if run else None
+    if action is None or run is None or task is None:
+        raise HTTPException(status_code=404, detail="Research Task context not found")
+    project = await _project(db_session, task.project_id)
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.read",
     )
+    lab = await db_session.get(Lab, task.lab_id)
+    if lab is None:
+        raise HTTPException(status_code=404, detail="Lab not found")
+    return approval, action, run, task, project, lab
+
+
+async def _approval_data(
+    db_session: DBSession,
+    approval: ResearchApproval,
+    action: ResearchAction,
+    run: ResearchRun,
+    task: ResearchTask,
+    project: Project,
+    lab: Lab,
+) -> dict[str, Any]:
+    return {
+        **(await _approval_summary(db_session, approval)),
+        "action": await _action_data(db_session, action, project=project, lab=lab),
+        "run": run.as_dict(),
+        "task": {
+            "id": str(task.id),
+            "title": task.title,
+            "goal": task.goal,
+            "status": task.status,
+            "revision": task.revision,
+        },
+        "project": {
+            "id": str(project.id),
+            "uid": project.uid,
+            "name": project.name,
+        },
+        "lab": {"id": str(lab.id), "uid": lab.uid, "name": lab.name},
+    }
+
+
+async def _require_approval_authority(
+    db_session: DBSession,
+    *,
+    current_user: User,
+    approval: ResearchApproval,
+    project: Project,
+) -> None:
+    if current_user.id == approval.approver_user_id:
+        return
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.approve",
+    )
+
+
+def _validate_pending_approval(
+    approval: ResearchApproval,
+    action: ResearchAction,
+    params: ApprovalDecisionParams,
+) -> None:
+    if approval.revision != params.expected_revision:
+        raise HTTPException(status_code=409, detail="Research Approval has changed")
+    if action.revision != params.expected_action_revision:
+        raise HTTPException(status_code=409, detail="Research Action has changed")
+    if approval.preview_digest != params.preview_digest:
+        raise HTTPException(
+            status_code=409, detail="Research Approval preview is stale"
+        )
+    if action.preview_digest != params.preview_digest:
+        raise HTTPException(status_code=409, detail="Research Action preview is stale")
+    if approval.status != ResearchApprovalStatus.PENDING.value:
+        raise HTTPException(status_code=409, detail="Research Approval is not pending")
+    if action.status != ResearchActionStatus.PROPOSED.value:
+        raise HTTPException(status_code=409, detail="Research Action is not proposed")
+
+
+@approvals_router.get("")
+async def list_research_approvals(
+    current_user: CurrentUser,
+    db_session: DBSession,
+    status: list[str] | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
+    conditions = [ResearchApproval.approver_user_id == current_user.id]
+    if status:
+        conditions.append(ResearchApproval.status.in_(status))
+    else:
+        conditions.append(
+            ResearchApproval.status == ResearchApprovalStatus.PENDING.value
+        )
+    approvals = list(
+        (
+            await db_session.scalars(
+                select(ResearchApproval)
+                .where(*conditions)
+                .order_by(ResearchApproval.requested_at.asc())
+            )
+        ).all()
+    )
+    result = []
+    for approval in approvals:
+        try:
+            context = await _approval_context(db_session, current_user, approval.id)
+        except HTTPException as error:
+            if error.status_code == 403:
+                continue
+            raise
+        result.append(await _approval_data(db_session, *context))
+    total = len(result)
+    return {
+        "approvals": result[(page - 1) * page_size : page * page_size],
+        "total_count": total,
+    }
+
+
+@approvals_router.get("/{approval_id}")
+async def get_research_approval(
+    approval_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    context = await _approval_context(db_session, current_user, approval_id)
+    return await _approval_data(db_session, *context)
+
+
+@approvals_router.post("/{approval_id}/approve")
+async def approve_research_action(
+    approval_id: UUID,
+    params: ApprovalDecisionParams,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    approval, action, run, task, project, lab = await _approval_context(
+        db_session, current_user, approval_id, lock=True
+    )
+    await _require_approval_authority(
+        db_session,
+        current_user=current_user,
+        approval=approval,
+        project=project,
+    )
+    _validate_pending_approval(approval, action, params)
+    if (
+        task.status != ResearchTaskStatus.ACTIVE.value
+        or run.status != ResearchRunStatus.WAITING_FOR_APPROVAL.value
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Resume the active Research Run before approving this Action",
+        )
+    protocol_run = await ResearchProtocolRun.find_by(
+        db_session, [ResearchProtocolRun.action_id == action.id]
+    )
+    if protocol_run is None:
+        raise HTTPException(status_code=409, detail="Protocol Run not found")
+    protocol = await db_session.get(Protocol, protocol_run.protocol_id)
+    version = await db_session.get(ProtocolVersion, protocol_run.protocol_version_id)
+    if protocol is None or version is None:
+        raise HTTPException(status_code=409, detail="Protocol context not found")
+
+    now = utcnow()
+    approval.status = ResearchApprovalStatus.APPROVED.value
+    approval.decision_reason = params.reason.strip()
+    approval.decided_by_user_id = current_user.id
+    approval.decided_at = now
+    approval.revision += 1
+    action.policy_decision = "allow"
+    await activate_protocol_action(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+        protocol=protocol,
+        version=version,
+        instructions=action.description,
+        actor_user_id=current_user.id,
+    )
+    task.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="approval.approved",
+        actor_user_id=current_user.id,
+        payload={
+            "approval_id": str(approval.id),
+            "preview_digest": approval.preview_digest,
+            "reason": approval.decision_reason,
+        },
+        idempotency_key=f"approval:{approval.id}:approved",
+    )
+    await db_session.commit()
+    return await _approval_data(db_session, approval, action, run, task, project, lab)
+
+
+@approvals_router.post("/{approval_id}/reject")
+async def reject_research_action(
+    approval_id: UUID,
+    params: ApprovalRejectParams,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    approval, action, run, task, project, lab = await _approval_context(
+        db_session, current_user, approval_id, lock=True
+    )
+    await _require_approval_authority(
+        db_session,
+        current_user=current_user,
+        approval=approval,
+        project=project,
+    )
+    _validate_pending_approval(approval, action, params)
+    if (
+        task.status != ResearchTaskStatus.ACTIVE.value
+        or run.status != ResearchRunStatus.WAITING_FOR_APPROVAL.value
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Resume the active Research Run before rejecting this Action",
+        )
+    now = utcnow()
+    approval.status = ResearchApprovalStatus.REJECTED.value
+    approval.decision_reason = params.reason.strip()
+    approval.decided_by_user_id = current_user.id
+    approval.decided_at = now
+    approval.revision += 1
+    action.status = ResearchActionStatus.CANCELLED.value
+    action.error = f"Rejected: {approval.decision_reason}"
+    action.completed_at = now
+    action.revision += 1
+
+    state = dict(run.aira_state or initial_aira_state(task.goal))
+    run.aira_state = {
+        **state,
+        "path_status": "waiting_for_next_protocol",
+        "rejected_actions": [
+            *(state.get("rejected_actions") or []),
+            {
+                "action_id": str(action.id),
+                "reason": approval.decision_reason,
+                "rejected_at": now.isoformat(),
+            },
+        ],
+    }
+    run.status = ResearchRunStatus.RUNNING.value
+    run.last_error = None
+    task.status = ResearchTaskStatus.ACTIVE.value
+    task.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="approval.rejected",
+        actor_user_id=current_user.id,
+        payload={
+            "approval_id": str(approval.id),
+            "preview_digest": approval.preview_digest,
+            "reason": approval.decision_reason,
+        },
+        idempotency_key=f"approval:{approval.id}:rejected",
+    )
+    if config.effective_ai_enabled and await task_protocol_rows(db_session, task.id):
+        await enqueue_research_advance(db_session, task=task, run=run)
+    else:
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            kind="run.manual_control_required",
+            actor_user_id=current_user.id,
+            payload={"reason": "approval_rejected_without_ai"},
+            idempotency_key=f"run:{run.id}:manual:approval:{approval.id}",
+        )
+    await db_session.commit()
+    return await _approval_data(db_session, approval, action, run, task, project, lab)

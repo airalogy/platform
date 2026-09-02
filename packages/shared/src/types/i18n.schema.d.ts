@@ -744,6 +744,7 @@ declare namespace I18n {
         projectTitle: string
         tasks: string
         workItems: string
+        approvals: string
         createTask: string
         createTitle: string
         taskName: string
@@ -783,6 +784,7 @@ declare namespace I18n {
         loadError: string
         noTasks: string
         noWorkItems: string
+        noApprovals: string
         owner: string
         openWorkCount: string
         partOfTask: string
@@ -805,10 +807,27 @@ declare namespace I18n {
         runNumber: string
         planVersion: string
         openWork: string
+        pendingApprovals: string
         airaStage: string
         notStarted: string
         needsAction: string
         humanWork: string
+        approvalGate: string
+        approvalRequired: string
+        approvalPending: string
+        approveAction: string
+        rejectAction: string
+        confirmApprove: string
+        confirmReject: string
+        approveHint: string
+        rejectHint: string
+        decisionReason: string
+        rejectionPlaceholder: string
+        approvedFromWorkbench: string
+        actionApproved: string
+        actionRejected: string
+        awaitingApprover: string
+        previewDigest: string
         assignedTo: string
         executionHistory: string
         actions: string
@@ -915,6 +934,9 @@ declare namespace I18n {
           work_item_started: string
           work_item_completed: string
           run_manual_control_required: string
+          approval_requested: string
+          approval_approved: string
+          approval_rejected: string
         }
       }
       recordDiary: {

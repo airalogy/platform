@@ -24,6 +24,8 @@ from app.models.research import (
     ResearchAction,
     ResearchActionKind,
     ResearchActionStatus,
+    ResearchApproval,
+    ResearchApprovalStatus,
     ResearchArtifactLink,
     ResearchEvent,
     ResearchHumanWorkItem,
@@ -40,7 +42,6 @@ from app.models.user import User
 from app.services.access_control import resolve_structured_access
 from app.services.model_usage import create_usage_context
 from app.services.persistent_jobs import enqueue_job
-
 
 AIRA_AI_STATUSES = {
     "waiting_for_research_strategy",
@@ -71,6 +72,35 @@ ACTIVE_WORK_ITEM_STATUSES = {
     HumanWorkItemStatus.IN_PROGRESS.value,
     HumanWorkItemStatus.CHANGES_REQUESTED.value,
 }
+
+
+def evaluate_research_action_policy(
+    *,
+    autonomy_level: str,
+    source: str,
+    executor_type: str,
+    requirements: dict[str, Any],
+) -> tuple[str, str]:
+    """Return a fail-closed P0 policy decision for an Action proposal.
+
+    Manual Actions have already passed the deterministic preview/confirmation
+    contract. Aira-generated physical work remains approval-gated for every
+    autonomy level until Lab policy, resource, risk, and budget rules exist.
+    """
+
+    if requirements.get("prohibited") is True:
+        return "deny", "The Action is prohibited by an explicit requirement."
+    if source == "manual":
+        return "allow", "The user confirmed the deterministic Action preview."
+    if executor_type == "human":
+        return (
+            "ask",
+            "Aira-proposed human execution requires approval before assignment.",
+        )
+    return (
+        "ask",
+        f"No allow policy is configured for {autonomy_level} {executor_type} execution.",
+    )
 
 
 def utcnow() -> datetime:
@@ -187,9 +217,7 @@ def workflow_info_for_task(
         "id": str(task.id),
         "title": task.title,
         "protocols": protocols,
-        "edges": [
-            f"{index} -> {index + 1}" for index in range(1, len(protocols))
-        ],
+        "edges": [f"{index} -> {index + 1}" for index in range(1, len(protocols))],
         "logic": "\n".join(
             [
                 *(f"Success: {item}" for item in task.success_criteria),
@@ -326,9 +354,7 @@ async def enqueue_research_advance(
             "run_id": str(run.id),
             "generation": run.advance_generation,
         },
-        idempotency_key=(
-            f"research-run:{run.id}:advance:{run.advance_generation}"
-        ),
+        idempotency_key=(f"research-run:{run.id}:advance:{run.advance_generation}"),
         max_attempts=5,
     )
 
@@ -392,9 +418,69 @@ async def _load_run_context(
 
 def _latest_step(state: dict[str, Any], kind: str) -> dict[str, Any] | None:
     return next(
-        (step for step in reversed(state.get("steps") or []) if step.get("step") == kind),
+        (
+            step
+            for step in reversed(state.get("steps") or [])
+            if step.get("step") == kind
+        ),
         None,
     )
+
+
+async def activate_protocol_action(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    protocol: Protocol,
+    version: ProtocolVersion,
+    instructions: str,
+    actor_user_id: UUID | None,
+) -> ResearchHumanWorkItem:
+    """Materialize executable human work only after the Action is allowed."""
+
+    existing = await ResearchHumanWorkItem.find_by(
+        db_session, [ResearchHumanWorkItem.action_id == action.id]
+    )
+    if existing is not None:
+        return existing
+    if action.policy_decision not in {"allow", "ask"}:
+        raise ValueError("A denied Research Action cannot be activated")
+
+    work_item = ResearchHumanWorkItem(
+        action_id=action.id,
+        assignee_user_id=action.assignee_user_id or task.owner_user_id,
+        instructions=instructions or f"Execute {protocol.name} and submit its Record.",
+        submission_contract={
+            "type": "protocol_record",
+            "protocol_id": str(protocol.id),
+            "protocol_version": version.version,
+        },
+        due_at=action.due_at,
+    )
+    db_session.add(work_item)
+    action.status = ResearchActionStatus.WAITING.value
+    action.revision += 1
+    run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
+    task.status = ResearchTaskStatus.ACTIVE.value
+    await db_session.flush()
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        work_item_id=work_item.id,
+        kind="work_item.assigned",
+        actor_user_id=actor_user_id,
+        payload={
+            "assignee_user_id": str(work_item.assignee_user_id),
+            "protocol_id": str(protocol.id),
+            "protocol_version": version.version,
+        },
+        idempotency_key=f"action:{action.id}:assigned:{action.revision}",
+    )
+    return work_item
 
 
 async def _materialize_human_protocol_action(
@@ -406,9 +492,7 @@ async def _materialize_human_protocol_action(
 ) -> ResearchAction:
     state = run.aira_state
     next_step = _latest_step(state, "add_next_protocol")
-    values_step = _latest_step(
-        state, "add_initial_values_for_fields_in_next_protocol"
-    )
+    values_step = _latest_step(state, "add_initial_values_for_fields_in_next_protocol")
     if next_step is None:
         raise ValueError("AIRA requested a Record without selecting a Protocol")
 
@@ -449,20 +533,46 @@ async def _materialize_human_protocol_action(
         "initial_values": initial_values,
         "source": "aira",
     }
-    preview_digest = canonical_digest(input_data)
+    requirements = {"record_required": True}
+    title = protocol.name
+    description = (next_step.get("data") or {}).get("thought") or ""
+    action_proposal = {
+        "run_id": str(run.id),
+        "plan_version": run.plan_version,
+        "kind": ResearchActionKind.PROTOCOL_RUN.value,
+        "title": title,
+        "description": description,
+        "executor_type": "human",
+        "assignee_user_id": str(task.owner_user_id),
+        "input_data": input_data,
+        "requirements": requirements,
+    }
+    preview_digest = canonical_digest(action_proposal)
+    policy_decision, policy_reason = evaluate_research_action_policy(
+        autonomy_level=task.autonomy_level,
+        source="aira",
+        executor_type="human",
+        requirements=requirements,
+    )
+    if policy_decision == "deny":
+        raise ValueError(policy_reason)
     action = ResearchAction(
         run_id=run.id,
         sequence=sequence,
         plan_version=run.plan_version,
         kind=ResearchActionKind.PROTOCOL_RUN.value,
-        status=ResearchActionStatus.WAITING.value,
-        title=protocol.name,
-        description=(next_step.get("data") or {}).get("thought") or "",
+        status=(
+            ResearchActionStatus.PROPOSED.value
+            if policy_decision == "ask"
+            else ResearchActionStatus.WAITING.value
+        ),
+        title=title,
+        description=description,
         executor_type="human",
         assignee_user_id=task.owner_user_id,
         input_data=input_data,
-        requirements={"record_required": True},
-        policy_decision="ask",
+        requirements=requirements,
+        policy_decision=policy_decision,
         preview_digest=preview_digest,
         idempotency_key=idempotency_key,
     )
@@ -476,17 +586,6 @@ async def _materialize_human_protocol_action(
         initial_values=initial_values,
     )
     db_session.add(protocol_run)
-    work_item = ResearchHumanWorkItem(
-        action_id=action.id,
-        assignee_user_id=task.owner_user_id,
-        instructions=action.description or f"Execute {protocol.name} and submit its Record.",
-        submission_contract={
-            "type": "protocol_record",
-            "protocol_id": str(protocol.id),
-            "protocol_version": version.version,
-        },
-    )
-    db_session.add(work_item)
     db_session.add(
         ResearchArtifactLink(
             task_id=task.id,
@@ -499,22 +598,45 @@ async def _materialize_human_protocol_action(
             link_metadata={"position": task_protocol.position},
         )
     )
-    await db_session.flush()
-    await emit_research_event(
-        db_session,
-        task_id=task.id,
-        run_id=run.id,
-        action_id=action.id,
-        work_item_id=work_item.id,
-        kind="work_item.assigned",
-        actor_user_id=None,
-        payload={
-            "assignee_user_id": str(work_item.assignee_user_id),
-            "protocol_id": str(protocol.id),
-            "protocol_version": version.version,
-        },
-        idempotency_key=f"action:{action.id}:assigned:1",
-    )
+    if policy_decision == "ask":
+        approval = ResearchApproval(
+            action_id=action.id,
+            approver_user_id=task.owner_user_id,
+            requested_by_user_id=run.requested_by_user_id,
+            status=ResearchApprovalStatus.PENDING.value,
+            preview_digest=preview_digest,
+            reason=policy_reason,
+        )
+        db_session.add(approval)
+        run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
+        task.revision += 1
+        await db_session.flush()
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="approval.requested",
+            actor_user_id=None,
+            payload={
+                "approval_id": str(approval.id),
+                "approver_user_id": str(approval.approver_user_id),
+                "preview_digest": preview_digest,
+                "reason": policy_reason,
+            },
+            idempotency_key=f"action:{action.id}:approval:requested",
+        )
+    else:
+        await activate_protocol_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            protocol=protocol,
+            version=version,
+            instructions=action.description,
+            actor_user_id=None,
+        )
     return action
 
 
@@ -651,13 +773,20 @@ async def process_research_run_advance(
         run, task, project, lab, rows = await _load_run_context(db_session, run_id)
         if generation != run.advance_generation:
             return {"status": "superseded", "generation": generation}
-        if run.status in TERMINAL_RUN_STATUSES or run.status == ResearchRunStatus.PAUSED.value:
+        if (
+            run.status in TERMINAL_RUN_STATUSES
+            or run.status == ResearchRunStatus.PAUSED.value
+        ):
             return {"status": run.status}
         if run.aira_state.get("path_status") == "waiting_for_record":
             action = await _materialize_human_protocol_action(
                 db_session, run=run, task=task, rows=rows
             )
-            run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
+            run.status = (
+                ResearchRunStatus.WAITING_FOR_APPROVAL.value
+                if action.status == ResearchActionStatus.PROPOSED.value
+                else ResearchRunStatus.WAITING_FOR_HUMAN.value
+            )
             task.status = ResearchTaskStatus.ACTIVE.value
             await db_session.commit()
             return {"status": run.status, "action_id": str(action.id)}
@@ -726,9 +855,7 @@ async def process_research_run_advance(
 
         current_run = (
             await db_session.execute(
-                select(ResearchRun)
-                .where(ResearchRun.id == run_id)
-                .with_for_update()
+                select(ResearchRun).where(ResearchRun.id == run_id).with_for_update()
             )
         ).scalar_one()
         if generation != current_run.advance_generation:

@@ -1,14 +1,19 @@
 import asyncio
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 from app.main import app
 from app.models.research import (
     ResearchActionKind,
+    ResearchApproval,
+    ResearchApprovalStatus,
     ResearchRunStatus,
     ResearchTaskStatus,
 )
@@ -17,6 +22,7 @@ from app.services import resource_job_worker
 from app.services.research_runtime import (
     EXPECTED_AIRA_STEPS,
     canonical_digest,
+    evaluate_research_action_policy,
     initial_aira_state,
     path_status_after_step,
     research_task_command,
@@ -51,7 +57,9 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         "owner_user_id": str(owner_id),
         "ai_model": "qwen3.5-flash",
     }
-    assert canonical_digest(command) == canonical_digest(dict(reversed(command.items())))
+    assert canonical_digest(command) == canonical_digest(
+        dict(reversed(command.items()))
+    )
     assert len(canonical_digest(command)) == 64
 
 
@@ -68,9 +76,7 @@ def test_research_task_draft_rejects_missing_criteria_and_duplicate_protocols():
     with pytest.raises(ValidationError):
         ResearchTaskDraft(**{**payload, "success_criteria": [" "]})
     with pytest.raises(ValidationError):
-        ResearchTaskDraft(
-            **{**payload, "protocol_ids": [protocol_id, protocol_id]}
-        )
+        ResearchTaskDraft(**{**payload, "protocol_ids": [protocol_id, protocol_id]})
 
 
 def test_aira_path_transitions_preserve_human_record_boundary():
@@ -98,9 +104,7 @@ def test_aira_path_transitions_preserve_human_record_boundary():
         == "waiting_for_record"
     )
     assert (
-        path_status_after_step(
-            "waiting_for_phased_research_conclusion", {"data": {}}
-        )
+        path_status_after_step("waiting_for_phased_research_conclusion", {"data": {}})
         == "waiting_for_next_protocol"
     )
     assert EXPECTED_AIRA_STEPS["waiting_for_final_research_conclusion"] == (
@@ -113,6 +117,139 @@ def test_research_runtime_has_explicit_review_and_human_states():
     assert ResearchRunStatus.WAITING_FOR_HUMAN.value == "waiting_for_human"
     assert ResearchActionKind.PROTOCOL_RUN.value == "protocol_run"
     assert ResearchActionKind.HUMAN_WORK_ITEM.value == "human_work_item"
+    assert ResearchApprovalStatus.PENDING.value == "pending"
+
+
+def test_research_approval_table_records_the_decider_and_stale_guard_revision():
+    ddl = str(
+        CreateTable(ResearchApproval.__table__).compile(dialect=postgresql.dialect())
+    )
+
+    assert "decided_by_user_id" in ddl
+    assert "decision_reason" in ddl
+    assert "preview_digest" in ddl
+    assert "revision" in ddl
+
+
+def test_research_approval_migration_handles_fresh_and_upgraded_databases(monkeypatch):
+    migration = import_module("migrations.versions.0010_research_approvals")
+
+    assert migration.down_revision == "0009_research_tasks"
+    assert migration.ADDED_COLUMNS == {
+        "decided_by_user_id",
+        "decision_reason",
+        "revision",
+    }
+
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(
+        migration.op,
+        "add_column",
+        lambda table, column: calls.append(("column", column.name)),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "create_foreign_key",
+        lambda name, *_args, **_kwargs: calls.append(("foreign_key", name)),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "create_index",
+        lambda name, *_args, **_kwargs: calls.append(("index", name)),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "drop_index",
+        lambda name, **_kwargs: calls.append(("drop_index", name)),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "drop_constraint",
+        lambda name, *_args, **_kwargs: calls.append(("drop_constraint", name)),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "drop_column",
+        lambda _table, name: calls.append(("drop_column", name)),
+    )
+
+    class Inspector:
+        def __init__(self, columns: set[str]):
+            self.columns = columns
+
+        def get_columns(self, _table: str):
+            return [{"name": name} for name in self.columns]
+
+        def get_indexes(self, _table: str):
+            if "decided_by_user_id" not in self.columns:
+                return []
+            return [{"name": "ix_research_approvals_decided_by_user_id"}]
+
+        def get_foreign_keys(self, _table: str):
+            if "decided_by_user_id" not in self.columns:
+                return []
+            return [
+                {
+                    "name": "research_approvals_decided_by_user_id_fkey",
+                    "constrained_columns": ["decided_by_user_id"],
+                }
+            ]
+
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: Inspector(set()))
+    migration.upgrade()
+    assert {
+        value for kind, value in calls if kind == "column"
+    } == migration.ADDED_COLUMNS
+
+    calls.clear()
+    monkeypatch.setattr(
+        migration.sa,
+        "inspect",
+        lambda _bind: Inspector(migration.ADDED_COLUMNS),
+    )
+    migration.upgrade()
+    assert calls == []
+
+    migration.downgrade()
+    assert ("drop_index", "ix_research_approvals_decided_by_user_id") in calls
+    assert (
+        "drop_constraint",
+        "research_approvals_decided_by_user_id_fkey",
+    ) in calls
+    assert {
+        value for kind, value in calls if kind == "drop_column"
+    } == migration.ADDED_COLUMNS
+
+
+def test_research_action_policy_fails_closed_for_aira_execution():
+    assert (
+        evaluate_research_action_policy(
+            autonomy_level="autonomous_within_policy",
+            source="aira",
+            executor_type="human",
+            requirements={"record_required": True},
+        )[0]
+        == "ask"
+    )
+    assert (
+        evaluate_research_action_policy(
+            autonomy_level="assisted",
+            source="manual",
+            executor_type="human",
+            requirements={"record_required": True},
+        )[0]
+        == "allow"
+    )
+    assert (
+        evaluate_research_action_policy(
+            autonomy_level="assisted",
+            source="manual",
+            executor_type="human",
+            requirements={"prohibited": True},
+        )[0]
+        == "deny"
+    )
 
 
 def test_persistent_worker_dispatches_research_run(monkeypatch):
@@ -148,3 +285,6 @@ def test_openapi_exposes_research_task_and_human_work_contracts():
     assert "/research-tasks/{task_id}/actions/preview" in paths
     assert "/research-work-items" in paths
     assert "/research-work-items/{work_item_id}/submit" in paths
+    assert "/research-approvals" in paths
+    assert "/research-approvals/{approval_id}/approve" in paths
+    assert "/research-approvals/{approval_id}/reject" in paths

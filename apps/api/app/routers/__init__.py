@@ -52,6 +52,7 @@ from .questions import router as questions_router
 from .record_exports import router as record_exports_router
 from .records import router as records_router
 from .research_tasks import (
+    approvals_router as research_approvals_router,
     router as research_tasks_router,
     work_items_router as research_work_items_router,
 )
@@ -262,6 +263,7 @@ app.include_router(records_router)
 app.include_router(record_exports_router)
 app.include_router(research_tasks_router)
 app.include_router(research_work_items_router)
+app.include_router(research_approvals_router)
 app.include_router(resources_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)

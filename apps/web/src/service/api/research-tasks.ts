@@ -43,6 +43,13 @@ export type HumanWorkItemStatus =
   | "changes_requested"
   | "cancelled"
 
+export type ResearchApprovalStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "revoked"
+
 export interface ResearchUser {
   id: string
   username: string
@@ -153,6 +160,25 @@ export interface ResearchAction {
   protocol_run?: ResearchProtocolRun | null
   protocol?: ResearchProtocolRef | null
   work_item?: ResearchHumanWorkItem | null
+  approval?: ResearchApproval | null
+}
+
+export interface ResearchApproval {
+  id: string
+  action_id: string
+  approver_user_id: string
+  requested_by_user_id: string
+  decided_by_user_id?: string | null
+  status: ResearchApprovalStatus
+  preview_digest: string
+  reason: string
+  decision_reason: string
+  revision: number
+  requested_at: string
+  decided_at?: string | null
+  approver: ResearchUser
+  requested_by: ResearchUser
+  decided_by?: ResearchUser | null
 }
 
 export interface ResearchTaskSummary {
@@ -177,6 +203,7 @@ export interface ResearchTaskSummary {
   lab: ResearchScope
   latest_run?: ResearchRun | null
   open_work_items: number
+  pending_approvals: number
   ai_available: boolean
   created_at: string
   updated_at: string
@@ -216,6 +243,14 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
 
 export interface ResearchWorkItemDetail extends ResearchHumanWorkItem {
   assignee: ResearchUser
+  action: ResearchAction
+  run: ResearchRun
+  task: Pick<ResearchTaskSummary, "id" | "title" | "goal" | "status" | "revision">
+  project: ResearchScope
+  lab: ResearchScope
+}
+
+export interface ResearchApprovalDetail extends ResearchApproval {
   action: ResearchAction
   run: ResearchRun
   task: Pick<ResearchTaskSummary, "id" | "title" | "goal" | "status" | "revision">
@@ -410,6 +445,54 @@ export function submitResearchWorkItem(
 ) {
   return getData<ResearchWorkItemDetail>({
     url: `/research-work-items/${workItemId}/submit`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function fetchResearchApprovals(params: {
+  status?: ResearchApprovalStatus[]
+  page?: number
+  pageSize?: number
+} = {}) {
+  return getData<{ approvals: ResearchApprovalDetail[], total_count: number }>({
+    url: "/research-approvals",
+    params: {
+      status: params.status,
+      page: params.page || 1,
+      page_size: params.pageSize || 20,
+    },
+    metadata: { showError: false },
+  })
+}
+
+export function approveResearchAction(
+  approvalId: string,
+  payload: {
+    expected_revision: number
+    expected_action_revision: number
+    preview_digest: string
+    reason?: string
+  },
+) {
+  return getData<ResearchApprovalDetail>({
+    url: `/research-approvals/${approvalId}/approve`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function rejectResearchAction(
+  approvalId: string,
+  payload: {
+    expected_revision: number
+    expected_action_revision: number
+    preview_digest: string
+    reason: string
+  },
+) {
+  return getData<ResearchApprovalDetail>({
+    url: `/research-approvals/${approvalId}/reject`,
     method: "POST",
     data: payload,
   })

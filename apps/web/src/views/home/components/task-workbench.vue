@@ -57,6 +57,32 @@
             </div>
           </template>
 
+          <template v-else-if="pendingApproval">
+            <div class="aira-type-eyebrow aira-type-eyebrow--accent">
+              {{ $t("page.research.approvalRequired") }}
+            </div>
+            <h2 class="aira-type-section-title mb-0 mt-2">
+              {{ pendingApproval.action.title }}
+            </h2>
+            <p class="aira-type-body aira-text-secondary mb-0 mt-2">
+              {{ pendingApproval.lab.name }} / {{ pendingApproval.project.name }} /
+              {{ pendingApproval.task.title }}
+            </p>
+            <p class="aira-type-meta mb-0 mt-2 line-clamp-2">
+              {{ pendingApproval.action.description || pendingApproval.reason }}
+            </p>
+            <div class="mt-5 flex flex-wrap gap-2">
+              <research-approval-actions
+                :approval="pendingApproval"
+                :action-revision="pendingApproval.action.revision"
+                @decided="loadWorkbench"
+              />
+              <n-button secondary @click="openResearchTask(pendingApproval.task.id)">
+                {{ $t("page.research.viewTask") }}
+              </n-button>
+            </div>
+          </template>
+
           <template v-else-if="attentionTask">
             <div class="aira-type-eyebrow aira-type-eyebrow--accent">
               {{ $t("page.home.workbench.continueLabel") }}
@@ -300,8 +326,10 @@ import { checkProjectActionPermission, ProjectAction } from "@/composables/usePr
 import { LabRole, ProjectRole } from "@/enum"
 import { getProtocolInfo } from "@/service/api/protocol"
 import {
+  fetchResearchApprovals,
   fetchResearchTasks,
   fetchResearchWorkItems,
+  type ResearchApprovalDetail,
   type ResearchTaskSummary,
   type ResearchWorkItemDetail,
   startResearchWorkItem,
@@ -311,6 +339,7 @@ import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { listRecordDrafts, type RecordDraft } from "@/utils/recordDrafts"
 import CreateProjectModal from "@/views/projects/modules/create-project-modal.vue"
+import ResearchApprovalActions from "@/views/research/components/research-approval-actions.vue"
 import { useLoading } from "@airalogy/composables"
 import { $t } from "@airalogy/shared/locales"
 import { nanoid } from "nanoid"
@@ -331,6 +360,7 @@ const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const validDrafts = ref<ResolvedDraft[]>([])
 const researchTasks = ref<ResearchTaskSummary[]>([])
 const researchWorkItems = ref<ResearchWorkItemDetail[]>([])
+const researchApprovals = ref<ResearchApprovalDetail[]>([])
 const loadError = ref(false)
 
 const displayName = computed(() => authStore.userInfo.name || authStore.userInfo.username)
@@ -344,6 +374,7 @@ const protocolCreationProject = computed(
 const recentProtocol = computed(() => protocols.value.find(canSubmitRecordForProtocol) || null)
 const latestDraft = computed(() => validDrafts.value[0] || null)
 const assignedWorkItem = computed(() => researchWorkItems.value[0] || null)
+const pendingApproval = computed(() => researchApprovals.value[0] || null)
 const attentionTask = computed(() =>
   researchTasks.value.find(task => task.status === "review_required")
   || researchTasks.value.find(task => ["active", "paused", "failed"].includes(task.status))
@@ -352,11 +383,13 @@ const attentionTask = computed(() =>
 const attentionCount = computed(() =>
   validDrafts.value.length
   + researchWorkItems.value.length
+  + researchApprovals.value.length
   + researchTasks.value.filter(task => task.status === "review_required").length,
 )
 const attentionSummary = computed(() => attentionCount.value
   ? $t("page.home.workbench.attentionSummary", {
     work: researchWorkItems.value.length,
+    approvals: researchApprovals.value.length,
     review: researchTasks.value.filter(task => task.status === "review_required").length,
     drafts: validDrafts.value.length,
   })
@@ -404,18 +437,20 @@ async function loadWorkbench() {
   loadError.value = false
   try {
     const userId = authStore.userInfo.id
-    const [projectResult, labResult, protocolResult, taskResult, workItemResult] = await Promise.all([
+    const [projectResult, labResult, protocolResult, taskResult, workItemResult, approvalResult] = await Promise.all([
       fetchUserProjects(userId, { page: 1, pageSize: 10, sortedBy: "updated_at" }),
       fetchUserLabs(userId, { page: 1, pageSize: 10, sortedBy: "updated_at" }),
       fetchUserProtocols(userId, { page: 1, pageSize: 10, sortedBy: "updated_at" }),
       fetchResearchTasks({ page: 1, pageSize: 10 }),
       fetchResearchWorkItems({ page: 1, pageSize: 10 }),
+      fetchResearchApprovals({ page: 1, pageSize: 10 }),
     ])
     projects.value = projectResult?.projects || []
     labs.value = labResult?.labs || []
     protocols.value = protocolResult?.protocols || []
     researchTasks.value = taskResult.tasks
     researchWorkItems.value = workItemResult.work_items
+    researchApprovals.value = approvalResult.approvals
 
     const localDrafts = listRecordDrafts(userId).slice(0, 10)
     const draftResults = await Promise.allSettled(

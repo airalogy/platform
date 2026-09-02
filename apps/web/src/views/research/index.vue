@@ -44,6 +44,10 @@
         {{ $t("page.research.workItems") }}
         <n-badge v-if="workItemCount" :value="workItemCount" :max="99" class="ml-1" />
       </n-tab>
+      <n-tab name="approvals">
+        {{ $t("page.research.approvals") }}
+        <n-badge v-if="approvalCount" :value="approvalCount" :max="99" class="ml-1" />
+      </n-tab>
     </n-tabs>
 
     <n-spin :show="loading" class="mt-5 min-h-70">
@@ -91,7 +95,7 @@
         </n-empty>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeView === 'work-items'">
         <div v-if="workItems.length" class="space-y-4">
           <article v-for="item in workItems" :key="item.id" class="research-card">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -137,6 +141,51 @@
         </div>
         <n-empty v-else-if="!loading" class="research-empty" :description="$t('page.research.noWorkItems')" />
       </template>
+
+      <template v-else>
+        <div v-if="approvals.length" class="space-y-4">
+          <article v-for="approval in approvals" :key="approval.id" class="research-card">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <n-tag type="warning" round size="small">
+                    {{ $t("page.research.approvalPending") }}
+                  </n-tag>
+                  <span class="aira-type-meta">
+                    {{ approval.lab.name }} / {{ approval.project.name }}
+                  </span>
+                </div>
+                <button type="button" class="mt-2 text-left" @click="openTaskById(approval.task.id)">
+                  <h2 class="aira-type-card-title mb-0 hover:text-primary">
+                    {{ approval.action.title }}
+                  </h2>
+                </button>
+                <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
+                  {{ approval.action.description || approval.reason }}
+                </p>
+                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+                  <span>{{ $t("page.research.partOfTask") }} · {{ approval.task.title }}</span>
+                  <span v-if="approval.action.protocol">
+                    {{ approval.action.protocol.name }} · v{{ approval.action.protocol.version }}
+                  </span>
+                  <span><n-time :time="new Date(approval.requested_at)" type="relative" /></span>
+                </div>
+              </div>
+              <div class="flex shrink-0 flex-wrap gap-2">
+                <n-button secondary @click="openTaskById(approval.task.id)">
+                  {{ $t("page.research.viewTask") }}
+                </n-button>
+                <research-approval-actions
+                  :approval="approval"
+                  :action-revision="approval.action.revision"
+                  @decided="loadCurrentView"
+                />
+              </div>
+            </div>
+          </article>
+        </div>
+        <n-empty v-else-if="!loading" class="research-empty" :description="$t('page.research.noApprovals')" />
+      </template>
     </n-spin>
 
     <div v-if="totalCount > pageSize" class="mt-6 flex justify-end">
@@ -153,6 +202,7 @@
 <script setup lang="ts">
 import type {
   HumanWorkItemStatus,
+  ResearchApprovalDetail,
   ResearchRunStatus,
   ResearchTaskDetail,
   ResearchTaskStatus,
@@ -162,6 +212,7 @@ import type {
 import type { TagProps } from "naive-ui"
 import { getProjectInfo } from "@/service/api/projects"
 import {
+  fetchResearchApprovals,
   fetchResearchTasks,
   fetchResearchWorkItems,
   startResearchWorkItem,
@@ -169,6 +220,7 @@ import {
 import { $t } from "@airalogy/shared/locales"
 import { useRoute, useRouter } from "vue-router"
 import CreateResearchTaskModal from "./components/create-research-task-modal.vue"
+import ResearchApprovalActions from "./components/research-approval-actions.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -176,16 +228,22 @@ const loading = ref(false)
 const loadError = ref(false)
 const tasks = ref<ResearchTaskSummary[]>([])
 const workItems = ref<ResearchWorkItemDetail[]>([])
+const approvals = ref<ResearchApprovalDetail[]>([])
 const workItemCount = ref(0)
+const approvalCount = ref(0)
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = 20
 const startingId = ref("")
 const projectContext = ref<Api.Project.MyProjectInfo | null>(null)
 
-const activeView = computed<"tasks" | "work-items">(() =>
-  route.name === "research-work-items" ? "work-items" : "tasks",
-)
+const activeView = computed<"tasks" | "work-items" | "approvals">(() => {
+  if (route.name === "research-work-items")
+    return "work-items"
+  if (route.name === "research-approvals")
+    return "approvals"
+  return "tasks"
+})
 
 async function loadProjectContext() {
   if (route.name !== "project-research") {
@@ -210,15 +268,29 @@ async function loadCurrentView() {
       tasks.value = result.tasks
       totalCount.value = result.total_count
       if (!projectContext.value) {
-        const assigned = await fetchResearchWorkItems({ page: 1, pageSize: 1 })
+        const [assigned, pending] = await Promise.all([
+          fetchResearchWorkItems({ page: 1, pageSize: 1 }),
+          fetchResearchApprovals({ page: 1, pageSize: 1 }),
+        ])
         workItemCount.value = assigned.total_count
+        approvalCount.value = pending.total_count
       }
     }
-    else {
+    else if (activeView.value === "work-items") {
       const result = await fetchResearchWorkItems({ page: page.value, pageSize })
       workItems.value = result.work_items
       totalCount.value = result.total_count
       workItemCount.value = result.total_count
+      const pending = await fetchResearchApprovals({ page: 1, pageSize: 1 })
+      approvalCount.value = pending.total_count
+    }
+    else {
+      const result = await fetchResearchApprovals({ page: page.value, pageSize })
+      approvals.value = result.approvals
+      totalCount.value = result.total_count
+      approvalCount.value = result.total_count
+      const assigned = await fetchResearchWorkItems({ page: 1, pageSize: 1 })
+      workItemCount.value = assigned.total_count
     }
   }
   catch {
@@ -229,9 +301,14 @@ async function loadCurrentView() {
   }
 }
 
-function handleViewChange(view: "tasks" | "work-items") {
+function handleViewChange(view: "tasks" | "work-items" | "approvals") {
   page.value = 1
-  void router.push({ name: view === "tasks" ? "research-tasks" : "research-work-items" })
+  const name = view === "tasks"
+    ? "research-tasks"
+    : view === "work-items"
+      ? "research-work-items"
+      : "research-approvals"
+  void router.push({ name })
 }
 
 function openTask(task: ResearchTaskSummary | ResearchTaskDetail) {

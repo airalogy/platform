@@ -108,6 +108,8 @@ express intent → generate draft → preview impact → user confirms
 
 Approvals bind to a preview version or digest and become invalid when source data changes. API authorization and policy checks are authoritative; hiding controls in the frontend is never a security boundary.
 
+The P0 policy is intentionally fail-closed: a manually created Protocol Action is `allow` only after its deterministic preview is confirmed, while every Aira-proposed human Protocol Action is `ask` at all autonomy levels. Approval activates that exact digest-bound Action and only then creates the Human Work Item. Rejection cancels the proposal, records the reason, and requests replanning; broader automatic `allow` rules require the later Lab policy, resource, risk, and budget controls.
+
 ## Scientific reliability
 
 Execution state and scientific outcome are separate. A correctly executed experiment may contradict the hypothesis or remain inconclusive; a negative result is not an execution failure.
