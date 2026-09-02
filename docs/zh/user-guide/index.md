@@ -36,6 +36,7 @@ Platform 使用四类相互关联的资源：
 
 - [Protocol](./protocols)：创建、版本、编辑与复用。
 - [Record](./records)：填写、校验、文件、修订与安全处理。
+- [科研自动化](./research-automation)：了解可审计的 Research Task、人工工作、数字工具、外部结果边界和科学审核。
 - [协作](./collaboration)：工作空间角色和分享方式。
 - [搜索](./search)：在现有访问范围内查找资源。
 - [导入与导出](./import-export)：CSV 导入与受控 Record 导出。

@@ -919,6 +919,50 @@ declare namespace I18n {
         cancelTask: string
         cancelConfirm: string
         addHumanWork: string
+        addDigitalAction: string
+        toolAction: string
+        toolActionHint: string
+        researchTool: string
+        selectTool: string
+        noToolsAvailable: string
+        searchQuery: string
+        searchQueryPlaceholder: string
+        resultLimit: string
+        actionTitle: string
+        actionDescription: string
+        waitEventAction: string
+        waitEventHint: string
+        waitFor: string
+        waitTitlePlaceholder: string
+        dueOptional: string
+        digitalActionPreviewHint: string
+        queryPreview: string
+        toolResultsStayDraft: string
+        eventKey: string
+        waitPausesRun: string
+        confirmDigitalAction: string
+        digitalActionCreated: string
+        waitDataAsset: string
+        waitResearchFile: string
+        waitExternalService: string
+        provideExternalResult: string
+        signalResponsibility: string
+        expectedEvent: string
+        eventPayload: string
+        payloadDataAssetId: string
+        payloadVersion: string
+        payloadFileId: string
+        payloadChecksum: string
+        payloadResultUri: string
+        payloadStatus: string
+        signalPreviewHint: string
+        externalSignal: string
+        previewSignal: string
+        confirmSignal: string
+        invalidEventPayload: string
+        signalReceived: string
+        resultCount: string
+        unnamedResult: string
         reviewResult: string
         reviewRequiredHint: string
         runNotice: string
@@ -1072,6 +1116,8 @@ declare namespace I18n {
           planning: string
           running: string
           waiting_for_human: string
+          waiting_for_tool: string
+          waiting_for_event: string
           waiting_for_approval: string
           validating: string
           paused: string
@@ -1145,6 +1191,12 @@ declare namespace I18n {
           claim_created: string
           claim_revised: string
           claim_reviewed: string
+          tool_job_queued: string
+          tool_job_started: string
+          tool_job_completed: string
+          tool_job_failed: string
+          wait_event_created: string
+          wait_event_received: string
         }
       }
       recordDiary: {

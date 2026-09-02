@@ -36,6 +36,7 @@ A deployment may present one fixed Lab or allow users to join several Labs. Proj
 
 - [Protocols](./protocols) explains creation, versions, editing, and reuse.
 - [Records](./records) covers entry, validation, files, history, and safe handling.
+- [Research automation](./research-automation) explains auditable Research Tasks, human work, digital tools, external result boundaries, and scientific review.
 - [Collaboration](./collaboration) explains workspace roles and sharing.
 - [Search](./search) describes finding resources without assuming access you do not have.
 - [Import and export](./import-export) covers CSV import and governed Record exports.

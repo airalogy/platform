@@ -36,6 +36,7 @@ Target initial version: `0.1.0`.
 - Added revisioned Personal, Project, and Lab Research Logs with structured progress, meeting, reflection, blocker, and milestone entries; role-scoped publishing; preview-confirm editing; and an immutable aggregate timeline of real Record, Protocol, Knowledge, and Research Task events while preserving the existing Record heatmap, calendar, exports, and legacy links.
 - Added versioned DataAssets, task-scoped Evidence quality review, revisioned evidence-linked scientific Claims, preview-confirm creation, provenance events, automatic validated Evidence from completed Record work items, and normalized scientific assets in the Research Result Package and Task workbench.
 - Added allowlisted and version-pinned digital Research Actions: schema-validated Tool Jobs execute through the retryable persistent worker with timeout and provenance, while typed Wait Events pause Runs until an authorized, preview-confirmed external signal satisfies the pinned payload contract; AI-disabled instances return safely to manual control.
+- Added digital Action controls to the Research Task workbench for preview-confirm tool searches, external-result boundaries, contract-derived signal forms, result inspection, bilingual states, and direct user guidance.
 
 ### Changed
 

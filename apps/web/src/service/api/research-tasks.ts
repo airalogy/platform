@@ -15,6 +15,8 @@ export type ResearchRunStatus =
   | "planning"
   | "running"
   | "waiting_for_human"
+  | "waiting_for_tool"
+  | "waiting_for_event"
   | "waiting_for_approval"
   | "validating"
   | "paused"
@@ -145,6 +147,36 @@ export interface ResearchHumanWorkItem {
   accepted_at?: string | null
 }
 
+export interface ResearchToolJob {
+  id: string
+  action_id: string
+  tool_key: string
+  tool_version: string
+  arguments: Record<string, unknown>
+  output: Record<string, any>
+  status: "queued" | "running" | "completed" | "failed" | "cancelled"
+  timeout_seconds: number
+  error?: string | null
+  created_at: string
+  started_at?: string | null
+  completed_at?: string | null
+}
+
+export interface ResearchWaitEvent {
+  id: string
+  action_id: string
+  event_key: string
+  expected_event_type: string
+  payload_schema: Record<string, any>
+  received_payload: Record<string, any>
+  status: "waiting" | "received" | "expired" | "cancelled"
+  revision: number
+  due_at?: string | null
+  created_at: string
+  received_at?: string | null
+  received_by_user_id?: string | null
+}
+
 export interface ResearchAction {
   id: string
   run_id: string
@@ -172,6 +204,8 @@ export interface ResearchAction {
   protocol_run?: ResearchProtocolRun | null
   protocol?: ResearchProtocolRef | null
   work_item?: ResearchHumanWorkItem | null
+  tool_job?: ResearchToolJob | null
+  wait_event?: ResearchWaitEvent | null
   approval?: ResearchApproval | null
 }
 

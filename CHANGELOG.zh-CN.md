@@ -36,6 +36,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增保留修订历史的 Personal、Project 和 Lab Research Log：支持结构化进展、会议记录、反思、阻塞和里程碑，按角色控制发布，通过预览后确认保存，并在不可编辑的聚合时间线中呈现真实 Record、Protocol、Knowledge 与 Research Task 活动；现有 Record 热图、日历、导出与历史链接继续保留。
 - 新增版本化 DataAsset、按 Research Task 隔离的 Evidence 质量审核和关联 Evidence 且保留修订的科学 Claim；支持预览后确认创建、来源事件留痕、从已完成 Record 待办自动登记已校验 Evidence，并在 Research Result Package 与任务工作台中统一呈现正式科研资产。
 - 新增白名单与版本锁定的数字 Research Action：Tool Job 在 Schema 校验后通过可重试的持久化工作器限时执行并保留来源记录；类型化 Wait Event 会暂停 Run，只有经授权、预览确认且满足锁定载荷契约的外部信号才能恢复；AI 关闭时安全回到手工控制。
+- Research Task 工作台新增数字 Action 控件，支持预览确认的工具检索、外部结果边界、根据契约生成的信号表单、结果查看、中英文完整状态和产品内使用指南。
 
 ### 变更
 

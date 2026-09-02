@@ -48,6 +48,11 @@
             <n-button v-if="canAddAction" secondary @click="openActionModal">
               {{ $t("page.research.addHumanWork") }}
             </n-button>
+            <research-digital-action-modal
+              v-if="canAddDigitalAction"
+              :task-id="task.id"
+              @created="() => loadTask(true)"
+            />
             <n-button v-if="task.status === 'active'" :loading="mutating" @click="pauseTask">
               {{ $t("page.research.pause") }}
             </n-button>
@@ -226,6 +231,49 @@
                     >
                       {{ $t("page.research.viewEvidenceRecord") }}
                     </n-button>
+                    <div v-if="action.tool_job" class="research-digital-result mt-3">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="aira-type-meta">
+                          {{ $t("page.research.researchTool") }} · {{ action.tool_job.tool_key }} · v{{ action.tool_job.tool_version }}
+                        </span>
+                        <span class="aira-type-meta">
+                          {{ $t("page.research.resultCount", { count: toolResultItems(action).length }) }}
+                        </span>
+                      </div>
+                      <n-alert v-if="action.tool_job.error" type="error" class="mt-2">
+                        {{ action.tool_job.error }}
+                      </n-alert>
+                      <div v-if="toolResultItems(action).length" class="mt-2 space-y-2">
+                        <div
+                          v-for="(item, index) in toolResultItems(action).slice(0, 3)"
+                          :key="String(item.id || item.doi || index)"
+                          class="research-tool-result"
+                        >
+                          <strong class="aira-type-label">{{ item.title || item.name || $t("page.research.unnamedResult") }}</strong>
+                          <p v-if="item.body || item.abstract" class="aira-type-meta line-clamp-2 mb-0 mt-1">
+                            {{ item.body || item.abstract }}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="action.wait_event" class="research-digital-result mt-3">
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="aira-type-label">
+                            {{ $t("page.research.expectedEvent") }} · {{ action.wait_event.expected_event_type }}
+                          </div>
+                          <div class="aira-type-meta mt-1 break-all">
+                            {{ $t("page.research.eventKey") }} · {{ action.wait_event.event_key }}
+                          </div>
+                        </div>
+                        <research-wait-event-signal
+                          v-if="action.wait_event.status === 'waiting'"
+                          :event="action.wait_event"
+                          @signaled="() => loadTask(true)"
+                        />
+                      </div>
+                      <pre v-if="action.wait_event.status === 'received'">{{ formatPayload(action.wait_event.received_payload) }}</pre>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -490,6 +538,8 @@ import { nanoid } from "nanoid"
 import { useRoute, useRouter } from "vue-router"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
+import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
+import ResearchWaitEventSignal from "./components/research-wait-event-signal.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -521,6 +571,7 @@ let pollTimer: ReturnType<typeof setInterval> | undefined
 
 const latestRun = computed(() => task.value?.latest_run || task.value?.runs[0] || null)
 const canAddAction = computed(() => ["active", "paused"].includes(task.value?.status || ""))
+const canAddDigitalAction = computed(() => task.value?.status === "active")
 const canCancel = computed(() => !["completed", "cancelled", "archived"].includes(task.value?.status || ""))
 const canReview = computed(() => Boolean(
   task.value
@@ -834,6 +885,15 @@ function actionStatusLabel(status: ResearchActionStatus) {
   return $t(`page.research.actionStatus.${status}` as I18n.I18nKey)
 }
 
+function toolResultItems(action: ResearchAction): Array<Record<string, any>> {
+  const items = action.tool_job?.output?.items
+  return Array.isArray(items) ? items : []
+}
+
+function formatPayload(payload: Record<string, any>) {
+  return JSON.stringify(payload || {}, null, 2)
+}
+
 function autonomyLabel(level: ResearchTaskDetail["autonomy_level"]) {
   const key = level === "assisted" ? "autonomyAssisted" : level === "bounded_autopilot" ? "autonomyBounded" : "autonomyPolicy"
   return $t(`page.research.${key}` as I18n.I18nKey)
@@ -875,6 +935,12 @@ function eventLabel(kind: string) {
     "claim.created",
     "claim.revised",
     "claim.reviewed",
+    "tool_job.queued",
+    "tool_job.started",
+    "tool_job.completed",
+    "tool_job.failed",
+    "wait_event.created",
+    "wait_event.received",
   ]
   return known.includes(kind)
     ? $t(`page.research.event.${kind.replaceAll(".", "_")}` as I18n.I18nKey)
@@ -942,6 +1008,30 @@ onUnmounted(() => {
   border-radius: 0.75rem;
   background: rgb(var(--primary-color) / 4%);
   padding: 1rem;
+}
+
+.research-digital-result {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.75rem;
+  background: rgb(248 250 252);
+  padding: 0.75rem;
+}
+
+.research-tool-result {
+  border-radius: 0.625rem;
+  background: white;
+  padding: 0.625rem 0.75rem;
+}
+
+.research-digital-result pre {
+  margin: 0.625rem 0 0;
+  overflow: auto;
+  border-radius: 0.625rem;
+  background: rgb(15 23 42);
+  color: rgb(226 232 240);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  padding: 0.75rem;
 }
 
 .research-sequence {
