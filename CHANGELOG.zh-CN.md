@@ -37,6 +37,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增版本化 DataAsset、按 Research Task 隔离的 Evidence 质量审核和关联 Evidence 且保留修订的科学 Claim；支持预览后确认创建、来源事件留痕、从已完成 Record 待办自动登记已校验 Evidence，并在 Research Result Package 与任务工作台中统一呈现正式科研资产。
 - 新增白名单与版本锁定的数字 Research Action：Tool Job 在 Schema 校验后通过可重试的持久化工作器限时执行并保留来源记录；类型化 Wait Event 会暂停 Run，只有经授权、预览确认且满足锁定载荷契约的外部信号才能恢复；AI 关闭时安全回到手工控制。
 - Research Task 工作台新增数字 Action 控件，支持预览确认的工具检索、外部结果边界、根据契约生成的信号表单、结果查看、中英文完整状态和产品内使用指南。
+- 新增由 Platform 治理的 Aira Action Planner，可在固定版本 Protocol、白名单且固定版本的 Tool、类型化外部 Wait 与结束研究路径之间选择；AI 提案必须经过 Schema 校验、摘要绑定、审批与完整留痕，也能在未预选 Protocol 的纯数字科研任务中运行，不会把 Tool 伪装成 Protocol。
 
 ### 变更
 

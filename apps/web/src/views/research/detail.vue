@@ -142,6 +142,7 @@
                       <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
                         {{ action.description || action.approval?.reason }}
                       </p>
+                      <research-action-impact :action="action" />
                       <div class="aira-type-meta mt-3 break-all">
                         {{ $t("page.research.previewDigest") }} · {{ action.preview_digest }}
                       </div>
@@ -267,7 +268,7 @@
                           </div>
                         </div>
                         <research-wait-event-signal
-                          v-if="action.wait_event.status === 'waiting'"
+                          v-if="action.wait_event.status === 'waiting' && action.status === 'waiting'"
                           :event="action.wait_event"
                           @signaled="() => loadTask(true)"
                         />
@@ -536,6 +537,7 @@ import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { useRoute, useRouter } from "vue-router"
+import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
@@ -920,6 +922,7 @@ function eventLabel(kind: string) {
     "task.review_requested",
     "plan.version_created",
     "aira.step_completed",
+    "aira.action_proposed",
     "work_item.assigned",
     "work_item.started",
     "work_item.completed",

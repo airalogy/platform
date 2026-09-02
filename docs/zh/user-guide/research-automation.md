@@ -6,7 +6,7 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 1. 进入“科研”，在正确 Project 中创建 Task。
 2. 填写可检验的目标、成功条件和停止条件。
-3. 选择允许使用的 Protocol 版本和已审核 Knowledge。
+3. 选择可能指导研究的 Protocol 版本和已审核 Knowledge。若研究路径只需受治理的数字工具或外部结果，可以不预先选择 Protocol。
 4. 预览保存位置与将被捕获的环境，然后确认创建。
 5. 开始 Task。Aira 可用时，它会持续推进，直到遇到人工、审批、工具、外部结果或最终审核边界；AI 不可用时，同一 Task 仍可通过明确的 Actions 执行。
 
@@ -19,6 +19,8 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 - **等待外部结果**：在人员、设备或外部服务返回结果前，把 Run 暂停在类型化边界。选择并确认预期结果契约；系统生成的事件键是不可变的交付引用，当前版本由获授权用户在工作台登记已收到的结果。
 
 检索候选项只是 Action 输出。Platform 不会将其静默采纳为 Knowledge、Evidence 或 Claim。
+
+每次到达“下一步做什么”的边界时，Aira 会先在固定版本的 Protocol、可用 Tool、类型化外部 Wait 与结束当前路径之间选择。Action Planner 不会直接执行模型自由文本：Platform 会先校验 Action 类型、白名单、固定版本、输入参数和结果契约，再创建正式 Action。在 Lab 尚未为对应风险级别配置明确策略前，Aira 提出的数字与人工 Action 均需审批。
 
 ## 提交外部结果
 
@@ -40,4 +42,4 @@ AI 可用时，Run 随后恢复 Aira；AI 关闭时，它会回到普通手工�
 
 ## 权限与安全
 
-Research Action 使用当前 Project 权限，并由 API 强制执行。看到工具不代表可以绕过 Knowledge 可见性、Restricted 内容授权或 Project 访问权。外部结果必须由具备科研执行权限的已登录用户提交，事件键本身不构成授权。
+Research Action 使用当前 Project 权限，并由 API 强制执行。看到工具不代表可以绕过 Knowledge 可见性、Restricted 内容授权或 Project 访问权。外部结果必须由具备科研执行权限的已登录用户提交，事件键本身不构成授权。拒绝 Aira 提案后，对应的类型化执行记录会被取消，拒绝原因会记录并传回下一轮规划。

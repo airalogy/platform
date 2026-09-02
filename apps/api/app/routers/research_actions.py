@@ -32,8 +32,9 @@ from app.models.research_execution import (
 )
 from app.models.user import User
 from app.routers.depends import CurrentUser
-from app.services.persistent_jobs import enqueue_job
 from app.services.research_runtime import (
+    activate_tool_action,
+    activate_wait_event_action,
     canonical_digest,
     create_plan_version,
     emit_research_event,
@@ -337,7 +338,7 @@ async def create_tool_action(
         sequence=await _next_sequence(db_session, run.id),
         plan_version=run.plan_version,
         kind=ResearchActionKind.TOOL_JOB.value,
-        status=ResearchActionStatus.QUEUED.value,
+        status=ResearchActionStatus.PROPOSED.value,
         title=command["title"],
         description=command["description"],
         executor_type=definition.executor_type,
@@ -366,25 +367,12 @@ async def create_tool_action(
     await db_session.flush()
     # Supersede any in-flight planner job before introducing a new boundary.
     run.advance_generation += 1
-    run.status = ResearchRunStatus.WAITING_FOR_TOOL.value
-    run.last_error = None
-    await enqueue_job(
+    await activate_tool_action(
         db_session,
-        kind="research_tool_job",
-        lab_id=task.lab_id,
-        payload={"tool_job_id": str(tool_job.id), "action_id": str(action.id)},
-        idempotency_key=f"research-tool-job:{tool_job.id}",
-        max_attempts=3,
-    )
-    await emit_research_event(
-        db_session,
-        task_id=task.id,
-        run_id=run.id,
-        action_id=action.id,
-        kind="tool_job.queued",
+        task=task,
+        run=run,
+        action=action,
         actor_user_id=current_user.id,
-        payload={"tool_key": definition.key, "tool_version": definition.version},
-        idempotency_key=f"tool-job:{tool_job.id}:queued",
     )
     await db_session.commit()
     return _digital_action_payload(action, tool_job=tool_job)
@@ -483,7 +471,7 @@ async def create_wait_action(
         sequence=await _next_sequence(db_session, run.id),
         plan_version=run.plan_version,
         kind=ResearchActionKind.WAIT_EVENT.value,
-        status=ResearchActionStatus.WAITING.value,
+        status=ResearchActionStatus.PROPOSED.value,
         title=params.title,
         description=params.description,
         executor_type="external_event",
@@ -512,20 +500,12 @@ async def create_wait_action(
     await db_session.flush()
     # Supersede any in-flight planner job before introducing a new boundary.
     run.advance_generation += 1
-    run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
-    run.last_error = None
-    await emit_research_event(
+    await activate_wait_event_action(
         db_session,
-        task_id=task.id,
-        run_id=run.id,
-        action_id=action.id,
-        kind="wait_event.created",
+        task=task,
+        run=run,
+        action=action,
         actor_user_id=current_user.id,
-        payload={
-            "event_key": params.event_key,
-            "expected_event_type": params.expected_event_type,
-        },
-        idempotency_key=f"wait-event:{wait_event.id}:created",
     )
     await db_session.commit()
     return _digital_action_payload(action, wait_event=wait_event)
@@ -647,6 +627,20 @@ async def signal_wait_event(
     }
     action.completed_at = now
     action.revision += 1
+    previous_results = list((run.aira_state or {}).get("event_results") or [])
+    run.aira_state = {
+        **(run.aira_state or {}),
+        "event_results": [
+            *previous_results[-49:],
+            {
+                "action_id": str(action.id),
+                "event_key": wait_event.event_key,
+                "event_type": params.event_type,
+                "payload": params.payload,
+                "received_at": now.isoformat(),
+            },
+        ],
+    }
     run.status = (
         ResearchRunStatus.PAUSED.value
         if task.status == ResearchTaskStatus.PAUSED.value

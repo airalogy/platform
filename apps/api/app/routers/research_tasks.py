@@ -60,6 +60,8 @@ from app.services.research_assets import research_asset_bundle
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
     activate_protocol_action,
+    activate_tool_action,
+    activate_wait_event_action,
     canonical_digest,
     create_plan_version,
     emit_research_event,
@@ -339,7 +341,7 @@ def _task_preview(
     protocols: list[tuple[Protocol, ProtocolVersion]],
     knowledge_items: list[KnowledgeItem],
 ) -> dict[str, Any]:
-    ai_path_available = config.effective_ai_enabled and bool(protocols)
+    ai_path_available = config.effective_ai_enabled
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
@@ -389,7 +391,7 @@ def _task_preview(
             []
             if ai_path_available
             else [
-                "Aira is unavailable or no Protocol is selected. The Task remains fully usable through manual Protocol Actions."
+                "Aira is unavailable. The Task remains fully usable through manual Protocol and digital Actions."
             ]
         ),
         "ai_path_available": ai_path_available,
@@ -869,11 +871,10 @@ async def start_research_task(
     if run is None or run.status != ResearchRunStatus.DRAFT.value:
         raise HTTPException(status_code=409, detail="Draft Research Run not found")
 
-    rows = await task_protocol_rows(db_session, task.id)
     now = utcnow()
     run.status = (
         ResearchRunStatus.PLANNING.value
-        if config.effective_ai_enabled and rows
+        if config.effective_ai_enabled
         else ResearchRunStatus.RUNNING.value
     )
     run.started_at = now
@@ -887,12 +888,12 @@ async def start_research_task(
         kind="run.started",
         actor_user_id=current_user.id,
         payload={
-            "ai": bool(config.effective_ai_enabled and rows),
+            "ai": config.effective_ai_enabled,
             "reason": params.reason,
         },
         idempotency_key=f"run:{run.id}:started",
     )
-    if config.effective_ai_enabled and rows:
+    if config.effective_ai_enabled:
         await enqueue_research_advance(db_session, task=task, run=run)
     else:
         await emit_research_event(
@@ -901,7 +902,7 @@ async def start_research_task(
             run_id=run.id,
             kind="run.manual_control_required",
             actor_user_id=current_user.id,
-            payload={"reason": "ai_unavailable_or_no_protocol"},
+            payload={"reason": "ai_unavailable"},
             idempotency_key=f"run:{run.id}:manual:start",
         )
     await db_session.commit()
@@ -980,9 +981,7 @@ async def resume_research_task(
         run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
     else:
         run.status = ResearchRunStatus.RUNNING.value
-        if config.effective_ai_enabled and await task_protocol_rows(
-            db_session, task.id
-        ):
+        if config.effective_ai_enabled:
             await enqueue_research_advance(db_session, task=task, run=run)
     await emit_research_event(
         db_session,
@@ -2301,15 +2300,14 @@ async def approve_research_action(
             status_code=409,
             detail="Resume the active Research Run before approving this Action",
         )
-    protocol_run = await ResearchProtocolRun.find_by(
-        db_session, [ResearchProtocolRun.action_id == action.id]
-    )
-    if protocol_run is None:
-        raise HTTPException(status_code=409, detail="Protocol Run not found")
-    protocol = await db_session.get(Protocol, protocol_run.protocol_id)
-    version = await db_session.get(ProtocolVersion, protocol_run.protocol_version_id)
-    if protocol is None or version is None:
-        raise HTTPException(status_code=409, detail="Protocol context not found")
+    if action.kind not in {
+        ResearchActionKind.PROTOCOL_RUN.value,
+        ResearchActionKind.TOOL_JOB.value,
+        ResearchActionKind.WAIT_EVENT.value,
+    }:
+        raise HTTPException(
+            status_code=409, detail="Research Action type cannot be approved"
+        )
 
     now = utcnow()
     approval.status = ResearchApprovalStatus.APPROVED.value
@@ -2318,16 +2316,50 @@ async def approve_research_action(
     approval.decided_at = now
     approval.revision += 1
     action.policy_decision = "allow"
-    await activate_protocol_action(
-        db_session,
-        task=task,
-        run=run,
-        action=action,
-        protocol=protocol,
-        version=version,
-        instructions=action.description,
-        actor_user_id=current_user.id,
-    )
+    if action.kind == ResearchActionKind.PROTOCOL_RUN.value:
+        protocol_run = await ResearchProtocolRun.find_by(
+            db_session, [ResearchProtocolRun.action_id == action.id]
+        )
+        if protocol_run is None:
+            raise HTTPException(status_code=409, detail="Protocol Run not found")
+        protocol = await db_session.get(Protocol, protocol_run.protocol_id)
+        version = await db_session.get(
+            ProtocolVersion, protocol_run.protocol_version_id
+        )
+        if protocol is None or version is None:
+            raise HTTPException(status_code=409, detail="Protocol context not found")
+        await activate_protocol_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            protocol=protocol,
+            version=version,
+            instructions=action.description,
+            actor_user_id=current_user.id,
+        )
+    elif action.kind == ResearchActionKind.TOOL_JOB.value:
+        try:
+            await activate_tool_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                actor_user_id=current_user.id,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+    else:
+        try:
+            await activate_wait_event_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                actor_user_id=current_user.id,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
     task.revision += 1
     await emit_research_event(
         db_session,
@@ -2382,6 +2414,18 @@ async def reject_research_action(
     action.error = f"Rejected: {approval.decision_reason}"
     action.completed_at = now
     action.revision += 1
+    tool_job = await ResearchToolJob.find_by(
+        db_session, [ResearchToolJob.action_id == action.id]
+    )
+    if tool_job is not None:
+        tool_job.status = ResearchToolJobStatus.CANCELLED.value
+        tool_job.completed_at = now
+    wait_event = await ResearchWaitEvent.find_by(
+        db_session, [ResearchWaitEvent.action_id == action.id]
+    )
+    if wait_event is not None:
+        wait_event.status = ResearchWaitEventStatus.CANCELLED.value
+        wait_event.revision += 1
 
     state = dict(run.aira_state or initial_aira_state(task.goal))
     run.aira_state = {
@@ -2414,7 +2458,7 @@ async def reject_research_action(
         },
         idempotency_key=f"approval:{approval.id}:rejected",
     )
-    if config.effective_ai_enabled and await task_protocol_rows(db_session, task.id):
+    if config.effective_ai_enabled:
         await enqueue_research_advance(db_session, task=task, run=run)
     else:
         await emit_research_event(

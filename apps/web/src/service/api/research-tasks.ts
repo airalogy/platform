@@ -37,6 +37,16 @@ export type ResearchActionStatus =
   | "skipped"
   | "cancelled"
 
+export type ResearchActionKind =
+  | "protocol_run"
+  | "tool_job"
+  | "human_work_item"
+  | "instrument_job"
+  | "external_service_job"
+  | "approval_request"
+  | "resource_reservation"
+  | "wait_event"
+
 export type HumanWorkItemStatus =
   | "open"
   | "in_progress"
@@ -74,7 +84,7 @@ export interface ResearchProtocolRef extends ResearchScope {
 export interface ResearchKnowledgeRef {
   id: string
   title: string
-  kind: string
+  kind: ResearchActionKind
   state?: string
   scope_type: "lab" | "project"
   revision: number

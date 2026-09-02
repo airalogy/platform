@@ -13,11 +13,20 @@ from sqlalchemy.schema import CreateTable
 from app.models.research_execution import ResearchToolJob, ResearchWaitEvent
 from app.routers.research_actions import WaitEventDraft
 from app.services import resource_job_worker
-from app.models.research import ResearchRunStatus
+from app.models.research import (
+    ResearchActionStatus,
+    ResearchRunStatus,
+    ResearchTaskStatus,
+)
 from app.services.research_tools import (
     get_research_tool,
     research_tool_catalog,
     validate_tool_arguments,
+)
+from app.services import research_runtime
+from app.services.research_runtime import (
+    activate_tool_action,
+    activate_wait_event_action,
 )
 from pydantic import ValidationError
 
@@ -136,3 +145,84 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
     assert "/research-tasks/{task_id}/wait-actions" in paths
     assert "/research-wait-events/{wait_event_id}/signal/preview" in paths
     assert "/research-wait-events/{wait_event_id}/signal" in paths
+
+
+def test_approved_tool_action_is_queued_at_a_durable_boundary(monkeypatch):
+    job = SimpleNamespace(
+        id=uuid4(),
+        tool_key="knowledge.search",
+        tool_version="1",
+        status="queued",
+    )
+    action = SimpleNamespace(
+        id=uuid4(),
+        policy_decision="allow",
+        status=ResearchActionStatus.PROPOSED.value,
+        revision=1,
+    )
+    run = SimpleNamespace(id=uuid4(), status="waiting_for_approval", last_error="old")
+    task = SimpleNamespace(
+        id=uuid4(), lab_id=uuid4(), status=ResearchTaskStatus.ACTIVE.value
+    )
+    monkeypatch.setattr(
+        ResearchToolJob, "find_by", AsyncMock(return_value=job)
+    )
+    enqueue = AsyncMock()
+    emit = AsyncMock()
+    monkeypatch.setattr(research_runtime, "enqueue_job", enqueue)
+    monkeypatch.setattr(research_runtime, "emit_research_event", emit)
+
+    result = asyncio.run(
+        activate_tool_action(
+            SimpleNamespace(),
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=uuid4(),
+        )
+    )
+
+    assert result is job
+    assert action.status == ResearchActionStatus.QUEUED.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_TOOL.value
+    assert run.last_error is None
+    enqueue.assert_awaited_once()
+    emit.assert_awaited_once()
+
+
+def test_approved_wait_action_opens_only_the_pinned_event(monkeypatch):
+    event = SimpleNamespace(
+        id=uuid4(),
+        event_key="aira.run.step.data_asset.ready",
+        expected_event_type="data_asset.ready",
+        status="waiting",
+    )
+    action = SimpleNamespace(
+        id=uuid4(),
+        policy_decision="allow",
+        status=ResearchActionStatus.PROPOSED.value,
+        revision=1,
+    )
+    run = SimpleNamespace(id=uuid4(), status="waiting_for_approval", last_error="old")
+    task = SimpleNamespace(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    monkeypatch.setattr(
+        ResearchWaitEvent, "find_by", AsyncMock(return_value=event)
+    )
+    emit = AsyncMock()
+    monkeypatch.setattr(research_runtime, "emit_research_event", emit)
+
+    result = asyncio.run(
+        activate_wait_event_action(
+            SimpleNamespace(),
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=uuid4(),
+        )
+    )
+
+    assert result is event
+    assert action.status == ResearchActionStatus.WAITING.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_EVENT.value
+    assert run.last_error is None
+    emit.assert_awaited_once()

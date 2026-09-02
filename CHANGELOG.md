@@ -37,6 +37,7 @@ Target initial version: `0.1.0`.
 - Added versioned DataAssets, task-scoped Evidence quality review, revisioned evidence-linked scientific Claims, preview-confirm creation, provenance events, automatic validated Evidence from completed Record work items, and normalized scientific assets in the Research Result Package and Task workbench.
 - Added allowlisted and version-pinned digital Research Actions: schema-validated Tool Jobs execute through the retryable persistent worker with timeout and provenance, while typed Wait Events pause Runs until an authorized, preview-confirmed external signal satisfies the pinned payload contract; AI-disabled instances return safely to manual control.
 - Added digital Action controls to the Research Task workbench for preview-confirm tool searches, external-result boundaries, contract-derived signal forms, result inspection, bilingual states, and direct user guidance.
+- Added a Platform-governed Aira Action Planner that chooses among pinned Protocols, allowlisted versioned Tools, typed external Waits, and finishing a research path; AI proposals are schema-validated, digest-bound, approval-gated, auditable, and can operate on tool-only Research Tasks without misrepresenting tools as Protocols.
 
 ### Changed
 

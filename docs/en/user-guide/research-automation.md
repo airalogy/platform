@@ -6,7 +6,7 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 
 1. Open **Research** and create a Task in the correct Project.
 2. State a testable goal, success criteria, and stop conditions.
-3. Select the Protocol versions and reviewed Knowledge that may guide the work.
+3. Select any Protocol versions and reviewed Knowledge that may guide the work. A Protocol is optional when the research path only needs governed digital tools or an external result.
 4. Preview the destination and captured environment, then confirm creation.
 5. Start the Task. If Aira is available, it can advance the plan until it reaches a human, approval, tool, external-result, or final-review boundary. If AI is unavailable, the same Task remains usable through explicit Actions.
 
@@ -19,6 +19,8 @@ Changing a Protocol or Knowledge item later does not silently change the capture
 - **Wait for an external result** pauses the Run at a typed boundary for a person, instrument, or service. Select and confirm the expected result contract. The generated event key is an immutable delivery reference; in the current version, an authorized user records the received result from the workbench.
 
 Search candidates remain Action output. Platform does not silently approve them as Knowledge, Evidence, or Claims.
+
+At each next-action boundary, Aira first chooses between a pinned Protocol, an available Tool, a typed external Wait, or finishing the path. This Action Planner does not execute arbitrary model output: Platform validates the chosen type, allowlist entry, pinned version, arguments, and result contract before creating an Action. Aira-proposed digital and human Actions are approval-gated until an explicit Lab policy allows that exact risk class.
 
 ## Supply an external result
 
@@ -40,4 +42,4 @@ Cancelling a Task preserves existing Records, Action history, tool provenance, a
 
 ## Permissions and safety
 
-Research Actions use the current Project permissions and are enforced by the API. A tool being visible does not bypass Knowledge visibility, Restricted content grants, or Project access. External results require an authenticated user with research execution capability; the event key alone is not authorization.
+Research Actions use the current Project permissions and are enforced by the API. A tool being visible does not bypass Knowledge visibility, Restricted content grants, or Project access. External results require an authenticated user with research execution capability; the event key alone is not authorization. Rejecting an Aira proposal cancels its typed execution record, records the reason, and returns that reason to the next planning round.

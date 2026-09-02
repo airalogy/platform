@@ -923,6 +923,8 @@ declare namespace I18n {
         toolAction: string
         toolActionHint: string
         researchTool: string
+        toolArguments: string
+        expectedPayload: string
         selectTool: string
         noToolsAvailable: string
         searchQuery: string
@@ -1138,6 +1140,12 @@ declare namespace I18n {
           skipped: string
           cancelled: string
         }
+        actionKind: {
+          protocol_run: string
+          tool_job: string
+          human_work_item: string
+          wait_event: string
+        }
         workItemStatus: {
           open: string
           in_progress: string
@@ -1176,6 +1184,7 @@ declare namespace I18n {
           task_review_requested: string
           plan_version_created: string
           aira_step_completed: string
+          aira_action_proposed: string
           work_item_assigned: string
           work_item_started: string
           work_item_completed: string

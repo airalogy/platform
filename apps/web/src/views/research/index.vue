@@ -163,6 +163,7 @@
                 <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
                   {{ approval.action.description || approval.reason }}
                 </p>
+                <research-action-impact :action="approval.action" />
                 <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
                   <span>{{ $t("page.research.partOfTask") }} · {{ approval.task.title }}</span>
                   <span v-if="approval.action.protocol">
@@ -220,6 +221,7 @@ import {
 import { $t } from "@airalogy/shared/locales"
 import { useRoute, useRouter } from "vue-router"
 import CreateResearchTaskModal from "./components/create-research-task-modal.vue"
+import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 
 const route = useRoute()

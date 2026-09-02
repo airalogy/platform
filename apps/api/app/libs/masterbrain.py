@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from collections.abc import AsyncIterator
@@ -388,3 +389,59 @@ async def aira_workflow_step(
         usage_context=usage_context,
     )
     return response
+
+
+def _extract_json_object(content: str) -> dict:
+    """Extract one bounded JSON object from a non-structured chat response."""
+
+    cleaned = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    if cleaned.startswith("```") and cleaned.endswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, count=1)
+        cleaned = re.sub(r"\s*```$", "", cleaned, count=1)
+    if len(cleaned) > 65_536:
+        raise ValueError("Aira Action proposal exceeded the response limit")
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError("Aira Action planner did not return a JSON object")
+    try:
+        value = json.loads(cleaned[start : end + 1])
+    except json.JSONDecodeError as error:
+        raise ValueError("Aira Action planner returned invalid JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError("Aira Action planner response must be a JSON object")
+    return value
+
+
+async def aira_action_proposal(
+    prompt: str,
+    model_name: str | None = None,
+    *,
+    usage_context: UsageContext | None = None,
+) -> dict:
+    """Ask Masterbrain for a Platform-owned, strictly validated Action proposal.
+
+    Masterbrain's AIRA Method remains responsible for scientific strategy and
+    Protocol selection. This adapter only supplies the additional Platform
+    decision boundary between a Protocol, a typed Tool, an external Wait, and
+    finishing the path.
+    """
+
+    chunks = [
+        chunk
+        async for chunk in stream_request(
+            "endpoints/chat/qa/language",
+            {
+                "model": build_masterbrain_model(
+                    {
+                        "name": build_masterbrain_aira_model(model_name),
+                        "enable_thinking": False,
+                        "enable_search": False,
+                    }
+                ),
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            usage_context=usage_context,
+        )
+    ]
+    return _extract_json_object("".join(chunks))
