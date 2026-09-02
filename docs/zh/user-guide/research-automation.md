@@ -12,6 +12,12 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。只有新建计划或 Run 后，新版本才应进入执行。
 
+## 从 Knowledge 生成 Protocol 草稿
+
+进入“Knowledge”，切换到“Knowledge 笔记”，在有效条目上选择“生成 Protocol 草稿”。先核对固定的来源修订，选择符合范围的目标 Project，再进入 Aira 草拟。Platform 会通过受保护接口把 Knowledge 内容载入可编辑生成器，不会把正文放进 URL。检查并修改生成的 AIMD 后，选择“保存 Protocol”，再次确认目标 Project。
+
+只有完成最后确认，Protocol 才会成为正式资产。保存时 Platform 会重新检查你是否仍可读取 Knowledge、是否能在 Project 创建 Protocol，以及来源是否仍是同一修订。来源发生变化、归档、被取代、跨范围或不可访问时都会拒绝保存，不会静默生成失去来源的资产。保存成功的 Protocol 版本保留不可变 Knowledge provenance。AI 关闭时不显示这个入口，但模板、复用、导入和手工创建 Protocol 仍完整可用。
+
 ## 重试、复现或延续 Run
 
 当前 Run 和 Task 完成、失败或取消后，在 Task 页面选择“新建 Run”。已形成的科学结果必须先经人工审核，才能开启下一次 Run。可选择任意已结束的来源 Run，标记为重试、复现或延续研究，并说明这次执行预期产生的差异。确认前的预览会展示新 Run 序号、来源、保存位置和准确的 Research Environment 摘要。

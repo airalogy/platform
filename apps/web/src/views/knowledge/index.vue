@@ -184,6 +184,15 @@
                 {{ tag }}
               </n-tag>
               <div class="ml-auto flex flex-wrap gap-2">
+                <n-button
+                  v-if="instanceStore.aiEnabled && !['archived', 'superseded'].includes(item.state)"
+                  size="small"
+                  type="primary"
+                  secondary
+                  @click="openProtocolDraft(item)"
+                >
+                  {{ $t("page.knowledge.createProtocolDraft") }}
+                </n-button>
                 <n-button size="small" secondary @click="editorRef?.open({ item })">
                   {{ $t("common.edit") }}
                 </n-button>
@@ -363,6 +372,54 @@
         </div>
       </template>
     </n-modal>
+
+    <n-modal
+      v-model:show="protocolDraftModalVisible"
+      preset="card"
+      class="knowledge-modal"
+      :title="$t('page.knowledge.createProtocolDraft')"
+    >
+      <template v-if="protocolDraftItem">
+        <n-alert type="info" class="mb-4">
+          {{ $t("page.knowledge.protocolDraftImpact") }}
+        </n-alert>
+        <section class="knowledge-preview-card mb-4">
+          <div class="aira-type-eyebrow">
+            {{ $t("page.knowledge.protocolDraftSource") }}
+          </div>
+          <div class="aira-type-card-title mt-2">
+            {{ protocolDraftItem.title }}
+          </div>
+          <p class="aira-type-meta mb-0 mt-2">
+            {{ $t("page.knowledge.revision", { revision: protocolDraftItem.revision }) }}
+          </p>
+        </section>
+        <n-form label-placement="top">
+          <n-form-item :label="$t('page.knowledge.targetProject')" required>
+            <n-select
+              v-model:value="protocolTargetProjectId"
+              filterable
+              :options="protocolProjectOptions"
+              :placeholder="$t('page.knowledge.targetProject')"
+            />
+          </n-form-item>
+        </n-form>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <n-button @click="protocolDraftModalVisible = false">
+            {{ $t("common.cancel") }}
+          </n-button>
+          <n-button
+            type="primary"
+            :disabled="!protocolTargetProjectId"
+            @click="startProtocolDraft"
+          >
+            {{ $t("page.knowledge.openProtocolDraft") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -379,6 +436,7 @@ import type {
   ResearchFileSummary,
 } from "@/service/api/knowledge"
 import type { TagProps } from "naive-ui"
+import { useRouterPush } from "@/composables"
 import {
   addPaperToCollection,
   confirmKnowledgePublish,
@@ -398,6 +456,7 @@ import { getLabInfoByUid } from "@/service/api/labs"
 import { getProjectInfo } from "@/service/api/projects"
 import { fetchUserProjects } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import { useRoute } from "vue-router"
 import ImportPaperModal from "./components/import-paper-modal.vue"
@@ -409,6 +468,8 @@ interface KnowledgeEditorHandle {
 
 const route = useRoute()
 const authStore = useAuthStore()
+const instanceStore = useInstanceStore()
+const { routerPushByKey } = useRouterPush()
 const editorRef = ref<KnowledgeEditorHandle | null>(null)
 const activeView = ref<"papers" | "items">("papers")
 const loading = ref(false)
@@ -446,6 +507,9 @@ const publishSaving = ref(false)
 const publishingItem = ref<KnowledgeItem | null>(null)
 const publishTargetProjectId = ref("")
 const publishPreview = ref<KnowledgePublishPreview | null>(null)
+const protocolDraftModalVisible = ref(false)
+const protocolDraftItem = ref<KnowledgeItem | null>(null)
+const protocolTargetProjectId = ref("")
 
 const contextLocked = computed(() => route.name === "lab-knowledge" || route.name === "project-knowledge")
 const availableLabs = computed(() => {
@@ -533,6 +597,20 @@ const stateOptions = computed(() => (["suggested", "draft", "reviewed", "superse
 })))
 const collectionOptions = computed(() => collections.value.map(item => ({ label: item.name, value: item.id })))
 const projectOptions = computed(() => projects.value.map(project => ({
+  label: `${project.lab_name || project.lab_uid} / ${project.name}`,
+  value: String(project.id),
+})))
+const protocolProjects = computed(() => {
+  const item = protocolDraftItem.value
+  if (!item)
+    return []
+  if (item.scope_type === "project")
+    return projects.value.filter(project => String(project.id) === String(item.project_id))
+  if (item.scope_type === "lab")
+    return projects.value.filter(project => String(project.lab_id) === String(item.lab_id))
+  return projects.value
+})
+const protocolProjectOptions = computed(() => protocolProjects.value.map(project => ({
   label: `${project.lab_name || project.lab_uid} / ${project.name}`,
   value: String(project.id),
 })))
@@ -762,6 +840,42 @@ function openPublish(item: KnowledgeItem) {
   publishPreview.value = null
   publishTargetProjectId.value = projects.value.length === 1 ? String(projects.value[0].id) : ""
   publishModalVisible.value = true
+}
+
+function openProtocolDraft(item: KnowledgeItem) {
+  protocolDraftItem.value = item
+  const currentProject = selectedProject.value
+  const eligible = protocolProjects.value
+  const preferred = currentProject && eligible.some(project => project.id === currentProject.id)
+    ? currentProject
+    : eligible.length === 1
+      ? eligible[0]
+      : null
+  protocolTargetProjectId.value = preferred ? String(preferred.id) : ""
+  protocolDraftModalVisible.value = true
+}
+
+async function startProtocolDraft() {
+  const item = protocolDraftItem.value
+  const project = protocolProjects.value.find(
+    candidate => String(candidate.id) === protocolTargetProjectId.value,
+  )
+  if (!item || !project)
+    return
+  protocolDraftModalVisible.value = false
+  await routerPushByKey("protocol-editor", {
+    params: {
+      labUid: project.lab_uid,
+      projectUid: project.uid,
+      protocolUid: "new",
+      protocolVersion: "",
+    },
+    query: {
+      show_ai_create: "true",
+      knowledge_id: item.id,
+      knowledge_revision: String(item.revision),
+    },
+  })
 }
 
 function publishPayload() {

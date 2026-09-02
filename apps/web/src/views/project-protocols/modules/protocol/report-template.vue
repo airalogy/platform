@@ -35,6 +35,18 @@
     </header>
 
     <main class="relative min-h-40 pt-5">
+      <n-alert
+        v-if="props.item.knowledge_sources?.length"
+        class="mb-5"
+        type="info"
+        :title="$t('page.protocol.knowledgeSources')"
+      >
+        <div class="flex flex-col gap-1">
+          <span v-for="source in props.item.knowledge_sources" :key="`${source.item_id}:${source.revision}:${source.protocol_version}`">
+            {{ $t("page.protocol.knowledgeSource", { title: source.title, revision: source.revision, version: source.protocol_version }) }}
+          </span>
+        </div>
+      </n-alert>
       <n-spin :show="!Boolean(props.item)">
         <!-- <edit-protocol v-if="isEdit" :protocol="protocol" :protocol-id="props.item?.id" /> -->
         <aimd-markdown-preview
@@ -80,7 +92,7 @@ import UploadIcon from "~icons/ion/cloud-upload-outline"
 import DropdownIcon from "~icons/local/dropdown-outline"
 import ReuseIcon from "~icons/local/reuse"
 
-import { type DropdownOption, NIcon, NTooltip } from "naive-ui"
+import { type DropdownOption, NAlert, NIcon, NTooltip } from "naive-ui"
 import { nanoid } from "nanoid"
 import { useOrProvideProjectInfoStore } from "../../hooks/useProjectInfoStore"
 

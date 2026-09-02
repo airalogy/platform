@@ -111,7 +111,7 @@ import { $t } from "@airalogy/shared/locales"
 import IconTablerSparkles from "~icons/tabler/sparkles"
 import IconTablerUpload from "~icons/tabler/upload"
 import { NButton, NIcon, NInput, NSelect, useMessage } from "naive-ui"
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 
 interface ExtractedInstructionFile {
   filename: string
@@ -145,6 +145,7 @@ interface IProps {
   onSaveFile?: (content: string, filename: string, language: string) => void | Promise<void>
   currentAimdContent?: string
   currentModelContent?: string
+  initialInstruction?: string
   disabled?: boolean
 }
 
@@ -153,6 +154,7 @@ const props = withDefaults(defineProps<IProps>(), {
   generateModel: () => Promise.reject(new Error("generateModel not provided")),
   generateAssigner: () => Promise.reject(new Error("generateAssigner not provided")),
   extractInstructionFile: undefined,
+  initialInstruction: "",
   disabled: false,
 })
 
@@ -170,7 +172,8 @@ const selectedModel = ref<number>(ChatModel.BASIC)
 
 const isGenerating = ref(false)
 const isExtractingFile = ref(false)
-const instruction = ref("")
+const instruction = ref(props.initialInstruction.slice(0, MAX_INSTRUCTION_LENGTH))
+const lastInitialInstruction = ref(instruction.value)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const importedSources = ref<ImportedSource[]>([])
 const placeholderText = computed(() => $t("editor.protocolGenerator.placeholder"))
@@ -179,6 +182,14 @@ const generatedAimd = ref<string | null>(null)
 const aimdGenerated = computed(() => generatedAimd.value !== null)
 const hasExistingAimd = computed(() => Boolean(props.currentAimdContent?.trim()))
 const isBusy = computed(() => isGenerating.value || isExtractingFile.value)
+
+watch(() => props.initialInstruction, (value) => {
+  const nextValue = value.slice(0, MAX_INSTRUCTION_LENGTH)
+  if (!instruction.value.trim() || instruction.value === lastInitialInstruction.value) {
+    instruction.value = nextValue
+  }
+  lastInitialInstruction.value = nextValue
+})
 
 function getChatModelConfig(): ChatModelConfig {
   return {

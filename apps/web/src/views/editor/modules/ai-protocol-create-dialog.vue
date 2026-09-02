@@ -26,6 +26,7 @@
     <protocol-generator
       :generate-aimd="props.generateAimd"
       :extract-instruction-file="props.extractInstructionFile"
+      :initial-instruction="props.initialInstruction"
       :disabled="props.loading || !protocolName.trim()"
       :on-save-file="handleGeneratedProtocol"
     />
@@ -56,9 +57,13 @@ const props = withDefaults(defineProps<{
     file: File,
   ) => Promise<{ data: ExtractedInstructionFile | null, error: any }>
   createProtocol: (payload: { name: string, content: string }) => Promise<void>
+  initialName?: string
+  initialInstruction?: string
 }>(), {
   loading: false,
   extractInstructionFile: undefined,
+  initialName: "",
+  initialInstruction: "",
 })
 
 const emit = defineEmits<{
@@ -67,7 +72,7 @@ const emit = defineEmits<{
 
 const message = useClosableMessage()
 const showModal = ref(props.show)
-const protocolName = ref($t("editor.aiCreate.defaultName"))
+const protocolName = ref(props.initialName || $t("editor.aiCreate.defaultName"))
 
 async function handleGeneratedProtocol(content: string) {
   const name = protocolName.value.trim()
@@ -82,6 +87,11 @@ async function handleGeneratedProtocol(content: string) {
 
 watch(() => props.show, (value) => {
   showModal.value = value
+})
+
+watch(() => props.initialName, (value) => {
+  if (value)
+    protocolName.value = value
 })
 
 watch(showModal, (value) => {

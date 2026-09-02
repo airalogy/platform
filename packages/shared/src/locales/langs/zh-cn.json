@@ -805,6 +805,10 @@
       "exportBibtex": "导出 BibTeX",
       "exportRis": "导出 RIS",
       "createFromPaper": "从论文创建 Knowledge",
+      "createProtocolDraft": "生成 Protocol 草稿",
+      "protocolDraftImpact": "Aira 会以当前 Knowledge 修订为上下文生成可编辑草稿。只有你在编辑器中预览并确认保存后，Protocol 才会写入目标 Project，并记录不可变来源关系。",
+      "protocolDraftSource": "来源 Knowledge",
+      "openProtocolDraft": "进入 Aira 草拟",
       "kind": "Knowledge 类型",
       "kindReference": "文献参考",
       "kindNote": "笔记",
@@ -1662,6 +1666,8 @@
       "protocolName": "协议名",
       "protocolId": "协议ID",
       "protocolDetails": "协议详情",
+      "knowledgeSources": "来源 Knowledge",
+      "knowledgeSource": "“{title}”第 {revision} 版用于生成 Protocol v{version}",
       "protocolIdCopied": "协议 ID 已复制",
       "reusedFrom": "复用自",
       "settings": {
@@ -2977,7 +2983,14 @@
       "createSuccess": "Protocol“{name}”已由 Aira 创建。",
       "createFailed": "AI Protocol 创建失败。",
       "continueHint": "草稿已生成。你可以在左侧继续告诉 Aira 要怎样修改。",
-      "otherWays": "其他创建方式"
+      "otherWays": "其他创建方式",
+      "knowledgeSourceTitle": "来源 Knowledge 已固定",
+      "knowledgeSourceHint": "将使用“{title}”第 {revision} 版生成草稿；最终保存时会再次校验并记录来源。",
+      "knowledgeSourceError": "无法使用来源 Knowledge",
+      "knowledgeSourceInvalid": "来源 Knowledge 的修订信息无效，请返回 Knowledge 重新开始。",
+      "knowledgeSourceChanged": "该 Knowledge 已产生新修订，请返回 Knowledge 重新预览后再生成。",
+      "knowledgeSourceUnavailable": "该 Knowledge 不可访问、已归档或已被取代。",
+      "saveKnowledgeLineage": "确认保存后，系统会把这个 Protocol 版本关联到 Knowledge 第 {revision} 版；如果来源已变化，保存将失败并要求重新预览。"
     },
     "landing": {
       "eyebrow": "协议编辑器",

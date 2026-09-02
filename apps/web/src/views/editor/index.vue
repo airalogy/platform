@@ -104,6 +104,14 @@
     footer-class="flex items-center justify-end gap-4"
     :mask-closable="false"
   >
+    <n-alert
+      v-if="sourceKnowledgeReference"
+      class="mb-4"
+      type="info"
+      :title="$t('editor.aiCreate.knowledgeSourceTitle')"
+    >
+      {{ $t("editor.aiCreate.saveKnowledgeLineage", { revision: sourceKnowledgeReference.revision }) }}
+    </n-alert>
     <protocol-setup ref="protocolSetupRef" mode="reuse" :skip-upload="true" :protocol-info="protocolInfo" :disable-default="false" />
     <template #footer>
       <n-button size="medium" :disabled="loading" @click="hideModal">
@@ -174,7 +182,7 @@ import { useRouteQuery } from "@vueuse/router"
 import IconLock from "~icons/tabler/lock"
 import Big from "big.js"
 import { cloneDeepWith as _cloneDeepWith } from "lodash-es"
-import { NButton, NEllipsis, NIcon, NTag, useDialog } from "naive-ui"
+import { NAlert, NButton, NEllipsis, NIcon, NTag, useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { storeToRefs } from "pinia"
 import { useAIMDProvide } from "../../components/custom/aimd/composables/useAIMDHelpers"
@@ -194,6 +202,15 @@ defineOptions({
 
 const route = useRoute()
 const { routerPushByKey, toHome, routerReplace, router } = useRouterPush()
+const sourceKnowledgeReference = computed(() => {
+  const itemId = typeof route.query.source_knowledge_item_id === "string"
+    ? route.query.source_knowledge_item_id
+    : ""
+  const revision = Number(route.query.source_knowledge_revision)
+  if (!itemId || !Number.isInteger(revision) || revision < 1)
+    return null
+  return { itemId, revision }
+})
 
 // Provide editor context for all child components
 const editorContext = useProvideProtocolEditorContext(route)
@@ -474,7 +491,7 @@ async function handleApplyProtocol() {
       },
       updated: true,
     }
-    const res = await applyProtocol()
+    const res = await applyProtocol(undefined, sourceKnowledgeReference.value || undefined)
     if (res) {
       const { latest_version, project_uid, lab_uid, uid } = res
       // message.success(`Apply protocol with version v${latest_version} succeed`)
@@ -783,6 +800,13 @@ onMounted(async () => {
           const fromLanding = route.query.from_landing === "true" || (route.name as any) === "protocol-editor-playground"
 
           if (!fromLanding) {
+            // Creation entry points intentionally remain on the landing surface until
+            // the user confirms a template or Aira-generated draft. Landing owns the
+            // temporary package id and must retain any versioned source context.
+            if (route.query.show_template === "true" || route.query.show_ai_create === "true") {
+              endLoading()
+              return
+            }
             // If not from landing, redirect to landing with package_id
             routerPushByKey("protocol-editor", {
               query: {
@@ -800,6 +824,13 @@ onMounted(async () => {
             ...route,
             query: {
               package_id: currPackageId,
+              ...(route.query.ai_created === "true" ? { ai_created: "true" } : {}),
+              ...(typeof route.query.source_knowledge_item_id === "string"
+                ? { source_knowledge_item_id: route.query.source_knowledge_item_id }
+                : {}),
+              ...(typeof route.query.source_knowledge_revision === "string"
+                ? { source_knowledge_revision: route.query.source_knowledge_revision }
+                : {}),
             },
           })
         }

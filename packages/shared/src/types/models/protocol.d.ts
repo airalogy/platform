@@ -46,6 +46,17 @@ export interface ProtocolResponseInfo {
   disciplines: string[]
   forks_count: number
   latest_version: string
+  knowledge_sources?: KnowledgeProtocolSource[]
+}
+
+export interface KnowledgeProtocolSource {
+  item_id: string
+  revision: number
+  protocol_version: string
+  title: string
+  kind: string
+  scope_type: "personal" | "lab" | "project"
+  relation_type: "derived_from"
 }
 
 export interface ProtocolVersion extends Pick<ProjectProtocolInfo, "id" | "protocol_id" | "version" | "created_at" | "updated_at" | "aimd" | "airalogy_id" | "assigner" | "authors" > {

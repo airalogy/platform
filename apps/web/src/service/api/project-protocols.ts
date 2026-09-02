@@ -925,8 +925,10 @@ export async function postUploadProtocol(payload: {
   projectId: string
   protocolId?: string
   env?: string
+  sourceKnowledgeItemId?: string
+  sourceKnowledgeRevision?: number
 }) {
-  const { file, projectId, protocolId, env } = payload
+  const { file, projectId, protocolId, env, sourceKnowledgeItemId, sourceKnowledgeRevision } = payload
   const form = new FormData()
   form.append("file", file)
   // form.append("version", version)
@@ -937,6 +939,10 @@ export async function postUploadProtocol(payload: {
 
   if (env) {
     form.append("env_vars", env)
+  }
+  if (sourceKnowledgeItemId && sourceKnowledgeRevision) {
+    form.append("source_knowledge_item_id", sourceKnowledgeItemId)
+    form.append("source_knowledge_revision", String(sourceKnowledgeRevision))
   }
 
   const { data, error } = await request<{ data: ProtocolModels.ForkedProtocolResponse }>({

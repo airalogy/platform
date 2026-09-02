@@ -8,6 +8,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, UploadFile
 from pydantic_core import ValidationError
+from sqlalchemy import select
 
 from app.config import config
 from app.database import DBSession
@@ -21,12 +22,19 @@ from app.libs.protocol_agent import (
 )
 from app.models.airalogy_file import AiralogyFile
 from app.models.embedding import Embedding, EmbeddingResourceType
+from app.models.knowledge import (
+    KnowledgeItem,
+    KnowledgeProtocolLink,
+    KnowledgeState,
+    OwnerScope,
+)
 from app.models.lab import Lab
 from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolMetadata, ProtocolVersion
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
+from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.schema_governance import (
     SchemaGovernanceError,
     build_compatibility_report,
@@ -80,6 +88,47 @@ def _validate_resource_definition(info: dict, kind: str) -> None:
                 "features": used,
             },
         )
+
+
+async def _validated_knowledge_source(
+    db_session: DBSession,
+    current_user,
+    project: Project,
+    item_id: UUID,
+    expected_revision: int,
+    *,
+    lock: bool = False,
+) -> KnowledgeItem:
+    statement = select(KnowledgeItem).where(KnowledgeItem.id == item_id)
+    if lock:
+        statement = statement.with_for_update().execution_options(
+            populate_existing=True
+        )
+    item = await db_session.scalar(statement)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Knowledge item not found")
+    await authorize_knowledge_item(db_session, current_user, item)
+    if item.revision != expected_revision:
+        raise HTTPException(
+            status_code=409,
+            detail="Knowledge item changed; reload before saving the Protocol",
+        )
+    if item.state in {KnowledgeState.ARCHIVED.value, KnowledgeState.SUPERSEDED.value}:
+        raise HTTPException(
+            status_code=409,
+            detail="Archived or superseded Knowledge cannot create a Protocol",
+        )
+    if item.scope_type == OwnerScope.LAB.value and item.lab_id != project.lab_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Lab Knowledge can only create a Protocol in the same Lab",
+        )
+    if item.scope_type == OwnerScope.PROJECT.value and item.project_id != project.id:
+        raise HTTPException(
+            status_code=422,
+            detail="Project Knowledge can only create a Protocol in the same Project",
+        )
+    return item
 
 
 def _load_migration_manifests(
@@ -164,6 +213,8 @@ async def upload_package(
     project_id: UUID = Body(embed=True),
     env_vars: str = Body(default="", embed=True),
     protocol_id: UUID | None = Body(None, embed=True),
+    source_knowledge_item_id: UUID | None = Body(None, embed=True),
+    source_knowledge_revision: int | None = Body(None, embed=True),
 ):
     project: Project = await Project.find(db_session, id=project_id)
     lab: Lab = await Lab.find(db_session, id=project.lab_id)
@@ -187,6 +238,28 @@ async def upload_package(
             action="create_protocol",
         )
         protocol = None
+    if (source_knowledge_item_id is None) != (source_knowledge_revision is None):
+        raise HTTPException(
+            status_code=422,
+            detail="Knowledge source id and revision must be provided together",
+        )
+    if source_knowledge_revision is not None and source_knowledge_revision < 1:
+        raise HTTPException(
+            status_code=422, detail="Knowledge revision must be positive"
+        )
+    if protocol_id is not None and source_knowledge_item_id is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Knowledge provenance can only be attached when creating a Protocol",
+        )
+    if source_knowledge_item_id is not None and source_knowledge_revision is not None:
+        await _validated_knowledge_source(
+            db_session,
+            current_user,
+            project,
+            source_knowledge_item_id,
+            source_knowledge_revision,
+        )
     if (
         file.content_type != "application/zip"
         and file.content_type != "application/x-zip-compressed"
@@ -232,7 +305,20 @@ async def upload_package(
 
     compatibility_report = None
     migration_manifest: list[dict] | None = None
+    source_knowledge = None
     if protocol is None:
+        if (
+            source_knowledge_item_id is not None
+            and source_knowledge_revision is not None
+        ):
+            source_knowledge = await _validated_knowledge_source(
+                db_session,
+                current_user,
+                project,
+                source_knowledge_item_id,
+                source_knowledge_revision,
+                lock=True,
+            )
         uid_exists = await Protocol.find_by(
             db_session,
             [
@@ -324,6 +410,28 @@ async def upload_package(
     )
     db_session.add(protocol_version)
     await db_session.flush()
+    knowledge_source_payload = None
+    if source_knowledge is not None:
+        db_session.add(
+            KnowledgeProtocolLink(
+                knowledge_item_id=source_knowledge.id,
+                knowledge_revision=source_knowledge.revision,
+                protocol_id=protocol.id,
+                protocol_version=protocol_version.version,
+                relation_type="derived_from",
+                source_snapshot=snapshot_knowledge(source_knowledge),
+                created_by_user_id=current_user.id,
+            )
+        )
+        knowledge_source_payload = {
+            "item_id": source_knowledge.id,
+            "revision": source_knowledge.revision,
+            "protocol_version": protocol_version.version,
+            "title": source_knowledge.title,
+            "kind": source_knowledge.kind,
+            "scope_type": source_knowledge.scope_type,
+            "relation_type": "derived_from",
+        }
 
     protocol_path = f"{protocol_dir}/{protocol_version.package_name}"
     if os.path.exists(protocol_path):
@@ -355,7 +463,15 @@ async def upload_package(
     )
 
     await db_session.commit()
-    return {"data": protocol}
+    return {
+        "data": protocol.as_dict(
+            lab_uid=lab.uid,
+            project_uid=project.uid,
+            knowledge_sources=[knowledge_source_payload]
+            if knowledge_source_payload is not None
+            else [],
+        )
+    }
 
 
 @router.get("/{id}/download_package")

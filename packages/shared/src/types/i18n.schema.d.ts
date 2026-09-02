@@ -809,6 +809,10 @@ declare namespace I18n {
         exportBibtex: string
         exportRis: string
         createFromPaper: string
+        createProtocolDraft: string
+        protocolDraftImpact: string
+        protocolDraftSource: string
+        openProtocolDraft: string
         kind: string
         kindReference: string
         kindNote: string
@@ -1666,6 +1670,8 @@ declare namespace I18n {
         protocolName: string
         protocolId: string
         protocolDetails: string
+        knowledgeSources: string
+        knowledgeSource: string
         protocolIdCopied: string
         reusedFrom: string
         settings: {
@@ -2982,6 +2988,13 @@ declare namespace I18n {
         createFailed: string
         continueHint: string
         otherWays: string
+        knowledgeSourceTitle: string
+        knowledgeSourceHint: string
+        knowledgeSourceError: string
+        knowledgeSourceInvalid: string
+        knowledgeSourceChanged: string
+        knowledgeSourceUnavailable: string
+        saveKnowledgeLineage: string
       }
       landing: {
         eyebrow: string

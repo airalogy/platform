@@ -8,6 +8,7 @@ from sqlalchemy import and_, distinct, exists, func, or_, select, update
 
 from app.config import config
 from app.database import DBSession
+from app.models.knowledge import KnowledgeItem, KnowledgeProtocolLink
 from app.models.lab import Lab
 from app.models.project import PermissionType, Project, ProjectRole
 from app.models.project_group import (
@@ -15,14 +16,15 @@ from app.models.project_group import (
     ProjectGroupUser,
     ProtocolUser,
 )
-from app.models.protocol_folder import ProtocolFolder, ProtocolFolderProtocol
 from app.models.protocol import Protocol, ProtocolStatus
+from app.models.protocol_folder import ProtocolFolder, ProtocolFolderProtocol
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
 from app.models.user import User
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID, UidStr
 from app.services.access_control import structured_protocol_ids_for_action
+from app.services.knowledge import authorize_knowledge_item
 
 from .depends import CurrentUser, OptionalCurrentUser
 
@@ -363,6 +365,38 @@ async def protocol_response(
     )
     folder_ids = [row.protocol_folder_id for row in folder_result]
 
+    knowledge_sources = []
+    if current_user is not None:
+        source_rows = (
+            await db_session.execute(
+                select(KnowledgeProtocolLink, KnowledgeItem)
+                .join(
+                    KnowledgeItem,
+                    KnowledgeItem.id == KnowledgeProtocolLink.knowledge_item_id,
+                )
+                .where(
+                    KnowledgeProtocolLink.protocol_id == protocol.id,
+                )
+                .order_by(KnowledgeProtocolLink.created_at)
+            )
+        ).all()
+        for link, item in source_rows:
+            try:
+                await authorize_knowledge_item(db_session, current_user, item)
+            except HTTPException:
+                continue
+            knowledge_sources.append(
+                {
+                    "item_id": item.id,
+                    "revision": link.knowledge_revision,
+                    "protocol_version": link.protocol_version,
+                    "title": item.title,
+                    "kind": item.kind,
+                    "scope_type": item.scope_type,
+                    "relation_type": link.relation_type,
+                }
+            )
+
     # Build response
     protocol.lab_uid = lab.uid
     protocol.project_uid = project.uid
@@ -388,6 +422,7 @@ async def protocol_response(
         aimd=protocol_version.aimd,
         assigners=protocol_version.assigners,
         assigner_graph=protocol_version.assigner_graph,
+        knowledge_sources=knowledge_sources,
         metadata=protocol_version.meta_data,
         records_count=records_count,
         folder_ids=folder_ids,

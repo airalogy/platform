@@ -805,6 +805,10 @@
       "exportBibtex": "Export BibTeX",
       "exportRis": "Export RIS",
       "createFromPaper": "Create Knowledge from paper",
+      "createProtocolDraft": "Generate Protocol draft",
+      "protocolDraftImpact": "Aira will use this exact Knowledge revision to generate an editable draft. The Protocol is written to the target Project only after you preview and confirm it in the editor, with immutable provenance recorded.",
+      "protocolDraftSource": "Source Knowledge",
+      "openProtocolDraft": "Open Aira draft",
       "kind": "Knowledge type",
       "kindReference": "Reference",
       "kindNote": "Note",
@@ -1662,6 +1666,8 @@
       "protocolName": "Protocol name",
       "protocolId": "Protocol ID",
       "protocolDetails": "Protocol details",
+      "knowledgeSources": "Source Knowledge",
+      "knowledgeSource": "Revision {revision} of “{title}” generated Protocol v{version}",
       "protocolIdCopied": "Protocol ID copied to clipboard",
       "reusedFrom": "Reused from",
       "settings": {
@@ -2977,7 +2983,14 @@
       "createSuccess": "Aira created “{name}”.",
       "createFailed": "Failed to create the AI Protocol.",
       "continueHint": "The draft is ready. Continue telling Aira what to change from the left panel.",
-      "otherWays": "Other ways to start"
+      "otherWays": "Other ways to start",
+      "knowledgeSourceTitle": "Knowledge source pinned",
+      "knowledgeSourceHint": "Revision {revision} of “{title}” will guide the draft. Platform validates it again and records provenance when you save.",
+      "knowledgeSourceError": "Knowledge source cannot be used",
+      "knowledgeSourceInvalid": "The Knowledge revision is invalid. Return to Knowledge and start again.",
+      "knowledgeSourceChanged": "This Knowledge has a newer revision. Return to Knowledge and preview the flow again.",
+      "knowledgeSourceUnavailable": "This Knowledge is unavailable, archived, superseded, or no longer accessible.",
+      "saveKnowledgeLineage": "When you confirm, this Protocol version will be linked to Knowledge revision {revision}. Saving fails closed if the source changed."
     },
     "landing": {
       "eyebrow": "Protocol Editor",

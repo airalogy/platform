@@ -62,7 +62,10 @@ export interface ApplyProtocolState {
   uploadModel: Ref<UploadModel>
   protocolData: Ref<ProtocolData | null>
   isStepValid: ComputedRef<Record<ApplyStep, boolean>>
-  applyProtocol: (payload?: FormModel | UploadModel) => Promise<ProtocolModels.ProtocolResponseInfo | undefined>
+  applyProtocol: (
+    payload?: FormModel | UploadModel,
+    source?: { itemId: string, revision: number },
+  ) => Promise<ProtocolModels.ProtocolResponseInfo | undefined>
   applyResult: Ref<ProtocolModels.ProtocolResponseInfo | null>
   mode: "fork" | "reuse"
   packageContent: Ref<ZipUpload | null>
@@ -240,7 +243,10 @@ const [useProvideApplyProtocol, _useApplyProtocol] = createInjectionState(
       { immediate: true },
     )
 
-    async function applyProtocol(payload?: FormModel | UploadModel) {
+    async function applyProtocol(
+      payload?: FormModel | UploadModel,
+      source?: { itemId: string, revision: number },
+    ) {
       const finalModel = payload || (selectedOption.value === "existing" ? model.value : uploadModel.value)
       const projectInfoVal = projectInfo.value || protocolInfo.value?.project
 
@@ -369,6 +375,8 @@ const [useProvideApplyProtocol, _useApplyProtocol] = createInjectionState(
         projectId: targetProjectUUID,
         protocolId: protocolInfo.value?.id,
         env: envVar,
+        sourceKnowledgeItemId: source?.itemId,
+        sourceKnowledgeRevision: source?.revision,
       })
 
       if (response?.data) {

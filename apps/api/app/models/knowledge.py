@@ -17,6 +17,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     Text,
@@ -472,6 +473,51 @@ class KnowledgeFileLink(Base):
         ForeignKey("research_files.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+    )
+
+
+class KnowledgeProtocolLink(Base):
+    """Immutable provenance from one Knowledge revision to a Protocol version."""
+
+    __tablename__ = "knowledge_protocol_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["knowledge_item_id", "knowledge_revision"],
+            ["knowledge_revisions.knowledge_item_id", "knowledge_revisions.revision"],
+            name="fk_knowledge_protocol_source_revision",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "knowledge_item_id",
+            "knowledge_revision",
+            "protocol_id",
+            "protocol_version",
+            "relation_type",
+            name="uq_knowledge_protocol_lineage",
+        ),
+        Index(
+            "ix_knowledge_protocol_links_protocol", "protocol_id", "protocol_version"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    knowledge_item_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    knowledge_revision: Mapped[int] = mapped_column(nullable=False)
+    protocol_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocols.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    protocol_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    relation_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="derived_from"
+    )
+    source_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

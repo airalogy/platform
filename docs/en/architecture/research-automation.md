@@ -128,6 +128,8 @@ The final `Research Result Package` contains the summary, goal status, Claims an
 
 `Research Log` records what happened by combining immutable system events with revisioned human entries. `Knowledge` is curated, reusable, reviewable understanding; Paper Library is its literature-specific view. Record remains structured evidence from one Protocol execution and is not converted into a generic log entry.
 
+Knowledge-to-method flow is explicit and versioned. An authorized user previews the exact Knowledge revision and destination Project before opening Aira's Protocol generator. The Knowledge body is fetched through its normal access control rather than placed in a URL. Saving the resulting Protocol rechecks source visibility, scope, target-Project write permission, and revision freshness, then atomically records an immutable `Knowledge revision → Protocol version` link and source snapshot. Personal Knowledge may target an accessible Project; Lab and Project Knowledge stay within their own Lab or Project. Archived, superseded, stale, or inaccessible sources fail closed. A Protocol response shows a source only when the reader can still read both assets, so provenance cannot reveal Restricted Knowledge.
+
 Three connected loops stay distinct:
 
 1. Research execution: Protocol/Action → Record/Evidence → phased state → next Action.

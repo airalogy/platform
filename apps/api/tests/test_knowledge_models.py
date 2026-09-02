@@ -1,12 +1,18 @@
+import asyncio
 import inspect
 from importlib import import_module
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 from app.models.knowledge import (
     KnowledgeItem,
+    KnowledgeProtocolLink,
     Paper,
     PaperLibraryEntry,
     ResearchFile,
@@ -53,6 +59,20 @@ def test_knowledge_items_keep_review_and_lineage_fields():
     assert "reviewed_by_user_id" in ddl
     assert "superseded_by_id" in ddl
     assert "revision" in ddl
+
+
+def test_protocol_lineage_pins_the_exact_knowledge_and_protocol_revisions():
+    ddl = compile_table(KnowledgeProtocolLink)
+
+    assert "knowledge_revision" in ddl
+    assert "protocol_version" in ddl
+    assert "source_snapshot" in ddl
+    assert "uq_knowledge_protocol_lineage" in ddl
+    assert "fk_knowledge_protocol_source_revision" in ddl
+
+    migration = import_module("migrations.versions.0019_knowledge_protocol_lineage")
+    assert migration.down_revision == "0018_research_operational_limits"
+    assert migration.TABLE_NAMES == ("knowledge_protocol_links",)
 
 
 def test_knowledge_migration_is_chained_and_complete():
@@ -145,3 +165,56 @@ def test_openapi_exposes_preview_confirm_and_short_lived_file_access():
     assert "/knowledge/collections/{collection_id}/entries/{entry_id}" in paths
     assert "/knowledge/items/{item_id}/publish/preview" in paths
     assert "/knowledge/items/{item_id}/publish/confirm" in paths
+
+
+def test_protocol_upload_accepts_versioned_knowledge_provenance():
+    from app.routers.protocol_versions import upload_package
+
+    parameters = inspect.signature(upload_package).parameters
+    assert "source_knowledge_item_id" in parameters
+    assert "source_knowledge_revision" in parameters
+
+
+def test_knowledge_protocol_source_rejects_stale_and_cross_project_revisions(
+    monkeypatch,
+):
+    from app.routers import protocol_versions
+
+    item = SimpleNamespace(
+        id=uuid4(),
+        revision=3,
+        state="reviewed",
+        scope_type="project",
+        project_id=uuid4(),
+        lab_id=uuid4(),
+    )
+    session = SimpleNamespace(scalar=AsyncMock(return_value=item))
+    monkeypatch.setattr(
+        protocol_versions,
+        "authorize_knowledge_item",
+        AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException, match="changed") as stale:
+        asyncio.run(
+            protocol_versions._validated_knowledge_source(
+                session,
+                SimpleNamespace(id=uuid4()),
+                SimpleNamespace(id=item.project_id, lab_id=item.lab_id),
+                item.id,
+                2,
+            )
+        )
+    assert stale.value.status_code == 409
+
+    with pytest.raises(HTTPException, match="same Project") as cross_project:
+        asyncio.run(
+            protocol_versions._validated_knowledge_source(
+                session,
+                SimpleNamespace(id=uuid4()),
+                SimpleNamespace(id=uuid4(), lab_id=item.lab_id),
+                item.id,
+                3,
+            )
+        )
+    assert cross_project.value.status_code == 422

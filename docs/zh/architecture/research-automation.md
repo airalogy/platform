@@ -160,6 +160,8 @@ AIRA 的阶段性和最终结论不只保存为 Markdown。结构化状态至少
 - `Knowledge` 是经整理、可复用、可审核和可派生的认识，Paper Library 是 Knowledge 的文献视图。
 - Record 仍是一次 Protocol 执行的结构化证据，不转换为普通日志。
 
+Knowledge 到方法的流转必须显式并固定版本。获授权用户先预览准确的 Knowledge 修订和目标 Project，再进入 Aira Protocol 生成器；Knowledge 正文通过正常权限接口读取，不进入 URL。保存生成结果时，Platform 会重新检查来源可见性、范围、目标 Project 写权限和修订新鲜度，然后原子写入不可变的 `Knowledge revision → Protocol version` 关系与来源快照。Personal Knowledge 可用于用户有权写入的 Project；Lab 与 Project Knowledge 只能留在各自 Lab 或 Project。已归档、已被取代、过期或不可访问的来源一律失败关闭。Protocol 响应只向同时有权读取两侧资产的人展示来源，避免 provenance 泄露 Restricted Knowledge。
+
 系统保持三个独立但互相连接的循环：
 
 1. 研究执行：Protocol/Action → Record/Evidence → 阶段状态 → 下一个 Action。
