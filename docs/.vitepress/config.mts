@@ -44,6 +44,7 @@ const englishSidebar = [
     items: [
       { text: "Development overview", link: "/en/developer/" },
       { text: "Frontend development", link: "/en/development/frontend" },
+      { text: "AI research automation", link: "/en/architecture/research-automation" },
       { text: "File Storage Bridge", link: "/en/architecture/file-storage-bridge" },
     ],
   },
@@ -83,6 +84,7 @@ const chineseSidebar = [
     items: [
       { text: "开发概览", link: "/zh/developer/" },
       { text: "前端开发", link: "/zh/development/frontend" },
+      { text: "AI 科研自动化", link: "/zh/architecture/research-automation" },
       { text: "文件存储桥接", link: "/zh/architecture/file-storage-bridge" },
     ],
   },
