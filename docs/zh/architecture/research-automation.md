@@ -51,7 +51,9 @@ AI 是智能编排层，不是系统记录或权限系统。Platform 仍是所�
 - Resource Reservation
 - Wait Event
 
-Protocol Run、Human Work Item、Tool Job、Resource Reservation 和 Wait Event 已使用这套生命周期。Instrument、外部服务和审批请求类型会在对应 Executor 接入时沿用同一边界。
+Protocol Run、Human Work Item、Tool Job、Instrument Job、Resource Reservation 和 Wait Event 已使用这套生命周期。外部服务和未来的审批请求类型会在对应 Executor 接入时沿用同一边界。
+
+Tool、Instrument、Resource 和 Wait 的类型化结果会追加到 Run 持久 AIRA 状态中有上限的结果通道。下一 Action 规划器和旧 AIRA Method 都会将这些通道作为不可信的科研证据读取。这既保留执行输出、Record 与 Protocol 的语义边界，也避免后续规划和结论丢失真实运行结果。
 
 ### Protocol 与 Capability
 

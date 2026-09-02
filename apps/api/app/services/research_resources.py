@@ -437,6 +437,20 @@ async def activate_aira_resource_action(
     if action.status == ResearchActionStatus.COMPLETED.value:
         action.completed_at = datetime.now(UTC)
         run.status = ResearchRunStatus.RUNNING.value
+        from app.services.research_runtime import append_aira_result
+
+        append_aira_result(
+            run,
+            "resource_results",
+            {
+                "action_id": str(action.id),
+                "kind": reservation.kind,
+                "resource_id": str(resource.id),
+                "status": reservation.status,
+                "result": action.output_data,
+                "completed_at": action.completed_at.isoformat(),
+            },
+        )
     else:
         run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
     return event_kind, {

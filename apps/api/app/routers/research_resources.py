@@ -46,6 +46,7 @@ from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
 from app.services.research_budget import reached_operational_limit
 from app.services.research_runtime import (
+    append_aira_result,
     canonical_digest,
     create_plan_version,
     emit_research_event,
@@ -755,8 +756,24 @@ async def sync_resource_reservation(
             "status": booking.status,
             "synced_at": utcnow().isoformat(),
         }
-        if next_action_status == ResearchActionStatus.COMPLETED.value:
+        if next_action_status in {
+            ResearchActionStatus.COMPLETED.value,
+            ResearchActionStatus.FAILED.value,
+            ResearchActionStatus.CANCELLED.value,
+        }:
             action.completed_at = utcnow()
+            append_aira_result(
+                run,
+                "resource_results",
+                {
+                    "action_id": str(action.id),
+                    "kind": reservation.kind,
+                    "resource_id": str(resource.id),
+                    "status": reservation.status,
+                    "result": action.output_data,
+                    "completed_at": action.completed_at.isoformat(),
+                },
+            )
         if next_action_status in {
             ResearchActionStatus.COMPLETED.value,
             ResearchActionStatus.FAILED.value,

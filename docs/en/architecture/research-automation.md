@@ -45,7 +45,9 @@ A `Research Action` provides a common orchestration envelope without collapsing 
 - Resource Reservation
 - Wait Event
 
-Protocol Run, Human Work Item, Tool Job, Resource Reservation, and Wait Event now use this lifecycle contract. Instrument, external-service, and approval-request types extend the same boundary as their executor integrations arrive.
+Protocol Run, Human Work Item, Tool Job, Instrument Job, Resource Reservation, and Wait Event now use this lifecycle contract. External-service and future approval-request types extend the same boundary as their executor integrations arrive.
+
+Typed Tool, Instrument, Resource, and Wait results are appended to bounded result channels in the Run's durable AIRA state. Both the next-action planner and the legacy AIRA Method receive those channels as untrusted evidence. This preserves the semantic distinction between execution output, Records, and Protocols while ensuring later planning and conclusions do not lose operational results.
 
 ### Protocol and Capability
 

@@ -51,6 +51,7 @@ from app.services.research_instruments import (
     validate_schema_payload,
 )
 from app.services.research_runtime import (
+    append_aira_result,
     canonical_digest,
     create_plan_version,
     emit_research_event,
@@ -1239,21 +1240,18 @@ async def complete_instrument_job(
     action.error = None
     action.completed_at = now
     action.revision += 1
-    previous_results = list((run.aira_state or {}).get("instrument_results") or [])
-    run.aira_state = {
-        **(run.aira_state or {}),
-        "instrument_results": [
-            *previous_results[-49:],
-            {
-                "action_id": str(action.id),
-                "command_key": job.command_key,
-                "command_version": job.command_version,
-                "resource_id": str(job.resource_id),
-                "result": params.result,
-                "completed_at": now.isoformat(),
-            },
-        ],
-    }
+    append_aira_result(
+        run,
+        "instrument_results",
+        {
+            "action_id": str(action.id),
+            "command_key": job.command_key,
+            "command_version": job.command_version,
+            "resource_id": str(job.resource_id),
+            "result": params.result,
+            "completed_at": now.isoformat(),
+        },
+    )
     run.status = (
         ResearchRunStatus.PAUSED.value
         if task.status == ResearchTaskStatus.PAUSED.value
