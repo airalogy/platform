@@ -17,6 +17,7 @@
           <template #icon><n-icon><icon-tabler-refresh /></n-icon></template>
           {{ $t("page.research.refresh") }}
         </n-button>
+        <research-executor-bindings v-if="projectContext" :project="projectContext" />
         <create-research-task-modal
           v-if="activeView === 'tasks'"
           :project="projectContext"
@@ -223,6 +224,7 @@ import { useRoute, useRouter } from "vue-router"
 import CreateResearchTaskModal from "./components/create-research-task-modal.vue"
 import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
+import ResearchExecutorBindings from "./components/research-executor-bindings.vue"
 
 const route = useRoute()
 const router = useRouter()

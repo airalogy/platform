@@ -58,9 +58,12 @@ from app.services.access_control import resolve_structured_access
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.research_assets import research_asset_bundle
 from app.services.research_capabilities import (
-    executor_bindings_for_environment,
     protocol_capability,
     tool_capability,
+)
+from app.services.research_executor_bindings import (
+    enforce_environment_binding_scope,
+    resolve_executor_binding,
 )
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
@@ -240,6 +243,7 @@ async def _validate_task_draft(
     User,
     list[tuple[Protocol, ProtocolVersion]],
     list[Any],
+    list[dict[str, Any]],
     list[KnowledgeItem],
 ]:
     project = await _project(db_session, draft.project_id)
@@ -303,6 +307,70 @@ async def _validate_task_draft(
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
+    capability_snapshots = [
+        *[
+            protocol_capability(protocol, version).payload()
+            for protocol, version in protocols
+        ],
+        *[tool_capability(definition).payload() for definition in tools],
+    ]
+    executor_bindings = [
+        await resolve_executor_binding(
+            db_session,
+            lab_id=lab.id,
+            capability=capability,
+            owner_user_id=owner.id,
+            project_id=project.id,
+            autonomy_level=draft.autonomy_level,
+        )
+        for capability in capability_snapshots
+    ]
+    denied = next(
+        (
+            binding
+            for binding in executor_bindings
+            if binding["approval_policy"] == "deny"
+        ),
+        None,
+    )
+    if denied is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Capability {denied['capability_key']} is denied by the current "
+                "Lab Executor Binding"
+            ),
+        )
+    for binding in executor_bindings:
+        try:
+            enforce_environment_binding_scope(
+                binding,
+                project_id=project.id,
+                autonomy_level=draft.autonomy_level,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+    for binding in executor_bindings:
+        if binding["executor_type"] != "human":
+            continue
+        executor_ref = binding.get("resolved_executor_ref") or binding.get(
+            "executor_ref"
+        )
+        if (executor_ref or {}).get("type") != "user":
+            raise HTTPException(
+                status_code=422,
+                detail="Protocol Executor Binding did not resolve to a user",
+            )
+        executor = await db_session.get(User, UUID(str(executor_ref["id"])))
+        if executor is None:
+            raise HTTPException(status_code=422, detail="Protocol executor not found")
+        await require_research_capability(
+            db_session,
+            user=executor,
+            project=project,
+            capability="research.run",
+        )
+
     knowledge_items: list[KnowledgeItem] = []
     for knowledge_id in draft.knowledge_ids:
         item = await db_session.get(KnowledgeItem, knowledge_id)
@@ -347,13 +415,23 @@ async def _validate_task_draft(
             {"key": definition.key, "version": definition.version}
             for definition in tools
         ],
+        executor_binding_refs=executor_bindings,
         knowledge_refs=[
             {"id": item.id, "revision": item.revision} for item in knowledge_items
         ],
         owner_user_id=owner.id,
         ai_model=draft.ai_model,
     )
-    return command, project, lab, owner, protocols, tools, knowledge_items
+    return (
+        command,
+        project,
+        lab,
+        owner,
+        protocols,
+        tools,
+        executor_bindings,
+        knowledge_items,
+    )
 
 
 def _task_preview(
@@ -364,6 +442,7 @@ def _task_preview(
     owner: User,
     protocols: list[tuple[Protocol, ProtocolVersion]],
     tools: list[Any],
+    executor_bindings: list[dict[str, Any]],
     knowledge_items: list[KnowledgeItem],
 ) -> dict[str, Any]:
     ai_path_available = config.effective_ai_enabled and bool(protocols or tools)
@@ -393,6 +472,7 @@ def _task_preview(
             for protocol, version in protocols
         ],
         "tools": [definition.payload() for definition in tools],
+        "executor_bindings": executor_bindings,
         "knowledge": [
             {
                 "id": str(item.id),
@@ -674,9 +754,16 @@ async def preview_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, project, lab, owner, protocols, tools, knowledge_items = (
-        await _validate_task_draft(db_session, current_user, params)
-    )
+    (
+        command,
+        project,
+        lab,
+        owner,
+        protocols,
+        tools,
+        executor_bindings,
+        knowledge_items,
+    ) = await _validate_task_draft(db_session, current_user, params)
     return _task_preview(
         command=command,
         project=project,
@@ -684,6 +771,7 @@ async def preview_research_task(
         owner=owner,
         protocols=protocols,
         tools=tools,
+        executor_bindings=executor_bindings,
         knowledge_items=knowledge_items,
     )
 
@@ -694,9 +782,16 @@ async def create_research_task(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, project, lab, owner, protocols, tools, knowledge_items = (
-        await _validate_task_draft(db_session, current_user, params)
-    )
+    (
+        command,
+        project,
+        lab,
+        owner,
+        protocols,
+        tools,
+        executor_bindings,
+        knowledge_items,
+    ) = await _validate_task_draft(db_session, current_user, params)
     expected_digest = canonical_digest(command)
     if params.preview_digest != expected_digest:
         raise HTTPException(
@@ -760,9 +855,7 @@ async def create_research_task(
         protocol_capability(protocol, version).payload()
         for _task_protocol, protocol, version in rows
     ]
-    tool_capabilities = [
-        tool_capability(definition).payload() for definition in tools
-    ]
+    tool_capabilities = [tool_capability(definition).payload() for definition in tools]
     environment_snapshot = {
         "schema": "airalogy.research-environment.v2",
         "captured_at": utcnow().isoformat(),
@@ -780,11 +873,7 @@ async def create_research_task(
         ],
         "tools": [definition.payload() for definition in tools],
         "capabilities": [*protocol_capabilities, *tool_capabilities],
-        "executor_bindings": executor_bindings_for_environment(
-            protocol_capabilities=protocol_capabilities,
-            tool_capabilities=tool_capabilities,
-            owner_user_id=str(owner.id),
-        ),
+        "executor_bindings": executor_bindings,
         "knowledge": pinned_knowledge,
         "ai_available_at_capture": config.effective_ai_enabled,
         "autonomy_level": task.autonomy_level,

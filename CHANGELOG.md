@@ -39,6 +39,7 @@ Target initial version: `0.1.0`.
 - Added digital Action controls to the Research Task workbench for preview-confirm tool searches, external-result boundaries, contract-derived signal forms, result inspection, bilingual states, and direct user guidance.
 - Added a Platform-governed Aira Action Planner that chooses among pinned Protocols, allowlisted versioned Tools, typed external Waits, and finishing a research path; AI proposals are schema-validated, digest-bound, approval-gated, auditable, and can operate on tool-only Research Tasks without misrepresenting tools as Protocols.
 - Added a derived Capability Registry over Project Protocols, allowlisted Tools, and Lab resource definitions; Research Task creation now explicitly selects and version-pins digital capabilities and captures initial executor bindings, while Aira and manual Tool Actions fail closed when a capability is outside the Research Environment or its pinned version is unavailable.
+- Added Lab-governed, revisioned Executor Bindings for Protocol and Tool capabilities with Owner/Manager-only preview-confirm configuration, immutable audit snapshots, Project/autonomy/per-Run constraints, deterministic priority resolution, fail-closed denials, and narrowly scoped auto-approval for internal read-only Tools; active Runs retain their pinned executor policy.
 
 ### Changed
 

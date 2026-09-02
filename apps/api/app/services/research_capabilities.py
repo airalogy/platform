@@ -192,35 +192,3 @@ def pinned_tool_definition(
     if definition.version != str(pinned.get("version") or ""):
         raise ValueError("Pinned Research Tool version is unavailable")
     return definition
-
-
-def executor_bindings_for_environment(
-    *,
-    protocol_capabilities: list[dict[str, Any]],
-    tool_capabilities: list[dict[str, Any]],
-    owner_user_id: str,
-) -> list[dict[str, Any]]:
-    return [
-        *[
-            {
-                "capability_key": item["key"],
-                "capability_version": item["version"],
-                "executor_type": "human",
-                "executor_ref": {"type": "user", "id": owner_user_id},
-                "mode": "protocol_record",
-                "policy": "approval_required_for_aira",
-            }
-            for item in protocol_capabilities
-        ],
-        *[
-            {
-                "capability_key": item["key"],
-                "capability_version": item["version"],
-                "executor_type": "platform_tool",
-                "executor_ref": {"type": "platform_worker", "id": item["key"]},
-                "mode": "durable_job",
-                "policy": "approval_required_for_aira",
-            }
-            for item in tool_capabilities
-        ],
-    ]

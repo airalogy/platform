@@ -10,7 +10,13 @@ from app.main import app
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
-from app.models.research_execution import ResearchToolJob, ResearchWaitEvent
+from app.models.research_execution import (
+    ResearchExecutorBinding,
+    ResearchExecutorBindingAudit,
+    ResearchToolJob,
+    ResearchWaitEvent,
+)
+from app.routers.research_executor_bindings import ExecutorBindingDraft
 from app.routers.research_actions import WaitEventDraft
 from app.services import resource_job_worker
 from app.models.research import (
@@ -25,10 +31,14 @@ from app.services.research_tools import (
 )
 from app.services import research_runtime
 from app.services.research_capabilities import (
-    executor_bindings_for_environment,
     pinned_tool_definition,
     protocol_capability,
     tool_capability,
+)
+from app.services.research_executor_bindings import (
+    derived_executor_binding,
+    enforce_environment_binding_scope,
+    environment_executor_binding,
 )
 from app.services.research_runtime import (
     activate_tool_action,
@@ -64,6 +74,84 @@ def test_digital_action_migration_follows_scientific_assets():
 
     assert migration.down_revision == "0014_research_assets"
     assert migration.TABLE_NAMES == ("research_tool_jobs", "research_wait_events")
+
+
+def test_executor_bindings_are_revisioned_and_audited():
+    binding_ddl = compile_table(ResearchExecutorBinding)
+    audit_ddl = compile_table(ResearchExecutorBindingAudit)
+
+    assert "uq_research_executor_bindings_identity" in binding_ddl
+    assert "approval_policy" in binding_ddl
+    assert "constraints" in binding_ddl
+    assert "revision" in binding_ddl
+    assert "uq_research_executor_binding_audits_revision" in audit_ddl
+    assert "snapshot" in audit_ddl
+
+    migration = import_module("migrations.versions.0016_research_executor_bindings")
+    assert migration.down_revision == "0015_research_digital_actions"
+    assert migration.TABLE_NAMES == (
+        "research_executor_bindings",
+        "research_executor_binding_audits",
+    )
+
+
+def test_executor_binding_contract_rejects_cross_type_dispatch():
+    valid = ExecutorBindingDraft(
+        lab_id=uuid4(),
+        capability_key="tool:knowledge.search",
+        capability_version="1",
+        executor_type="platform_tool",
+        executor_ref_type="platform_worker",
+        executor_ref_id="knowledge.search",
+        mode="durable_job",
+    )
+    assert valid.approval_policy == "always_ask"
+
+    with pytest.raises(ValidationError, match="Platform Tool execution requires"):
+        ExecutorBindingDraft(
+            lab_id=uuid4(),
+            capability_key="tool:knowledge.search",
+            capability_version="1",
+            executor_type="platform_tool",
+            executor_ref_type="user",
+            executor_ref_id=str(uuid4()),
+            mode="durable_job",
+        )
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        ExecutorBindingDraft(
+            lab_id=uuid4(),
+            capability_key="tool:knowledge.search",
+            capability_version="1",
+            executor_type="platform_tool",
+            executor_ref_type="platform_worker",
+            executor_ref_id="knowledge.search",
+            mode="durable_job",
+            constraints={"pretend_budget_limit": 1},
+        )
+
+
+def test_executor_binding_scope_constraints_fail_closed():
+    allowed_project = uuid4()
+    binding = {
+        "constraints": {
+            "allowed_project_ids": [str(allowed_project)],
+            "allowed_autonomy_levels": ["assisted"],
+        }
+    }
+
+    enforce_environment_binding_scope(
+        binding, project_id=allowed_project, autonomy_level="assisted"
+    )
+    with pytest.raises(ValueError, match="does not allow this Project"):
+        enforce_environment_binding_scope(
+            binding, project_id=uuid4(), autonomy_level="assisted"
+        )
+    with pytest.raises(ValueError, match="does not allow this autonomy"):
+        enforce_environment_binding_scope(
+            binding,
+            project_id=allowed_project,
+            autonomy_level="bounded_autopilot",
+        )
 
 
 def test_tool_catalog_is_allowlisted_versioned_and_schema_validated():
@@ -109,21 +197,36 @@ def test_capability_registry_is_derived_and_executor_bindings_are_explicit():
         json_schema={"type": "object"},
     )
     protocol_item = protocol_capability(protocol, version).payload()
-    tool_item = tool_capability(
-        research_tool_catalog()["knowledge.search"]
-    ).payload()
-    bindings = executor_bindings_for_environment(
-        protocol_capabilities=[protocol_item],
-        tool_capabilities=[tool_item],
-        owner_user_id=str(uuid4()),
-    )
+    tool_item = tool_capability(research_tool_catalog()["knowledge.search"]).payload()
+    owner_user_id = uuid4()
+    bindings = [
+        derived_executor_binding(capability=protocol_item, owner_user_id=owner_user_id),
+        derived_executor_binding(capability=tool_item, owner_user_id=owner_user_id),
+    ]
 
     assert protocol_item["key"] == f"protocol:{protocol_id}"
     assert protocol_item["source_revision_id"] == str(version_id)
     assert tool_item["key"] == "tool:knowledge.search"
     assert bindings[0]["mode"] == "protocol_record"
     assert bindings[1]["mode"] == "durable_job"
-    assert all(item["policy"] == "approval_required_for_aira" for item in bindings)
+    assert all(item["approval_policy"] == "always_ask" for item in bindings)
+    assert (
+        environment_executor_binding(
+            {"executor_bindings": bindings},
+            tool_item["key"],
+            tool_item["version"],
+        )["mode"]
+        == "durable_job"
+    )
+    legacy = environment_executor_binding(
+        {"schema": "airalogy.research-environment.v1"},
+        protocol_item["key"],
+        protocol_item["version"],
+        legacy_capability=protocol_item,
+        owner_user_id=owner_user_id,
+    )
+    assert legacy["source"] == "platform_default"
+    assert legacy["resolved_executor_ref"]["id"] == str(owner_user_id)
 
 
 def test_wait_event_draft_validates_contract_and_normalizes_naive_deadline():
@@ -194,6 +297,9 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
     assert "/research-tasks/{task_id}/wait-actions" in paths
     assert "/research-wait-events/{wait_event_id}/signal/preview" in paths
     assert "/research-wait-events/{wait_event_id}/signal" in paths
+    assert "/research-executor-bindings" in paths
+    assert "/research-executor-bindings/preview" in paths
+    assert "/research-executor-bindings/{binding_id}/preview" in paths
 
 
 def test_approved_tool_action_is_queued_at_a_durable_boundary(monkeypatch):
@@ -213,9 +319,7 @@ def test_approved_tool_action_is_queued_at_a_durable_boundary(monkeypatch):
     task = SimpleNamespace(
         id=uuid4(), lab_id=uuid4(), status=ResearchTaskStatus.ACTIVE.value
     )
-    monkeypatch.setattr(
-        ResearchToolJob, "find_by", AsyncMock(return_value=job)
-    )
+    monkeypatch.setattr(ResearchToolJob, "find_by", AsyncMock(return_value=job))
     enqueue = AsyncMock()
     emit = AsyncMock()
     monkeypatch.setattr(research_runtime, "enqueue_job", enqueue)
@@ -254,9 +358,7 @@ def test_approved_wait_action_opens_only_the_pinned_event(monkeypatch):
     )
     run = SimpleNamespace(id=uuid4(), status="waiting_for_approval", last_error="old")
     task = SimpleNamespace(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
-    monkeypatch.setattr(
-        ResearchWaitEvent, "find_by", AsyncMock(return_value=event)
-    )
+    monkeypatch.setattr(ResearchWaitEvent, "find_by", AsyncMock(return_value=event))
     emit = AsyncMock()
     monkeypatch.setattr(research_runtime, "emit_research_event", emit)
 

@@ -45,6 +45,16 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         autonomy_level="assisted",
         protocol_ids=[protocol_id],
         tool_refs=[{"key": "knowledge.search", "version": "1"}],
+        executor_binding_refs=[
+            {
+                "id": None,
+                "revision": 1,
+                "source": "platform_default",
+                "capability_key": "tool:knowledge.search",
+                "capability_version": "1",
+                "approval_policy": "always_ask",
+            }
+        ],
         knowledge_refs=[{"id": str(uuid4()), "revision": 2}],
         owner_user_id=owner_id,
         ai_model="  qwen3.5-flash  ",
@@ -59,6 +69,16 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         "autonomy_level": "assisted",
         "protocol_ids": [str(protocol_id)],
         "tool_refs": [{"key": "knowledge.search", "version": "1"}],
+        "executor_binding_refs": [
+            {
+                "id": None,
+                "revision": 1,
+                "source": "platform_default",
+                "capability_key": "tool:knowledge.search",
+                "capability_version": "1",
+                "approval_policy": "always_ask",
+            }
+        ],
         "knowledge_refs": [ANY],
         "owner_user_id": str(owner_id),
         "ai_model": "qwen3.5-flash",
@@ -89,9 +109,7 @@ def test_research_task_draft_rejects_missing_criteria_and_duplicate_protocols():
         )
     knowledge_id = uuid4()
     with pytest.raises(ValidationError):
-        ResearchTaskDraft(
-            **{**payload, "knowledge_ids": [knowledge_id, knowledge_id]}
-        )
+        ResearchTaskDraft(**{**payload, "knowledge_ids": [knowledge_id, knowledge_id]})
 
 
 def test_research_environment_knowledge_is_revision_pinned():
@@ -105,9 +123,7 @@ def test_research_environment_knowledge_is_revision_pinned():
     assert "knowledge_revision" in ddl
     assert "snapshot" in ddl
 
-    migration = import_module(
-        "migrations.versions.0012_research_environment_knowledge"
-    )
+    migration = import_module("migrations.versions.0012_research_environment_knowledge")
     assert migration.down_revision == "0011_knowledge_core"
     assert migration.TABLE_NAMES == ("research_task_knowledge",)
 
@@ -315,6 +331,30 @@ def test_research_action_policy_fails_closed_for_aira_execution():
             requirements={"prohibited": True},
         )[0]
         == "deny"
+    )
+    assert (
+        evaluate_research_action_policy(
+            autonomy_level="bounded_autopilot",
+            source="aira",
+            executor_type="platform_tool",
+            requirements={
+                "risk": "read_only",
+                "approval_policy": "allow_read_only",
+            },
+        )[0]
+        == "allow"
+    )
+    assert (
+        evaluate_research_action_policy(
+            autonomy_level="bounded_autopilot",
+            source="aira",
+            executor_type="platform_tool",
+            requirements={
+                "risk": "external_read_only",
+                "approval_policy": "allow_read_only",
+            },
+        )[0]
+        == "ask"
     )
 
 

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -34,6 +35,110 @@ class ResearchWaitEventStatus(StrEnum):
     RECEIVED = "received"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
+
+
+class ResearchExecutorBindingPolicy(StrEnum):
+    ALWAYS_ASK = "always_ask"
+    ALLOW_READ_ONLY = "allow_read_only"
+    DENY = "deny"
+
+
+class ResearchExecutorBinding(Base):
+    __tablename__ = "research_executor_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "lab_id",
+            "capability_key",
+            "capability_version",
+            "executor_type",
+            "executor_ref_type",
+            "executor_ref_id",
+            name="uq_research_executor_bindings_identity",
+        ),
+        Index(
+            "ix_research_executor_bindings_resolution",
+            "lab_id",
+            "capability_key",
+            "capability_version",
+            "enabled",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    capability_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    capability_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    executor_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    executor_ref_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    executor_ref_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    mode: Mapped[str] = mapped_column(String(64), nullable=False)
+    approval_policy: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ResearchExecutorBindingPolicy.ALWAYS_ASK.value,
+    )
+    constraints: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    priority: Mapped[int] = mapped_column(nullable=False, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchExecutorBindingAudit(Base):
+    __tablename__ = "research_executor_binding_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "binding_id",
+            "revision",
+            name="uq_research_executor_binding_audits_revision",
+        ),
+        Index(
+            "ix_research_executor_binding_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    binding_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_executor_bindings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class ResearchToolJob(Base):

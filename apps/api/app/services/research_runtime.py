@@ -101,10 +101,20 @@ def evaluate_research_action_policy(
     autonomy level until Lab policy, resource, risk, and budget rules exist.
     """
 
-    if requirements.get("prohibited") is True:
+    approval_policy = requirements.get("approval_policy")
+    if requirements.get("prohibited") is True or approval_policy == "deny":
         return "deny", "The Action is prohibited by an explicit requirement."
     if source == "manual":
         return "allow", "The user confirmed the deterministic Action preview."
+    if (
+        approval_policy == "allow_read_only"
+        and executor_type == "platform_tool"
+        and requirements.get("risk") == "read_only"
+    ):
+        return (
+            "allow",
+            "The pinned Lab Executor Binding allows this internal read-only Tool.",
+        )
     if executor_type == "human":
         return (
             "ask",
@@ -149,6 +159,7 @@ def research_task_command(
     autonomy_level: str,
     protocol_ids: list[UUID],
     tool_refs: list[dict[str, Any]],
+    executor_binding_refs: list[dict[str, Any]],
     knowledge_refs: list[dict[str, Any]],
     owner_user_id: UUID,
     ai_model: str | None,
@@ -164,6 +175,17 @@ def research_task_command(
         "tool_refs": [
             {"key": str(item["key"]), "version": str(item["version"])}
             for item in tool_refs
+        ],
+        "executor_binding_refs": [
+            {
+                "id": item.get("id"),
+                "revision": int(item["revision"]),
+                "source": str(item["source"]),
+                "capability_key": str(item["capability_key"]),
+                "capability_version": str(item["capability_version"]),
+                "approval_policy": str(item["approval_policy"]),
+            }
+            for item in executor_binding_refs
         ],
         "knowledge_refs": [
             {"id": str(item["id"]), "revision": int(item["revision"])}
@@ -714,6 +736,36 @@ async def _materialize_human_protocol_action(
     if selected is None:
         raise ValueError("AIRA selected a Protocol outside this Research Environment")
     task_protocol, protocol, version = selected
+    from app.services.research_executor_bindings import environment_executor_binding
+
+    executor_binding = environment_executor_binding(
+        run.environment_snapshot or {},
+        f"protocol:{protocol.id}",
+        version.version,
+        legacy_capability={
+            "key": f"protocol:{protocol.id}",
+            "version": version.version,
+            "kind": "protocol",
+            "metadata": {},
+        },
+        owner_user_id=task.owner_user_id,
+    )
+    from app.services.research_executor_bindings import (
+        enforce_environment_binding_action_limit,
+    )
+
+    await enforce_environment_binding_action_limit(
+        db_session, run=run, binding=executor_binding
+    )
+    executor_ref = executor_binding.get(
+        "resolved_executor_ref"
+    ) or executor_binding.get("executor_ref")
+    if (executor_ref or {}).get("type") != "user":
+        raise ValueError("Pinned Protocol Executor Binding did not resolve to a user")
+    try:
+        assignee_user_id = UUID(str(executor_ref["id"]))
+    except ValueError as error:
+        raise ValueError("Pinned Protocol executor user is invalid") from error
 
     selection_position = (state.get("steps") or []).index(next_step)
     idempotency_key = f"aira-step:{selection_position}:protocol:{protocol_index}"
@@ -742,7 +794,11 @@ async def _materialize_human_protocol_action(
         "initial_values": initial_values,
         "source": "aira",
     }
-    requirements = {"record_required": True}
+    requirements = {
+        "record_required": True,
+        "approval_policy": executor_binding["approval_policy"],
+        "executor_binding": executor_binding,
+    }
     title = protocol.name
     description = (next_step.get("data") or {}).get("thought") or ""
     action_proposal = {
@@ -752,7 +808,7 @@ async def _materialize_human_protocol_action(
         "title": title,
         "description": description,
         "executor_type": "human",
-        "assignee_user_id": str(task.owner_user_id),
+        "assignee_user_id": str(assignee_user_id),
         "input_data": input_data,
         "requirements": requirements,
     }
@@ -778,7 +834,7 @@ async def _materialize_human_protocol_action(
         title=title,
         description=description,
         executor_type="human",
-        assignee_user_id=task.owner_user_id,
+        assignee_user_id=assignee_user_id,
         input_data=input_data,
         requirements=requirements,
         policy_decision=policy_decision,
@@ -938,12 +994,10 @@ def _aira_planner_context(
             for action in actions[-30:]
         ],
         "tool_results": list((run.aira_state or {}).get("tool_results") or [])[-20:],
-        "event_results": list((run.aira_state or {}).get("event_results") or [])[
+        "event_results": list((run.aira_state or {}).get("event_results") or [])[-20:],
+        "rejected_actions": list((run.aira_state or {}).get("rejected_actions") or [])[
             -20:
         ],
-        "rejected_actions": list(
-            (run.aira_state or {}).get("rejected_actions") or []
-        )[-20:],
         "reviewed_knowledge": [
             {
                 "id": item.get("id"),
@@ -952,9 +1006,9 @@ def _aira_planner_context(
                 "title": item.get("title"),
                 "tags": item.get("tags") or [],
             }
-            for item in list(
-                (run.environment_snapshot or {}).get("knowledge") or []
-            )[:50]
+            for item in list((run.environment_snapshot or {}).get("knowledge") or [])[
+                :50
+            ]
         ],
     }
 
@@ -987,9 +1041,9 @@ async def _materialize_aira_digital_action(
         return existing
 
     action_count = await db_session.scalar(
-        select(func.count()).select_from(ResearchAction).where(
-            ResearchAction.run_id == run.id
-        )
+        select(func.count())
+        .select_from(ResearchAction)
+        .where(ResearchAction.run_id == run.id)
     )
     if (action_count or 0) >= 100:
         raise ValueError("Research Run reached its governed Action limit")
@@ -1015,9 +1069,37 @@ async def _materialize_aira_digital_action(
         definition = pinned_tool_definition(
             run.environment_snapshot or {}, proposal.tool_key or ""
         )
+        from app.services.research_executor_bindings import (
+            environment_executor_binding,
+        )
+
+        executor_binding = environment_executor_binding(
+            run.environment_snapshot or {},
+            f"tool:{definition.key}",
+            definition.version,
+            legacy_capability={
+                "key": f"tool:{definition.key}",
+                "version": definition.version,
+                "kind": "tool",
+                "metadata": {"tool_key": definition.key},
+            },
+            owner_user_id=task.owner_user_id,
+        )
+        from app.services.research_executor_bindings import (
+            enforce_environment_binding_action_limit,
+        )
+
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
         validate_tool_arguments(definition, proposal.arguments)
-        requirements = {"risk": definition.risk, "read_only": True}
-        executor_type = definition.executor_type
+        requirements = {
+            "risk": definition.risk,
+            "read_only": True,
+            "approval_policy": executor_binding["approval_policy"],
+            "executor_binding": executor_binding,
+        }
+        executor_type = executor_binding["executor_type"]
         kind = ResearchActionKind.TOOL_JOB.value
         title = definition.name
         description = proposal.thought
@@ -1290,15 +1372,11 @@ async def process_research_run_advance(
         run, task, project, lab, rows = await _load_run_context(db_session, run_id)
         if generation != run.advance_generation:
             return {"status": "superseded", "generation": generation}
-        if (
-            run.status in TERMINAL_RUN_STATUSES
-            or run.status
-            in {
-                ResearchRunStatus.PAUSED.value,
-                ResearchRunStatus.WAITING_FOR_TOOL.value,
-                ResearchRunStatus.WAITING_FOR_EVENT.value,
-            }
-        ):
+        if run.status in TERMINAL_RUN_STATUSES or run.status in {
+            ResearchRunStatus.PAUSED.value,
+            ResearchRunStatus.WAITING_FOR_TOOL.value,
+            ResearchRunStatus.WAITING_FOR_EVENT.value,
+        }:
             return {"status": run.status}
         if run.aira_state.get("path_status") == "waiting_for_record":
             action = await _materialize_human_protocol_action(
@@ -1397,9 +1475,7 @@ async def process_research_run_advance(
                 if canonical_digest(current_run.aira_state) != state_digest:
                     await db_session.rollback()
                     continue
-                current_task = await db_session.get(
-                    ResearchTask, current_run.task_id
-                )
+                current_task = await db_session.get(ResearchTask, current_run.task_id)
                 action = await _materialize_aira_digital_action(
                     db_session,
                     task=current_task,

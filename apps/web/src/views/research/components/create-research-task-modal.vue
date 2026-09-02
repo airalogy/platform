@@ -140,6 +140,20 @@
           </p>
         </section>
         <section class="research-preview-card">
+          <div class="aira-type-eyebrow">{{ $t("page.research.resolvedExecutors") }}</div>
+          <div v-if="preview.executor_bindings.length" class="mt-3 space-y-2">
+            <div v-for="binding in preview.executor_bindings" :key="binding.capability_key" class="flex flex-wrap items-center justify-between gap-2">
+              <span class="aira-type-label break-all">{{ binding.capability_key }}</span>
+              <div class="flex flex-wrap gap-2">
+                <n-tag size="small" round>{{ executorBindingLabel(binding.executor_type) }}</n-tag>
+                <n-tag size="small" round :type="binding.approval_policy === 'allow_read_only' ? 'success' : 'warning'">
+                  {{ executorPolicyLabel(binding.approval_policy) }}
+                </n-tag>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="research-preview-card">
           <div class="aira-type-eyebrow">{{ $t("page.research.pinnedKnowledge") }}</div>
           <div v-if="preview.knowledge.length" class="mt-3 flex flex-wrap gap-2">
             <n-tag v-for="item in preview.knowledge" :key="item.id" round type="success">
@@ -201,6 +215,7 @@ import type {
 } from "@/service/api/knowledge"
 import type { ResearchCapabilityDescriptor } from "@/service/api/research-capabilities"
 import type {
+  ResearchEnvironmentExecutorBinding,
   ResearchTaskDetail,
   ResearchTaskDraft,
   ResearchTaskPreview,
@@ -313,6 +328,20 @@ const localizedWarnings = computed(() => {
       : $t("page.research.warningManual"),
   ]
 })
+
+function executorBindingLabel(value: ResearchEnvironmentExecutorBinding["executor_type"]) {
+  return value === "human"
+    ? $t("page.research.executorTaskOwner")
+    : $t("page.research.platformWorker")
+}
+
+function executorPolicyLabel(value: ResearchEnvironmentExecutorBinding["approval_policy"]) {
+  return {
+    always_ask: $t("page.research.policyAlwaysAsk"),
+    allow_read_only: $t("page.research.policyAllowReadOnly"),
+    deny: $t("page.research.policyDeny"),
+  }[value]
+}
 
 function lines(value: string) {
   return value.split("\n").map(item => item.trim()).filter(Boolean)

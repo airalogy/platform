@@ -883,6 +883,36 @@ declare namespace I18n {
         digitalCapabilitiesHint: string
         pinnedDigitalCapabilities: string
         noDigitalCapabilities: string
+        executorBindings: string
+        executorBindingsHint: string
+        addExecutorBinding: string
+        noExecutorBindings: string
+        bindingDisabled: string
+        bindingRevision: string
+        capability: string
+        selectCapability: string
+        approvalPolicy: string
+        policyAlwaysAsk: string
+        policyAllowReadOnly: string
+        policyDeny: string
+        bindingPriority: string
+        bindingEnabled: string
+        bindingConstraints: string
+        bindingConstraintsHint: string
+        maxActionsPerRun: string
+        onlyCurrentProject: string
+        allowedAutonomyLevels: string
+        changeReason: string
+        changeReasonPlaceholder: string
+        previewImpact: string
+        bindingFutureRunsOnly: string
+        backToBindings: string
+        confirmBinding: string
+        executorTaskOwner: string
+        platformWorker: string
+        resolvedExecutors: string
+        invalidBindingConstraints: string
+        bindingSaved: string
         knowledgeContext: string
         knowledgePlaceholder: string
         knowledgeHint: string

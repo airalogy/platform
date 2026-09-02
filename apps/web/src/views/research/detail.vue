@@ -367,6 +367,16 @@
               </p>
               <n-divider />
               <h2 class="aira-type-card-title mb-0">
+                {{ $t("page.research.resolvedExecutors") }}
+              </h2>
+              <div v-if="pinnedExecutorBindings.length" class="mt-3 space-y-2">
+                <div v-for="binding in pinnedExecutorBindings" :key="binding.capability_key" class="research-method">
+                  <span class="aira-type-label break-all">{{ binding.capability_key }}</span>
+                  <span class="aira-type-meta">{{ binding.approval_policy.replaceAll("_", " ") }} · r{{ binding.revision }}</span>
+                </div>
+              </div>
+              <n-divider />
+              <h2 class="aira-type-card-title mb-0">
                 {{ $t("page.research.pinnedKnowledge") }}
               </h2>
               <n-collapse v-if="task.knowledge.length" class="mt-3">
@@ -527,6 +537,7 @@ import type {
   ManualProtocolActionPreview,
   ResearchAction,
   ResearchActionStatus,
+  ResearchEnvironmentExecutorBinding,
   ResearchProtocolRef,
   ResearchRunStatus,
   ResearchTaskDetail,
@@ -589,6 +600,10 @@ const latestRun = computed(() => task.value?.latest_run || task.value?.runs[0] |
 const pinnedTools = computed<ResearchToolDefinition[]>(() => {
   const tools = latestRun.value?.environment_snapshot?.tools
   return Array.isArray(tools) ? tools as ResearchToolDefinition[] : []
+})
+const pinnedExecutorBindings = computed<ResearchEnvironmentExecutorBinding[]>(() => {
+  const bindings = latestRun.value?.environment_snapshot?.executor_bindings
+  return Array.isArray(bindings) ? bindings as ResearchEnvironmentExecutorBinding[] : []
 })
 const hasAiraCapabilities = computed(() => Boolean(
   task.value?.protocols.length || pinnedTools.value.some(item => item.available),

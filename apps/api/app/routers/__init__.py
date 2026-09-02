@@ -54,6 +54,7 @@ from .record_exports import router as record_exports_router
 from .records import router as records_router
 from .research_assets import router as research_assets_router
 from .research_capabilities import router as research_capabilities_router
+from .research_executor_bindings import router as research_executor_bindings_router
 from .research_actions import router as research_actions_router
 from .research_log import router as research_log_router
 from .research_tasks import (
@@ -276,6 +277,7 @@ app.include_router(research_approvals_router)
 app.include_router(research_log_router)
 app.include_router(research_assets_router)
 app.include_router(research_capabilities_router)
+app.include_router(research_executor_bindings_router)
 app.include_router(research_actions_router)
 app.include_router(knowledge_router)
 app.include_router(resources_router)

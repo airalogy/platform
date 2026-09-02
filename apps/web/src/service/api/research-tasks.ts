@@ -93,6 +93,21 @@ export interface ResearchKnowledgeRef {
   tags?: string[]
 }
 
+export interface ResearchEnvironmentExecutorBinding {
+  id?: string | null
+  revision: number
+  source: "platform_default" | "lab_policy"
+  capability_key: string
+  capability_version: string
+  executor_type: "human" | "platform_tool"
+  executor_ref: { type: string, id: string }
+  resolved_executor_ref?: { type: string, id: string }
+  mode: string
+  approval_policy: "always_ask" | "allow_read_only" | "deny"
+  constraints: Record<string, unknown>
+  priority: number
+}
+
 export interface ResearchRun {
   id: string
   task_id: string
@@ -342,6 +357,7 @@ export interface ResearchTaskPreview {
     description: string
     risk: string
   }>
+  executor_bindings: ResearchEnvironmentExecutorBinding[]
   knowledge: ResearchKnowledgeRef[]
   effects: string[]
   warnings: string[]
