@@ -37,6 +37,10 @@ from app.services.research_runtime import (
     mark_research_run_job_failure,
     process_research_run_advance,
 )
+from app.services.research_tools import (
+    mark_research_tool_job_failure,
+    process_research_tool_job,
+)
 from app.services.resource_index import build_resource_indexes
 from app.services.resource_inventory import (
     release_expired_inventory_reservations,
@@ -291,6 +295,11 @@ async def process_persistent_job(
             run_id=UUID(str(job.payload["run_id"])),
             generation=int(job.payload["generation"]),
         )
+    if job.kind == "research_tool_job":
+        return await process_research_tool_job(
+            db_session,
+            tool_job_id=UUID(str(job.payload["tool_job_id"])),
+        )
     if job.kind == "record_export":
         return await process_record_export(
             db_session, UUID(str(job.payload["export_id"]))
@@ -322,6 +331,7 @@ async def run_persistent_job_worker(
                             "record_export",
                             "record_projection",
                             "research_run_advance",
+                            "research_tool_job",
                             "resource_schema_migration",
                         },
                         lease_seconds=lease_seconds,
@@ -386,6 +396,13 @@ async def run_persistent_job_worker(
                             await mark_research_run_job_failure(
                                 db_session,
                                 run_id=UUID(str(job.payload["run_id"])),
+                                error=str(error),
+                                terminal=job.status == JobStatus.FAILED.value,
+                            )
+                        elif job.kind == "research_tool_job":
+                            await mark_research_tool_job_failure(
+                                db_session,
+                                tool_job_id=UUID(str(job.payload["tool_job_id"])),
                                 error=str(error),
                                 terminal=job.status == JobStatus.FAILED.value,
                             )

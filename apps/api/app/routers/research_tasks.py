@@ -46,6 +46,12 @@ from app.models.research_asset import (
     ResearchClaim,
     ResearchEvidence,
 )
+from app.models.research_execution import (
+    ResearchToolJob,
+    ResearchToolJobStatus,
+    ResearchWaitEvent,
+    ResearchWaitEventStatus,
+)
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_structured_access
@@ -461,6 +467,12 @@ async def _action_data(
     work_item = await ResearchHumanWorkItem.find_by(
         db_session, [ResearchHumanWorkItem.action_id == action.id]
     )
+    tool_job = await ResearchToolJob.find_by(
+        db_session, [ResearchToolJob.action_id == action.id]
+    )
+    wait_event = await ResearchWaitEvent.find_by(
+        db_session, [ResearchWaitEvent.action_id == action.id]
+    )
     approval = (
         await db_session.scalars(
             select(ResearchApproval)
@@ -487,6 +499,8 @@ async def _action_data(
         "protocol_run": protocol_run.as_dict() if protocol_run else None,
         "protocol": protocol_data,
         "work_item": work_item.as_dict() if work_item else None,
+        "tool_job": tool_job.as_dict() if tool_job else None,
+        "wait_event": wait_event.as_dict() if wait_event else None,
         "approval": (
             await _approval_summary(db_session, approval)
             if approval is not None
@@ -1041,6 +1055,42 @@ async def cancel_research_task(
             for item in work_items:
                 item.status = HumanWorkItemStatus.CANCELLED.value
                 item.revision += 1
+            tool_jobs = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchToolJob).where(
+                            ResearchToolJob.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchToolJob.status.in_(
+                                [
+                                    ResearchToolJobStatus.QUEUED.value,
+                                    ResearchToolJobStatus.RUNNING.value,
+                                ]
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            for tool_job in tool_jobs:
+                tool_job.status = ResearchToolJobStatus.CANCELLED.value
+                tool_job.completed_at = now
+            wait_events = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchWaitEvent).where(
+                            ResearchWaitEvent.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchWaitEvent.status
+                            == ResearchWaitEventStatus.WAITING.value,
+                        )
+                    )
+                ).all()
+            )
+            for wait_event in wait_events:
+                wait_event.status = ResearchWaitEventStatus.CANCELLED.value
+                wait_event.revision += 1
             approvals = list(
                 (
                     await db_session.scalars(
@@ -1149,6 +1199,30 @@ async def complete_research_task(
         raise HTTPException(
             status_code=409,
             detail="Approve, reject, or cancel pending Research Actions first",
+        )
+    unfinished_actions = await db_session.scalar(
+        select(func.count())
+        .select_from(ResearchAction)
+        .join(ResearchRun, ResearchRun.id == ResearchAction.run_id)
+        .where(
+            ResearchRun.task_id == task.id,
+            ResearchAction.status.in_(
+                [
+                    ResearchActionStatus.PROPOSED.value,
+                    ResearchActionStatus.APPROVED.value,
+                    ResearchActionStatus.QUEUED.value,
+                    ResearchActionStatus.RUNNING.value,
+                    ResearchActionStatus.WAITING.value,
+                    ResearchActionStatus.SUBMITTED.value,
+                    ResearchActionStatus.VALIDATING.value,
+                ]
+            ),
+        )
+    )
+    if unfinished_actions:
+        raise HTTPException(
+            status_code=409,
+            detail="Complete or cancel unfinished Research Actions first",
         )
     run = await _latest_run(db_session, task.id)
     now = utcnow()
@@ -1525,6 +1599,8 @@ async def create_manual_protocol_action(
         ]
     )
     run.aira_state = {**state, "path_status": "waiting_for_record", "steps": steps}
+    # Supersede any planner result computed against the previous manual state.
+    run.advance_generation += 1
     run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
     task.status = ResearchTaskStatus.ACTIVE.value
     task.revision += 1

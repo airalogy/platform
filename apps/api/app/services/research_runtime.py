@@ -845,7 +845,12 @@ async def process_research_run_advance(
             return {"status": "superseded", "generation": generation}
         if (
             run.status in TERMINAL_RUN_STATUSES
-            or run.status == ResearchRunStatus.PAUSED.value
+            or run.status
+            in {
+                ResearchRunStatus.PAUSED.value,
+                ResearchRunStatus.WAITING_FOR_TOOL.value,
+                ResearchRunStatus.WAITING_FOR_EVENT.value,
+            }
         ):
             return {"status": run.status}
         if run.aira_state.get("path_status") == "waiting_for_record":
