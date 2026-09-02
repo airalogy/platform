@@ -918,6 +918,42 @@ declare namespace I18n {
         humanExecutor: string
         selectHumanExecutor: string
         humanExecutorHint: string
+        humanExecutorProfiles: string
+        humanExecutorProfilesHint: string
+        humanExecutorProfileCount: string
+        addHumanExecutorProfile: string
+        noHumanExecutorProfiles: string
+        humanExecutorCapacity: string
+        executorAvailability: string
+        executorAvailable: string
+        executorUnavailable: string
+        executorOutsideWindow: string
+        executorAvailabilityWindow: string
+        executorWindowOpen: string
+        executorCapacity: string
+        availableFrom: string
+        availableUntil: string
+        executorSkills: string
+        executorSkillsHint: string
+        addExecutorSkill: string
+        noExecutorSkills: string
+        skillKey: string
+        skillName: string
+        skillLevel: string
+        skillVerified: string
+        skillUnverified: string
+        skillExpiresAt: string
+        executorNotes: string
+        executorProfileConfirmationHint: string
+        backToHumanExecutors: string
+        confirmHumanExecutorProfile: string
+        humanExecutorProfileSaved: string
+        executorSkillPool: string
+        executorSkillPoolWithSkills: string
+        requiredExecutorSkills: string
+        selectRequiredExecutorSkills: string
+        noVerifiedExecutorSkills: string
+        minimumSkillLevel: string
         platformWorker: string
         resolvedExecutors: string
         invalidBindingConstraints: string

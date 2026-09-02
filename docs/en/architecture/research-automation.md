@@ -55,7 +55,9 @@ A `Protocol` is a repeatable, scientifically meaningful, versioned method with d
 
 Platform derives the first registry view from the Project's current Protocol versions, the instance's allowlisted digital tools, and the Lab's current resource-type revisions. Creating a Research Task explicitly selects Protocol and Tool capabilities, pins their source versions in `airalogy.research-environment.v2`, and records the initial human or Platform-worker executor binding. The runtime and manual controls both reject a Tool that is absent from that snapshot or whose implementation version is no longer available. Resource definitions are discoverable but remain requirements, not executable methods; concrete reservation and consumption are resolved at Action time.
 
-Lab Owners and Managers can add version-specific Executor Binding overrides from Project Research. A Protocol binding may resolve to the future Task owner or directly to a current Lab member who can run Research in that Project. Each change uses preview and confirmation, increments the binding revision, and appends an immutable audit snapshot. A binding can require approval, deny use, or allow only an internal read-only Tool; it can also restrict Projects, autonomy levels, and Actions per Run. Task creation resolves these rules deterministically and embeds the exact binding revision, resolved executor, policy, and constraints. Later policy edits never mutate an active Run, but current Lab membership and `research.run` permission are rechecked before a human work item is actually assigned; revocation therefore fails closed rather than dispatching work from stale authority.
+Lab Owners and Managers can add version-specific Executor Binding overrides from Project Research. A Protocol binding may resolve to the future Task owner, directly to a current Lab member who can run Research in that Project, or to a governed skill pool. Human Executor profiles are revisioned Lab records of availability windows, maximum concurrent work, and skill claims with levels, management verification, and optional expiry. Skill-pool resolution accepts only available profiles with every required verified and unexpired skill plus current `research.run` permission, then selects the lowest normalized active workload, active item count, and stable user ID in that order. The selected person, profile revision, matched skill evidence, workload, capacity, and digest are pinned in the Research Environment.
+
+Each binding and profile change uses preview and confirmation and appends an immutable audit snapshot. A binding can require approval, deny use, or allow only an internal read-only Tool; it can also restrict Projects, autonomy levels, Actions per Run, and required human skill level. Later policy or profile edits never mutate an active Run. Before a human work item is actually assigned, Platform locks and rechecks the pinned person's current Lab membership, `research.run` permission, availability, verified qualifications, and remaining capacity; revocation, expiry, or saturation therefore fails closed rather than dispatching work from stale authority. Manual owner or explicit-member assignment remains available without AI.
 
 Assets, coordination objects, resources, notifications, approvals, reservations, waits, audit events, and payments are not forced into Protocols. Platform supports progressive formalization:
 
@@ -193,12 +195,12 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 ### P2: operational resources and governance
 
 - derived Capability Registry and task-scoped version pinning (delivered)
-- governed, Lab-configurable Protocol/Tool Executor Bindings, direct eligible-member assignment, and permission revalidation (delivered)
+- governed, Lab-configurable Protocol/Tool Executor Bindings, direct eligible-member or verified-skill-pool assignment, and dispatch-time revalidation (delivered)
 - revision-pinned resource requirements plus inventory/equipment reservation and release Actions (delivered)
 - Aira resource requests, deterministic candidate resolution, approval, and stale-state rejection (delivered)
 - Task deadlines, budget ceilings, immutable budget ledger, and execution stop gates (delivered)
 - people, instrument, and external-service Executor Binding adapters
-- people and skills, sample semantics, compute, and automatic cost ingestion
+- revisioned people availability, capacity, and verified skills (delivered); sample semantics, compute, and automatic cost ingestion
 - consumption completion, risk policy, approval thresholds, and resource-aware replanning
 
 ### P3: instruments, RaaS, and self-improvement

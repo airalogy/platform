@@ -276,6 +276,107 @@ class ResearchExecutorBindingAudit(Base):
     )
 
 
+class ResearchHumanExecutorProfile(Base):
+    """Lab-governed human availability and verified skill claims."""
+
+    __tablename__ = "research_human_executor_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "lab_id", "user_id", name="uq_research_human_executor_profile_user"
+        ),
+        CheckConstraint(
+            "availability IN ('available', 'unavailable')",
+            name="ck_research_human_executor_profile_availability",
+        ),
+        CheckConstraint(
+            "max_concurrent_items BETWEEN 1 AND 100",
+            name="ck_research_human_executor_profile_capacity",
+        ),
+        CheckConstraint(
+            "available_from IS NULL OR available_until IS NULL "
+            "OR available_from < available_until",
+            name="ck_research_human_executor_profile_window",
+        ),
+        Index(
+            "ix_research_human_executor_profiles_lab_availability",
+            "lab_id",
+            "availability",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    availability: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="available"
+    )
+    available_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    available_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    max_concurrent_items: Mapped[int] = mapped_column(nullable=False, default=1)
+    skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ResearchHumanExecutorProfileAudit(Base):
+    __tablename__ = "research_human_executor_profile_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "profile_id",
+            "revision",
+            name="uq_research_human_executor_profile_audit_revision",
+        ),
+        Index(
+            "ix_research_human_executor_profile_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    profile_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_human_executor_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchToolJob(Base):
     __tablename__ = "research_tool_jobs"
     __table_args__ = (

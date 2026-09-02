@@ -230,6 +230,7 @@ declare module 'vue' {
     IconTablerStarFilled: typeof import('~icons/tabler/star-filled')['default']
     IconTablerTrash: typeof import('~icons/tabler/trash')['default']
     IconTablerUpload: typeof import('~icons/tabler/upload')['default']
+    IconTablerUsers: typeof import('~icons/tabler/users')['default']
     IconUilDialpadAlt: typeof import('~icons/uil/dialpad-alt')['default']
     ImageRenderer: typeof import('./../components/custom/aimd/components/image-renderer.vue')['default']
     InsertWbr: typeof import('./../components/common/insert-wbr.vue')['default']

@@ -631,6 +631,16 @@ async def activate_protocol_action(
         raise ValueError(
             "Pinned human executor is no longer eligible to run Research in this Project"
         )
+    from app.services.research_executor_bindings import (
+        validate_pinned_skill_pool_executor,
+    )
+
+    await validate_pinned_skill_pool_executor(
+        db_session,
+        binding=dict((action.requirements or {}).get("executor_binding") or {}),
+        lab_id=task.lab_id,
+        assignee_user_id=assignee_user_id,
+    )
 
     work_item = ResearchHumanWorkItem(
         action_id=action.id,

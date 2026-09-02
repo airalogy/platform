@@ -61,6 +61,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     review_recommendation_revision = import_module(
         "migrations.versions.0023_research_review_recommendations"
     )
+    human_executor_revision = import_module(
+        "migrations.versions.0024_research_human_executor_profiles"
+    )
     import_models()
 
     later_tables = {
@@ -88,6 +91,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
         "0021_protocol_improvement_lineage"
     )
     later_tables.update(review_recommendation_revision.TABLE_NAMES)
+    later_tables.update(human_executor_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

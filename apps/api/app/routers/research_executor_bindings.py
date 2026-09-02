@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal
 from uuid import UUID
 
@@ -35,6 +36,8 @@ router = APIRouter(
     prefix="/research-executor-bindings", tags=["research-executor-bindings"]
 )
 
+SKILL_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
+
 
 class ExecutorBindingConstraints(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -44,13 +47,24 @@ class ExecutorBindingConstraints(BaseModel):
         Literal["assisted", "bounded_autopilot", "autonomous_within_policy"]
     ] = Field(default_factory=list, max_length=3)
     max_actions_per_run: int | None = Field(default=None, ge=1, le=100)
+    required_skill_keys: list[str] = Field(default_factory=list, max_length=20)
+    minimum_skill_level: int | None = Field(default=None, ge=1, le=5)
 
     @model_validator(mode="after")
     def reject_duplicates(self):
+        self.required_skill_keys = [
+            item.strip().lower() for item in self.required_skill_keys
+        ]
         if len(set(self.allowed_project_ids)) != len(self.allowed_project_ids):
             raise ValueError("Allowed Project selection contains duplicates")
         if len(set(self.allowed_autonomy_levels)) != len(self.allowed_autonomy_levels):
             raise ValueError("Allowed autonomy selection contains duplicates")
+        if len(set(self.required_skill_keys)) != len(self.required_skill_keys):
+            raise ValueError("Required skill selection contains duplicates")
+        if any(not SKILL_KEY_RE.fullmatch(item) for item in self.required_skill_keys):
+            raise ValueError("Required skill keys are invalid")
+        if self.minimum_skill_level is not None and not self.required_skill_keys:
+            raise ValueError("Minimum skill level requires at least one skill")
         return self
 
 
@@ -69,7 +83,7 @@ class ExecutorBindingDraft(BaseModel):
     capability_key: str = Field(min_length=3, max_length=255)
     capability_version: str = Field(min_length=1, max_length=64)
     executor_type: Literal["human", "platform_tool"]
-    executor_ref_type: Literal["task_role", "user", "platform_worker"]
+    executor_ref_type: Literal["task_role", "user", "skill_pool", "platform_worker"]
     executor_ref_id: str = Field(min_length=1, max_length=255)
     mode: Literal["protocol_record", "durable_job"]
     approval_policy: Literal["always_ask", "allow_read_only", "deny"] = "always_ask"
@@ -86,13 +100,23 @@ class ExecutorBindingDraft(BaseModel):
         self.reason = self.reason.strip()
         self.constraints = _normalize_constraints(self.constraints)
         if self.executor_type == "human":
-            if self.executor_ref_type not in {"task_role", "user"}:
+            if self.executor_ref_type not in {"task_role", "user", "skill_pool"}:
                 raise ValueError(
-                    "Human executors require a task role or user reference"
+                    "Human executors require a task role, user, or skill-pool reference"
                 )
             if self.mode != "protocol_record":
                 raise ValueError(
                     "Human Protocol execution requires protocol_record mode"
+                )
+            required_skills = self.constraints.get("required_skill_keys") or []
+            if self.executor_ref_type == "skill_pool":
+                if self.executor_ref_id != "lab.skills" or not required_skills:
+                    raise ValueError(
+                        "Skill-pool executors require lab.skills and at least one skill"
+                    )
+            elif required_skills:
+                raise ValueError(
+                    "Skill requirements can only be used with a skill-pool executor"
                 )
         elif self.executor_ref_type != "platform_worker" or self.mode != "durable_job":
             raise ValueError(
@@ -124,6 +148,23 @@ class ExecutorBindingUpdateDraft(BaseModel):
 
 class ExecutorBindingUpdate(ExecutorBindingUpdateDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
+
+
+def _validate_updated_constraints(
+    binding: ResearchExecutorBinding,
+    constraints: dict[str, Any],
+) -> None:
+    required_skills = constraints.get("required_skill_keys") or []
+    if binding.executor_ref_type == "skill_pool" and not required_skills:
+        raise HTTPException(
+            status_code=422,
+            detail="Skill-pool executors require at least one verified skill",
+        )
+    if binding.executor_ref_type != "skill_pool" and required_skills:
+        raise HTTPException(
+            status_code=422,
+            detail="Skill requirements require a skill-pool executor",
+        )
 
 
 async def _membership(
@@ -219,7 +260,7 @@ async def _validate_capability_and_executor(
                 raise HTTPException(
                     status_code=422, detail="Only task.owner is a supported task role"
                 )
-        else:
+        elif params.executor_ref_type == "user":
             try:
                 executor_user_id = UUID(params.executor_ref_id)
             except ValueError as error:
@@ -249,6 +290,10 @@ async def _validate_capability_and_executor(
                     status_code=422,
                     detail="Executor must be allowed to run Research in the Project",
                 )
+        elif params.executor_ref_id != "lab.skills":
+            raise HTTPException(
+                status_code=422, detail="Invalid Lab skill-pool executor reference"
+            )
         return {
             "kind": "protocol",
             "name": protocol.name,
@@ -494,6 +539,7 @@ async def preview_executor_binding_update(
     binding = await _binding_context(db_session, current_user, binding_id, lock=False)
     if binding.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Executor Binding changed")
+    _validate_updated_constraints(binding, params.constraints)
     command = _update_command(binding, params)
     return {
         "preview_digest": canonical_digest(command),
@@ -517,6 +563,7 @@ async def update_executor_binding(
     binding = await _binding_context(db_session, current_user, binding_id, lock=True)
     if binding.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Executor Binding changed")
+    _validate_updated_constraints(binding, params.constraints)
     command = _update_command(binding, params)
     if canonical_digest(command) != params.preview_digest:
         raise HTTPException(status_code=409, detail="Executor Binding preview changed")

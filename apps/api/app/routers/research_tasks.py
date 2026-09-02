@@ -470,17 +470,21 @@ async def _validate_task_draft(
         ],
         *[tool_capability(definition).payload() for definition in tools],
     ]
-    executor_bindings = [
-        await resolve_executor_binding(
-            db_session,
-            lab_id=lab.id,
-            capability=capability,
-            owner_user_id=owner.id,
-            project_id=project.id,
-            autonomy_level=draft.autonomy_level,
-        )
-        for capability in capability_snapshots
-    ]
+    executor_bindings = []
+    for capability in capability_snapshots:
+        try:
+            executor_bindings.append(
+                await resolve_executor_binding(
+                    db_session,
+                    lab_id=lab.id,
+                    capability=capability,
+                    owner_user_id=owner.id,
+                    project_id=project.id,
+                    autonomy_level=draft.autonomy_level,
+                )
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
     denied = next(
         (
             binding
@@ -3252,16 +3256,19 @@ async def approve_research_action(
         )
         if protocol is None or version is None:
             raise HTTPException(status_code=409, detail="Protocol context not found")
-        await activate_protocol_action(
-            db_session,
-            task=task,
-            run=run,
-            action=action,
-            protocol=protocol,
-            version=version,
-            instructions=action.description,
-            actor_user_id=current_user.id,
-        )
+        try:
+            await activate_protocol_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                protocol=protocol,
+                version=version,
+                instructions=action.description,
+                actor_user_id=current_user.id,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
     elif action.kind == ResearchActionKind.TOOL_JOB.value:
         try:
             await activate_tool_action(

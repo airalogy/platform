@@ -1,47 +1,50 @@
-from importlib import import_module
+import asyncio
 from datetime import UTC, datetime, timedelta
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, Mock
 from uuid import uuid4
 
-import asyncio
 import pytest
-from app.main import app
+from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
+from app.main import app
+from app.models.research import (
+    ResearchActionStatus,
+    ResearchHumanWorkItem,
+    ResearchRunStatus,
+    ResearchTaskStatus,
+)
 from app.models.research_execution import (
     ResearchExecutorBinding,
     ResearchExecutorBindingAudit,
+    ResearchHumanExecutorProfile,
+    ResearchHumanExecutorProfileAudit,
     ResearchResourceReservation,
     ResearchToolJob,
     ResearchWaitEvent,
 )
 from app.routers import research_executor_bindings as executor_bindings_router
+from app.routers.research_actions import WaitEventDraft
 from app.routers.research_executor_bindings import (
     ExecutorBindingDraft,
     list_eligible_executor_users,
 )
-from app.routers.research_actions import WaitEventDraft
+from app.routers.research_human_executors import (
+    HumanExecutorProfileDraft,
+    HumanExecutorSkill,
+)
+from app.routers.research_human_executors import (
+    _command as human_executor_profile_command,
+)
 from app.routers.research_resources import (
     ResourceActionDraft,
     _pinned_requirement,
     _resource_command,
 )
-from app.services import resource_job_worker
-from app.services import research_resources
-from app.models.research import (
-    ResearchHumanWorkItem,
-    ResearchActionStatus,
-    ResearchRunStatus,
-    ResearchTaskStatus,
-)
-from app.services.research_tools import (
-    get_research_tool,
-    research_tool_catalog,
-    validate_tool_arguments,
-)
-from app.services import research_runtime
+from app.services import research_resources, research_runtime, resource_job_worker
 from app.services.research_capabilities import (
     pinned_tool_definition,
     protocol_capability,
@@ -51,7 +54,16 @@ from app.services.research_executor_bindings import (
     derived_executor_binding,
     enforce_environment_binding_scope,
     environment_executor_binding,
+    matching_profile_skills,
+    profile_is_available,
     resolve_human_executor_ref,
+    resolve_skill_pool_executor,
+    validate_pinned_skill_pool_executor,
+)
+from app.services.research_resources import (
+    ResearchResourceError,
+    activate_aira_resource_action,
+    resolve_aira_resource_request,
 )
 from app.services.research_runtime import (
     activate_protocol_action,
@@ -59,12 +71,11 @@ from app.services.research_runtime import (
     activate_wait_event_action,
     canonical_digest,
 )
-from app.services.research_resources import (
-    ResearchResourceError,
-    activate_aira_resource_action,
-    resolve_aira_resource_request,
+from app.services.research_tools import (
+    get_research_tool,
+    research_tool_catalog,
+    validate_tool_arguments,
 )
-from pydantic import ValidationError
 
 
 def compile_table(model) -> str:
@@ -115,6 +126,25 @@ def test_executor_bindings_are_revisioned_and_audited():
     )
 
 
+def test_human_executor_profiles_are_revisioned_and_audited():
+    profile_ddl = compile_table(ResearchHumanExecutorProfile)
+    audit_ddl = compile_table(ResearchHumanExecutorProfileAudit)
+
+    assert "uq_research_human_executor_profile_user" in profile_ddl
+    assert "max_concurrent_items BETWEEN 1 AND 100" in profile_ddl
+    assert "skills JSON" in profile_ddl
+    assert "uq_research_human_executor_profile_audit_revision" in audit_ddl
+
+    migration = import_module(
+        "migrations.versions.0024_research_human_executor_profiles"
+    )
+    assert migration.down_revision == "0023_research_review_recommendations"
+    assert migration.TABLE_NAMES == (
+        "research_human_executor_profiles",
+        "research_human_executor_profile_audits",
+    )
+
+
 def test_executor_binding_contract_rejects_cross_type_dispatch():
     valid = ExecutorBindingDraft(
         lab_id=uuid4(),
@@ -126,6 +156,21 @@ def test_executor_binding_contract_rejects_cross_type_dispatch():
         mode="durable_job",
     )
     assert valid.approval_policy == "always_ask"
+
+    skill_pool = ExecutorBindingDraft(
+        lab_id=uuid4(),
+        capability_key=f"protocol:{uuid4()}",
+        capability_version="1.0.0",
+        executor_type="human",
+        executor_ref_type="skill_pool",
+        executor_ref_id="lab.skills",
+        mode="protocol_record",
+        constraints={
+            "required_skill_keys": ["western_blot"],
+            "minimum_skill_level": 3,
+        },
+    )
+    assert skill_pool.constraints["required_skill_keys"] == ["western_blot"]
 
     with pytest.raises(ValidationError, match="Platform Tool execution requires"):
         ExecutorBindingDraft(
@@ -148,6 +193,16 @@ def test_executor_binding_contract_rejects_cross_type_dispatch():
             mode="durable_job",
             constraints={"pretend_budget_limit": 1},
         )
+    with pytest.raises(ValidationError, match="at least one skill"):
+        ExecutorBindingDraft(
+            lab_id=uuid4(),
+            capability_key=f"protocol:{uuid4()}",
+            capability_version="1.0.0",
+            executor_type="human",
+            executor_ref_type="skill_pool",
+            executor_ref_id="lab.skills",
+            mode="protocol_record",
+        )
 
 
 def test_human_executor_bindings_pin_task_roles_and_specific_users():
@@ -162,12 +217,12 @@ def test_human_executor_bindings_pin_task_roles_and_specific_users():
         "executor_ref": {"type": "user", "id": str(explicit_user_id)},
     }
 
-    assert resolve_human_executor_ref(
-        task_role, owner_user_id=owner_user_id
-    )["resolved_executor_ref"] == {"type": "user", "id": str(owner_user_id)}
-    assert resolve_human_executor_ref(
-        explicit, owner_user_id=owner_user_id
-    )["resolved_executor_ref"] == {"type": "user", "id": str(explicit_user_id)}
+    assert resolve_human_executor_ref(task_role, owner_user_id=owner_user_id)[
+        "resolved_executor_ref"
+    ] == {"type": "user", "id": str(owner_user_id)}
+    assert resolve_human_executor_ref(explicit, owner_user_id=owner_user_id)[
+        "resolved_executor_ref"
+    ] == {"type": "user", "id": str(explicit_user_id)}
 
     with pytest.raises(ValueError, match="Unsupported human executor task role"):
         resolve_human_executor_ref(
@@ -176,6 +231,185 @@ def test_human_executor_bindings_pin_task_roles_and_specific_users():
                 "executor_ref": {"type": "task_role", "id": "project.manager"},
             },
             owner_user_id=owner_user_id,
+        )
+
+
+def test_human_executor_profile_contract_normalizes_skills_and_preview():
+    lab_id = uuid4()
+    user_id = uuid4()
+    draft = HumanExecutorProfileDraft(
+        lab_id=lab_id,
+        user_id=user_id,
+        max_concurrent_items=2,
+        skills=[
+            HumanExecutorSkill(
+                key=" Western_Blot ",
+                name=" Western blot ",
+                level=3,
+                verified=True,
+            )
+        ],
+        notes="  Trained operator  ",
+    )
+    command = human_executor_profile_command(draft)
+
+    assert draft.skills[0].key == "western_blot"
+    assert draft.skills[0].name == "Western blot"
+    assert command["expected_revision"] == 0
+    assert command["skills"][0]["verified"] is True
+    assert command["notes"] == "Trained operator"
+    assert len(canonical_digest(command)) == 64
+
+    with pytest.raises(ValidationError, match="duplicate keys"):
+        HumanExecutorProfileDraft(
+            lab_id=lab_id,
+            user_id=user_id,
+            skills=[
+                {"key": "assay", "name": "Assay", "level": 1},
+                {"key": "ASSAY", "name": "Assay", "level": 2},
+            ],
+        )
+
+
+def test_skill_pool_resolution_uses_verified_availability_and_workload(monkeypatch):
+    now = datetime.now(UTC)
+    lab_id = uuid4()
+    project = SimpleNamespace(id=uuid4(), lab_id=lab_id, deleted_at=None)
+    busy_profile = SimpleNamespace(
+        id=uuid4(),
+        lab_id=lab_id,
+        user_id=uuid4(),
+        availability="available",
+        available_from=None,
+        available_until=None,
+        max_concurrent_items=2,
+        revision=2,
+        skills=[
+            {
+                "key": "western_blot",
+                "name": "Western blot",
+                "level": 4,
+                "verified": True,
+                "expires_at": None,
+            }
+        ],
+    )
+    free_profile = SimpleNamespace(
+        id=uuid4(),
+        lab_id=lab_id,
+        user_id=uuid4(),
+        availability="available",
+        available_from=now - timedelta(days=1),
+        available_until=now + timedelta(days=1),
+        max_concurrent_items=1,
+        revision=3,
+        skills=[
+            {
+                "key": "western_blot",
+                "name": "Western blot",
+                "level": 3,
+                "verified": True,
+                "expires_at": None,
+            }
+        ],
+    )
+    busy_user = SimpleNamespace(id=busy_profile.user_id)
+    free_user = SimpleNamespace(id=free_profile.user_id)
+    query_results = [
+        SimpleNamespace(
+            all=lambda: [(busy_profile, busy_user), (free_profile, free_user)]
+        ),
+        SimpleNamespace(all=lambda: [(busy_profile.user_id, 1)]),
+    ]
+    db_session = SimpleNamespace(
+        get=AsyncMock(return_value=project),
+        execute=AsyncMock(side_effect=query_results),
+    )
+    monkeypatch.setattr(
+        research_runtime, "has_research_capability", AsyncMock(return_value=True)
+    )
+    binding = {
+        "executor_type": "human",
+        "executor_ref": {"type": "skill_pool", "id": "lab.skills"},
+        "constraints": {
+            "required_skill_keys": ["western_blot"],
+            "minimum_skill_level": 3,
+        },
+    }
+
+    resolved = asyncio.run(
+        resolve_skill_pool_executor(
+            db_session,
+            binding=binding,
+            lab_id=lab_id,
+            project_id=project.id,
+        )
+    )
+
+    assert resolved["resolved_executor_ref"] == {
+        "type": "user",
+        "id": str(free_profile.user_id),
+    }
+    assert resolved["executor_resolution"]["profile_revision"] == 3
+    assert resolved["executor_resolution"]["matched_skills"][0]["level"] == 3
+    assert len(resolved["executor_resolution"]["profile_digest"]) == 64
+
+    free_profile.skills[0]["verified"] = False
+    assert (
+        matching_profile_skills(
+            free_profile,
+            required_skill_keys=["western_blot"],
+            minimum_skill_level=3,
+            now=now,
+        )
+        is None
+    )
+    free_profile.availability = "unavailable"
+    assert profile_is_available(free_profile, now=now) is False
+
+
+def test_skill_pool_dispatch_rechecks_current_capacity():
+    lab_id = uuid4()
+    user_id = uuid4()
+    profile = SimpleNamespace(
+        id=uuid4(),
+        lab_id=lab_id,
+        user_id=user_id,
+        availability="available",
+        available_from=None,
+        available_until=None,
+        max_concurrent_items=1,
+        skills=[
+            {
+                "key": "western_blot",
+                "name": "Western blot",
+                "level": 3,
+                "verified": True,
+                "expires_at": None,
+            }
+        ],
+    )
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(return_value=SimpleNamespace(first=lambda: profile)),
+        execute=AsyncMock(return_value=SimpleNamespace(all=lambda: [(user_id, 1)])),
+    )
+    binding = {
+        "executor_ref": {"type": "skill_pool", "id": "lab.skills"},
+        "executor_resolution": {
+            "profile_id": str(profile.id),
+            "required_skill_keys": ["western_blot"],
+            "minimum_skill_level": 3,
+        },
+    }
+
+    with pytest.raises(ValueError, match="reached current work capacity"):
+        asyncio.run(
+            validate_pinned_skill_pool_executor(
+                db_session,
+                binding=binding,
+                lab_id=lab_id,
+                assignee_user_id=user_id,
+            )
         )
 
 
@@ -192,15 +426,12 @@ def test_eligible_executor_users_are_project_permission_filtered(monkeypatch):
     )
     require_access = AsyncMock()
     has_access = AsyncMock(
-        side_effect=lambda _db_session, **kwargs: kwargs["user"].id
-        == eligible_user.id
+        side_effect=lambda _db_session, **kwargs: kwargs["user"].id == eligible_user.id
     )
     monkeypatch.setattr(
         executor_bindings_router, "require_research_capability", require_access
     )
-    monkeypatch.setattr(
-        executor_bindings_router, "has_research_capability", has_access
-    )
+    monkeypatch.setattr(executor_bindings_router, "has_research_capability", has_access)
 
     result = asyncio.run(
         list_eligible_executor_users(
@@ -211,9 +442,7 @@ def test_eligible_executor_users_are_project_permission_filtered(monkeypatch):
     )
 
     assert result == {
-        "items": [
-            {"id": str(eligible_user.id), "username": "runner", "name": "Runner"}
-        ]
+        "items": [{"id": str(eligible_user.id), "username": "runner", "name": "Runner"}]
     }
     require_access.assert_awaited_once_with(
         db_session,
@@ -621,7 +850,7 @@ def test_capability_registry_is_derived_and_executor_bindings_are_explicit():
 
 
 def test_wait_event_draft_validates_contract_and_normalizes_naive_deadline():
-    deadline = datetime.now() + timedelta(hours=1)
+    deadline = datetime.now() + timedelta(hours=1)  # noqa: DTZ005
     draft = WaitEventDraft(
         title="Wait for instrument upload",
         event_key="instrument.run-42.completed",
@@ -692,6 +921,9 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
     assert "/research-executor-bindings/eligible-users" in paths
     assert "/research-executor-bindings/preview" in paths
     assert "/research-executor-bindings/{binding_id}/preview" in paths
+    assert "/research-human-executors" in paths
+    assert "/research-human-executors/preview" in paths
+    assert "/research-human-executors/{user_id}" in paths
     assert "/research-tasks/{task_id}/resource-actions/preview" in paths
     assert "/research-tasks/{task_id}/resource-actions" in paths
     assert "/research-resource-reservations/{reservation_id}/sync" in paths

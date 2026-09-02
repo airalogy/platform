@@ -32,7 +32,7 @@ export interface ExecutorBindingDraft {
   capability_key: string
   capability_version: string
   executor_type: ResearchExecutorBinding["executor_type"]
-  executor_ref_type: "task_role" | "user" | "platform_worker"
+  executor_ref_type: "task_role" | "user" | "skill_pool" | "platform_worker"
   executor_ref_id: string
   mode: ResearchExecutorBinding["mode"]
   approval_policy: ExecutorApprovalPolicy

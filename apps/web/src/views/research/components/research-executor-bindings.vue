@@ -23,9 +23,15 @@
             <div class="aira-type-eyebrow">{{ project.lab_name || project.lab_uid }}</div>
             <div class="aira-type-card-title mt-1">{{ project.name }}</div>
           </div>
-          <n-button v-if="canManage" type="primary" @click="beginCreate">
-            {{ $t("page.research.addExecutorBinding") }}
-          </n-button>
+          <div v-if="canManage" class="flex flex-wrap items-center gap-2">
+            <research-human-executor-profiles
+              :lab-id="String(project.lab_id || '')"
+              @updated="loadHumanProfiles"
+            />
+            <n-button type="primary" @click="beginCreate">
+              {{ $t("page.research.addExecutorBinding") }}
+            </n-button>
+          </div>
         </div>
 
         <div v-if="bindings.length" class="space-y-3">
@@ -80,6 +86,26 @@
             />
             <template #feedback>{{ $t("page.research.humanExecutorHint") }}</template>
           </n-form-item>
+          <div
+            v-if="skillPoolEditor"
+            class="grid grid-cols-1 gap-x-4 sm:grid-cols-2"
+          >
+            <n-form-item :label="$t('page.research.requiredExecutorSkills')" required>
+              <n-select
+                v-model:value="requiredSkillKeys"
+                :options="skillOptions"
+                multiple
+                filterable
+                :placeholder="$t('page.research.selectRequiredExecutorSkills')"
+              />
+            </n-form-item>
+            <n-form-item :label="$t('page.research.minimumSkillLevel')" required>
+              <n-input-number v-model:value="minimumSkillLevel" :min="1" :max="5" />
+            </n-form-item>
+          </div>
+          <n-alert v-if="skillPoolEditor && skillOptions.length === 0" type="warning" class="mb-4">
+            {{ $t("page.research.noVerifiedExecutorSkills") }}
+          </n-alert>
           <n-form-item :label="$t('page.research.approvalPolicy')" required>
             <n-select v-model:value="policy" :options="policyOptions" />
           </n-form-item>
@@ -124,9 +150,13 @@
               <dt>{{ $t("page.research.bindingEnabled") }}</dt>
               <dd>{{ enabled ? $t("page.research.bindingEnabled") : $t("page.research.bindingDisabled") }}</dd>
             </div>
-            <div v-if="selectedCapability?.kind === 'protocol'">
+            <div v-if="selectedCapability?.kind === 'protocol' || editingProtocol">
               <dt>{{ $t("page.research.humanExecutor") }}</dt>
               <dd>{{ selectedExecutorLabel }}</dd>
+            </div>
+            <div v-if="skillPoolEditor">
+              <dt>{{ $t("page.research.requiredExecutorSkills") }}</dt>
+              <dd>{{ requiredSkillKeys.join(", ") }}</dd>
             </div>
           </dl>
           <p class="aira-type-meta mb-0 mt-4">
@@ -167,6 +197,7 @@ import type {
   ResearchEligibleExecutor,
   ResearchExecutorBinding,
 } from "@/service/api/research-executor-bindings"
+import type { ResearchHumanExecutorProfile } from "@/service/api/research-human-executors"
 import type { TagProps } from "naive-ui"
 import { fetchResearchCapabilities } from "@/service/api/research-capabilities"
 import {
@@ -177,7 +208,9 @@ import {
   previewExecutorBindingUpdate,
   updateExecutorBinding,
 } from "@/service/api/research-executor-bindings"
+import { fetchResearchHumanExecutorProfiles } from "@/service/api/research-human-executors"
 import { $t } from "@airalogy/shared/locales"
+import ResearchHumanExecutorProfiles from "./research-human-executor-profiles.vue"
 
 interface ProjectContext {
   id: string | number
@@ -198,6 +231,7 @@ const editingId = ref("")
 const bindings = ref<ResearchExecutorBinding[]>([])
 const capabilities = ref<ResearchCapabilityDescriptor[]>([])
 const eligibleExecutors = ref<ResearchEligibleExecutor[]>([])
+const humanProfiles = ref<ResearchHumanExecutorProfile[]>([])
 const preview = ref<ExecutorBindingPreview | null>(null)
 const policy = ref<ExecutorApprovalPolicy>("always_ask")
 const priority = ref(0)
@@ -207,6 +241,8 @@ const onlyCurrentProject = ref(false)
 const allowedAutonomyLevels = ref<string[]>([])
 const reason = ref("")
 const executorChoice = ref("task.owner")
+const requiredSkillKeys = ref<string[]>([])
+const minimumSkillLevel = ref(1)
 const createDraft = reactive<ExecutorBindingDraft>({
   lab_id: "",
   capability_key: "",
@@ -233,11 +269,23 @@ const selectedCapability = computed(() =>
 )
 const executorOptions = computed(() => [
   { label: $t("page.research.executorTaskOwner"), value: "task.owner" },
+  { label: $t("page.research.executorSkillPool"), value: "skill_pool" },
   ...eligibleExecutors.value.map(user => ({
     label: user.name ? `${user.name} (@${user.username})` : `@${user.username}`,
     value: `user:${user.id}`,
   })),
 ])
+const skillOptions = computed(() => {
+  const items = new Map<string, string>()
+  const now = Date.now()
+  for (const profile of humanProfiles.value) {
+    for (const skill of profile.skills) {
+      if (skill.verified && (!skill.expires_at || new Date(skill.expires_at).getTime() > now))
+        items.set(skill.key, `${skill.name} · ${skill.key}`)
+    }
+  }
+  return [...items.entries()].map(([value, label]) => ({ label, value }))
+})
 const selectedExecutorLabel = computed(() => {
   return executorOptions.value.find(item => item.value === executorChoice.value)?.label
     || createDraft.executor_ref_id
@@ -245,6 +293,10 @@ const selectedExecutorLabel = computed(() => {
 const editingProtocol = computed(() => editingId.value
   ? bindings.value.find(item => item.id === editingId.value)?.capability_key.startsWith("protocol:")
   : false)
+const skillPoolEditor = computed(() =>
+  executorChoice.value === "skill_pool"
+  && (selectedCapability.value?.kind === "protocol" || editingProtocol.value),
+)
 const policyOptions = computed(() => [
   { label: $t("page.research.policyAlwaysAsk"), value: "always_ask" },
   ...(selectedCapability.value?.kind === "protocol" || editingProtocol.value
@@ -252,9 +304,14 @@ const policyOptions = computed(() => [
     : [{ label: $t("page.research.policyAllowReadOnly"), value: "allow_read_only" }]),
   { label: $t("page.research.policyDeny"), value: "deny" },
 ])
-const canPreview = computed(() => Boolean(
-  editingId.value || createDraft.capability_key,
-))
+const canPreview = computed(() => {
+  if (editingId.value)
+    return !skillPoolEditor.value || requiredSkillKeys.value.length > 0
+  return Boolean(
+    createDraft.capability_key
+    && (!skillPoolEditor.value || requiredSkillKeys.value.length),
+  )
+})
 const autonomyOptions = computed(() => [
   { label: $t("page.research.autonomyAssisted"), value: "assisted" },
   { label: $t("page.research.autonomyBounded"), value: "bounded_autopilot" },
@@ -284,6 +341,12 @@ function capabilityName(key: string) {
 function executorLabel(binding: ResearchExecutorBinding) {
   if (binding.executor_ref.type === "task_role")
     return $t("page.research.executorTaskOwner")
+  if (binding.executor_ref.type === "skill_pool") {
+    const keys = Array.isArray(binding.constraints.required_skill_keys)
+      ? binding.constraints.required_skill_keys.map(String)
+      : []
+    return $t("page.research.executorSkillPoolWithSkills", { skills: keys.join(", ") })
+  }
   const user = eligibleExecutors.value.find(item => item.id === binding.executor_ref.id)
   return user
     ? (user.name ? `${user.name} (@${user.username})` : `@${user.username}`)
@@ -311,6 +374,8 @@ async function load() {
     bindings.value = result.items
     eligibleExecutors.value = executors.items
     canManage.value = result.can_manage
+    if (result.can_manage)
+      await loadHumanProfiles()
   }
   finally {
     loading.value = false
@@ -320,6 +385,13 @@ async function load() {
 function open() {
   visible.value = true
   void load()
+}
+
+async function loadHumanProfiles() {
+  if (!props.project.lab_id || !canManage.value)
+    return
+  const result = await fetchResearchHumanExecutorProfiles(String(props.project.lab_id))
+  humanProfiles.value = result.items
 }
 
 function beginCreate() {
@@ -343,6 +415,13 @@ function beginEdit(binding: ResearchExecutorBinding) {
     Array.isArray(binding.constraints.allowed_project_ids)
     && binding.constraints.allowed_project_ids.includes(String(props.project.id)),
   )
+  if (binding.executor_ref.type === "skill_pool") {
+    executorChoice.value = "skill_pool"
+    requiredSkillKeys.value = Array.isArray(binding.constraints.required_skill_keys)
+      ? binding.constraints.required_skill_keys.map(String)
+      : []
+    minimumSkillLevel.value = Number(binding.constraints.minimum_skill_level) || 1
+  }
 }
 
 function applyCapability(key: string) {
@@ -373,6 +452,11 @@ function applyExecutor(value: string) {
     createDraft.executor_ref_id = value
     return
   }
+  if (value === "skill_pool") {
+    createDraft.executor_ref_type = "skill_pool"
+    createDraft.executor_ref_id = "lab.skills"
+    return
+  }
   if (value.startsWith("user:")) {
     createDraft.executor_ref_type = "user"
     createDraft.executor_ref_id = value.slice("user:".length)
@@ -391,6 +475,8 @@ function resetEditor() {
   allowedAutonomyLevels.value = []
   reason.value = ""
   executorChoice.value = "task.owner"
+  requiredSkillKeys.value = []
+  minimumSkillLevel.value = 1
   createDraft.capability_key = ""
   createDraft.capability_version = ""
 }
@@ -423,6 +509,12 @@ function bindingConstraints(): Record<string, unknown> {
     allowed_project_ids: onlyCurrentProject.value ? [String(props.project.id)] : [],
     allowed_autonomy_levels: allowedAutonomyLevels.value,
     ...(maxActionsPerRun.value ? { max_actions_per_run: maxActionsPerRun.value } : {}),
+    ...(skillPoolEditor.value
+      ? {
+          required_skill_keys: requiredSkillKeys.value,
+          minimum_skill_level: minimumSkillLevel.value,
+        }
+      : {}),
   }
 }
 
