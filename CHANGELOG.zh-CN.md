@@ -30,6 +30,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增端到端发布与部署身份机制：运行时版本自报、Alembic revision、四个核心镜像的不可变清单、Tag 触发发布、持久部署历史、不透明部署 ID 和脱敏运维支持包。
 - 新增 Community Edition 公开发行中的商标与客户数据边界说明。
 - 新增统一、使用 Airalogy 品牌标识的双语 VitePress 文档体系，同时用于公开站与单实验室镜像内的版本匹配文档；产品内新增按部署方式和角色展示使用手册、实验室管理、自托管运维与托管支持入口的帮助中心。
+- 新增可持久化的 Research Task 与 Run：固定版本化 Research Environment，使用类型明确的 Protocol Action、可指派 Human Work Item、经过校验的 Record 回传和仅追加的来源事件；Aira 可在服务重启后安全续跑，AI 不可用时仍可手工执行，科研结论必须由人明确审核。
 
 ### 变更
 

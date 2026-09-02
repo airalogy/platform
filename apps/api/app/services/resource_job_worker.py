@@ -33,6 +33,10 @@ from app.services.record_exports import (
     mark_record_export_failed,
     process_record_export,
 )
+from app.services.research_runtime import (
+    mark_research_run_job_failure,
+    process_research_run_advance,
+)
 from app.services.resource_index import build_resource_indexes
 from app.services.resource_inventory import (
     release_expired_inventory_reservations,
@@ -281,6 +285,12 @@ async def _migrate_resources(
 async def process_persistent_job(
     db_session: AsyncSession, job: PersistentJob
 ) -> dict:
+    if job.kind == "research_run_advance":
+        return await process_research_run_advance(
+            db_session,
+            run_id=UUID(str(job.payload["run_id"])),
+            generation=int(job.payload["generation"]),
+        )
     if job.kind == "record_export":
         return await process_record_export(
             db_session, UUID(str(job.payload["export_id"]))
@@ -311,6 +321,7 @@ async def run_persistent_job_worker(
                         kinds={
                             "record_export",
                             "record_projection",
+                            "research_run_advance",
                             "resource_schema_migration",
                         },
                         lease_seconds=lease_seconds,
@@ -371,6 +382,13 @@ async def run_persistent_job_worker(
                                         RecordExportStatus.PENDING.value
                                     )
                                     record_export.error = str(error)
+                        elif job.kind == "research_run_advance":
+                            await mark_research_run_job_failure(
+                                db_session,
+                                run_id=UUID(str(job.payload["run_id"])),
+                                error=str(error),
+                                terminal=job.status == JobStatus.FAILED.value,
+                            )
                         await db_session.commit()
         except TimeoutError:
             continue

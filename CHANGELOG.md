@@ -30,6 +30,7 @@ Target initial version: `0.1.0`.
 - Added end-to-end release and deployment identity: runtime version reporting, Alembic revision visibility, immutable four-image release manifests, tag-triggered verified releases, persisted deployment history, an opaque deployment ID, and sanitized operator support bundles.
 - Added an explicit trademark and customer-data boundary for public Community Edition distributions.
 - Added a unified, Airalogy-branded bilingual VitePress documentation system for the public site and version-matched Single-Lab images, plus a deployment-aware in-product Help Center with role-relevant user, Lab administration, self-hosting, and managed-support entry points.
+- Added durable Research Tasks and Runs with versioned Research Environments, typed Protocol Actions, assigned Human Work Items, validated Record handoff, append-only provenance events, restart-safe Aira advancement, manual execution when AI is unavailable, and explicit human review of scientific outcomes.
 
 ### Changed
 

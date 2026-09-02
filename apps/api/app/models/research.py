@@ -29,6 +29,7 @@ class ResearchTaskStatus(StrEnum):
     DRAFT = "draft"
     ACTIVE = "active"
     PAUSED = "paused"
+    REVIEW_REQUIRED = "review_required"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"

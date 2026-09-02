@@ -51,6 +51,10 @@ from .protocols import router as protocols_router
 from .questions import router as questions_router
 from .record_exports import router as record_exports_router
 from .records import router as records_router
+from .research_tasks import (
+    router as research_tasks_router,
+    work_items_router as research_work_items_router,
+)
 from .resources import router as resources_router
 from .search import router as search_router
 from .schema_governance import router as schema_governance_router
@@ -256,6 +260,8 @@ app.include_router(protocols_router)
 app.include_router(protocol_versions_router)
 app.include_router(records_router)
 app.include_router(record_exports_router)
+app.include_router(research_tasks_router)
+app.include_router(research_work_items_router)
 app.include_router(resources_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)
