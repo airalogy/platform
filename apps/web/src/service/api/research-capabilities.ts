@@ -1,6 +1,6 @@
 import { request } from "../request"
 
-export type ResearchCapabilityKind = "protocol" | "tool" | "resource"
+export type ResearchCapabilityKind = "protocol" | "tool" | "resource" | "service"
 
 export interface ResearchCapabilityDescriptor {
   key: string
@@ -26,6 +26,7 @@ export interface ResearchCapabilityCatalog {
   protocols: ResearchCapabilityDescriptor[]
   tools: ResearchCapabilityDescriptor[]
   resources: ResearchCapabilityDescriptor[]
+  services: ResearchCapabilityDescriptor[]
 }
 
 export async function fetchResearchCapabilities(projectId: string) {

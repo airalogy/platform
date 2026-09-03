@@ -172,6 +172,7 @@ def research_task_command(
     executor_binding_refs: list[dict[str, Any]],
     knowledge_refs: list[dict[str, Any]],
     resource_refs: list[dict[str, Any]],
+    service_refs: list[dict[str, Any]],
     deadline_at: datetime | None,
     budget_limit: Decimal | None,
     budget_currency: str | None,
@@ -212,6 +213,15 @@ def research_task_command(
                 "revision": int(item["revision"]),
             }
             for item in resource_refs
+        ],
+        "service_refs": [
+            {
+                "id": str(item["id"]),
+                "revision_id": str(item["revision_id"]),
+                "revision": int(item["revision"]),
+                "version": str(item["version"]),
+            }
+            for item in service_refs
         ],
         "deadline_at": deadline_at.isoformat() if deadline_at else None,
         "budget_limit": str(budget_limit) if budget_limit is not None else None,

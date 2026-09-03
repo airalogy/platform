@@ -42,6 +42,7 @@ async def list_research_capabilities(
         db_session,
         project=project,
         include_resources=access.allows("resource.read"),
+        include_services=access.allows("research.service.use"),
     )
     return {
         "project_id": str(project.id),
@@ -49,4 +50,5 @@ async def list_research_capabilities(
         "protocols": [item.payload() for item in catalog["protocols"]],
         "tools": [item.payload() for item in catalog["tools"]],
         "resources": [item.payload() for item in catalog["resources"]],
+        "services": [item.payload() for item in catalog["services"]],
     }

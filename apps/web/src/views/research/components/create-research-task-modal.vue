@@ -139,6 +139,21 @@
             {{ $t("page.research.resourceRequirementsHint") }}
           </template>
         </n-form-item>
+        <n-form-item :label="$t('page.research.externalServices')">
+          <n-select
+            v-model:value="form.service_offering_ids"
+            :options="serviceOptions"
+            :loading="capabilitiesLoading"
+            :disabled="!form.project_id"
+            multiple
+            filterable
+            clearable
+            :placeholder="$t('page.research.externalServicesPlaceholder')"
+          />
+          <template #feedback>
+            {{ $t("page.research.externalServicesHint") }}
+          </template>
+        </n-form-item>
         <n-form-item :label="$t('page.research.knowledgeContext')">
           <n-select
             v-model:value="form.knowledge_ids"
@@ -256,6 +271,19 @@
         </section>
         <section class="research-preview-card">
           <div class="aira-type-eyebrow">
+            {{ $t("page.research.externalServices") }}
+          </div>
+          <div v-if="preview.services.length" class="mt-3 flex flex-wrap gap-2">
+            <n-tag v-for="item in preview.services" :key="item.source_revision_id" round type="info">
+              {{ item.metadata.provider.name }} · {{ item.name }} · v{{ item.version }}
+            </n-tag>
+          </div>
+          <p v-else class="aira-type-body aira-text-muted mb-0 mt-2">
+            {{ $t("page.research.noExternalServices") }}
+          </p>
+        </section>
+        <section class="research-preview-card">
+          <div class="aira-type-eyebrow">
             {{ $t("page.research.confirmedMethods") }}
           </div>
           <div v-if="preview.protocols.length" class="mt-3 flex flex-wrap gap-2">
@@ -351,6 +379,7 @@ const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const knowledgeItems = ref<KnowledgeItem[]>([])
 const toolCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const resourceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
+const serviceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
@@ -369,6 +398,7 @@ function emptyForm(): ResearchTaskDraft {
     tool_keys: [],
     knowledge_ids: [],
     resource_type_ids: [],
+    service_offering_ids: [],
     budget_limit: "",
     budget_currency: "USD",
   }
@@ -402,6 +432,11 @@ const toolOptions = computed(() => toolCapabilities.value.map(item => ({
 })))
 const resourceOptions = computed(() => resourceCapabilities.value.map(item => ({
   label: `${item.name} · r${item.version}`,
+  value: item.source_id,
+  disabled: !item.available,
+})))
+const serviceOptions = computed(() => serviceCapabilities.value.map(item => ({
+  label: `${String(item.metadata.provider?.name || "")} · ${item.name} · v${item.version}`,
   value: item.source_id,
   disabled: !item.available,
 })))
@@ -508,8 +543,10 @@ async function loadProjects() {
 async function loadCapabilities(projectId: string) {
   toolCapabilities.value = []
   resourceCapabilities.value = []
+  serviceCapabilities.value = []
   form.tool_keys = []
   form.resource_type_ids = []
+  form.service_offering_ids = []
   if (!projectId)
     return
   capabilitiesLoading.value = true
@@ -517,6 +554,7 @@ async function loadCapabilities(projectId: string) {
     const catalog = await fetchResearchCapabilities(projectId)
     toolCapabilities.value = catalog.tools
     resourceCapabilities.value = catalog.resources
+    serviceCapabilities.value = catalog.services
     const internalSearch = catalog.tools.find(item =>
       item.available && item.source_id === "knowledge.search",
     )

@@ -510,6 +510,19 @@
               </p>
               <n-divider />
               <h2 class="aira-type-card-title mb-0">
+                {{ $t("page.research.externalServices") }}
+              </h2>
+              <div v-if="task.services.length" class="mt-3 space-y-2">
+                <div v-for="service in task.services" :key="service.source_revision_id" class="research-method">
+                  <span class="aira-type-label">{{ service.metadata.provider.name }} · {{ service.name }}</span>
+                  <span class="aira-type-meta">v{{ service.version }} · r{{ service.metadata.offering_revision }}</span>
+                </div>
+              </div>
+              <p v-else class="aira-type-meta aira-text-muted mb-0 mt-3">
+                {{ $t("page.research.noExternalServices") }}
+              </p>
+              <n-divider />
+              <h2 class="aira-type-card-title mb-0">
                 {{ $t("page.research.resolvedExecutors") }}
               </h2>
               <div v-if="pinnedExecutorBindings.length" class="mt-3 space-y-2">

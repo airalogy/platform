@@ -68,6 +68,14 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         resource_refs=[
             {"id": str(uuid4()), "revision_id": str(uuid4()), "revision": 3}
         ],
+        service_refs=[
+            {
+                "id": str(uuid4()),
+                "revision_id": str(uuid4()),
+                "revision": 4,
+                "version": "2026.1",
+            }
+        ],
         deadline_at=None,
         budget_limit=None,
         budget_currency=None,
@@ -96,6 +104,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         ],
         "knowledge_refs": [ANY],
         "resource_refs": [ANY],
+        "service_refs": [ANY],
         "deadline_at": None,
         "budget_limit": None,
         "budget_currency": None,

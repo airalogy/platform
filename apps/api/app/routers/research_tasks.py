@@ -41,6 +41,7 @@ from app.models.research import (
     ResearchTaskOutcome,
     ResearchTaskProtocol,
     ResearchTaskResourceRequirement,
+    ResearchTaskServiceOffering,
     ResearchTaskStatus,
     ScientificOutcome,
 )
@@ -56,6 +57,9 @@ from app.models.research_execution import (
     ResearchInstrumentJobStatus,
     ResearchResourceReservation,
     ResearchResourceReservationStatus,
+    ResearchServiceOffering,
+    ResearchServiceOfferingRevision,
+    ResearchServiceProvider,
     ResearchToolJob,
     ResearchToolJobStatus,
     ResearchWaitEvent,
@@ -107,6 +111,10 @@ from app.services.research_runtime import (
     utcnow,
     workflow_info_for_task,
 )
+from app.services.research_services import (
+    latest_service_offering_revision,
+    offering_snapshot,
+)
 
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
 work_items_router = APIRouter(
@@ -130,6 +138,7 @@ class ResearchTaskDraft(BaseModel):
     tool_keys: list[str] = Field(default_factory=list, max_length=50)
     knowledge_ids: list[UUID] = Field(default_factory=list, max_length=50)
     resource_type_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    service_offering_ids: list[UUID] = Field(default_factory=list, max_length=50)
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
     deadline_at: datetime | None = None
@@ -159,6 +168,8 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Knowledge selection contains duplicates")
         if len(set(self.resource_type_ids)) != len(self.resource_type_ids):
             raise ValueError("Resource requirement selection contains duplicates")
+        if len(set(self.service_offering_ids)) != len(self.service_offering_ids):
+            raise ValueError("Service offering selection contains duplicates")
         if (self.budget_limit is None) != (self.budget_currency is None):
             raise ValueError("Budget limit and currency must be provided together")
         if self.budget_currency is not None:
@@ -404,6 +415,13 @@ async def _validate_task_draft(
     list[dict[str, Any]],
     list[KnowledgeItem],
     list[tuple[ResourceType, ResourceTypeRevision]],
+    list[
+        tuple[
+            ResearchServiceProvider,
+            ResearchServiceOffering,
+            ResearchServiceOfferingRevision,
+        ]
+    ],
 ]:
     project = await _project(db_session, draft.project_id)
     await require_research_capability(
@@ -606,6 +624,55 @@ async def _validate_task_draft(
                 )
         resources.append((resource_type, revision))
 
+    service_offerings: list[
+        tuple[
+            ResearchServiceProvider,
+            ResearchServiceOffering,
+            ResearchServiceOfferingRevision,
+        ]
+    ] = []
+    for offering_id in draft.service_offering_ids:
+        offering = await db_session.get(ResearchServiceOffering, offering_id)
+        if (
+            offering is None
+            or offering.lab_id != lab.id
+            or offering.archived_at is not None
+            or not offering.enabled
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Service offering {offering_id} is unavailable in this Lab",
+            )
+        provider = await db_session.get(ResearchServiceProvider, offering.provider_id)
+        if (
+            provider is None
+            or provider.lab_id != lab.id
+            or provider.archived_at is not None
+            or not provider.enabled
+        ):
+            raise HTTPException(status_code=422, detail="Service provider is unavailable")
+        revision = await latest_service_offering_revision(db_session, offering.id)
+        if revision is None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Service offering {offering.name} has no contract revision",
+            )
+        for user in {current_user.id: current_user, owner.id: owner}.values():
+            if not await has_research_capability(
+                db_session,
+                user=user,
+                project=project,
+                capability="research.service.use",
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"{user.name or user.username} cannot use the selected "
+                        f"external service {offering.name}"
+                    ),
+                )
+        service_offerings.append((provider, offering, revision))
+
     command = research_task_command(
         project_id=project.id,
         title=draft.title,
@@ -630,6 +697,15 @@ async def _validate_task_draft(
             }
             for resource_type, revision in resources
         ],
+        service_refs=[
+            {
+                "id": offering.id,
+                "revision_id": revision.id,
+                "revision": revision.revision,
+                "version": revision.service_version,
+            }
+            for _provider, offering, revision in service_offerings
+        ],
         deadline_at=draft.deadline_at,
         budget_limit=draft.budget_limit,
         budget_currency=draft.budget_currency,
@@ -646,6 +722,7 @@ async def _validate_task_draft(
         executor_bindings,
         knowledge_items,
         resources,
+        service_offerings,
     )
 
 
@@ -660,6 +737,13 @@ def _task_preview(
     executor_bindings: list[dict[str, Any]],
     knowledge_items: list[KnowledgeItem],
     resources: list[tuple[ResourceType, ResourceTypeRevision]],
+    service_offerings: list[
+        tuple[
+            ResearchServiceProvider,
+            ResearchServiceOffering,
+            ResearchServiceOfferingRevision,
+        ]
+    ],
 ) -> dict[str, Any]:
     ai_path_available = config.effective_ai_enabled and bool(protocols or tools)
     return {
@@ -703,6 +787,10 @@ def _task_preview(
             resource_capability(resource_type, revision).payload()
             for resource_type, revision in resources
         ],
+        "services": [
+            offering_snapshot(provider, offering, revision)
+            for provider, offering, revision in service_offerings
+        ],
         "operational_limits": {
             "deadline_at": command["deadline_at"],
             "budget_limit": command["budget_limit"],
@@ -714,6 +802,7 @@ def _task_preview(
             "Pin the selected digital Tool versions in the Research Environment",
             "Pin reviewed Knowledge revisions in the Research Environment",
             "Pin selected resource-type revisions as explicit requirements",
+            "Pin selected external-service contract revisions",
             "Enforce the confirmed deadline and budget as runtime stop boundaries",
             (
                 "Use AIRA after the Task is started"
@@ -1064,6 +1153,21 @@ async def _task_detail(
             ).all()
         )
     ]
+    services = [
+        {
+            **row.snapshot,
+            "position": row.position,
+        }
+        for row in list(
+            (
+                await db_session.scalars(
+                    select(ResearchTaskServiceOffering)
+                    .where(ResearchTaskServiceOffering.task_id == task.id)
+                    .order_by(ResearchTaskServiceOffering.position)
+                )
+            ).all()
+        )
+    ]
     review_recommendations = list(
         (
             await db_session.scalars(
@@ -1086,6 +1190,7 @@ async def _task_detail(
         "protocols": protocols,
         "knowledge": knowledge,
         "resources": resources,
+        "services": services,
         "review_recommendations": [item.as_dict() for item in review_recommendations],
         "permissions": {
             "can_run": await has_research_capability(
@@ -1120,6 +1225,7 @@ async def preview_research_task(
         executor_bindings,
         knowledge_items,
         resources,
+        service_offerings,
     ) = await _validate_task_draft(db_session, current_user, params)
     return _task_preview(
         command=command,
@@ -1131,6 +1237,7 @@ async def preview_research_task(
         executor_bindings=executor_bindings,
         knowledge_items=knowledge_items,
         resources=resources,
+        service_offerings=service_offerings,
     )
 
 
@@ -1150,6 +1257,7 @@ async def create_research_task(
         executor_bindings,
         knowledge_items,
         resources,
+        service_offerings,
     ) = await _validate_task_draft(db_session, current_user, params)
     expected_digest = canonical_digest(command)
     if params.preview_digest != expected_digest:
@@ -1217,6 +1325,22 @@ async def create_research_task(
                 snapshot=snapshot,
             )
         )
+    pinned_services: list[dict[str, Any]] = []
+    for position, (provider, offering, revision) in enumerate(
+        service_offerings, start=1
+    ):
+        snapshot = offering_snapshot(provider, offering, revision)
+        pinned_services.append(snapshot)
+        db_session.add(
+            ResearchTaskServiceOffering(
+                task_id=task.id,
+                service_offering_id=offering.id,
+                service_offering_revision_id=revision.id,
+                service_offering_revision=revision.revision,
+                position=position,
+                snapshot=snapshot,
+            )
+        )
     run = ResearchRun(
         task_id=task.id,
         run_number=1,
@@ -1249,10 +1373,12 @@ async def create_research_task(
         ],
         "tools": [definition.payload() for definition in tools],
         "resources": pinned_resources,
+        "services": pinned_services,
         "capabilities": [
             *protocol_capabilities,
             *tool_capabilities,
             *pinned_resources,
+            *pinned_services,
         ],
         "executor_bindings": executor_bindings,
         "knowledge": pinned_knowledge,

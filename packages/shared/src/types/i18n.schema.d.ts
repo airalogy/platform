@@ -1008,6 +1008,10 @@ declare namespace I18n {
         resourceRequirementsPlaceholder: string
         resourceRequirementsHint: string
         noResourceRequirements: string
+        externalServices: string
+        externalServicesPlaceholder: string
+        externalServicesHint: string
+        noExternalServices: string
         reserveResource: string
         resourceReservationHint: string
         reservationImpact: string
@@ -2604,6 +2608,38 @@ declare namespace I18n {
         events: string
         types: string
         instrumentGateways: string
+        externalServices: string
+        externalServicesHint: string
+        serviceGovernanceHint: string
+        serviceAccessDenied: string
+        serviceAccessDeniedHint: string
+        addServiceProvider: string
+        editServiceProvider: string
+        noServiceProviders: string
+        providerKey: string
+        providerContact: string
+        providerEmail: string
+        providerWebsite: string
+        serviceProviderImpact: string
+        serviceProviderSaved: string
+        addServiceOffering: string
+        reviseServiceOffering: string
+        noServiceOfferings: string
+        offeringKey: string
+        serviceVersion: string
+        quotePolicy: string
+        quoteRequired: string
+        catalogPrice: string
+        basePrice: string
+        serviceCurrency: string
+        serviceSla: string
+        serviceInputSchema: string
+        serviceResultSchema: string
+        sampleRequirements: string
+        logisticsPolicy: string
+        serviceTerms: string
+        serviceOfferingImpact: string
+        serviceOfferingSaved: string
         instrumentGatewaysHint: string
         addInstrumentGateway: string
         editInstrumentGateway: string

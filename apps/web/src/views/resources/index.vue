@@ -225,6 +225,19 @@
         />
       </template>
 
+      <template v-else-if="activeSection === 'services'">
+        <research-service-catalog-panel
+          v-if="canManageResearchServices"
+          :lab-id="labId"
+        />
+        <n-result
+          v-else
+          status="403"
+          :title="$t('page.resourceLibrary.serviceAccessDenied')"
+          :description="$t('page.resourceLibrary.serviceAccessDeniedHint')"
+        />
+      </template>
+
       <template v-else-if="activeSection === 'reminders'">
         <section class="resource-library__panel">
           <div class="panel-heading">
@@ -986,6 +999,7 @@ const sections = [
   { value: "locations" as const, label: $t("page.resourceLibrary.locations") },
   { value: "bookings" as const, label: $t("page.resourceLibrary.bookings") },
   { value: "gateways" as const, label: $t("page.resourceLibrary.instrumentGateways") },
+  { value: "services" as const, label: $t("page.resourceLibrary.externalServices") },
   { value: "reminders" as const, label: $t("page.resourceLibrary.reminders") },
   { value: "events" as const, label: $t("page.resourceLibrary.events") },
   { value: "types" as const, label: $t("page.resourceLibrary.types") },
@@ -1024,8 +1038,10 @@ const canManageResources = computed(() => hasResourceCapability("resource.manage
 const canBookEquipment = computed(() => hasResourceCapability("equipment.book"))
 const canCustodyResources = computed(() => hasResourceCapability("resource.custody"))
 const canServiceEquipment = computed(() => hasResourceCapability("equipment.service"))
+const canManageResearchServices = computed(() => hasResourceCapability("research.service.manage"))
 const visibleSections = computed(() => sections.filter(
-  section => section.value !== "gateways" || canServiceEquipment.value,
+  section => (section.value !== "gateways" || canServiceEquipment.value)
+    && (section.value !== "services" || canManageResearchServices.value),
 ))
 
 const overviewCards = computed(() => [

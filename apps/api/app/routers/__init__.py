@@ -66,6 +66,7 @@ from .research_instrument_jobs import router as research_instrument_jobs_router
 from .research_log import router as research_log_router
 from .research_notifications import router as research_notifications_router
 from .research_resources import router as research_resources_router
+from .research_services import router as research_services_router
 from .research_tasks import (
     approvals_router as research_approvals_router,
 )
@@ -295,6 +296,7 @@ app.include_router(research_instrument_runtime_router)
 app.include_router(research_actions_router)
 app.include_router(research_budget_router)
 app.include_router(research_resources_router)
+app.include_router(research_services_router)
 app.include_router(knowledge_router)
 app.include_router(resources_router)
 app.include_router(airalogy_files_router)

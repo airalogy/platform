@@ -126,6 +126,32 @@ export interface ResearchResourceRequirement {
   position?: number
 }
 
+export interface ResearchServiceRequirement {
+  key: string
+  version: string
+  kind: "service"
+  name: string
+  description: string
+  source_id: string
+  source_revision_id: string
+  risk: "low" | "medium" | "high"
+  available: boolean
+  metadata: {
+    offering_key: string
+    offering_revision: number
+    quote_required: boolean
+    base_price?: string | null
+    currency?: string | null
+    sla_hours?: number | null
+    provider: {
+      id: string
+      name: string
+      revision: number
+    }
+  }
+  position?: number
+}
+
 export interface ResearchResourceReservation {
   id: string
   action_id: string
@@ -430,6 +456,7 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   protocols: ResearchProtocolRef[]
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
+  services: ResearchServiceRequirement[]
   review_recommendations: ResearchReviewRecommendation[]
   permissions: {
     can_run: boolean
@@ -498,6 +525,7 @@ export interface ResearchTaskDraft {
   tool_keys: string[]
   knowledge_ids: string[]
   resource_type_ids: string[]
+  service_offering_ids: string[]
   deadline_at?: string
   budget_limit?: string
   budget_currency?: string
@@ -521,6 +549,7 @@ export interface ResearchTaskPreview {
   executor_bindings: ResearchEnvironmentExecutorBinding[]
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
+  services: ResearchServiceRequirement[]
   operational_limits: {
     deadline_at?: string | null
     budget_limit?: string | null

@@ -48,6 +48,8 @@ ALL_CAPABILITIES = frozenset(
         "research.run",
         "research.assign",
         "research.approve",
+        "research.service.use",
+        "research.service.manage",
         "knowledge.read",
         "knowledge.create",
         "knowledge.manage",
@@ -87,6 +89,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.create",
             "research.run",
             "research.assign",
+            "research.service.use",
             "knowledge.read",
             "knowledge.create",
             "knowledge.import",
@@ -105,6 +108,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.read",
             "research.create",
             "research.run",
+            "research.service.use",
             "knowledge.read",
             "knowledge.create",
             "knowledge.import",
@@ -122,6 +126,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "record.read",
             "research.read",
             "research.run",
+            "research.service.use",
             "knowledge.read",
             "knowledge.create",
             "knowledge.import",
@@ -162,6 +167,13 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
         {"knowledge.read", "knowledge.restricted.read", "knowledge.export"}
     ),
     "lab_log_publisher": frozenset({"log.read", "log.write"}),
+    "research_service_manager": frozenset(
+        {
+            "research.read",
+            "research.service.use",
+            "research.service.manage",
+        }
+    ),
     "resource_manager": frozenset(
         {
             "resource.read",
@@ -215,6 +227,7 @@ ROLE_LABELS = {
     "knowledge_reviewer": "Knowledge reviewer",
     "knowledge_restricted_reader": "Restricted knowledge reader",
     "lab_log_publisher": "Lab Log publisher",
+    "research_service_manager": "Research service manager",
 }
 
 ROLE_LEGACY_PROJECT_ROLE = {
@@ -274,6 +287,8 @@ ACTION_CAPABILITY = {
     "run_research": "research.run",
     "assign_research": "research.assign",
     "approve_research": "research.approve",
+    "use_research_service": "research.service.use",
+    "manage_research_service": "research.service.manage",
     "read_knowledge": "knowledge.read",
     "create_knowledge": "knowledge.create",
     "manage_knowledge": "knowledge.manage",

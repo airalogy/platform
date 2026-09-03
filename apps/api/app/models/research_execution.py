@@ -90,6 +90,198 @@ class ResearchInstrumentJobStatus(StrEnum):
     STOPPED = "stopped"
 
 
+class ResearchServiceProvider(Base):
+    """Lab-governed identity for an external research-service provider."""
+
+    __tablename__ = "research_service_providers"
+    __table_args__ = (
+        UniqueConstraint(
+            "lab_id", "provider_key", name="uq_research_service_provider_key"
+        ),
+        Index("ix_research_service_providers_lab_enabled", "lab_id", "enabled"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    contact_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    contact_email: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    website_url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchServiceProviderAudit(Base):
+    __tablename__ = "research_service_provider_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_id",
+            "revision",
+            name="uq_research_service_provider_audit_revision",
+        ),
+        Index(
+            "ix_research_service_provider_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    provider_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_providers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchServiceOffering(Base):
+    """Stable Lab identity whose executable contract lives in immutable revisions."""
+
+    __tablename__ = "research_service_offerings"
+    __table_args__ = (
+        UniqueConstraint(
+            "lab_id", "offering_key", name="uq_research_service_offering_key"
+        ),
+        Index("ix_research_service_offerings_lab_enabled", "lab_id", "enabled"),
+        Index(
+            "ix_research_service_offerings_provider_enabled",
+            "provider_id",
+            "enabled",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    provider_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_providers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    offering_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchServiceOfferingRevision(Base):
+    """Immutable request, result, price, SLA, sample, and logistics contract."""
+
+    __tablename__ = "research_service_offering_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "offering_id",
+            "revision",
+            name="uq_research_service_offering_revision",
+        ),
+        UniqueConstraint(
+            "offering_id",
+            "service_version",
+            name="uq_research_service_offering_version",
+        ),
+        CheckConstraint(
+            "((base_price IS NULL AND currency IS NULL) OR "
+            "(base_price >= 0 AND currency IS NOT NULL AND length(currency) = 3 "
+            "AND currency = upper(currency)))",
+            name="ck_research_service_offering_price_pair",
+        ),
+        CheckConstraint(
+            "sla_hours IS NULL OR sla_hours BETWEEN 1 AND 87600",
+            name="ck_research_service_offering_sla",
+        ),
+        CheckConstraint(
+            "risk IN ('low', 'medium', 'high')",
+            name="ck_research_service_offering_risk",
+        ),
+        Index(
+            "ix_research_service_offering_revisions_offering_created",
+            "offering_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    offering_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_offerings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    service_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    quote_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    base_price: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    sla_hours: Mapped[int | None] = mapped_column()
+    sample_requirements: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    logistics_policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    terms: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    risk: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchBudgetEntry(Base):
     """Immutable reservation and actual-cost ledger for one Research Task."""
 

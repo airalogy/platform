@@ -6,11 +6,17 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 
 1. Open **Research** and create a Task in the correct Project.
 2. State a testable goal, success criteria, and stop conditions. Add a deadline and one-currency budget ceiling when the Task must operate inside hard time or cost boundaries.
-3. Select any Protocol versions, digital tools, reviewed Knowledge, and Lab resource types that may guide or constrain the work. A Protocol is optional when the research path only needs governed digital tools or an external result.
+3. Select any Protocol versions, digital tools, reviewed Knowledge, Lab resource types, and approved external research services that may guide or constrain the work. A Protocol is optional when the research path only needs governed digital tools or an external result.
 4. Preview the destination and captured environment, then confirm creation.
 5. Start the Task. If Aira is available, it can advance the plan until it reaches a human, approval, tool, external-result, or final-review boundary. If AI is unavailable, the same Task remains usable through explicit Actions.
 
 Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new plan or Run when the new version should apply.
+
+## Register an external research service
+
+Lab members with research-service management access can open **Lab resource library → External research services**. Add a provider through preview-confirm, then add one or more services. Each service revision records its exact version, request and result JSON Schemas, risk, whether a quote is required, optional catalog price and currency, SLA target, sample requirements, logistics policy, and terms. Revising a service creates a new immutable contract; it does not rewrite existing Tasks.
+
+Task creators with service-use access can select an enabled service when creating a Research Task. Platform copies the exact provider and offering revision into the Research Environment. This step authorizes only the capability boundary. It does not place an order, reserve budget, send a sample, or assert that a result exists. Until the governed external-service Action lifecycle is added, use an explicit typed external-result boundary and record authoritative costs in the budget ledger.
 
 ## Turn Knowledge into a Protocol draft
 
