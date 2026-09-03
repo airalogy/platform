@@ -26,7 +26,7 @@ from app.routers.research_tasks import (
     _new_run_command,
     _validate_new_run,
 )
-from app.services import resource_job_worker
+from app.services import research_compute_jobs, research_runtime, resource_job_worker
 from app.services.research_runtime import (
     EXPECTED_AIRA_STEPS,
     append_aira_result,
@@ -36,6 +36,7 @@ from app.services.research_runtime import (
     initial_aira_state,
     path_status_after_step,
     research_environment_has_ai_path,
+    research_run_has_executable_ai_path,
     research_task_command,
 )
 
@@ -549,16 +550,48 @@ def test_research_action_policy_fails_closed_for_aira_execution():
     )
 
 
-def test_only_currently_executable_environment_can_enter_aira_planning():
+def test_declared_environment_capabilities_can_enter_aira_planning():
     assert research_environment_has_ai_path({"resources": [{"key": "equipment"}]})
     assert research_environment_has_ai_path({"services": [{"source_id": str(uuid4())}]})
     assert not research_environment_has_ai_path(
         {"services": [{"source_id": str(uuid4()), "available": False}]}
     )
+    assert research_environment_has_ai_path({"compute": [{"source_id": str(uuid4())}]})
     assert not research_environment_has_ai_path(
-        {"compute": [{"source_id": str(uuid4())}]}
+        {"compute": [{"source_id": str(uuid4()), "available": False}]}
     )
     assert not research_environment_has_ai_path({"resources": []})
+
+
+def test_compute_only_aira_path_requires_permission_pin_and_runner(monkeypatch):
+    revision_id = uuid4()
+    task = SimpleNamespace(id=uuid4(), project_id=uuid4())
+    run = SimpleNamespace(
+        requested_by_user_id=uuid4(),
+        environment_snapshot={
+            "compute": [{"source_revision_id": str(revision_id), "available": True}]
+        },
+    )
+    session = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(
+        research_runtime, "has_research_capability", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        research_compute_jobs,
+        "pinned_compute_environment",
+        AsyncMock(
+            return_value=(SimpleNamespace(), SimpleNamespace(), SimpleNamespace())
+        ),
+    )
+    runner_count = AsyncMock(return_value=0)
+    monkeypatch.setattr(research_compute_jobs, "eligible_runner_count", runner_count)
+
+    assert not asyncio.run(
+        research_run_has_executable_ai_path(session, task=task, run=run)
+    )
+
+    runner_count.return_value = 1
+    assert asyncio.run(research_run_has_executable_ai_path(session, task=task, run=run))
 
 
 def test_persistent_worker_dispatches_research_run(monkeypatch):

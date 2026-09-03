@@ -92,6 +92,7 @@ export interface ResearchComputeJob {
   compute_environment_revision: number
   runner_id?: string | null
   language: "python" | "r"
+  source_code?: string
   source_sha256: string
   source_bytes: number
   input_payload: Record<string, unknown>

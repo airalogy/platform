@@ -149,9 +149,70 @@ def research_environment_has_ai_path(environment_snapshot: dict[str, Any]) -> bo
         return True
     return any(
         item.get("available", True)
-        for key in ("tools", "resources", "services")
+        for key in ("tools", "resources", "services", "compute")
         for item in list(environment_snapshot.get(key) or [])
     )
+
+
+async def research_run_has_executable_ai_path(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+) -> bool:
+    """Recheck dynamic permission and Runner state for a Compute-only AI path."""
+
+    snapshot = run.environment_snapshot or {}
+    if list(snapshot.get("protocols") or []):
+        return True
+    if any(
+        item.get("available", True)
+        for key in ("tools", "resources", "services")
+        for item in list(snapshot.get(key) or [])
+    ):
+        return True
+    compute = [
+        item
+        for item in list(snapshot.get("compute") or [])
+        if item.get("available", True)
+    ]
+    if not compute:
+        return False
+    project = await db_session.get(Project, task.project_id)
+    requester = await db_session.get(User, run.requested_by_user_id)
+    if (
+        project is None
+        or requester is None
+        or not await has_research_capability(
+            db_session,
+            user=requester,
+            project=project,
+            capability="research.compute.use",
+        )
+    ):
+        return False
+    from app.services.research_compute_jobs import (
+        eligible_runner_count,
+        pinned_compute_environment,
+    )
+
+    for item in compute[:20]:
+        try:
+            revision_id = UUID(str(item.get("source_revision_id") or ""))
+            await pinned_compute_environment(
+                db_session,
+                task=task,
+                revision_id=revision_id,
+            )
+        except (TypeError, ValueError):
+            continue
+        if await eligible_runner_count(
+            db_session,
+            environment_revision_id=revision_id,
+            ready_only=False,
+        ):
+            return True
+    return False
 
 
 def canonical_digest(value: Any) -> str:
@@ -1099,6 +1160,46 @@ async def _aira_planner_context(
         run=run,
         user_id=run.requested_by_user_id,
     )
+    compute_options: list[dict[str, Any]] = []
+    compute_inputs: list[dict[str, Any]] = []
+    project = await db_session.get(Project, task.project_id)
+    requester = await db_session.get(User, run.requested_by_user_id)
+    if (
+        project is not None
+        and requester is not None
+        and await has_research_capability(
+            db_session,
+            user=requester,
+            project=project,
+            capability="research.compute.use",
+        )
+    ):
+        from app.services.research_compute_jobs import (
+            available_compute_input_options,
+            eligible_runner_count,
+            pinned_compute_environment,
+        )
+
+        for item in list((run.environment_snapshot or {}).get("compute") or [])[:20]:
+            try:
+                revision_id = UUID(str(item.get("source_revision_id") or ""))
+                await pinned_compute_environment(
+                    db_session,
+                    task=task,
+                    revision_id=revision_id,
+                )
+            except (TypeError, ValueError):
+                continue
+            if await eligible_runner_count(
+                db_session,
+                environment_revision_id=revision_id,
+                ready_only=False,
+            ):
+                compute_options.append(item)
+        if compute_options:
+            compute_inputs = await available_compute_input_options(
+                db_session, task=task
+            )
     return {
         "goal": task.goal,
         "success_criteria": task.success_criteria,
@@ -1118,6 +1219,8 @@ async def _aira_planner_context(
             (run.environment_snapshot or {}).get("resources") or []
         ),
         "services": list((run.environment_snapshot or {}).get("services") or []),
+        "compute": compute_options,
+        "compute_inputs": compute_inputs,
         "instrument_commands": [
             {
                 "id": item["id"],
@@ -1159,12 +1262,12 @@ async def _aira_planner_context(
         "instrument_results": list(
             (run.aira_state or {}).get("instrument_results") or []
         )[-20:],
-        "resource_results": list(
-            (run.aira_state or {}).get("resource_results") or []
-        )[-20:],
-        "service_results": list(
-            (run.aira_state or {}).get("service_results") or []
-        )[-20:],
+        "resource_results": list((run.aira_state or {}).get("resource_results") or [])[
+            -20:
+        ],
+        "service_results": list((run.aira_state or {}).get("service_results") or [])[
+            -20:
+        ],
         "event_results": list((run.aira_state or {}).get("event_results") or [])[-20:],
         "rejected_actions": list((run.aira_state or {}).get("rejected_actions") or [])[
             -20:
@@ -1199,6 +1302,7 @@ async def _materialize_aira_action(
         "resource",
         "instrument",
         "service",
+        "compute",
         "wait",
     }:
         raise ValueError("This Aira proposal cannot be materialized here")
@@ -1437,6 +1541,154 @@ async def _materialize_aira_action(
             "source": "aira",
             "resume_run": True,
         }
+    elif proposal.decision == "compute":
+        request = proposal.compute_request
+        if request is None:
+            raise ValueError("Aira Compute proposal is incomplete")
+        from app.services.knowledge import assert_research_file_upload_quota
+        from app.services.research_budget import (
+            ResearchBudgetError,
+            project_budget_change,
+        )
+        from app.services.research_compute_contracts import (
+            MAX_AIRA_SOURCE_BYTES,
+            validate_compute_action_payload,
+            validate_compute_output_budget,
+        )
+        from app.services.research_compute_jobs import (
+            compute_action_command,
+            compute_estimated_cost,
+            eligible_runner_count,
+            exact_compute_inputs,
+            pinned_compute_environment,
+        )
+        from app.services.research_instruments import validate_schema_payload
+
+        project = await db_session.get(Project, task.project_id)
+        requester = await db_session.get(User, run.requested_by_user_id)
+        if (
+            project is None
+            or requester is None
+            or not await has_research_capability(
+                db_session,
+                user=requester,
+                project=project,
+                capability="research.compute.use",
+            )
+        ):
+            raise ValueError("Research compute use access was revoked")
+        (
+            task_environment,
+            compute_environment,
+            compute_revision,
+        ) = await pinned_compute_environment(
+            db_session,
+            task=task,
+            revision_id=request.compute_environment_revision_id,
+            lock=True,
+        )
+        if request.language not in compute_revision.allowed_languages:
+            raise ValueError("Language is not allowed by this Compute Environment")
+        validate_compute_action_payload(
+            source_code=request.source_code,
+            source_byte_limit=MAX_AIRA_SOURCE_BYTES,
+            input_payload=request.input_payload,
+            input_assets=request.input_assets,
+            output_files=request.output_files,
+        )
+        validate_schema_payload(
+            compute_revision.input_schema,
+            request.input_payload,
+            "Compute input",
+        )
+        compute_inputs = await exact_compute_inputs(
+            db_session,
+            task=task,
+            items=[
+                (item.data_asset_version_id, item.mount_name)
+                for item in request.input_assets
+            ],
+        )
+        declared_output_bytes = validate_compute_output_budget(
+            request.output_files, compute_revision.resource_limits
+        )
+        if request.output_files:
+            try:
+                await assert_research_file_upload_quota(
+                    db_session,
+                    run.requested_by_user_id,
+                    declared_output_bytes,
+                    incoming_count=len(request.output_files),
+                )
+            except HTTPException as error:
+                raise ValueError(str(error.detail)) from error
+        if not await eligible_runner_count(
+            db_session,
+            environment_revision_id=compute_revision.id,
+            ready_only=False,
+        ):
+            raise ValueError(
+                "No Compute Runner is authorized for this environment revision"
+            )
+        estimated_cost = compute_estimated_cost(compute_revision)
+        if task.budget_limit is not None:
+            if estimated_cost is None or not compute_revision.currency:
+                raise ValueError(
+                    "A budgeted Task requires a priced Compute Environment"
+                )
+            try:
+                budget_snapshot = await research_budget_snapshot(db_session, task=task)
+                project_budget_change(
+                    task=task,
+                    snapshot=budget_snapshot,
+                    kind="reserve",
+                    amount=estimated_cost,
+                    currency=compute_revision.currency,
+                )
+            except ResearchBudgetError as error:
+                raise ValueError(str(error)) from error
+        title = request.title or f"Run {compute_revision.name} computation"
+        output_files = [item.model_dump(mode="json") for item in request.output_files]
+        compute_command = compute_action_command(
+            task=task,
+            run=run,
+            environment=compute_environment,
+            revision=compute_revision,
+            language=request.language,
+            source_code=request.source_code,
+            input_payload=request.input_payload,
+            input_versions=compute_inputs,
+            output_files=output_files,
+            title=title,
+            description=proposal.thought,
+            idempotency_key=idempotency_key,
+        )
+        requirements = {
+            "risk": compute_revision.risk,
+            "approval_policy": "always_ask",
+            "image_ref": compute_revision.image_ref,
+            "resource_limits": compute_revision.resource_limits,
+            "network_policy": compute_revision.network_policy,
+            "allowed_egress_hosts": compute_revision.allowed_egress_hosts,
+            "input_schema": compute_revision.input_schema,
+            "result_schema": compute_revision.result_schema,
+            "estimated_cost": compute_command["estimated_cost"],
+            "currency": compute_revision.currency,
+            "deterministic_resolution": True,
+        }
+        executor_type = "compute_runner"
+        kind = ResearchActionKind.COMPUTE_JOB.value
+        description = proposal.thought
+        input_data = {
+            "compute_environment_revision_id": str(compute_revision.id),
+            "language": request.language,
+            "source_sha256": compute_command["source_sha256"],
+            "input_payload": request.input_payload,
+            "input_assets": compute_command["input_assets"],
+            "output_files": output_files,
+            "source": "aira",
+            "resume_run": True,
+        }
     else:
         template = AIRA_WAIT_TEMPLATES[proposal.wait_template_key]
         requirements = {"payload_schema": template["payload_schema"]}
@@ -1488,6 +1740,7 @@ async def _materialize_aira_action(
     db_session.add(action)
     await db_session.flush()
 
+    compute_job = None
     if proposal.decision == "tool":
         tool_job = ResearchToolJob(
             action_id=action.id,
@@ -1641,6 +1894,71 @@ async def _materialize_aira_action(
             },
             idempotency_key=f"service-job:{service_job.id}:created",
         )
+    elif proposal.decision == "compute":
+        from app.models.research_execution import (
+            ResearchComputeJob,
+            ResearchComputeJobInput,
+            ResearchComputeJobOutput,
+        )
+        from app.services.research_compute_jobs import (
+            compute_estimated_cost,
+            compute_output_snapshot,
+        )
+
+        compute_job = ResearchComputeJob(
+            action_id=action.id,
+            compute_environment_id=compute_environment.id,
+            compute_environment_revision_id=compute_revision.id,
+            compute_environment_revision=compute_revision.revision,
+            language=request.language,
+            source_code=request.source_code,
+            source_sha256=compute_command["source_sha256"],
+            input_payload=request.input_payload,
+            input_schema=compute_revision.input_schema,
+            result_schema=compute_revision.result_schema,
+            environment_snapshot=task_environment.snapshot,
+            resource_limits=compute_revision.resource_limits,
+            timeout_seconds=int(compute_revision.resource_limits["timeout_seconds"]),
+            estimated_cost=compute_estimated_cost(compute_revision),
+            currency=compute_revision.currency,
+            created_by_user_id=run.requested_by_user_id,
+            output_manifest=[],
+        )
+        db_session.add(compute_job)
+        await db_session.flush()
+        for position, (asset, version, mount_name) in enumerate(
+            compute_inputs, start=1
+        ):
+            db_session.add(
+                ResearchComputeJobInput(
+                    compute_job_id=compute_job.id,
+                    data_asset_id=asset.id,
+                    data_asset_version_id=version.id,
+                    position=position,
+                    mount_name=mount_name,
+                )
+            )
+        output_rows = []
+        for position, output in enumerate(request.output_files, start=1):
+            output_row = ResearchComputeJobOutput(
+                compute_job_id=compute_job.id,
+                position=position,
+                mount_name=output.mount_name,
+                asset_name=output.asset_name,
+                description=output.description,
+                kind=output.kind,
+                media_type=output.media_type,
+                max_bytes=output.max_bytes,
+                required=output.required,
+                data_schema=output.data_schema,
+                version_metadata=output.metadata,
+            )
+            db_session.add(output_row)
+            output_rows.append(output_row)
+        await db_session.flush()
+        compute_job.output_manifest = [
+            compute_output_snapshot(output) for output in output_rows
+        ]
     else:
         wait_event = ResearchWaitEvent(
             action_id=action.id,
@@ -1670,13 +1988,30 @@ async def _materialize_aira_action(
     if proposal.decision == "service":
         pass
     elif policy_decision == "ask":
-        await request_action_approval(
+        approval = await request_action_approval(
             db_session,
             task=task,
             run=run,
             action=action,
             reason=policy_reason,
         )
+        if proposal.decision == "compute":
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                kind="compute_job.requested",
+                actor_user_id=None,
+                payload={
+                    "compute_job_id": str(compute_job.id),
+                    "approval_id": str(approval.id),
+                    "environment_revision_id": str(compute_revision.id),
+                    "source_sha256": compute_job.source_sha256,
+                    "source": "aira",
+                },
+                idempotency_key=f"compute-job:{compute_job.id}:requested",
+            )
     elif proposal.decision == "tool":
         await activate_tool_action(
             db_session,
@@ -1695,7 +2030,7 @@ async def _materialize_aira_action(
         )
     else:
         raise ValueError(
-            "Aira Resource and Instrument Actions require approval before activation"
+            "Aira Resource, Instrument, and Compute Actions require approval before activation"
         )
     return action
 
@@ -1898,8 +2233,11 @@ async def process_research_run_advance(
             return {"status": run.status, "action_id": str(action.id)}
         if run.aira_state.get("path_status") == "completed":
             return await _finish_aira_run(db_session, task=task, run=run)
-        if not config.effective_ai_enabled or not research_environment_has_ai_path(
-            run.environment_snapshot or {}
+        if (
+            not config.effective_ai_enabled
+            or not await research_run_has_executable_ai_path(
+                db_session, task=task, run=run
+            )
         ):
             run.status = ResearchRunStatus.RUNNING.value
             run.last_error = (
@@ -1973,6 +2311,7 @@ async def process_research_run_advance(
                 "resource",
                 "instrument",
                 "service",
+                "compute",
                 "wait",
             }:
                 current_run = (

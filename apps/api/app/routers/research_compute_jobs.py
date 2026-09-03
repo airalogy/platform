@@ -69,15 +69,23 @@ from app.services.research_budget import (
     project_budget_change,
     research_budget_snapshot,
 )
+from app.services.research_compute_contracts import (
+    MAX_OUTPUT_FILES,
+    MAX_SOURCE_BYTES,
+    ComputeInputDraft,
+    ComputeOutputDraft,
+    validate_compute_action_payload,
+    validate_compute_output_budget,
+)
 from app.services.research_compute_jobs import (
     ACTIVE_COMPUTE_JOB_STATUSES,
     FINAL_COMPUTE_JOB_STATUSES,
     LEASE_SECONDS,
-    MAX_SOURCE_BYTES,
     compute_action_command,
     compute_estimated_cost,
     compute_job_snapshot,
     compute_lease_token_digest,
+    compute_output_snapshot,
     compute_source_digest,
     eligible_runner_count,
     exact_compute_inputs,
@@ -99,69 +107,15 @@ from app.services.research_runtime import (
     enqueue_research_advance,
     request_action_approval,
     require_research_capability,
-    research_environment_has_ai_path,
+    research_run_has_executable_ai_path,
     utcnow,
 )
 
 router = APIRouter(tags=["research-compute-jobs"])
-runtime_router = APIRouter(
-    prefix="/compute-runner/v1", tags=["compute-runner-runtime"]
-)
+runtime_router = APIRouter(prefix="/compute-runner/v1", tags=["compute-runner-runtime"])
 
 LeaseToken = Annotated[str, Header(alias="X-Airalogy-Compute-Lease")]
-MOUNT_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
-MEDIA_TYPE_RE = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$"
-)
-MAX_OUTPUT_FILES = 16
-MAX_OUTPUT_FILE_BYTES = 2_147_483_647
 OUTPUT_UPLOAD_MIN_BYTES_PER_SECOND = 256 * 1024
-
-
-class ComputeInputDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    data_asset_version_id: UUID
-    mount_name: str = Field(min_length=1, max_length=128)
-
-    @model_validator(mode="after")
-    def normalize(self):
-        self.mount_name = self.mount_name.strip()
-        if not MOUNT_NAME_RE.fullmatch(self.mount_name):
-            raise ValueError("Invalid Compute input mount name")
-        return self
-
-
-class ComputeOutputDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    mount_name: str = Field(min_length=1, max_length=128)
-    asset_name: str = Field(min_length=1, max_length=512)
-    description: str = Field(default="", max_length=20_000)
-    kind: Literal["file", "table", "image", "model", "archive"] = "file"
-    media_type: str = Field(min_length=3, max_length=255)
-    max_bytes: int = Field(ge=1, le=MAX_OUTPUT_FILE_BYTES)
-    required: bool = True
-    data_schema: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def normalize(self):
-        self.mount_name = self.mount_name.strip()
-        self.asset_name = self.asset_name.strip()
-        self.description = self.description.strip()
-        self.media_type = self.media_type.strip().lower()
-        if not MOUNT_NAME_RE.fullmatch(self.mount_name):
-            raise ValueError("Invalid Compute output mount name")
-        if not self.asset_name:
-            raise ValueError("Compute output asset name is required")
-        if not MEDIA_TYPE_RE.fullmatch(self.media_type):
-            raise ValueError("Invalid Compute output media type")
-        if len(str(self.data_schema)) > 100_000:
-            raise ValueError("Compute output data Schema is too large")
-        if len(str(self.metadata)) > 100_000:
-            raise ValueError("Compute output metadata is too large")
-        return self
 
 
 class ComputeActionDraft(BaseModel):
@@ -184,17 +138,13 @@ class ComputeActionDraft(BaseModel):
         self.title = self.title.strip()
         self.description = self.description.strip()
         self.idempotency_key = self.idempotency_key.strip()
-        if not self.source_code.strip():
-            raise ValueError("Compute source code cannot be blank")
-        if len(self.source_code.encode("utf-8")) > MAX_SOURCE_BYTES:
-            raise ValueError("Compute source code is too large")
-        if len(str(self.input_payload)) > 100_000:
-            raise ValueError("Compute input payload is too large")
-        output_mounts = [item.mount_name for item in self.output_files]
-        if len(output_mounts) != len(set(output_mounts)):
-            raise ValueError("Compute output mount names must be unique")
-        if len(str([item.model_dump(mode="json") for item in self.output_files])) > 200_000:
-            raise ValueError("Compute output declarations are too large")
+        validate_compute_action_payload(
+            source_code=self.source_code,
+            source_byte_limit=MAX_SOURCE_BYTES,
+            input_payload=self.input_payload,
+            input_assets=self.input_assets,
+            output_files=self.output_files,
+        )
         return self
 
 
@@ -224,9 +174,7 @@ class ComputeUsage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     wall_seconds: int = Field(ge=0, le=86_400)
-    cpu_seconds: float = Field(
-        default=0, ge=0, le=5_529_600, allow_inf_nan=False
-    )
+    cpu_seconds: float = Field(default=0, ge=0, le=5_529_600, allow_inf_nan=False)
     max_memory_mb: int = Field(default=0, ge=0, le=1_048_576)
     gpu_seconds: float = Field(default=0, ge=0, le=691_200, allow_inf_nan=False)
     output_bytes: int = Field(default=0, ge=0, le=10 * 1024 * 1024 * 1024)
@@ -364,7 +312,9 @@ async def _validated_action_command(
             detail="Language is not allowed by this Compute Environment",
         )
     try:
-        validate_schema_payload(revision.input_schema, params.input_payload, "compute input")
+        validate_schema_payload(
+            revision.input_schema, params.input_payload, "compute input"
+        )
         inputs = await exact_compute_inputs(
             db_session,
             task=task,
@@ -375,20 +325,20 @@ async def _validated_action_command(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    output_limit = int(revision.resource_limits.get("max_output_bytes") or 0)
-    if sum(item.max_bytes for item in params.output_files) > max(0, output_limit - 1024):
+    try:
+        declared_output_bytes = validate_compute_output_budget(
+            params.output_files, revision.resource_limits
+        )
+    except ValueError as error:
         raise HTTPException(
             status_code=422,
-            detail=(
-                "Declared Compute output files must leave at least 1024 bytes "
-                "for the structured result"
-            ),
-        )
+            detail=str(error),
+        ) from error
     if params.output_files:
         await assert_research_file_upload_quota(
             db_session,
             requesting_user_id,
-            sum(item.max_bytes for item in params.output_files),
+            declared_output_bytes,
             incoming_count=len(params.output_files),
         )
     authorized_runners = await eligible_runner_count(
@@ -508,14 +458,19 @@ async def preview_compute_action(
     task, project, lab, run = await _task_context(
         db_session, current_user, task_id, capability="research.compute.use"
     )
-    command, _environment, revision, inputs, authorized, ready = (
-        await _validated_action_command(
-            db_session,
-            task=task,
-            run=run,
-            params=params,
-            requesting_user_id=current_user.id,
-        )
+    (
+        command,
+        _environment,
+        revision,
+        inputs,
+        authorized,
+        ready,
+    ) = await _validated_action_command(
+        db_session,
+        task=task,
+        run=run,
+        params=params,
+        requesting_user_id=current_user.id,
     )
     return {
         "preview_digest": canonical_digest(command),
@@ -556,14 +511,19 @@ async def create_compute_action(
     task, _project_context, _lab, run = await _task_context(
         db_session, current_user, task_id, capability="research.compute.use"
     )
-    command, environment, revision, inputs, _authorized, _ready = (
-        await _validated_action_command(
-            db_session,
-            task=task,
-            run=run,
-            params=params,
-            requesting_user_id=current_user.id,
-        )
+    (
+        command,
+        environment,
+        revision,
+        inputs,
+        _authorized,
+        _ready,
+    ) = await _validated_action_command(
+        db_session,
+        task=task,
+        run=run,
+        params=params,
+        requesting_user_id=current_user.id,
     )
     digest = canonical_digest(command)
     if digest != params.preview_digest:
@@ -694,7 +654,7 @@ async def create_compute_action(
         db_session.add(row)
         output_rows.append(row)
     await db_session.flush()
-    job.output_manifest = [_compute_output_snapshot(row) for row in output_rows]
+    job.output_manifest = [compute_output_snapshot(row) for row in output_rows]
     approval = await request_action_approval(
         db_session,
         task=task,
@@ -784,7 +744,9 @@ async def list_compute_jobs(
     }
 
 
-def _cancel_command(job: ResearchComputeJob, params: ComputeCancelDraft) -> dict[str, Any]:
+def _cancel_command(
+    job: ResearchComputeJob, params: ComputeCancelDraft
+) -> dict[str, Any]:
     return {
         "operation": "cancel_research_compute_job",
         "compute_job_id": str(job.id),
@@ -845,7 +807,9 @@ async def cancel_compute_job(
         raise HTTPException(status_code=409, detail="Compute Job is already final")
     command = _cancel_command(job, params)
     if canonical_digest(command) != params.preview_digest:
-        raise HTTPException(status_code=409, detail="Compute cancellation preview changed")
+        raise HTTPException(
+            status_code=409, detail="Compute cancellation preview changed"
+        )
     now = utcnow()
     previous_status = job.status
     job.cancel_reason = params.reason
@@ -965,9 +929,13 @@ def _ensure_live_lease(job: ResearchComputeJob) -> None:
 def _validate_usage(job: ResearchComputeJob, usage: ComputeUsage) -> None:
     limits = job.resource_limits or {}
     if usage.wall_seconds > job.timeout_seconds:
-        raise HTTPException(status_code=422, detail="Compute wall time exceeds its limit")
+        raise HTTPException(
+            status_code=422, detail="Compute wall time exceeds its limit"
+        )
     if usage.max_memory_mb > int(limits.get("memory_mb") or 0):
-        raise HTTPException(status_code=422, detail="Compute memory usage exceeds its limit")
+        raise HTTPException(
+            status_code=422, detail="Compute memory usage exceeds its limit"
+        )
     if usage.output_bytes > int(limits.get("max_output_bytes") or 0):
         raise HTTPException(status_code=422, detail="Compute output exceeds its limit")
 
@@ -1029,48 +997,6 @@ async def _input_rows(db_session: DBSession, job_id: UUID):
     )
 
 
-def _compute_output_snapshot(
-    output: ResearchComputeJobOutput,
-    blob: ResearchFileBlob | None = None,
-) -> dict[str, Any]:
-    status = (
-        "registered"
-        if output.data_asset_version_id is not None
-        else "uploaded"
-        if output.blob_id is not None
-        else "declared"
-    )
-    return {
-        "id": str(output.id),
-        "position": output.position,
-        "mount_name": output.mount_name,
-        "asset_name": output.asset_name,
-        "description": output.description,
-        "kind": output.kind,
-        "media_type": output.media_type,
-        "max_bytes": output.max_bytes,
-        "required": output.required,
-        "data_schema": output.data_schema,
-        "metadata": output.version_metadata,
-        "status": status,
-        "checksum_sha256": blob.checksum_sha256 if blob is not None else None,
-        "byte_size": blob.size_bytes if blob is not None else None,
-        "research_file_id": (
-            str(output.research_file_id) if output.research_file_id else None
-        ),
-        "data_asset_id": str(output.data_asset_id) if output.data_asset_id else None,
-        "data_asset_version_id": (
-            str(output.data_asset_version_id)
-            if output.data_asset_version_id
-            else None
-        ),
-        "uploaded_at": output.uploaded_at.isoformat() if output.uploaded_at else None,
-        "registered_at": (
-            output.registered_at.isoformat() if output.registered_at else None
-        ),
-    }
-
-
 async def _output_rows(db_session: DBSession, job_id: UUID):
     return list(
         (
@@ -1091,7 +1017,7 @@ async def _refresh_output_manifest(
     db_session: DBSession, job: ResearchComputeJob
 ) -> list[dict[str, Any]]:
     manifest = [
-        _compute_output_snapshot(output, blob)
+        compute_output_snapshot(output, blob)
         for output, blob in await _output_rows(db_session, job.id)
     ]
     job.output_manifest = manifest
@@ -1105,7 +1031,9 @@ async def lease_compute_job(
 ):
     runner = await authenticate_compute_runner(db_session, runner_token)
     if not runner.enabled or not runner_report_is_execution_ready(runner):
-        raise HTTPException(status_code=403, detail="Compute Runner is not execution-ready")
+        raise HTTPException(
+            status_code=403, detail="Compute Runner is not execution-ready"
+        )
     report = runner.last_report or {}
     if int(report.get("available_slots") or 0) <= 0:
         await db_session.commit()
@@ -1256,9 +1184,7 @@ async def lease_compute_job(
         invalid_reason = "Compute source digest no longer matches"
     else:
         try:
-            await validate_pinned_compute_inputs(
-                db_session, task=task, job_id=job.id
-            )
+            await validate_pinned_compute_inputs(db_session, task=task, job_id=job.id)
         except ValueError as error:
             invalid_reason = str(error)
     if invalid_reason is not None:
@@ -1637,7 +1563,9 @@ async def upload_compute_output(
     checksum_sha256 = checksum_sha256.strip().lower()
     content_type = content_type.strip().lower()
     if not re.fullmatch(r"[0-9a-f]{64}", checksum_sha256):
-        raise HTTPException(status_code=422, detail="Compute output checksum is invalid")
+        raise HTTPException(
+            status_code=422, detail="Compute output checksum is invalid"
+        )
     runner = await authenticate_compute_runner(db_session, runner_token)
     job, _action, _run, _task = await _runner_job_context(
         db_session, runner=runner, job_id=job_id, lease_token=lease_token
@@ -1681,9 +1609,7 @@ async def upload_compute_output(
             status_code=413, detail="Compute output exceeds its declared limit"
         )
     if content_type != output.media_type:
-        raise HTTPException(
-            status_code=415, detail="Compute output media type changed"
-        )
+        raise HTTPException(status_code=415, detail="Compute output media type changed")
     await assert_research_file_upload_quota(
         db_session,
         job.created_by_user_id,
@@ -1717,7 +1643,8 @@ async def upload_compute_output(
             staged.write(chunk)
         if received != content_length:
             raise HTTPException(
-                status_code=422, detail="Compute output byte count changed during upload"
+                status_code=422,
+                detail="Compute output byte count changed during upload",
             )
         if not hmac.compare_digest(digest.hexdigest(), checksum_sha256):
             raise HTTPException(
@@ -2128,7 +2055,7 @@ async def complete_compute_job(
     if (
         task.status == ResearchTaskStatus.ACTIVE.value
         and config.effective_ai_enabled
-        and research_environment_has_ai_path(run.environment_snapshot or {})
+        and await research_run_has_executable_ai_path(db_session, task=task, run=run)
     ):
         await enqueue_research_advance(db_session, task=task, run=run)
     elif task.status == ResearchTaskStatus.ACTIVE.value:

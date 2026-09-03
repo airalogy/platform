@@ -13,6 +13,15 @@ from masterbrain.usage import UsageContext
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.libs.masterbrain import aira_action_proposal
+from app.services.research_compute_contracts import (
+    MAX_AIRA_SOURCE_BYTES,
+    MAX_INPUT_ASSETS,
+    MAX_OUTPUT_FILES,
+    ComputeInputDraft,
+    ComputeOutputDraft,
+    validate_compute_action_payload,
+    validate_compute_output_budget,
+)
 
 
 class AiraResourceRequest(BaseModel):
@@ -54,13 +63,50 @@ class AiraResourceRequest(BaseModel):
         return self
 
 
+class AiraComputeRequest(BaseModel):
+    """Untrusted analysis code bound to one pinned Compute Environment revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    compute_environment_revision_id: UUID
+    language: Literal["python", "r"]
+    source_code: str = Field(min_length=1, max_length=MAX_AIRA_SOURCE_BYTES)
+    input_payload: dict[str, Any] = Field(default_factory=dict)
+    input_assets: list[ComputeInputDraft] = Field(
+        default_factory=list, max_length=MAX_INPUT_ASSETS
+    )
+    output_files: list[ComputeOutputDraft] = Field(
+        default_factory=list, max_length=MAX_OUTPUT_FILES
+    )
+    title: str = Field(default="", max_length=255)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.title = self.title.strip()
+        validate_compute_action_payload(
+            source_code=self.source_code,
+            source_byte_limit=MAX_AIRA_SOURCE_BYTES,
+            input_payload=self.input_payload,
+            input_assets=self.input_assets,
+            output_files=self.output_files,
+        )
+        return self
+
+
 class AiraActionProposal(BaseModel):
     """One untrusted AI proposal, validated before any Action is persisted."""
 
     model_config = ConfigDict(extra="forbid")
 
     decision: Literal[
-        "protocol", "tool", "resource", "instrument", "service", "wait", "finish"
+        "protocol",
+        "tool",
+        "resource",
+        "instrument",
+        "service",
+        "compute",
+        "wait",
+        "finish",
     ]
     thought: str = Field(default="", max_length=4000)
     tool_key: str | None = Field(default=None, max_length=128)
@@ -79,6 +125,7 @@ class AiraActionProposal(BaseModel):
     resource_request: AiraResourceRequest | None = None
     service_offering_id: UUID | None = None
     service_request: dict[str, Any] = Field(default_factory=dict)
+    compute_request: AiraComputeRequest | None = None
 
     @model_validator(mode="after")
     def validate_decision_fields(self):
@@ -115,11 +162,13 @@ class AiraActionProposal(BaseModel):
         if self.decision == "service" and self.service_offering_id is None:
             raise ValueError("A service proposal requires service_offering_id")
         if self.decision != "service" and self.service_offering_id is not None:
-            raise ValueError(
-                "service_offering_id is only valid for a service proposal"
-            )
+            raise ValueError("service_offering_id is only valid for a service proposal")
         if self.decision != "service" and self.service_request:
             raise ValueError("service_request is only valid for a service proposal")
+        if self.decision == "compute" and self.compute_request is None:
+            raise ValueError("A compute proposal requires compute_request")
+        if self.decision != "compute" and self.compute_request is not None:
+            raise ValueError("compute_request is only valid for a compute proposal")
         return self
 
 
@@ -241,8 +290,55 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         for item in list(context.get("services") or [])
         if item.get("available", True)
     ]
+    compute_environments = [
+        {
+            "environment_id": item.get("source_id"),
+            "revision_id": item.get("source_revision_id"),
+            "revision": item.get("version"),
+            "name": item.get("name"),
+            "description": item.get("description"),
+            "input_schema": item.get("input_schema") or {},
+            "result_schema": item.get("output_schema") or {},
+            "risk": item.get("risk"),
+            "allowed_languages": (item.get("metadata") or {}).get("allowed_languages")
+            or [],
+            "resource_limits": (item.get("metadata") or {}).get("resource_limits")
+            or {},
+            "network_policy": (item.get("metadata") or {}).get("network_policy"),
+            "allowed_egress_hosts": (item.get("metadata") or {}).get(
+                "allowed_egress_hosts"
+            )
+            or [],
+            "software_manifest": (item.get("metadata") or {}).get("software_manifest")
+            or {},
+            "estimated_cost_per_hour": (item.get("metadata") or {}).get(
+                "estimated_cost_per_hour"
+            ),
+            "currency": (item.get("metadata") or {}).get("currency"),
+        }
+        for item in list(context.get("compute") or [])
+        if item.get("available", True)
+    ]
+    compute_inputs = [
+        {
+            "data_asset_id": item.get("data_asset_id"),
+            "data_asset_version_id": item.get("data_asset_version_id"),
+            "version": item.get("version"),
+            "name": item.get("name"),
+            "description": item.get("description"),
+            "kind": item.get("kind"),
+            "media_type": item.get("media_type"),
+            "checksum": item.get("checksum"),
+            "byte_size": item.get("byte_size"),
+            "data_schema": item.get("data_schema") or {},
+            "suggested_mount_name": item.get("suggested_mount_name"),
+        }
+        for item in list(context.get("compute_inputs") or [])
+    ]
     decision_schema = {
-        "decision": "protocol | tool | resource | instrument | service | wait | finish",
+        "decision": (
+            "protocol | tool | resource | instrument | service | compute | wait | finish"
+        ),
         "thought": "short scientific reason",
         "tool_key": "required only for tool",
         "instrument_command_id": "required only for instrument; choose one listed ID",
@@ -258,6 +354,38 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         },
         "service_offering_id": "required only for service; choose one listed ID",
         "service_request": "required service request object; must match its input_schema",
+        "compute_request": {
+            "compute_environment_revision_id": (
+                "required only for compute; choose one listed revision_id"
+            ),
+            "language": "python | r; must be allowed by the chosen environment",
+            "source_code": (
+                "complete deterministic analysis program; read inputs from "
+                "/airalogy/input/files and write only declared outputs to "
+                "/airalogy/output/files"
+            ),
+            "input_payload": "must match the chosen environment input_schema",
+            "input_assets": [
+                {
+                    "data_asset_version_id": "choose only a listed exact version ID",
+                    "mount_name": "safe unique filename exposed read-only",
+                }
+            ],
+            "output_files": [
+                {
+                    "mount_name": "safe unique output filename",
+                    "asset_name": "name for the resulting draft DataAsset",
+                    "description": "scientific meaning of this output",
+                    "kind": "file | table | image | model | archive",
+                    "media_type": "valid MIME type",
+                    "max_bytes": "positive byte limit inside the environment cap",
+                    "required": "boolean",
+                    "data_schema": "optional structured schema",
+                    "metadata": "optional provenance-safe metadata",
+                }
+            ],
+            "title": "short reviewable computation title",
+        },
         "wait_template_key": "required only for wait",
         "wait_title": "optional for wait",
         "wait_description": "optional for wait",
@@ -265,12 +393,13 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, resource, instrument, service, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, resource, instrument, service, compute, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
+            "Compute is isolated digital analysis in one listed exact environment revision. Choose only listed DataAsset versions, generate deterministic code, declare every output file and byte cap, and never assume host, shell, secret, or unrestricted network access. Platform validates and requires human approval before a Runner can execute it.",
             "Wait only when progress truly depends on an external result that is not available yet.",
             "Finish only when the research path can proceed to its final evidence-based conclusion.",
             "Do not repeat a completed Tool with equivalent arguments unless new evidence requires it.",
@@ -281,6 +410,8 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             f"AVAILABLE_RESOURCE_REQUIREMENTS={_bounded_json(resources)}",
             f"AVAILABLE_INSTRUMENT_COMMANDS={_bounded_json(instrument_commands)}",
             f"AVAILABLE_SERVICES={_bounded_json(services)}",
+            f"AVAILABLE_COMPUTE_ENVIRONMENTS={_bounded_json(compute_environments)}",
+            f"AVAILABLE_COMPUTE_INPUTS={_bounded_json(compute_inputs)}",
             f"WAIT_TEMPLATES={_bounded_json(AIRA_WAIT_TEMPLATES)}",
             f"RESEARCH_CONTEXT={_bounded_json(context)}",
         ]
@@ -387,5 +518,46 @@ async def plan_next_research_action(
             dict(pinned.get("input_schema") or {}),
             proposal.service_request,
             "Service request",
+        )
+    if proposal.decision == "compute":
+        from app.services.research_instruments import validate_schema_payload
+
+        request = proposal.compute_request
+        if request is None:
+            raise ValueError("Aira Compute proposal is incomplete")
+        pinned = next(
+            (
+                item
+                for item in list(context.get("compute") or [])
+                if str(item.get("source_revision_id") or "")
+                == str(request.compute_environment_revision_id)
+            ),
+            None,
+        )
+        if pinned is None:
+            raise ValueError(
+                "Aira proposed a Compute Environment outside the environment"
+            )
+        if not pinned.get("available", True):
+            raise ValueError("Aira proposed an unavailable Compute Environment")
+        metadata = dict(pinned.get("metadata") or {})
+        if request.language not in list(metadata.get("allowed_languages") or []):
+            raise ValueError("Aira proposed a disallowed Compute language")
+        validate_schema_payload(
+            dict(pinned.get("input_schema") or {}),
+            request.input_payload,
+            "Compute input",
+        )
+        available_versions = {
+            str(item.get("data_asset_version_id") or "")
+            for item in list(context.get("compute_inputs") or [])
+        }
+        if any(
+            str(item.data_asset_version_id) not in available_versions
+            for item in request.input_assets
+        ):
+            raise ValueError("Aira proposed a Compute input outside the Task context")
+        validate_compute_output_budget(
+            request.output_files, dict(metadata.get("resource_limits") or {})
         )
     return proposal

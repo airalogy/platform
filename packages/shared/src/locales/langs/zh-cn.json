@@ -1198,7 +1198,7 @@
       "computeLanguage": "语言",
       "computeMaximumCost": "最大预留费用",
       "computeUnpriced": "未配置计费单价",
-      "computeSource": "已审核源代码",
+      "computeSource": "源代码",
       "computeSourcePlaceholder": "输入将在隔离 Runner 中执行的确定性 Python 或 R 代码。",
       "computeInputPayload": "输入载荷（JSON）",
       "computeInputSchemaHint": "Platform 会依据已固定的环境契约校验该对象。",

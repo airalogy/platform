@@ -10,10 +10,10 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.knowledge import ResearchFile
+from app.models.knowledge import ResearchFile, ResearchFileBlob
 from app.models.research import (
     ResearchAction,
     ResearchActionStatus,
@@ -30,6 +30,7 @@ from app.models.research_execution import (
     ResearchComputeEnvironmentRevision,
     ResearchComputeJob,
     ResearchComputeJobInput,
+    ResearchComputeJobOutput,
     ResearchComputeJobStatus,
     ResearchComputeRunner,
     ResearchComputeRunnerEnvironment,
@@ -44,7 +45,6 @@ from app.services.research_compute_runners import runner_report_is_execution_rea
 from app.services.research_runtime import canonical_digest, utcnow
 
 LEASE_SECONDS = 120
-MAX_SOURCE_BYTES = 200_000
 FINAL_COMPUTE_JOB_STATUSES = {
     ResearchComputeJobStatus.COMPLETED.value,
     ResearchComputeJobStatus.FAILED.value,
@@ -85,8 +85,10 @@ def compute_estimated_cost(
     if revision.estimated_cost_per_hour is None:
         return None
     timeout_seconds = int((revision.resource_limits or {}).get("timeout_seconds") or 0)
-    return Decimal(revision.estimated_cost_per_hour) * Decimal(timeout_seconds) / Decimal(
-        3600
+    return (
+        Decimal(revision.estimated_cost_per_hour)
+        * Decimal(timeout_seconds)
+        / Decimal(3600)
     )
 
 
@@ -99,11 +101,57 @@ def compute_actual_cost(job: ResearchComputeJob, wall_seconds: int) -> Decimal |
     return Decimal(str(hourly)) * Decimal(billable_seconds) / Decimal(3600)
 
 
-def compute_job_snapshot(job: ResearchComputeJob) -> dict[str, Any]:
+def compute_job_snapshot(
+    job: ResearchComputeJob, *, include_source: bool = False
+) -> dict[str, Any]:
     data = job.as_dict()
     data["source_sha256"] = job.source_sha256
     data["source_bytes"] = len(job.source_code.encode("utf-8"))
+    if include_source:
+        data["source_code"] = job.source_code
     return data
+
+
+def compute_output_snapshot(
+    output: ResearchComputeJobOutput,
+    blob: ResearchFileBlob | None = None,
+) -> dict[str, Any]:
+    """Return the stable declared/uploaded/registered output contract."""
+
+    status = (
+        "registered"
+        if output.data_asset_version_id is not None
+        else "uploaded"
+        if output.blob_id is not None
+        else "declared"
+    )
+    return {
+        "id": str(output.id),
+        "position": output.position,
+        "mount_name": output.mount_name,
+        "asset_name": output.asset_name,
+        "description": output.description,
+        "kind": output.kind,
+        "media_type": output.media_type,
+        "max_bytes": output.max_bytes,
+        "required": output.required,
+        "data_schema": output.data_schema,
+        "metadata": output.version_metadata,
+        "status": status,
+        "checksum_sha256": blob.checksum_sha256 if blob is not None else None,
+        "byte_size": blob.size_bytes if blob is not None else None,
+        "research_file_id": (
+            str(output.research_file_id) if output.research_file_id else None
+        ),
+        "data_asset_id": str(output.data_asset_id) if output.data_asset_id else None,
+        "data_asset_version_id": (
+            str(output.data_asset_version_id) if output.data_asset_version_id else None
+        ),
+        "uploaded_at": output.uploaded_at.isoformat() if output.uploaded_at else None,
+        "registered_at": (
+            output.registered_at.isoformat() if output.registered_at else None
+        ),
+    }
 
 
 def compute_action_command(
@@ -258,6 +306,64 @@ async def exact_compute_inputs(
             )
         result.append((asset, version, mount_name))
     return result
+
+
+async def available_compute_input_options(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """List safe current Project DataAsset versions without storage internals."""
+
+    rows = list(
+        (
+            await db_session.execute(
+                select(DataAsset, DataAssetVersion, ResearchFile)
+                .join(
+                    DataAssetVersion,
+                    (DataAssetVersion.data_asset_id == DataAsset.id)
+                    & (DataAssetVersion.version == DataAsset.current_version),
+                )
+                .join(
+                    ResearchFile,
+                    ResearchFile.id == DataAssetVersion.research_file_id,
+                )
+                .where(
+                    DataAsset.lab_id == task.lab_id,
+                    DataAsset.project_id == task.project_id,
+                    DataAsset.archived_at.is_(None),
+                    DataAsset.status == DataAssetStatus.READY.value,
+                    ResearchFile.scope_type.in_(["lab", "project"]),
+                    ResearchFile.lab_id == task.lab_id,
+                    or_(
+                        ResearchFile.project_id.is_(None),
+                        ResearchFile.project_id == task.project_id,
+                    ),
+                    ResearchFile.visibility.notin_(["private", "restricted"]),
+                    ResearchFile.archived_at.is_(None),
+                )
+                .order_by(DataAsset.updated_at.desc(), DataAsset.id)
+                .limit(max(1, min(limit, 100)))
+            )
+        ).all()
+    )
+    return [
+        {
+            "data_asset_id": str(asset.id),
+            "data_asset_version_id": str(version.id),
+            "version": version.version,
+            "name": asset.name,
+            "description": asset.description,
+            "kind": asset.kind,
+            "media_type": version.media_type,
+            "checksum": version.checksum,
+            "byte_size": version.byte_size,
+            "data_schema": version.data_schema,
+            "suggested_mount_name": f"input-{position}",
+        }
+        for position, (asset, version, _research_file) in enumerate(rows, start=1)
+    ]
 
 
 async def validate_pinned_compute_inputs(
@@ -426,7 +532,8 @@ async def activate_compute_action(
     )
     if (
         revision.revision != job.compute_environment_revision
-        or compute_environment_snapshot(environment, revision) != job.environment_snapshot
+        or compute_environment_snapshot(environment, revision)
+        != job.environment_snapshot
         or compute_source_digest(job.source_code) != job.source_sha256
     ):
         raise ValueError("Compute Job contract changed before approval")
@@ -436,7 +543,9 @@ async def activate_compute_action(
         environment_revision_id=revision.id,
         ready_only=False,
     ):
-        raise ValueError("No Compute Runner is authorized for this environment revision")
+        raise ValueError(
+            "No Compute Runner is authorized for this environment revision"
+        )
     if task.budget_limit is not None and job.estimated_cost and job.estimated_cost > 0:
         if not job.currency:
             raise ResearchBudgetError("Compute Environment cost currency is missing")
@@ -566,9 +675,7 @@ async def release_compute_budget(
     )
 
 
-async def runner_active_job_count(
-    db_session: AsyncSession, runner_id: UUID
-) -> int:
+async def runner_active_job_count(db_session: AsyncSession, runner_id: UUID) -> int:
     return int(
         await db_session.scalar(
             select(func.count())

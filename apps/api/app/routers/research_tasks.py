@@ -99,6 +99,7 @@ from app.services.research_compute import (
 from app.services.research_compute_jobs import (
     activate_compute_action,
     compute_job_snapshot,
+    eligible_runner_count,
     release_compute_budget,
 )
 from app.services.research_executor_bindings import (
@@ -130,7 +131,7 @@ from app.services.research_runtime import (
     has_research_capability,
     initial_aira_state,
     require_research_capability,
-    research_environment_has_ai_path,
+    research_run_has_executable_ai_path,
     research_task_command,
     task_protocol_rows,
     utcnow,
@@ -679,7 +680,9 @@ async def _validate_task_draft(
             or provider.archived_at is not None
             or not provider.enabled
         ):
-            raise HTTPException(status_code=422, detail="Service provider is unavailable")
+            raise HTTPException(
+                status_code=422, detail="Service provider is unavailable"
+            )
         revision = await latest_service_offering_revision(db_session, offering.id)
         if revision is None:
             raise HTTPException(
@@ -823,12 +826,14 @@ def _task_preview(
     compute_environments: list[
         tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]
     ],
+    compute_runtime_available: bool,
 ) -> dict[str, Any]:
-    # A pinned Compute Environment is a governed execution contract, not an
-    # executable Aira path by itself. Keep it out of this check until the
-    # independent Compute Runner and Compute Job state machine are available.
     ai_path_available = config.effective_ai_enabled and bool(
-        protocols or tools or resources or service_offerings
+        protocols
+        or tools
+        or resources
+        or service_offerings
+        or (compute_environments and compute_runtime_available)
     )
     return {
         "preview_digest": canonical_digest(command),
@@ -907,7 +912,15 @@ def _task_preview(
                     "Aira is unavailable. The Task remains fully usable through "
                     "manual Protocol and digital Actions."
                     if not config.effective_ai_enabled
-                    else "No executable capability is selected for Aira."
+                    else (
+                        "No authorized Compute Runner supports the selected "
+                        "environment revision yet; this Task will start under "
+                        "manual control."
+                        if compute_environments
+                        and not (protocols or tools or resources or service_offerings)
+                        and not compute_runtime_available
+                        else "No executable capability is selected for Aira."
+                    )
                 )
             ]
         ),
@@ -972,7 +985,9 @@ async def _task_summary(
         "ai_available": bool(
             config.effective_ai_enabled
             and run is not None
-            and research_environment_has_ai_path(run.environment_snapshot or {})
+            and await research_run_has_executable_ai_path(
+                db_session, task=task, run=run
+            )
         ),
     }
 
@@ -1041,7 +1056,11 @@ async def _action_data(
         "work_item": work_item.as_dict() if work_item else None,
         "tool_job": tool_job.as_dict() if tool_job else None,
         "instrument_job": instrument_job.as_dict() if instrument_job else None,
-        "compute_job": compute_job_snapshot(compute_job) if compute_job else None,
+        "compute_job": (
+            compute_job_snapshot(compute_job, include_source=True)
+            if compute_job
+            else None
+        ),
         "wait_event": wait_event.as_dict() if wait_event else None,
         "resource_reservation": (
             resource_reservation.as_dict() if resource_reservation else None
@@ -1362,6 +1381,16 @@ async def preview_research_task(
         service_offerings,
         compute_environments,
     ) = await _validate_task_draft(db_session, current_user, params)
+    compute_runtime_available = any(
+        [
+            await eligible_runner_count(
+                db_session,
+                environment_revision_id=revision.id,
+                ready_only=False,
+            )
+            for _environment, revision in compute_environments
+        ]
+    )
     return _task_preview(
         command=command,
         project=project,
@@ -1374,6 +1403,7 @@ async def preview_research_task(
         resources=resources,
         service_offerings=service_offerings,
         compute_environments=compute_environments,
+        compute_runtime_available=compute_runtime_available,
     )
 
 
@@ -1848,7 +1878,7 @@ async def start_research_task(
     now = utcnow()
     ai_path_available = bool(
         config.effective_ai_enabled
-        and research_environment_has_ai_path(run.environment_snapshot or {})
+        and await research_run_has_executable_ai_path(db_session, task=task, run=run)
     )
     run.status = (
         ResearchRunStatus.PLANNING.value
@@ -2122,8 +2152,7 @@ async def resume_research_task(
         )
     if (
         active_compute_job is not None
-        and active_compute_job.status
-        == ResearchComputeJobStatus.CANCEL_REQUESTED.value
+        and active_compute_job.status == ResearchComputeJobStatus.CANCEL_REQUESTED.value
     ):
         raise HTTPException(
             status_code=409,
@@ -2147,8 +2176,8 @@ async def resume_research_task(
         run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
     else:
         run.status = ResearchRunStatus.RUNNING.value
-        if config.effective_ai_enabled and research_environment_has_ai_path(
-            run.environment_snapshot or {}
+        if config.effective_ai_enabled and await research_run_has_executable_ai_path(
+            db_session, task=task, run=run
         ):
             await enqueue_research_advance(db_session, task=task, run=run)
     await emit_research_event(
@@ -2326,9 +2355,7 @@ async def cancel_research_task(
                     compute_job.status = ResearchComputeJobStatus.CANCELLED.value
                     compute_job.completed_at = now
                 else:
-                    compute_job.status = (
-                        ResearchComputeJobStatus.CANCEL_REQUESTED.value
-                    )
+                    compute_job.status = ResearchComputeJobStatus.CANCEL_REQUESTED.value
             service_jobs = list(
                 (
                     await db_session.scalars(
@@ -2365,7 +2392,9 @@ async def cancel_research_task(
                         )
                     except ResearchBudgetError as error:
                         await db_session.rollback()
-                        raise HTTPException(status_code=409, detail=str(error)) from error
+                        raise HTTPException(
+                            status_code=409, detail=str(error)
+                        ) from error
                 service_job.status = ResearchServiceJobStatus.CANCELLED.value
                 service_job.error = params.reason or "Research Task cancelled"
                 service_job.completed_at = now
@@ -3612,8 +3641,8 @@ async def submit_research_work_item(
         },
         idempotency_key=(f"work-item:{item.id}:record:{record.id}:v{record.version}"),
     )
-    if config.effective_ai_enabled and research_environment_has_ai_path(
-        run.environment_snapshot or {}
+    if config.effective_ai_enabled and await research_run_has_executable_ai_path(
+        db_session, task=task, run=run
     ):
         await enqueue_research_advance(db_session, task=task, run=run)
     else:
@@ -4082,8 +4111,7 @@ async def reject_research_action(
     )
     if (
         service_job is not None
-        and service_job.status
-        == ResearchServiceJobStatus.AWAITING_APPROVAL.value
+        and service_job.status == ResearchServiceJobStatus.AWAITING_APPROVAL.value
     ):
         service_job.status = ResearchServiceJobStatus.CANCELLED.value
         service_job.error = f"Order rejected: {approval.decision_reason}"
@@ -4132,8 +4160,8 @@ async def reject_research_action(
         },
         idempotency_key=f"approval:{approval.id}:rejected",
     )
-    if config.effective_ai_enabled and research_environment_has_ai_path(
-        run.environment_snapshot or {}
+    if config.effective_ai_enabled and await research_run_has_executable_ai_path(
+        db_session, task=task, run=run
     ):
         await enqueue_research_advance(db_session, task=task, run=run)
     else:

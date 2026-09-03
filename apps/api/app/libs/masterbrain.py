@@ -450,9 +450,9 @@ async def aira_action_proposal(
     """Ask Masterbrain for a Platform-owned, strictly validated Action proposal.
 
     Masterbrain's AIRA Method remains responsible for scientific strategy and
-    Protocol selection. This adapter only supplies the additional Platform
-    decision boundary between a Protocol, a typed Tool, an external Wait, and
-    finishing the path.
+    Protocol selection. This adapter supplies the additional Platform boundary
+    between a Protocol and governed Tool, Resource, Instrument, External
+    Service, Compute, or Wait Actions before the path can finish.
     """
 
     return await aira_structured_proposal(

@@ -1198,7 +1198,7 @@
       "computeLanguage": "Language",
       "computeMaximumCost": "Maximum reserved cost",
       "computeUnpriced": "No monetary rate configured",
-      "computeSource": "Reviewed source code",
+      "computeSource": "Source code",
       "computeSourcePlaceholder": "Enter deterministic Python or R source for the isolated Runner.",
       "computeInputPayload": "Input payload (JSON)",
       "computeInputSchemaHint": "Platform validates this object against the pinned environment contract.",

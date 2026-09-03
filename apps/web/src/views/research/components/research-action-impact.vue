@@ -63,9 +63,21 @@
         <div class="aira-type-meta">{{ $t("page.research.computeResourceLimits") }}</div>
         <pre>{{ formatted(action.compute_job.resource_limits) }}</pre>
       </div>
+      <div v-if="action.compute_job.source_code">
+        <div class="aira-type-meta">{{ $t("page.research.computeSource") }}</div>
+        <pre>{{ action.compute_job.source_code }}</pre>
+      </div>
       <div>
         <div class="aira-type-meta">{{ $t("page.research.computeInputPayload") }}</div>
         <pre>{{ formatted(action.compute_job.input_payload) }}</pre>
+      </div>
+      <div v-if="computeInputAssets.length">
+        <div class="aira-type-meta">{{ $t("page.research.computeInputAssets") }}</div>
+        <pre>{{ formatted(computeInputAssets) }}</pre>
+      </div>
+      <div v-if="action.compute_job.output_manifest?.length">
+        <div class="aira-type-meta">{{ $t("page.research.computeOutputFiles") }}</div>
+        <pre>{{ formatted(action.compute_job.output_manifest) }}</pre>
       </div>
     </div>
     <div v-else-if="action.wait_event" class="mt-2">
@@ -142,6 +154,11 @@ const bookingWindow = computed(() => (
   (props.action.requirements?.booking_window || {}) as Record<string, string>
 ))
 
+const computeInputAssets = computed(() => {
+  const value = props.action.input_data?.input_assets
+  return Array.isArray(value) ? value : []
+})
+
 const instrumentResource = computed(() => {
   const name = String(props.action.input_data?.resource_name || props.action.instrument_job?.resource_id || "")
   const code = String(props.action.input_data?.resource_code || "")
@@ -152,7 +169,7 @@ function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString() : "—"
 }
 
-function formatted(value: Record<string, unknown>) {
+function formatted(value: unknown) {
   return JSON.stringify(value || {}, null, 2)
 }
 </script>
