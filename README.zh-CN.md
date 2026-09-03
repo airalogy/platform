@@ -28,6 +28,7 @@ Enterprise 扩展不应直接混入这个仓库，除非该能力对开源版也
 platform/
 ├── apps/
 │   ├── api/    # FastAPI backend、migrations、Docker Compose stack
+│   ├── compute-runner/     # 受治理 Python/R 作业的隔离运行时
 │   ├── instrument-gateway/ # 部署在科研设备旁的只拉取本地运行时
 │   ├── web/    # Vue 3 Web 应用
 │   └── admin/  # 为后续管理端预留的 workspace

@@ -48,6 +48,21 @@ test("Instrument Gateway changes add its isolated runtime tests", () => {
   ])
 })
 
+test("Compute Runner changes add its isolated runtime tests", () => {
+  assert.deepEqual(checkIds(["apps/compute-runner/src/airalogy_compute_runner/runtime.py"]), [
+    "lint",
+    "types",
+    "api-compile",
+    "compute-runner-tests",
+  ])
+  assert.deepEqual(checkIds([".github/workflows/compute-runner.yml"]), [
+    "lint",
+    "types",
+    "api-compile",
+    "compute-runner-tests",
+  ])
+})
+
 test("E2E infrastructure changes run the full browser suite", () => {
   assert.deepEqual(checkIds(["tests/e2e/scripts/start-api.sh"]), [
     "lint",

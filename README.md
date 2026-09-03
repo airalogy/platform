@@ -28,6 +28,7 @@ Formal releases, immutable image identity, support diagnostics, and the boundary
 platform/
 ├── apps/
 │   ├── api/    # FastAPI backend, migrations, Docker Compose stack
+│   ├── compute-runner/     # Isolated runtime for governed Python/R jobs
 │   ├── instrument-gateway/ # Pull-only local runtime beside laboratory equipment
 │   ├── web/    # Vue 3 web application
 │   └── admin/  # Reserved workspace slot for future admin surfaces

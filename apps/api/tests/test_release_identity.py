@@ -18,9 +18,14 @@ def test_release_workflow_builds_the_complete_component_set():
     assert 'tags:\n      - "v*.*.*"' in workflow
     for component in ("api", "web", "protocol-executor", "postgres"):
         assert f"- component: {component}" in workflow
-    assert "gateway-package:" in workflow
-    assert "uv --directory apps/instrument-gateway build --locked" in workflow
-    assert "instrument-gateway-package/*" in workflow
+    for package, job_name in (
+        ("instrument-gateway", "gateway-package"),
+        ("compute-runner", "compute-runner-package"),
+    ):
+        assert f"{job_name}:" in workflow
+        assert f"uv --directory apps/{package} lock --check" in workflow
+        assert f"uv --directory apps/{package} build" in workflow
+        assert f"{package}-package/*" in workflow
     assert "release-manifest.json" in workflow
     assert "attest-build-provenance" in workflow
 

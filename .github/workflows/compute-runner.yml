@@ -1,17 +1,17 @@
-name: Instrument Gateway
+name: Compute Runner
 
 on:
   push:
     paths:
-      - "apps/instrument-gateway/**"
-      - ".github/workflows/instrument-gateway.yml"
+      - "apps/compute-runner/**"
+      - ".github/workflows/compute-runner.yml"
   pull_request:
     paths:
-      - "apps/instrument-gateway/**"
-      - ".github/workflows/instrument-gateway.yml"
+      - "apps/compute-runner/**"
+      - ".github/workflows/compute-runner.yml"
 
 concurrency:
-  group: instrument-gateway-${{ github.ref }}
+  group: compute-runner-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/instrument-gateway
+        working-directory: apps/compute-runner
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -48,7 +48,7 @@ jobs:
 
       - name: Verify wheel installation
         run: |
-          python -m venv "$RUNNER_TEMP/instrument-gateway-wheel"
-          "$RUNNER_TEMP/instrument-gateway-wheel/bin/pip" install --no-deps dist/*.whl
-          "$RUNNER_TEMP/instrument-gateway-wheel/bin/python" -c \
-            "import airalogy_instrument_gateway, importlib.metadata; print(importlib.metadata.version('airalogy-instrument-gateway'))"
+          python -m venv "$RUNNER_TEMP/compute-runner-wheel"
+          "$RUNNER_TEMP/compute-runner-wheel/bin/pip" install --no-deps dist/*.whl
+          "$RUNNER_TEMP/compute-runner-wheel/bin/python" -c \
+            "import airalogy_compute_runner, importlib.metadata; print(importlib.metadata.version('airalogy-compute-runner'))"

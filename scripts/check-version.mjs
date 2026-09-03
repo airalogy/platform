@@ -16,7 +16,11 @@ for (const packageFile of ["package.json", "apps/web/package.json"]) {
   }
 }
 
-for (const projectFile of ["apps/api/pyproject.toml", "apps/instrument-gateway/pyproject.toml"]) {
+for (const projectFile of [
+  "apps/api/pyproject.toml",
+  "apps/compute-runner/pyproject.toml",
+  "apps/instrument-gateway/pyproject.toml",
+]) {
   const project = await readText(projectFile)
   const projectVersion = /^version\s*=\s*"([^"]+)"$/mu.exec(project)?.[1]
   if (projectVersion !== version) {

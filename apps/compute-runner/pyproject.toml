@@ -1,0 +1,22 @@
+[project]
+name = "airalogy-compute-runner"
+version = "0.1.0"
+description = "Isolated pull-only runtime for governed Airalogy Compute Jobs"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Airalogy" }]
+dependencies = []
+
+[project.scripts]
+airalogy-compute-runner = "airalogy_compute_runner.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+exclude = ["/.uv-cache", "/dist"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/airalogy_compute_runner"]

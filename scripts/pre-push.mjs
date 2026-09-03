@@ -37,6 +37,12 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "gateway:test"],
   },
+  computeRunnerTests: {
+    id: "compute-runner-tests",
+    label: "Compute Runner tests",
+    command: "corepack",
+    args: ["pnpm", "compute-runner:test"],
+  },
   docs: {
     id: "docs",
     label: "documentation production build",
@@ -88,6 +94,7 @@ const AI_E2E_PREFIXES = [
 ]
 
 const GATEWAY_FILES = new Set([".github/workflows/instrument-gateway.yml"])
+const COMPUTE_RUNNER_FILES = new Set([".github/workflows/compute-runner.yml"])
 
 function hasPath(files, exactFiles, prefixes = []) {
   return files.some(
@@ -104,6 +111,10 @@ export function buildCheckPlan(files, fullRequested = false) {
 
   if (hasPath(files, GATEWAY_FILES, ["apps/instrument-gateway/"])) {
     plan.push(checks.gatewayTests)
+  }
+
+  if (hasPath(files, COMPUTE_RUNNER_FILES, ["apps/compute-runner/"])) {
+    plan.push(checks.computeRunnerTests)
   }
 
   if (hasPath(files, DOCS_FILES, ["docs/"])) {
