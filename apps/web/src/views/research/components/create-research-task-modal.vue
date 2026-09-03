@@ -154,6 +154,21 @@
             {{ $t("page.research.externalServicesHint") }}
           </template>
         </n-form-item>
+        <n-form-item :label="$t('page.research.computeEnvironments')">
+          <n-select
+            v-model:value="form.compute_environment_ids"
+            :options="computeOptions"
+            :loading="capabilitiesLoading"
+            :disabled="!form.project_id"
+            multiple
+            filterable
+            clearable
+            :placeholder="$t('page.research.computeEnvironmentsPlaceholder')"
+          />
+          <template #feedback>
+            {{ $t("page.research.computeEnvironmentsHint") }}
+          </template>
+        </n-form-item>
         <n-form-item :label="$t('page.research.knowledgeContext')">
           <n-select
             v-model:value="form.knowledge_ids"
@@ -284,6 +299,19 @@
         </section>
         <section class="research-preview-card">
           <div class="aira-type-eyebrow">
+            {{ $t("page.research.computeEnvironments") }}
+          </div>
+          <div v-if="preview.compute.length" class="mt-3 flex flex-wrap gap-2">
+            <n-tag v-for="item in preview.compute" :key="item.source_revision_id" round type="warning">
+              {{ item.name }} · r{{ item.metadata.environment_revision }} · {{ item.metadata.runtime_version }}
+            </n-tag>
+          </div>
+          <p v-else class="aira-type-body aira-text-muted mb-0 mt-2">
+            {{ $t("page.research.noComputeEnvironments") }}
+          </p>
+        </section>
+        <section class="research-preview-card">
+          <div class="aira-type-eyebrow">
             {{ $t("page.research.confirmedMethods") }}
           </div>
           <div v-if="preview.protocols.length" class="mt-3 flex flex-wrap gap-2">
@@ -380,6 +408,7 @@ const knowledgeItems = ref<KnowledgeItem[]>([])
 const toolCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const resourceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const serviceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
+const computeCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
@@ -399,6 +428,7 @@ function emptyForm(): ResearchTaskDraft {
     knowledge_ids: [],
     resource_type_ids: [],
     service_offering_ids: [],
+    compute_environment_ids: [],
     budget_limit: "",
     budget_currency: "USD",
   }
@@ -437,6 +467,11 @@ const resourceOptions = computed(() => resourceCapabilities.value.map(item => ({
 })))
 const serviceOptions = computed(() => serviceCapabilities.value.map(item => ({
   label: `${String(item.metadata.provider?.name || "")} · ${item.name} · v${item.version}`,
+  value: item.source_id,
+  disabled: !item.available,
+})))
+const computeOptions = computed(() => computeCapabilities.value.map(item => ({
+  label: `${item.name} · r${item.version} · ${String(item.metadata.runtime_version || "")}`,
   value: item.source_id,
   disabled: !item.available,
 })))
@@ -544,9 +579,11 @@ async function loadCapabilities(projectId: string) {
   toolCapabilities.value = []
   resourceCapabilities.value = []
   serviceCapabilities.value = []
+  computeCapabilities.value = []
   form.tool_keys = []
   form.resource_type_ids = []
   form.service_offering_ids = []
+  form.compute_environment_ids = []
   if (!projectId)
     return
   capabilitiesLoading.value = true
@@ -555,6 +592,7 @@ async function loadCapabilities(projectId: string) {
     toolCapabilities.value = catalog.tools
     resourceCapabilities.value = catalog.resources
     serviceCapabilities.value = catalog.services
+    computeCapabilities.value = catalog.compute
     const internalSearch = catalog.tools.find(item =>
       item.available && item.source_id === "knowledge.search",
     )

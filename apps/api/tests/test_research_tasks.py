@@ -76,6 +76,13 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
                 "version": "2026.1",
             }
         ],
+        compute_refs=[
+            {
+                "id": str(uuid4()),
+                "revision_id": str(uuid4()),
+                "revision": 5,
+            }
+        ],
         deadline_at=None,
         budget_limit=None,
         budget_currency=None,
@@ -105,6 +112,7 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
         "knowledge_refs": [ANY],
         "resource_refs": [ANY],
         "service_refs": [ANY],
+        "compute_refs": [ANY],
         "deadline_at": None,
         "budget_limit": None,
         "budget_currency": None,
@@ -138,6 +146,17 @@ def test_research_task_draft_rejects_missing_criteria_and_duplicate_protocols():
     knowledge_id = uuid4()
     with pytest.raises(ValidationError):
         ResearchTaskDraft(**{**payload, "knowledge_ids": [knowledge_id, knowledge_id]})
+    compute_environment_id = uuid4()
+    with pytest.raises(ValidationError):
+        ResearchTaskDraft(
+            **{
+                **payload,
+                "compute_environment_ids": [
+                    compute_environment_id,
+                    compute_environment_id,
+                ],
+            }
+        )
 
 
 def test_new_research_run_command_pins_source_lineage_and_environment():
@@ -528,13 +547,14 @@ def test_research_action_policy_fails_closed_for_aira_execution():
     )
 
 
-def test_resource_or_service_only_environment_can_enter_aira_planning():
+def test_only_currently_executable_environment_can_enter_aira_planning():
     assert research_environment_has_ai_path({"resources": [{"key": "equipment"}]})
-    assert research_environment_has_ai_path(
-        {"services": [{"source_id": str(uuid4())}]}
-    )
+    assert research_environment_has_ai_path({"services": [{"source_id": str(uuid4())}]})
     assert not research_environment_has_ai_path(
         {"services": [{"source_id": str(uuid4()), "available": False}]}
+    )
+    assert not research_environment_has_ai_path(
+        {"compute": [{"source_id": str(uuid4())}]}
     )
     assert not research_environment_has_ai_path({"resources": []})
 

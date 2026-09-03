@@ -43,6 +43,7 @@ async def list_research_capabilities(
         project=project,
         include_resources=access.allows("resource.read"),
         include_services=access.allows("research.service.use"),
+        include_compute=access.allows("research.compute.use"),
     )
     return {
         "project_id": str(project.id),
@@ -51,4 +52,5 @@ async def list_research_capabilities(
         "tools": [item.payload() for item in catalog["tools"]],
         "resources": [item.payload() for item in catalog["resources"]],
         "services": [item.payload() for item in catalog["services"]],
+        "compute": [item.payload() for item in catalog["compute"]],
     }

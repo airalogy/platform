@@ -37,6 +37,7 @@ from app.models.research import (
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
+    ResearchTaskComputeEnvironment,
     ResearchTaskKnowledge,
     ResearchTaskOutcome,
     ResearchTaskProtocol,
@@ -53,6 +54,8 @@ from app.models.research_asset import (
     ResearchEvidence,
 )
 from app.models.research_execution import (
+    ResearchComputeEnvironment,
+    ResearchComputeEnvironmentRevision,
     ResearchInstrumentJob,
     ResearchInstrumentJobStatus,
     ResearchResourceReservation,
@@ -86,6 +89,10 @@ from app.services.research_capabilities import (
     protocol_capability,
     resource_capability,
     tool_capability,
+)
+from app.services.research_compute import (
+    compute_environment_snapshot,
+    latest_compute_environment_revision,
 )
 from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
@@ -150,6 +157,7 @@ class ResearchTaskDraft(BaseModel):
     knowledge_ids: list[UUID] = Field(default_factory=list, max_length=50)
     resource_type_ids: list[UUID] = Field(default_factory=list, max_length=100)
     service_offering_ids: list[UUID] = Field(default_factory=list, max_length=50)
+    compute_environment_ids: list[UUID] = Field(default_factory=list, max_length=50)
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
     deadline_at: datetime | None = None
@@ -181,6 +189,8 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Resource requirement selection contains duplicates")
         if len(set(self.service_offering_ids)) != len(self.service_offering_ids):
             raise ValueError("Service offering selection contains duplicates")
+        if len(set(self.compute_environment_ids)) != len(self.compute_environment_ids):
+            raise ValueError("Compute environment selection contains duplicates")
         if (self.budget_limit is None) != (self.budget_currency is None):
             raise ValueError("Budget limit and currency must be provided together")
         if self.budget_currency is not None:
@@ -433,6 +443,7 @@ async def _validate_task_draft(
             ResearchServiceOfferingRevision,
         ]
     ],
+    list[tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]],
 ]:
     project = await _project(db_session, draft.project_id)
     await require_research_capability(
@@ -684,6 +695,44 @@ async def _validate_task_draft(
                 )
         service_offerings.append((provider, offering, revision))
 
+    compute_environments: list[
+        tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]
+    ] = []
+    for environment_id in draft.compute_environment_ids:
+        environment = await db_session.get(ResearchComputeEnvironment, environment_id)
+        if (
+            environment is None
+            or environment.lab_id != lab.id
+            or environment.archived_at is not None
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Compute environment {environment_id} is unavailable in this Lab",
+            )
+        revision = await latest_compute_environment_revision(db_session, environment.id)
+        if revision is None or not revision.enabled:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Compute environment {environment.environment_key} has no enabled revision"
+                ),
+            )
+        for user in {current_user.id: current_user, owner.id: owner}.values():
+            if not await has_research_capability(
+                db_session,
+                user=user,
+                project=project,
+                capability="research.compute.use",
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"{user.name or user.username} cannot use the selected "
+                        f"Compute Environment {revision.name}"
+                    ),
+                )
+        compute_environments.append((environment, revision))
+
     command = research_task_command(
         project_id=project.id,
         title=draft.title,
@@ -717,6 +766,14 @@ async def _validate_task_draft(
             }
             for _provider, offering, revision in service_offerings
         ],
+        compute_refs=[
+            {
+                "id": environment.id,
+                "revision_id": revision.id,
+                "revision": revision.revision,
+            }
+            for environment, revision in compute_environments
+        ],
         deadline_at=draft.deadline_at,
         budget_limit=draft.budget_limit,
         budget_currency=draft.budget_currency,
@@ -734,6 +791,7 @@ async def _validate_task_draft(
         knowledge_items,
         resources,
         service_offerings,
+        compute_environments,
     )
 
 
@@ -755,8 +813,16 @@ def _task_preview(
             ResearchServiceOfferingRevision,
         ]
     ],
+    compute_environments: list[
+        tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]
+    ],
 ) -> dict[str, Any]:
-    ai_path_available = config.effective_ai_enabled and bool(protocols or tools)
+    # A pinned Compute Environment is a governed execution contract, not an
+    # executable Aira path by itself. Keep it out of this check until the
+    # independent Compute Runner and Compute Job state machine are available.
+    ai_path_available = config.effective_ai_enabled and bool(
+        protocols or tools or resources or service_offerings
+    )
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
@@ -802,6 +868,10 @@ def _task_preview(
             offering_snapshot(provider, offering, revision)
             for provider, offering, revision in service_offerings
         ],
+        "compute": [
+            compute_environment_snapshot(environment, revision)
+            for environment, revision in compute_environments
+        ],
         "operational_limits": {
             "deadline_at": command["deadline_at"],
             "budget_limit": command["budget_limit"],
@@ -814,6 +884,7 @@ def _task_preview(
             "Pin reviewed Knowledge revisions in the Research Environment",
             "Pin selected resource-type revisions as explicit requirements",
             "Pin selected external-service contract revisions",
+            "Pin selected Compute Environment revisions without executing code",
             "Enforce the confirmed deadline and budget as runtime stop boundaries",
             (
                 "Use AIRA after the Task is started"
@@ -1187,6 +1258,21 @@ async def _task_detail(
             ).all()
         )
     ]
+    compute = [
+        {
+            **row.snapshot,
+            "position": row.position,
+        }
+        for row in list(
+            (
+                await db_session.scalars(
+                    select(ResearchTaskComputeEnvironment)
+                    .where(ResearchTaskComputeEnvironment.task_id == task.id)
+                    .order_by(ResearchTaskComputeEnvironment.position)
+                )
+            ).all()
+        )
+    ]
     review_recommendations = list(
         (
             await db_session.scalars(
@@ -1213,6 +1299,7 @@ async def _task_detail(
         "knowledge": knowledge,
         "resources": resources,
         "services": services,
+        "compute": compute,
         "review_recommendations": [item.as_dict() for item in review_recommendations],
         "permissions": {
             "can_run": await has_research_capability(
@@ -1233,9 +1320,14 @@ async def _task_detail(
                 project=project,
                 capability="research.service.use",
             ),
-            "can_manage_services": resource_access.allows(
-                "research.service.manage"
+            "can_manage_services": resource_access.allows("research.service.manage"),
+            "can_use_compute": await has_research_capability(
+                db_session,
+                user=current_user,
+                project=project,
+                capability="research.compute.use",
             ),
+            "can_manage_compute": resource_access.allows("research.compute.manage"),
         },
     }
 
@@ -1257,6 +1349,7 @@ async def preview_research_task(
         knowledge_items,
         resources,
         service_offerings,
+        compute_environments,
     ) = await _validate_task_draft(db_session, current_user, params)
     return _task_preview(
         command=command,
@@ -1269,6 +1362,7 @@ async def preview_research_task(
         knowledge_items=knowledge_items,
         resources=resources,
         service_offerings=service_offerings,
+        compute_environments=compute_environments,
     )
 
 
@@ -1289,6 +1383,7 @@ async def create_research_task(
         knowledge_items,
         resources,
         service_offerings,
+        compute_environments,
     ) = await _validate_task_draft(db_session, current_user, params)
     expected_digest = canonical_digest(command)
     if params.preview_digest != expected_digest:
@@ -1372,6 +1467,20 @@ async def create_research_task(
                 snapshot=snapshot,
             )
         )
+    pinned_compute: list[dict[str, Any]] = []
+    for position, (environment, revision) in enumerate(compute_environments, start=1):
+        snapshot = compute_environment_snapshot(environment, revision)
+        pinned_compute.append(snapshot)
+        db_session.add(
+            ResearchTaskComputeEnvironment(
+                task_id=task.id,
+                compute_environment_id=environment.id,
+                compute_environment_revision_id=revision.id,
+                compute_environment_revision=revision.revision,
+                position=position,
+                snapshot=snapshot,
+            )
+        )
     run = ResearchRun(
         task_id=task.id,
         run_number=1,
@@ -1405,11 +1514,13 @@ async def create_research_task(
         "tools": [definition.payload() for definition in tools],
         "resources": pinned_resources,
         "services": pinned_services,
+        "compute": pinned_compute,
         "capabilities": [
             *protocol_capabilities,
             *tool_capabilities,
             *pinned_resources,
             *pinned_services,
+            *pinned_compute,
         ],
         "executor_bindings": executor_bindings,
         "knowledge": pinned_knowledge,

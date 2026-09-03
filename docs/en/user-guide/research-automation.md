@@ -6,11 +6,17 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 
 1. Open **Research** and create a Task in the correct Project.
 2. State a testable goal, success criteria, and stop conditions. Add a deadline and one-currency budget ceiling when the Task must operate inside hard time or cost boundaries.
-3. Select any Protocol versions, digital tools, reviewed Knowledge, Lab resource types, and approved external research services that may guide or constrain the work. A Protocol is optional when the research path only needs governed digital tools or an external result.
+3. Select any Protocol versions, digital tools, reviewed Knowledge, Lab resource types, approved external research services, and governed Compute Environments that may guide or constrain the work. A Protocol is optional when the research path only needs governed digital tools or an external result.
 4. Preview the destination and captured environment, then confirm creation.
 5. Start the Task. If Aira is available, it can advance the plan until it reaches a human, approval, tool, external-result, or final-review boundary. If AI is unavailable, the same Task remains usable through explicit Actions.
 
 Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new plan or Run when the new version should apply.
+
+## Register a Compute Environment
+
+Lab members with research-compute management access can open **Lab resource library → Compute environments**. Create a stable environment key, then declare an immutable OCI image digest, runtime and allowed language, hard CPU/memory/GPU/timeout/output limits, network policy, input/result JSON Schemas, software manifest, risk, and optional hourly cost. Preview the complete contract before confirmation. A revision creates a new immutable contract; existing Research Tasks remain pinned to the prior revision.
+
+Task creators with compute-use access can select an enabled environment during Task creation. Platform copies the exact revision into the Research Environment. This does not run code, reserve budget, or imply that a Compute Runner exists. The current milestone intentionally provides governance and reproducible pinning only; until the independent Runner and Compute Job lifecycle are delivered, compute-only Tasks remain under manual control and the Task page says that execution is unavailable.
 
 ## Register an external research service
 

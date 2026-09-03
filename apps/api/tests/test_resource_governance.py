@@ -1,14 +1,19 @@
+import asyncio
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.main import app
 from app.models.access_control import AccessScopeType
 from app.models.resource import InventoryEvent, ResourceRevision
+from app.routers import resources as resources_router
 from app.routers.access import GrantParams
-from app.routers.resources import _validation_issues
+from app.routers.resources import _validation_issues, resource_capabilities
 from app.services.resource_bindings import extract_resource_bindings
 from app.services.resource_index import build_resource_indexes
 from app.services.resource_units import UnitError, convert_quantity
@@ -262,6 +267,44 @@ def test_resource_grant_scopes_require_exact_target(scope_type, field):
     payload[field] = None
     with pytest.raises(ValidationError):
         GrantParams(**payload)
+
+
+def test_infrastructure_manager_can_open_shell_without_resource_read(monkeypatch):
+    decision = SimpleNamespace(
+        capabilities={"research.compute.manage"},
+        as_dict=lambda: {
+            "capabilities": ["research.compute.manage"],
+            "role_keys": ["research_compute_manager"],
+            "sources": [],
+        },
+    )
+    monkeypatch.setattr(
+        resources_router, "_decision", AsyncMock(return_value=decision)
+    )
+
+    result = asyncio.run(
+        resource_capabilities(
+            uuid4(), SimpleNamespace(id=uuid4()), SimpleNamespace()
+        )
+    )
+
+    assert result["capabilities"] == ["research.compute.manage"]
+
+
+def test_unrelated_member_cannot_open_infrastructure_shell(monkeypatch):
+    decision = SimpleNamespace(capabilities={"research.read"})
+    monkeypatch.setattr(
+        resources_router, "_decision", AsyncMock(return_value=decision)
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            resource_capabilities(
+                uuid4(), SimpleNamespace(id=uuid4()), SimpleNamespace()
+            )
+        )
+
+    assert raised.value.status_code == 403
 
 
 def test_openapi_exposes_resource_and_schema_governance_contracts():

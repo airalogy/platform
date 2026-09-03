@@ -79,6 +79,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     service_job_revision = import_module(
         "migrations.versions.0029_research_service_jobs"
     )
+    compute_environment_revision = import_module(
+        "migrations.versions.0030_research_compute_environments"
+    )
     import_models()
 
     later_tables = {
@@ -112,6 +115,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(instrument_job_revision.TABLE_NAMES)
     later_tables.update(service_catalog_revision.TABLE_NAMES)
     later_tables.update(service_job_revision.TABLE_NAMES)
+    later_tables.update(compute_environment_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

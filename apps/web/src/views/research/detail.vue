@@ -538,6 +538,24 @@
               </p>
               <n-divider />
               <h2 class="aira-type-card-title mb-0">
+                {{ $t("page.research.computeEnvironments") }}
+              </h2>
+              <div v-if="task.compute.length" class="mt-3 space-y-2">
+                <div v-for="environment in task.compute" :key="environment.source_revision_id" class="research-method">
+                  <span class="aira-type-label">{{ environment.name }}</span>
+                  <span class="aira-type-meta">
+                    r{{ environment.metadata.environment_revision }} · {{ environment.metadata.runtime_version }}
+                  </span>
+                </div>
+              </div>
+              <p v-else class="aira-type-meta aira-text-muted mb-0 mt-3">
+                {{ $t("page.research.noComputeEnvironments") }}
+              </p>
+              <n-alert v-if="task.compute.length" type="info" class="mt-3">
+                {{ $t("page.research.computePinnedOnlyHint") }}
+              </n-alert>
+              <n-divider />
+              <h2 class="aira-type-card-title mb-0">
                 {{ $t("page.research.resolvedExecutors") }}
               </h2>
               <div v-if="pinnedExecutorBindings.length" class="mt-3 space-y-2">

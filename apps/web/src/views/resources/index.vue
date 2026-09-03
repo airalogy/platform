@@ -9,7 +9,7 @@
         <p>{{ $t("page.resourceLibrary.description") }}</p>
       </div>
       <n-space>
-        <n-button secondary @click="openScanModal">
+        <n-button v-if="canReadResources" secondary @click="openScanModal">
           <template #icon>
             <icon-tabler-scan />
           </template>
@@ -235,6 +235,19 @@
           status="403"
           :title="$t('page.resourceLibrary.serviceAccessDenied')"
           :description="$t('page.resourceLibrary.serviceAccessDeniedHint')"
+        />
+      </template>
+
+      <template v-else-if="activeSection === 'compute'">
+        <research-compute-environments-panel
+          v-if="canManageResearchCompute"
+          :lab-id="labId"
+        />
+        <n-result
+          v-else
+          status="403"
+          :title="$t('page.resourceLibrary.computeAccessDenied')"
+          :description="$t('page.resourceLibrary.computeAccessDeniedHint')"
         />
       </template>
 
@@ -1000,6 +1013,7 @@ const sections = [
   { value: "bookings" as const, label: $t("page.resourceLibrary.bookings") },
   { value: "gateways" as const, label: $t("page.resourceLibrary.instrumentGateways") },
   { value: "services" as const, label: $t("page.resourceLibrary.externalServices") },
+  { value: "compute" as const, label: $t("page.resourceLibrary.computeEnvironments") },
   { value: "reminders" as const, label: $t("page.resourceLibrary.reminders") },
   { value: "events" as const, label: $t("page.resourceLibrary.events") },
   { value: "types" as const, label: $t("page.resourceLibrary.types") },
@@ -1033,15 +1047,23 @@ function hasResourceCapability(capability: string) {
   return Boolean(resourceAccess.value?.capabilities.includes(capability))
 }
 const canOperateResource = computed(() => hasResourceCapability("resource.operate"))
+const canReadResources = computed(() => hasResourceCapability("resource.read"))
 const canOperateInventory = computed(() => hasResourceCapability("inventory.operate"))
 const canManageResources = computed(() => hasResourceCapability("resource.manage"))
 const canBookEquipment = computed(() => hasResourceCapability("equipment.book"))
 const canCustodyResources = computed(() => hasResourceCapability("resource.custody"))
 const canServiceEquipment = computed(() => hasResourceCapability("equipment.service"))
 const canManageResearchServices = computed(() => hasResourceCapability("research.service.manage"))
+const canManageResearchCompute = computed(() => hasResourceCapability("research.compute.manage"))
 const visibleSections = computed(() => sections.filter(
-  section => (section.value !== "gateways" || canServiceEquipment.value)
-    && (section.value !== "services" || canManageResearchServices.value),
+  section => (
+    canReadResources.value
+    || section.value === "services"
+    || section.value === "compute"
+  )
+  && (section.value !== "gateways" || canServiceEquipment.value)
+  && (section.value !== "services" || canManageResearchServices.value)
+  && (section.value !== "compute" || canManageResearchCompute.value),
 ))
 
 const overviewCards = computed(() => [
@@ -1255,7 +1277,13 @@ async function loadSection() {
   try {
     if (!resourceAccess.value)
       resourceAccess.value = await fetchResourceCapabilities(labId.value)
-    if (!resourceTypes.value.length)
+    if (!visibleSections.value.some(section => section.value === activeSection.value)) {
+      const fallback = visibleSections.value[0]?.value
+      if (fallback)
+        await navigateSection(fallback)
+      return
+    }
+    if (!["services", "compute"].includes(activeSection.value) && !resourceTypes.value.length)
       resourceTypes.value = (await fetchResourceTypes(labId.value)).items
     if (activeSection.value === "overview") {
       Object.assign(overview, await fetchResourceOverview(labId.value))

@@ -314,6 +314,44 @@ class ResearchTaskServiceOffering(Base):
     )
 
 
+class ResearchTaskComputeEnvironment(Base):
+    """An exact compute-environment revision pinned into a Research Task."""
+
+    __tablename__ = "research_task_compute_environments"
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id", "position", name="uq_research_task_compute_environment_position"
+        ),
+        UniqueConstraint(
+            "task_id",
+            "compute_environment_id",
+            name="uq_research_task_compute_environment",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    compute_environment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environments.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    compute_environment_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environment_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    compute_environment_revision: Mapped[int] = mapped_column(nullable=False)
+    position: Mapped[int] = mapped_column(nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchRun(Base):
     __tablename__ = "research_runs"
     __table_args__ = (

@@ -6,11 +6,17 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 1. 进入“科研”，在正确 Project 中创建 Task。
 2. 填写可检验的目标、成功条件和停止条件；如果 Task 必须在硬性的时间或费用边界内运行，同时设置截止时间和单一币种的预算上限。
-3. 选择可能指导或约束研究的 Protocol 版本、数字工具、已审核 Knowledge、Lab 资源类型和已批准的外部科研服务。若研究路径只需受治理的数字工具或外部结果，可以不预先选择 Protocol。
+3. 选择可能指导或约束研究的 Protocol 版本、数字工具、已审核 Knowledge、Lab 资源类型、已批准的外部科研服务，以及受治理的 Compute Environment。若研究路径只需受治理的数字工具或外部结果，可以不预先选择 Protocol。
 4. 预览保存位置与将被捕获的环境，然后确认创建。
 5. 开始 Task。Aira 可用时，它会持续推进，直到遇到人工、审批、工具、外部结果或最终审核边界；AI 不可用时，同一 Task 仍可通过明确的 Actions 执行。
 
 之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。只有新建计划或 Run 后，新版本才应进入执行。
+
+## 登记 Compute Environment
+
+具备科研计算管理权限的 Lab 成员可进入“实验室资源库 → 计算环境”。先填写稳定环境标识，再声明不可变 OCI 镜像摘要、运行时与允许语言、CPU/内存/GPU/超时/输出硬上限、网络策略、输入/结果 JSON Schema、软件清单、风险和可选每小时成本。确认前先预览完整契约。修订会创建新的不可变契约；已有 Research Task 继续固定原修订。
+
+具备科研计算使用权的 Task 创建者可以在创建 Task 时选择已启用环境。Platform 会把准确修订复制到 Research Environment。这不会执行代码、预留预算，也不表示 Compute Runner 已存在。当前里程碑有意只提供治理和可复现版本固定；在独立 Runner 与 Compute Job 生命周期交付前，纯计算环境 Task 仍由人工控制，Task 页面也会明确说明暂不可执行。
 
 ## 登记外部科研服务
 

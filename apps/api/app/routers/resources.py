@@ -617,13 +617,24 @@ async def resource_templates(
 async def resource_capabilities(
     lab_id: UUID, current_user: CurrentUser, db_session: DBSession
 ):
-    """Expose the current user's Lab-level resource permissions to the UI."""
-    decision = await _require(
+    """Expose Lab infrastructure permissions without widening data access.
+
+    External-service and compute managers use the shared infrastructure shell,
+    but neither role implicitly gains access to inventory or Lab resources.
+    """
+    decision = await _decision(
         db_session,
         user_id=current_user.id,
         lab_id=lab_id,
-        capability="resource.read",
     )
+    if not decision.capabilities.intersection(
+        {
+            "resource.read",
+            "research.service.manage",
+            "research.compute.manage",
+        }
+    ):
+        raise HTTPException(status_code=403, detail="Permission denied")
     return decision.as_dict()
 
 

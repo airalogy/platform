@@ -48,6 +48,8 @@ ALL_CAPABILITIES = frozenset(
         "research.run",
         "research.assign",
         "research.approve",
+        "research.compute.use",
+        "research.compute.manage",
         "research.service.use",
         "research.service.manage",
         "knowledge.read",
@@ -89,6 +91,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.create",
             "research.run",
             "research.assign",
+            "research.compute.use",
             "research.service.use",
             "knowledge.read",
             "knowledge.create",
@@ -108,6 +111,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.read",
             "research.create",
             "research.run",
+            "research.compute.use",
             "research.service.use",
             "knowledge.read",
             "knowledge.create",
@@ -126,6 +130,7 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "record.read",
             "research.read",
             "research.run",
+            "research.compute.use",
             "research.service.use",
             "knowledge.read",
             "knowledge.create",
@@ -172,6 +177,13 @@ ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
             "research.read",
             "research.service.use",
             "research.service.manage",
+        }
+    ),
+    "research_compute_manager": frozenset(
+        {
+            "research.read",
+            "research.compute.use",
+            "research.compute.manage",
         }
     ),
     "resource_manager": frozenset(
@@ -228,6 +240,7 @@ ROLE_LABELS = {
     "knowledge_restricted_reader": "Restricted knowledge reader",
     "lab_log_publisher": "Lab Log publisher",
     "research_service_manager": "Research service manager",
+    "research_compute_manager": "Research compute manager",
 }
 
 ROLE_LEGACY_PROJECT_ROLE = {
@@ -287,6 +300,8 @@ ACTION_CAPABILITY = {
     "run_research": "research.run",
     "assign_research": "research.assign",
     "approve_research": "research.approve",
+    "use_research_compute": "research.compute.use",
+    "manage_research_compute": "research.compute.manage",
     "use_research_service": "research.service.use",
     "manage_research_service": "research.service.manage",
     "read_knowledge": "knowledge.read",

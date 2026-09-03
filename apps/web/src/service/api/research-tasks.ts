@@ -154,6 +154,39 @@ export interface ResearchServiceRequirement {
   position?: number
 }
 
+export interface ResearchComputeRequirement {
+  key: string
+  version: string
+  kind: "compute"
+  name: string
+  description: string
+  source_id: string
+  source_revision_id: string
+  risk: "low" | "medium" | "high"
+  input_schema: Record<string, unknown>
+  output_schema: Record<string, unknown>
+  available: boolean
+  metadata: {
+    environment_key: string
+    environment_revision: number
+    image_ref: string
+    runtime_version: string
+    allowed_languages: Array<"python" | "r">
+    resource_limits: {
+      cpu_millis: number
+      memory_mb: number
+      gpu_count: number
+      timeout_seconds: number
+      max_output_bytes: number
+    }
+    network_policy: "none" | "egress_allowlist"
+    allowed_egress_hosts: string[]
+    estimated_cost_per_hour?: string | null
+    currency?: string | null
+  }
+  position?: number
+}
+
 export interface ResearchResourceReservation {
   id: string
   action_id: string
@@ -547,12 +580,15 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
   services: ResearchServiceRequirement[]
+  compute: ResearchComputeRequirement[]
   review_recommendations: ResearchReviewRecommendation[]
   permissions: {
     can_run: boolean
     can_approve: boolean
     can_use_services: boolean
     can_manage_services: boolean
+    can_use_compute: boolean
+    can_manage_compute: boolean
   }
 }
 
@@ -618,6 +654,7 @@ export interface ResearchTaskDraft {
   knowledge_ids: string[]
   resource_type_ids: string[]
   service_offering_ids: string[]
+  compute_environment_ids: string[]
   deadline_at?: string
   budget_limit?: string
   budget_currency?: string
@@ -642,6 +679,7 @@ export interface ResearchTaskPreview {
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
   services: ResearchServiceRequirement[]
+  compute: ResearchComputeRequirement[]
   operational_limits: {
     deadline_at?: string | null
     budget_limit?: string | null

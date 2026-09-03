@@ -8,6 +8,7 @@ export type ResourceLibrarySection =
   | "bookings"
   | "gateways"
   | "services"
+  | "compute"
   | "reminders"
   | "events"
   | "types"

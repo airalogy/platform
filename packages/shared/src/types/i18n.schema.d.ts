@@ -1012,6 +1012,11 @@ declare namespace I18n {
         externalServicesPlaceholder: string
         externalServicesHint: string
         noExternalServices: string
+        computeEnvironments: string
+        computeEnvironmentsPlaceholder: string
+        computeEnvironmentsHint: string
+        noComputeEnvironments: string
+        computePinnedOnlyHint: string
         externalService: string
         requestExternalService: string
         serviceRequestHint: string
@@ -2693,6 +2698,34 @@ declare namespace I18n {
         serviceGovernanceHint: string
         serviceAccessDenied: string
         serviceAccessDeniedHint: string
+        computeEnvironments: string
+        computeEnvironmentsHint: string
+        computeGovernanceHint: string
+        computeAccessDenied: string
+        computeAccessDeniedHint: string
+        addComputeEnvironment: string
+        reviseComputeEnvironment: string
+        noComputeEnvironments: string
+        computeKey: string
+        computeImage: string
+        computeImageHint: string
+        computeRuntime: string
+        computeLanguages: string
+        computeResources: string
+        computeResourceLimits: string
+        computeTimeout: string
+        computeOutputLimit: string
+        computeNetwork: string
+        computeNetworkNone: string
+        computeNetworkAllowlist: string
+        computeEgressHosts: string
+        computeEgressHint: string
+        computeInputSchema: string
+        computeResultSchema: string
+        computeSoftwareManifest: string
+        computeHourlyCost: string
+        computeEnvironmentImpact: string
+        computeEnvironmentSaved: string
         addServiceProvider: string
         editServiceProvider: string
         noServiceProviders: string

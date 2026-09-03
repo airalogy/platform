@@ -56,6 +56,7 @@ from .research_actions import router as research_actions_router
 from .research_assets import router as research_assets_router
 from .research_budget import router as research_budget_router
 from .research_capabilities import router as research_capabilities_router
+from .research_compute import router as research_compute_router
 from .research_executor_bindings import router as research_executor_bindings_router
 from .research_human_executors import router as research_human_executors_router
 from .research_instrument_gateways import router as research_instrument_gateways_router
@@ -289,6 +290,7 @@ app.include_router(research_log_router)
 app.include_router(research_notifications_router)
 app.include_router(research_assets_router)
 app.include_router(research_capabilities_router)
+app.include_router(research_compute_router)
 app.include_router(research_executor_bindings_router)
 app.include_router(research_human_executors_router)
 app.include_router(research_instrument_gateways_router)

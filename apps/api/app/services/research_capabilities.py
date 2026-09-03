@@ -17,13 +17,17 @@ from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolVersion
 from app.models.resource import ResourceType, ResourceTypeRevision
+from app.services.research_compute import (
+    compute_environment_snapshot,
+    latest_compute_environment_rows,
+)
 from app.services.research_services import (
     latest_service_offering_rows,
     offering_snapshot,
 )
 from app.services.research_tools import ResearchToolDefinition, research_tool_catalog
 
-CapabilityKind = Literal["protocol", "tool", "resource", "service"]
+CapabilityKind = Literal["protocol", "tool", "resource", "service", "compute"]
 
 
 @dataclass(frozen=True)
@@ -126,6 +130,7 @@ async def research_capability_catalog(
     project: Project,
     include_resources: bool = True,
     include_services: bool = True,
+    include_compute: bool = True,
 ) -> dict[str, list[ResearchCapabilityDescriptor]]:
     protocol_rows = list(
         (
@@ -168,6 +173,11 @@ async def research_capability_catalog(
         service_rows = await latest_service_offering_rows(
             db_session, lab_id=project.lab_id, enabled_only=True
         )
+    compute_rows = []
+    if include_compute:
+        compute_rows = await latest_compute_environment_rows(
+            db_session, lab_id=project.lab_id, enabled_only=True
+        )
     return {
         "protocols": [
             protocol_capability(protocol, version)
@@ -179,8 +189,16 @@ async def research_capability_catalog(
             for resource_type, revision in resource_rows
         ],
         "services": [
-            ResearchCapabilityDescriptor(**offering_snapshot(provider, offering, revision))
+            ResearchCapabilityDescriptor(
+                **offering_snapshot(provider, offering, revision)
+            )
             for provider, offering, revision in service_rows
+        ],
+        "compute": [
+            ResearchCapabilityDescriptor(
+                **compute_environment_snapshot(environment, revision)
+            )
+            for environment, revision in compute_rows
         ],
     }
 

@@ -100,6 +100,104 @@ class ResearchServiceJobStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ResearchComputeEnvironment(Base):
+    """Stable Lab identity for an immutable compute-environment lineage."""
+
+    __tablename__ = "research_compute_environments"
+    __table_args__ = (
+        UniqueConstraint(
+            "lab_id", "environment_key", name="uq_research_compute_environment_key"
+        ),
+        Index("ix_research_compute_environments_lab", "lab_id", "archived_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    environment_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchComputeEnvironmentRevision(Base):
+    """Immutable execution and resource contract for one compute environment."""
+
+    __tablename__ = "research_compute_environment_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "compute_environment_id",
+            "revision",
+            name="uq_research_compute_environment_revision",
+        ),
+        CheckConstraint(
+            "network_policy IN ('none', 'egress_allowlist')",
+            name="ck_research_compute_environment_network_policy",
+        ),
+        CheckConstraint(
+            "risk IN ('low', 'medium', 'high')",
+            name="ck_research_compute_environment_risk",
+        ),
+        CheckConstraint(
+            "((estimated_cost_per_hour IS NULL AND currency IS NULL) OR "
+            "(estimated_cost_per_hour >= 0 AND currency IS NOT NULL AND "
+            "length(currency) = 3 AND currency = upper(currency)))",
+            name="ck_research_compute_environment_cost_pair",
+        ),
+        Index(
+            "ix_research_compute_environment_revisions_environment",
+            "compute_environment_id",
+            "revision",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    compute_environment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    runner_protocol_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="airalogy.compute-runner.v1"
+    )
+    image_ref: Mapped[str] = mapped_column(String(2048), nullable=False)
+    runtime_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    allowed_languages: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    resource_limits: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    network_policy: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="none"
+    )
+    allowed_egress_hosts: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    input_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    software_manifest: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    estimated_cost_per_hour: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    risk: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchServiceProvider(Base):
     """Lab-governed identity for an external research-service provider."""
 
