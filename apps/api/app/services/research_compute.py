@@ -133,3 +133,35 @@ async def latest_compute_environment_rows(
             ResearchComputeEnvironmentRevision.enabled.is_(True)
         )
     return list((await db_session.execute(statement)).all())
+
+
+async def all_compute_environment_revision_rows(
+    db_session: AsyncSession,
+    *,
+    lab_id: UUID,
+    enabled_only: bool,
+) -> list[tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]]:
+    """List exact revisions so old Task contracts remain bindable and reproducible."""
+
+    statement = (
+        select(ResearchComputeEnvironment, ResearchComputeEnvironmentRevision)
+        .join(
+            ResearchComputeEnvironmentRevision,
+            ResearchComputeEnvironmentRevision.compute_environment_id
+            == ResearchComputeEnvironment.id,
+        )
+        .where(
+            ResearchComputeEnvironment.lab_id == lab_id,
+            ResearchComputeEnvironment.archived_at.is_(None),
+        )
+        .order_by(
+            ResearchComputeEnvironmentRevision.name,
+            ResearchComputeEnvironmentRevision.revision.desc(),
+            ResearchComputeEnvironment.id,
+        )
+    )
+    if enabled_only:
+        statement = statement.where(
+            ResearchComputeEnvironmentRevision.enabled.is_(True)
+        )
+    return list((await db_session.execute(statement)).all())

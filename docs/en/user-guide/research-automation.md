@@ -16,7 +16,11 @@ Changing a Protocol or Knowledge item later does not silently change the capture
 
 Lab members with research-compute management access can open **Lab resource library → Compute environments**. Create a stable environment key, then declare an immutable OCI image digest, runtime and allowed language, hard CPU/memory/GPU/timeout/output limits, network policy, input/result JSON Schemas, software manifest, risk, and optional hourly cost. Preview the complete contract before confirmation. A revision creates a new immutable contract; existing Research Tasks remain pinned to the prior revision.
 
-Task creators with compute-use access can select an enabled environment during Task creation. Platform copies the exact revision into the Research Environment. This does not run code, reserve budget, or imply that a Compute Runner exists. The current milestone intentionally provides governance and reproducible pinning only; until the independent Runner and Compute Job lifecycle are delivered, compute-only Tasks remain under manual control and the Task page says that execution is unavailable.
+Task creators with compute-use access can select an enabled environment during Task creation. Platform copies the exact revision into the Research Environment. This does not run code, reserve budget, or imply that an eligible Compute Runner exists. The current milestone provides governance, reproducible pinning, and Runner authorization only; until the Compute Job lifecycle and independent Runner process are delivered, compute-only Tasks remain under manual control and the Task page says that execution is unavailable.
+
+## Register a Compute Runner
+
+A Lab compute manager can add a Runner under **Lab resource library → Compute environments**, receive its credential once, and configure a hard concurrency limit. After installing the independent Runner process, its status appears as ready only when it reports non-root execution, a read-only root filesystem, network isolation, and no host mounts. Bind each Runner to the exact environment revisions it may execute; newer revisions require a separate review and binding. Disabling a Runner or removing a binding stops future work without deleting the audit history. Registration and binding alone still run no code.
 
 ## Register an external research service
 

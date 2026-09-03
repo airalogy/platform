@@ -2726,6 +2726,31 @@ declare namespace I18n {
         computeHourlyCost: string
         computeEnvironmentImpact: string
         computeEnvironmentSaved: string
+        computeRunners: string
+        computeRunnersHint: string
+        computeRunnerSecurityHint: string
+        addComputeRunner: string
+        editComputeRunner: string
+        noComputeRunners: string
+        runnerReady: string
+        runnerNotReady: string
+        runnerConcurrency: string
+        runnerConcurrencyLabel: string
+        computeRunnerCreateImpact: string
+        computeRunnerUpdateImpact: string
+        computeRunnerSaved: string
+        computeRunnerRotateImpact: string
+        computeRunnerCredential: string
+        runnerEnvironments: string
+        runnerEnvironmentsHint: string
+        bindComputeEnvironment: string
+        computeEnvironmentRevision: string
+        noRunnerEnvironments: string
+        computeRunnerBindingImpact: string
+        computeRunnerBindingSaved: string
+        removeRunnerEnvironment: string
+        removeRunnerEnvironmentImpact: string
+        computeRunnerBindingRemoved: string
         addServiceProvider: string
         editServiceProvider: string
         noServiceProviders: string

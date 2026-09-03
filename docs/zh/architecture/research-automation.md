@@ -198,7 +198,9 @@ External Service Job 是受治理的执行对象。Aira 规划器只能选择已
 
 计算同样严格区分版本化能力契约与后续执行对象。Lab 计算管理员通过“预览→确认”创建或修订 `Compute Environment`。每个不可变修订都会固定 OCI 镜像 SHA-256 摘要、Runner 协议版本、Python/R 语言允许清单、CPU/内存/GPU/超时/输出硬上限、禁止网络或准确出站主机允许清单、本地输入/结果 JSON Schema、软件清单、风险和可选每小时成本。Research Task 可固定其中一个准确修订；后续修订不会改写已经捕获的环境。
 
-当前里程碑有意止于目录治理与 Task 固定。Platform 不在 API 进程中运行科研代码，不把容器运行时 Socket 挂载给 API，也不会把只有 Compute Environment 的任务标成可由 Aira 执行。真正执行还必须具备独立鉴权、独立运行的 Compute Runner，以及受治理的 Compute Job 租约、审批、预算、输入 DataAsset 和结果登记状态机。在这条边界交付前，界面会明确显示它只是执行契约，任何 Run 都不能通过它派发代码。
+执行平面使用独立鉴权的 `Compute Runner`。Lab 计算管理员通过“预览→确认”创建或轮换凭据、限制并发，并且只能把 Runner 绑定到已经审核的准确 Compute Environment 修订。绑定绝不会自动跟随可变环境谱系。Runner 状态契约会报告协议、执行后端、容量和四项强制隔离控制：非 root 执行、只读根文件系统、网络隔离、无宿主机挂载。任何一项缺失都会使 Runner 不具备执行资格，而不是放宽策略。
+
+当前里程碑有意止于 Compute Job 执行之前。Platform 已治理环境目录、Task 固定、Runner 身份与就绪状态，以及 Runner 到准确环境修订的授权，但不会在 API 进程中运行科研代码，不把容器运行时 Socket 挂载给 API，也不会把只有 Compute Environment 的任务标成可由 Aira 执行。真正执行仍须具备独立 Runner 进程和受治理的 Compute Job 租约、审批、预算、输入 DataAsset 与结果登记状态机。在这条边界交付前，界面会明确显示它只是执行契约，任何 Run 都不能通过它派发代码。
 
 设备集成从数据导入、引导执行、需设备端确认的辅助控制，再到策略内闭环自动化逐级升级。Aira 不直接向设备发送任意指令。在下一 Action 边界，它只能从 Platform 根据当前 Research Environment 与请求人本人已批准设备预约提供的列表中选择准确指令 ID，并提供符合输入 Schema 的参数。Platform 确定性选择最早可用预约，固定完整指令与资源状态，并始终请求人员批准。批准时会在锁定下重新解析指令、Gateway、设备、权限、预约、Schema 和竞争作业状态，仅当全部一致时 Action 才可入队。本地 Instrument Gateway 只接收签名、结构化且列入允许清单的作业，并提供状态校验、审计和受治理的停止请求。
 
@@ -253,7 +255,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - Task 截止时间、预算上限、不可变预算账本和执行停止门禁（已交付）；
 - 人员、设备和外部服务 Executor Binding 适配器；
 - 保留修订的人员可用性、容量与已验证技能（已交付）；样品语义和自动成本采集；
-- 不可变 Compute Environment 目录、范围权限、“预览→确认”修订和 Research Environment 准确版本固定（已交付）；独立 Runner、Compute Job、成本结算和 DataAsset 结果登记仍待后续实现；
+- 不可变 Compute Environment 目录、范围权限、“预览→确认”修订、Research Environment 准确版本固定，以及受治理的 Runner 身份、就绪报告和环境绑定（已交付）；Compute Job 租约、隔离运行、成本结算和 DataAsset 结果登记仍待后续实现；
 - 消耗完成、风险策略、审批阈值和资源感知的计划重排。
 
 ### P3：设备、RaaS 与自我改进

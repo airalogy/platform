@@ -90,6 +90,13 @@ export function fetchResearchComputeEnvironments(labId: string) {
   }, "Research Compute Environment catalog returned no data")
 }
 
+export function fetchResearchComputeEnvironmentRevisions(labId: string) {
+  return requiredData<{ items: ResearchComputeEnvironment[] }>({
+    url: "/research-compute-environments/revisions",
+    params: { lab_id: labId },
+  }, "Research Compute Environment revisions returned no data")
+}
+
 export function previewResearchComputeEnvironment(payload: ComputeEnvironmentDraft) {
   return requiredData<ResearchComputePreview>({
     url: "/research-compute-environments/preview",

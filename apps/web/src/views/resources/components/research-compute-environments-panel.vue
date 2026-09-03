@@ -82,6 +82,8 @@
       </div>
     </n-spin>
 
+    <research-compute-runners-panel :lab-id="props.labId" class="mt-8" />
+
     <n-modal
       v-model:show="modalVisible"
       preset="card"

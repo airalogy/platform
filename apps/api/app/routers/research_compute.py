@@ -24,6 +24,7 @@ from app.services.research_compute import (
     COMPUTE_KEY_RE,
     EGRESS_HOST_RE,
     OCI_DIGEST_RE,
+    all_compute_environment_revision_rows,
     compute_environment_snapshot,
     latest_compute_environment_revision,
     latest_compute_environment_rows,
@@ -262,6 +263,29 @@ async def list_compute_environments(
         capability="research.compute.manage",
     )
     rows = await latest_compute_environment_rows(
+        db_session, lab_id=lab_id, enabled_only=False
+    )
+    return {
+        "items": [
+            compute_environment_snapshot(environment, revision)
+            for environment, revision in rows
+        ]
+    }
+
+
+@router.get("/revisions")
+async def list_compute_environment_revisions(
+    lab_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    await _lab_access(
+        db_session,
+        user=current_user,
+        lab_id=lab_id,
+        capability="research.compute.manage",
+    )
+    rows = await all_compute_environment_revision_rows(
         db_session, lab_id=lab_id, enabled_only=False
     )
     return {

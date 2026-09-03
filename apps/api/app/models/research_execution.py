@@ -198,6 +198,166 @@ class ResearchComputeEnvironmentRevision(Base):
     )
 
 
+class ResearchComputeRunner(Base):
+    """Lab-owned identity and credential boundary for an isolated Compute Runner."""
+
+    __tablename__ = "research_compute_runners"
+    __table_args__ = (
+        UniqueConstraint("lab_id", "name", name="uq_research_compute_runner_name"),
+        CheckConstraint(
+            "length(token_digest) = 64",
+            name="ck_research_compute_runner_token_digest",
+        ),
+        CheckConstraint(
+            "max_concurrent_jobs BETWEEN 1 AND 64",
+            name="ck_research_compute_runner_concurrency",
+        ),
+        Index(
+            "ix_research_compute_runners_lab_enabled",
+            "lab_id",
+            "enabled",
+        ),
+    )
+
+    json_exclude_fields: ClassVar[list[str]] = ["token_digest"]
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    runner_protocol_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="airalogy.compute-runner.v1"
+    )
+    max_concurrent_jobs: Mapped[int] = mapped_column(nullable=False, default=1)
+    token_digest: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    token_hint: Mapped[str] = mapped_column(String(16), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    last_report: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchComputeRunnerEnvironment(Base):
+    """Explicit authorization for a Runner to use one exact environment revision."""
+
+    __tablename__ = "research_compute_runner_environments"
+    __table_args__ = (
+        UniqueConstraint(
+            "runner_id",
+            "compute_environment_revision_id",
+            name="uq_research_compute_runner_environment",
+        ),
+        Index(
+            "ix_research_compute_runner_environments_runner",
+            "runner_id",
+            "archived_at",
+        ),
+        Index(
+            "ix_research_compute_runner_environments_revision",
+            "compute_environment_revision_id",
+            "archived_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    runner_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_runners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    compute_environment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    compute_environment_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environment_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchComputeRunnerAudit(Base):
+    """Immutable Runner and environment-binding configuration history."""
+
+    __tablename__ = "research_compute_runner_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "runner_id",
+            "revision",
+            name="uq_research_compute_runner_audit_revision",
+        ),
+        Index(
+            "ix_research_compute_runner_audits_runner_created",
+            "runner_id",
+            "created_at",
+        ),
+        Index(
+            "ix_research_compute_runner_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    runner_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_runners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    binding_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_compute_runner_environments.id", ondelete="SET NULL"),
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchServiceProvider(Base):
     """Lab-governed identity for an external research-service provider."""
 
