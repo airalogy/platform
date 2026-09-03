@@ -1362,6 +1362,7 @@
       "executionHistory": "Execution ledger",
       "actions": "Actions",
       "noActions": "No Action has been scheduled yet.",
+      "parallelBranch": "Parallel {position}/{size}",
       "viewEvidenceRecord": "View evidence Record",
       "resultPackage": "Result package",
       "researchConclusion": "Research conclusion",

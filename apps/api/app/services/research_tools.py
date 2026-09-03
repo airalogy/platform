@@ -23,6 +23,7 @@ from app.models.research import (
 )
 from app.models.research_execution import ResearchToolJob, ResearchToolJobStatus
 from app.services.literature_provider import get_literature_provider
+from app.services.research_frontiers import hold_or_release_parallel_frontier
 from app.services.research_runtime import (
     emit_research_event,
     enqueue_research_advance,
@@ -357,24 +358,34 @@ async def process_research_tool_job(
             if task.status == ResearchTaskStatus.PAUSED.value
             else ResearchRunStatus.RUNNING.value
         )
+        frontier_settled = await hold_or_release_parallel_frontier(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+        )
         run.last_error = None
         if (
-            task.status == ResearchTaskStatus.ACTIVE.value
-            and config.effective_ai_enabled
+            frontier_settled
+            and run.status == ResearchRunStatus.RUNNING.value
+            and task.status == ResearchTaskStatus.ACTIVE.value
         ):
-            await enqueue_research_advance(db_session, task=task, run=run)
-        elif task.status == ResearchTaskStatus.ACTIVE.value:
-            run.last_error = "AI is disabled; continue this Research Task manually."
-            await emit_research_event(
-                db_session,
-                task_id=task.id,
-                run_id=run.id,
-                action_id=action.id,
-                kind="run.manual_control_required",
-                actor_user_id=None,
-                payload={"reason": "ai_disabled"},
-                idempotency_key=f"run:{run.id}:manual:tool-job:{tool_job.id}",
-            )
+            if config.effective_ai_enabled:
+                await enqueue_research_advance(db_session, task=task, run=run)
+            else:
+                run.last_error = (
+                    "AI is disabled; continue this Research Task manually."
+                )
+                await emit_research_event(
+                    db_session,
+                    task_id=task.id,
+                    run_id=run.id,
+                    action_id=action.id,
+                    kind="run.manual_control_required",
+                    actor_user_id=None,
+                    payload={"reason": "ai_disabled"},
+                    idempotency_key=f"run:{run.id}:manual:tool-job:{tool_job.id}",
+                )
     await emit_research_event(
         db_session,
         task_id=task.id,
@@ -447,24 +458,32 @@ async def mark_research_tool_job_failure(
                     if task.status == ResearchTaskStatus.PAUSED.value
                     else ResearchRunStatus.RUNNING.value
                 )
+                frontier_settled = await hold_or_release_parallel_frontier(
+                    db_session,
+                    task=task,
+                    run=run,
+                    action=action,
+                )
                 run.last_error = f"Research Tool failed: {error[:7900]}"
                 if (
-                    task.status == ResearchTaskStatus.ACTIVE.value
-                    and config.effective_ai_enabled
+                    frontier_settled
+                    and run.status == ResearchRunStatus.RUNNING.value
+                    and task.status == ResearchTaskStatus.ACTIVE.value
                 ):
-                    await enqueue_research_advance(db_session, task=task, run=run)
-                elif task.status == ResearchTaskStatus.ACTIVE.value:
-                    await emit_research_event(
-                        db_session,
-                        task_id=task.id,
-                        run_id=run.id,
-                        action_id=action.id,
-                        kind="run.manual_control_required",
-                        actor_user_id=None,
-                        payload={"reason": "tool_job_failed"},
-                        idempotency_key=(
-                            f"run:{run.id}:manual:tool-job-failed:{tool_job.id}"
-                        ),
-                    )
+                    if config.effective_ai_enabled:
+                        await enqueue_research_advance(db_session, task=task, run=run)
+                    else:
+                        await emit_research_event(
+                            db_session,
+                            task_id=task.id,
+                            run_id=run.id,
+                            action_id=action.id,
+                            kind="run.manual_control_required",
+                            actor_user_id=None,
+                            payload={"reason": "tool_job_failed"},
+                            idempotency_key=(
+                                f"run:{run.id}:manual:tool-job-failed:{tool_job.id}"
+                            ),
+                        )
     else:
         tool_job.status = ResearchToolJobStatus.QUEUED.value

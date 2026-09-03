@@ -206,6 +206,12 @@
                           {{ $t("page.research.approvalPending") }}
                         </n-tag>
                         <span class="aira-type-meta">#{{ action.sequence }}</span>
+                        <n-tag v-if="action.input_data.parallel_group" type="info" round size="small">
+                          {{ $t("page.research.parallelBranch", {
+                            position: action.input_data.parallel_group.position,
+                            size: action.input_data.parallel_group.size,
+                          }) }}
+                        </n-tag>
                         <span v-if="action.protocol" class="aira-type-meta">
                           {{ action.protocol.name }} · v{{ action.protocol.version }}
                         </span>
@@ -290,9 +296,17 @@
                       <h3 class="aira-type-label mb-0">
                         {{ action.title }}
                       </h3>
-                      <n-tag :type="actionStatusType(action.status)" size="small" round>
-                        {{ actionStatusLabel(action.status) }}
-                      </n-tag>
+                      <div class="flex flex-wrap items-center justify-end gap-2">
+                        <n-tag v-if="action.input_data.parallel_group" type="info" size="small" round>
+                          {{ $t("page.research.parallelBranch", {
+                            position: action.input_data.parallel_group.position,
+                            size: action.input_data.parallel_group.size,
+                          }) }}
+                        </n-tag>
+                        <n-tag :type="actionStatusType(action.status)" size="small" round>
+                          {{ actionStatusLabel(action.status) }}
+                        </n-tag>
+                      </div>
                     </div>
                     <p v-if="action.description" class="aira-type-meta line-clamp-2 mb-0 mt-1">
                       {{ action.description }}

@@ -92,7 +92,7 @@ Research Task
   → replan or terminate
 ```
 
-The plan is a versioned adaptive DAG supporting branches, parallel actions, cycles, retries, resource waits, and approvals. Changes to the goal, success criteria, budget, or high-risk path create a new plan version and require renewed confirmation.
+The target plan is a versioned adaptive DAG supporting branches, parallel actions, cycles, retries, resource waits, and approvals. The current runtime delivers its first bounded parallel frontier for two to four independent read-only Tool Actions: every branch is pinned and governed independently, and the Run remains at one durable barrier until all branches settle. General dependency execution, parallel physical work, and arbitrary multi-agent graphs remain gated future work rather than implied by the presence of the dependency table. Changes to the goal, success criteria, budget, or high-risk path create a new plan version and require renewed confirmation.
 
 ## Human collaboration
 
@@ -236,7 +236,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - governed provider catalog, immutable service contracts, scoped permissions, and exact Research Environment pinning (delivered)
 - Aira-planned and manual external-service requests sharing quote, order approval, budget reservation, logistics, chain of custody, fulfilment, and result receipt governance (delivered)
 - evidence-backed, reviewed Protocol improvement proposals and exact new-version lineage (delivered without AI dependency)
-- independent advisory Reviewer Agent (delivered), parallel/multi-agent execution, and reproduction evaluation
+- independent advisory Reviewer Agent (delivered), bounded parallel read-only Tool frontiers (delivered), general dependency/multi-agent execution, and reproduction evaluation
 - protein-purification method evolution and OT-2 governance benchmarks
 
 ## Definition of complete

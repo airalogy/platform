@@ -1294,6 +1294,9 @@ async def _materialize_aira_action(
     run: ResearchRun,
     proposal: AiraActionProposal,
     step_index: int,
+    create_plan: bool = True,
+    idempotency_key_override: str | None = None,
+    parallel_group: dict[str, Any] | None = None,
 ) -> ResearchAction:
     """Turn one validated Aira decision into a governed typed Action."""
 
@@ -1308,7 +1311,7 @@ async def _materialize_aira_action(
         raise ValueError("This Aira proposal cannot be materialized here")
     proposal_data = proposal.model_dump(mode="json", exclude_none=True)
     proposal_digest = canonical_digest(proposal_data)
-    idempotency_key = (
+    idempotency_key = idempotency_key_override or (
         f"aira-planner:{step_index}:{proposal.decision}:{proposal_digest[:24]}"
     )
     existing = await ResearchAction.find_by(
@@ -1329,17 +1332,18 @@ async def _materialize_aira_action(
     if (action_count or 0) >= 100:
         raise ValueError("Research Run reached its governed Action limit")
 
-    await create_plan_version(
-        db_session,
-        task=task,
-        run=run,
-        kind="aira",
-        plan={
-            "action_proposal": proposal_data,
-            "previous_plan_version": run.plan_version,
-        },
-        summary=proposal.thought or f"Aira proposed {proposal.decision}",
-    )
+    if create_plan:
+        await create_plan_version(
+            db_session,
+            task=task,
+            run=run,
+            kind="aira",
+            plan={
+                "action_proposal": proposal_data,
+                "previous_plan_version": run.plan_version,
+            },
+            summary=proposal.thought or f"Aira proposed {proposal.decision}",
+        )
 
     if proposal.decision == "tool":
         from app.services.research_capabilities import pinned_tool_definition
@@ -1704,6 +1708,9 @@ async def _materialize_aira_action(
             "source": "aira",
         }
 
+    if parallel_group is not None:
+        input_data = {**input_data, "parallel_group": parallel_group}
+
     policy_decision, policy_reason = evaluate_research_action_policy(
         autonomy_level=task.autonomy_level,
         source="aira",
@@ -2035,6 +2042,87 @@ async def _materialize_aira_action(
     return action
 
 
+async def _materialize_aira_parallel_tools(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    proposal: AiraActionProposal,
+    step_index: int,
+) -> list[ResearchAction]:
+    """Materialize one bounded, independently executable Tool frontier."""
+
+    if proposal.decision != "parallel_tools" or len(proposal.parallel_tools) < 2:
+        raise ValueError("Parallel Tool proposal is incomplete")
+    proposal_data = proposal.model_dump(mode="json", exclude_none=True)
+    proposal_digest = canonical_digest(proposal_data)
+    group_id = f"aira-frontier:{step_index}:{proposal_digest[:24]}"
+    existing = list(
+        (
+            await db_session.scalars(
+                select(ResearchAction).where(
+                    ResearchAction.run_id == run.id,
+                    ResearchAction.idempotency_key.like(f"{group_id}:%"),
+                )
+            )
+        ).all()
+    )
+    if existing:
+        if len(existing) != len(proposal.parallel_tools):
+            raise ValueError("Parallel Tool frontier is only partially materialized")
+        return sorted(existing, key=lambda item: item.sequence)
+
+    await create_plan_version(
+        db_session,
+        task=task,
+        run=run,
+        kind="aira",
+        plan={
+            "parallel_frontier": proposal_data,
+            "previous_plan_version": run.plan_version,
+        },
+        summary=proposal.thought or "Aira proposed parallel Research Tools",
+    )
+    actions: list[ResearchAction] = []
+    size = len(proposal.parallel_tools)
+    for position, call in enumerate(proposal.parallel_tools, start=1):
+        action = await _materialize_aira_action(
+            db_session,
+            task=task,
+            run=run,
+            proposal=AiraActionProposal(
+                decision="tool",
+                thought=call.purpose,
+                tool_key=call.tool_key,
+                arguments=call.arguments,
+            ),
+            step_index=step_index,
+            create_plan=False,
+            idempotency_key_override=f"{group_id}:{position}",
+            parallel_group={
+                "id": group_id,
+                "position": position,
+                "size": size,
+            },
+        )
+        actions.append(action)
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="aira.parallel_frontier_created",
+        actor_user_id=None,
+        payload={
+            "group_id": group_id,
+            "plan_version": run.plan_version,
+            "action_ids": [str(action.id) for action in actions],
+            "size": size,
+        },
+        idempotency_key=f"{group_id}:created",
+    )
+    return actions
+
+
 def _apply_aira_step(state: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     result = {**state, "steps": [*(state.get("steps") or []), step]}
     data = step.get("data") or {}
@@ -2308,6 +2396,7 @@ async def process_research_run_advance(
             planner_decision = proposal.decision
             if proposal.decision in {
                 "tool",
+                "parallel_tools",
                 "resource",
                 "instrument",
                 "service",
@@ -2328,17 +2417,29 @@ async def process_research_run_advance(
                     await db_session.rollback()
                     continue
                 current_task = await db_session.get(ResearchTask, current_run.task_id)
-                action = await _materialize_aira_action(
-                    db_session,
-                    task=current_task,
-                    run=current_run,
-                    proposal=proposal,
-                    step_index=step_index,
-                )
+                if proposal.decision == "parallel_tools":
+                    actions = await _materialize_aira_parallel_tools(
+                        db_session,
+                        task=current_task,
+                        run=current_run,
+                        proposal=proposal,
+                        step_index=step_index,
+                    )
+                else:
+                    actions = [
+                        await _materialize_aira_action(
+                            db_session,
+                            task=current_task,
+                            run=current_run,
+                            proposal=proposal,
+                            step_index=step_index,
+                        )
+                    ]
                 await db_session.commit()
                 return {
                     "status": current_run.status,
-                    "action_id": str(action.id),
+                    "action_id": str(actions[0].id),
+                    "action_ids": [str(action.id) for action in actions],
                     "decision": proposal.decision,
                 }
             if proposal.decision == "finish":

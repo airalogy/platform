@@ -1366,6 +1366,7 @@ declare namespace I18n {
         executionHistory: string
         actions: string
         noActions: string
+        parallelBranch: string
         viewEvidenceRecord: string
         resultPackage: string
         researchConclusion: string

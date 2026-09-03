@@ -93,6 +93,24 @@ class AiraComputeRequest(BaseModel):
         return self
 
 
+class AiraToolRequest(BaseModel):
+    """One independently executable read-only Tool call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_key: str = Field(min_length=1, max_length=128)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    purpose: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.tool_key = self.tool_key.strip()
+        self.purpose = self.purpose.strip()
+        if not self.tool_key or not self.purpose:
+            raise ValueError("Parallel Tool key and purpose cannot be blank")
+        return self
+
+
 class AiraActionProposal(BaseModel):
     """One untrusted AI proposal, validated before any Action is persisted."""
 
@@ -101,6 +119,7 @@ class AiraActionProposal(BaseModel):
     decision: Literal[
         "protocol",
         "tool",
+        "parallel_tools",
         "resource",
         "instrument",
         "service",
@@ -112,6 +131,7 @@ class AiraActionProposal(BaseModel):
     tool_key: str | None = Field(default=None, max_length=128)
     instrument_command_id: UUID | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
+    parallel_tools: list[AiraToolRequest] = Field(default_factory=list, max_length=4)
     wait_template_key: (
         Literal[
             "data_asset.ready",
@@ -137,6 +157,23 @@ class AiraActionProposal(BaseModel):
         )
         if self.decision == "tool" and not self.tool_key:
             raise ValueError("A tool proposal requires tool_key")
+        if self.decision == "parallel_tools" and len(self.parallel_tools) < 2:
+            raise ValueError("A parallel Tool proposal requires at least two calls")
+        if self.decision != "parallel_tools" and self.parallel_tools:
+            raise ValueError(
+                "parallel_tools are only valid for a parallel Tool proposal"
+            )
+        if self.parallel_tools:
+            calls = [
+                json.dumps(
+                    {"tool_key": item.tool_key, "arguments": item.arguments},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for item in self.parallel_tools
+            ]
+            if len(calls) != len(set(calls)):
+                raise ValueError("Parallel Tool calls contain duplicates")
         if self.decision == "instrument" and self.instrument_command_id is None:
             raise ValueError("An instrument proposal requires instrument_command_id")
         if self.decision != "tool" and self.tool_key:
@@ -337,10 +374,18 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     ]
     decision_schema = {
         "decision": (
-            "protocol | tool | resource | instrument | service | compute | wait | finish"
+            "protocol | tool | parallel_tools | resource | instrument | service | "
+            "compute | wait | finish"
         ),
         "thought": "short scientific reason",
         "tool_key": "required only for tool",
+        "parallel_tools": [
+            {
+                "tool_key": "listed read-only Tool key",
+                "arguments": "must match that Tool's input_schema",
+                "purpose": "why this independent call is needed",
+            }
+        ],
         "instrument_command_id": "required only for instrument; choose one listed ID",
         "arguments": "tool or instrument arguments; must match its input_schema",
         "resource_request": {
@@ -393,9 +438,10 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, resource, instrument, service, compute, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, parallel_tools, resource, instrument, service, compute, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
+            "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
@@ -437,23 +483,43 @@ async def plan_next_research_action(
     proposal = AiraActionProposal.model_validate(raw)
     if proposal.decision == "protocol" and not context.get("protocols"):
         raise ValueError("Aira proposed a Protocol but none is available")
-    if proposal.decision == "tool":
+    def validate_tool_call(
+        tool_key: str,
+        arguments: dict[str, Any],
+        *,
+        require_read_only: bool = False,
+    ) -> None:
         pinned = next(
             (
                 item
                 for item in list(context.get("tools") or [])
-                if item.get("key") == proposal.tool_key
+                if item.get("key") == tool_key
             ),
             None,
         )
-        definition = research_tool_catalog().get(proposal.tool_key or "")
+        definition = research_tool_catalog().get(tool_key)
         if pinned is None:
             raise ValueError("Aira proposed a Research Tool outside the environment")
         if definition is None or not definition.available:
             raise ValueError("Aira proposed an unavailable Research Tool")
         if definition.version != str(pinned.get("version") or ""):
             raise ValueError("Aira proposed an unavailable Research Tool version")
-        validate_tool_arguments(definition, proposal.arguments)
+        if require_read_only and definition.risk not in {
+            "read_only",
+            "external_read_only",
+        }:
+            raise ValueError("Parallel planning only supports read-only Research Tools")
+        validate_tool_arguments(definition, arguments)
+
+    if proposal.decision == "tool":
+        validate_tool_call(proposal.tool_key or "", proposal.arguments)
+    if proposal.decision == "parallel_tools":
+        for call in proposal.parallel_tools:
+            validate_tool_call(
+                call.tool_key,
+                call.arguments,
+                require_read_only=True,
+            )
     if proposal.decision == "resource":
         request = proposal.resource_request
         if request is None:

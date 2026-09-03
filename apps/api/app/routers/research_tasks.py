@@ -111,6 +111,7 @@ from app.services.research_external_services import (
     release_service_budget,
     service_job_snapshot,
 )
+from app.services.research_frontiers import hold_or_release_parallel_frontier
 from app.services.research_instruments import activate_aira_instrument_action
 from app.services.research_resources import (
     ResearchResourceError,
@@ -3831,10 +3832,10 @@ async def approve_research_action(
         project=project,
     )
     _validate_pending_approval(approval, action, params)
-    if (
-        task.status != ResearchTaskStatus.ACTIVE.value
-        or run.status != ResearchRunStatus.WAITING_FOR_APPROVAL.value
-    ):
+    if task.status != ResearchTaskStatus.ACTIVE.value or run.status in {
+        *TERMINAL_RUN_STATUSES,
+        ResearchRunStatus.PAUSED.value,
+    }:
         raise HTTPException(
             status_code=409,
             detail="Resume the active Research Run before approving this Action",
@@ -4004,6 +4005,12 @@ async def approve_research_action(
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+    await hold_or_release_parallel_frontier(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
     task.revision += 1
     if activation_event is not None:
         event_kind, event_payload = activation_event
@@ -4056,10 +4063,10 @@ async def reject_research_action(
         project=project,
     )
     _validate_pending_approval(approval, action, params)
-    if (
-        task.status != ResearchTaskStatus.ACTIVE.value
-        or run.status != ResearchRunStatus.WAITING_FOR_APPROVAL.value
-    ):
+    if task.status != ResearchTaskStatus.ACTIVE.value or run.status in {
+        *TERMINAL_RUN_STATUSES,
+        ResearchRunStatus.PAUSED.value,
+    }:
         raise HTTPException(
             status_code=409,
             detail="Resume the active Research Run before rejecting this Action",
@@ -4160,19 +4167,26 @@ async def reject_research_action(
         },
         idempotency_key=f"approval:{approval.id}:rejected",
     )
-    if config.effective_ai_enabled and await research_run_has_executable_ai_path(
-        db_session, task=task, run=run
-    ):
-        await enqueue_research_advance(db_session, task=task, run=run)
-    else:
-        await emit_research_event(
-            db_session,
-            task_id=task.id,
-            run_id=run.id,
-            kind="run.manual_control_required",
-            actor_user_id=current_user.id,
-            payload={"reason": "approval_rejected_without_ai"},
-            idempotency_key=f"run:{run.id}:manual:approval:{approval.id}",
-        )
+    frontier_settled = await hold_or_release_parallel_frontier(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
+    if frontier_settled:
+        if config.effective_ai_enabled and await research_run_has_executable_ai_path(
+            db_session, task=task, run=run
+        ):
+            await enqueue_research_advance(db_session, task=task, run=run)
+        else:
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                kind="run.manual_control_required",
+                actor_user_id=current_user.id,
+                payload={"reason": "approval_rejected_without_ai"},
+                idempotency_key=f"run:{run.id}:manual:approval:{approval.id}",
+            )
     await db_session.commit()
     return await _approval_data(db_session, approval, action, run, task, project, lab)

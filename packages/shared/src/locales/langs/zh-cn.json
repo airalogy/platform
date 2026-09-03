@@ -1362,6 +1362,7 @@
       "executionHistory": "执行账本",
       "actions": "Actions",
       "noActions": "尚未安排 Action。",
+      "parallelBranch": "并行 {position}/{size}",
       "viewEvidenceRecord": "查看证据 Record",
       "resultPackage": "结果包",
       "researchConclusion": "科研结论",
