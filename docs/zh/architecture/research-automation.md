@@ -51,9 +51,9 @@ AI 是智能编排层，不是系统记录或权限系统。Platform 仍是所�
 - Resource Reservation
 - Wait Event
 
-Protocol Run、Human Work Item、Tool Job、Instrument Job、Resource Reservation 和 Wait Event 已使用这套生命周期。外部服务和未来的审批请求类型会在对应 Executor 接入时沿用同一边界。
+Protocol Run、Human Work Item、Tool Job、Instrument Job、External Service Job、Resource Reservation 和 Wait Event 已使用这套生命周期。未来的独立审批请求类型会在对应 Executor 接入时沿用同一边界。
 
-Tool、Instrument、Resource 和 Wait 的类型化结果会追加到 Run 持久 AIRA 状态中有上限的结果通道。下一 Action 规划器和旧 AIRA Method 都会将这些通道作为不可信的科研证据读取。这既保留执行输出、Record 与 Protocol 的语义边界，也避免后续规划和结论丢失真实运行结果。
+Tool、Instrument、External Service、Resource 和 Wait 的类型化结果会追加到 Run 持久 AIRA 状态中有上限的结果通道。下一 Action 规划器和旧 AIRA Method 都会将这些通道作为不可信的科研证据读取。这既保留执行输出、Record 与 Protocol 的语义边界，也避免后续规划和结论丢失真实运行结果。
 
 ### Protocol 与 Capability
 
@@ -192,7 +192,9 @@ Task 还可固定截止时间和单一币种的预算上限。预算变化必须
 
 Platform 不必取代完整 ERP/LIMS。小型 Lab 可使用内置最小模块，成熟组织可连接既有系统；Platform 统一保存资源引用、需求、预留、Action 关联、权限和审计。
 
-外部科研服务同样区分版本化能力与受治理执行。Lab 服务管理员通过“预览→确认”登记服务商，再发布不可变的服务修订，固定仅本地引用的请求/结果 JSON Schema、版本、风险、报价策略、可选基础价与币种、SLA 目标、样本要求、物流规则和条款。创建 Task 时可将已批准服务的准确服务商与契约修订固定到 Research Environment。这只证明 Run 允许请求什么，不等于下单、授权付款、发送样本或收到结果。服务商编辑和后续服务修订都不会改写活动 Task 的快照。报价、审批、预留预算、交接、履约和结果校验仍须由独立的类型化 Action 和账本表达。
+外部科研服务同样区分版本化能力与受治理执行。Lab 服务管理员通过“预览→确认”登记服务商，再发布不可变的服务修订，固定仅本地引用的请求/结果 JSON Schema、版本、风险、报价策略、可选基础价与币种、SLA 目标、样本要求、物流规则和条款。创建 Task 时可将已批准服务的准确服务商与契约修订固定到 Research Environment。这只证明 Run 允许请求什么，不等于下单、授权付款、发送样本或收到结果。服务商编辑和后续服务修订都不会改写活动 Task 的快照。
+
+External Service Job 是受治理的执行对象。创建请求时按锁定的输入 Schema 校验；服务商报价或锁定的目录价会保存为不可变报价，并创建绑定摘要的下单审批。审批时会在锁内重新解析契约、检查报价有效期与 Task 币种/限额，然后预留准确金额；未通过审批就不会进入已下单或可交接样本状态。履约进度与失败使用明确状态变更。样本交接是针对有权访问的 Lab 资源及可选容器追加的不可变序列，不把交接误当成库存消耗。接收结果时按锁定结果 Schema 校验，关联准确的 Task DataAsset 版本，释放已批准预留、记录实际支出，并把类型化 Service 结果回传 Run。实际费用高于批准报价时失败关闭，必须建立新的审批边界。AI 关闭后，这条确定性流程仍可完整使用。
 
 设备集成从数据导入、引导执行、需设备端确认的辅助控制，再到策略内闭环自动化逐级升级。Aira 不直接向设备发送任意指令。在下一 Action 边界，它只能从 Platform 根据当前 Research Environment 与请求人本人已批准设备预约提供的列表中选择准确指令 ID，并提供符合输入 Schema 的参数。Platform 确定性选择最早可用预约，固定完整指令与资源状态，并始终请求人员批准。批准时会在锁定下重新解析指令、Gateway、设备、权限、预约、Schema 和竞争作业状态，仅当全部一致时 Action 才可入队。本地 Instrument Gateway 只接收签名、结构化且列入允许清单的作业，并提供状态校验、审计和受治理的停止请求。
 

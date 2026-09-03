@@ -135,6 +135,8 @@ export interface ResearchServiceRequirement {
   source_id: string
   source_revision_id: string
   risk: "low" | "medium" | "high"
+  input_schema: Record<string, unknown>
+  output_schema: Record<string, unknown>
   available: boolean
   metadata: {
     offering_key: string
@@ -321,6 +323,93 @@ export interface ResearchInstrumentJob {
   completed_at?: string | null
 }
 
+export type ResearchServiceJobStatus
+  = "awaiting_quote"
+  | "awaiting_approval"
+  | "ordered"
+  | "in_fulfillment"
+  | "completed"
+  | "failed"
+  | "cancelled"
+
+export interface ResearchServiceQuote {
+  id: string
+  service_job_id: string
+  revision: number
+  amount: string
+  currency: string
+  provider_quote_ref: string
+  valid_until?: string | null
+  terms: string
+  source: "catalog" | "provider"
+  quote_digest: string
+  created_at: string
+}
+
+export interface ResearchServiceCustodyEvent {
+  id: string
+  service_job_id: string
+  sequence: number
+  kind: "prepared" | "released_to_carrier" | "received_by_provider" | "returned_to_lab" | "disposed_by_provider"
+  resource_id: string
+  container_id?: string | null
+  from_party: string
+  to_party: string
+  location: string
+  carrier: string
+  tracking_ref: string
+  condition: Record<string, unknown>
+  notes: string
+  occurred_at: string
+  event_digest: string
+  created_at: string
+}
+
+export interface ResearchServiceResultAsset {
+  data_asset_version_id: string
+  data_asset_id: string
+  name: string
+  kind: string
+  status: string
+  version: number
+}
+
+export interface ResearchServiceJob {
+  id: string
+  action_id: string
+  provider_id: string
+  service_offering_id: string
+  service_offering_revision_id: string
+  service_offering_revision: number
+  service_version: string
+  provider_snapshot: { id?: string, name?: string, revision?: number }
+  offering_snapshot: ResearchServiceRequirement & Record<string, any>
+  request_payload: Record<string, unknown>
+  input_schema: Record<string, unknown>
+  result_schema: Record<string, unknown>
+  risk: "low" | "medium" | "high"
+  quote_required: boolean
+  status: ResearchServiceJobStatus
+  current_quote_revision?: number | null
+  external_order_ref: string
+  provider_status: string
+  expected_completion_at?: string | null
+  result: Record<string, unknown>
+  actual_amount?: string | null
+  error?: string | null
+  revision: number
+  quote_requested_at?: string | null
+  approved_at?: string | null
+  ordered_at?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  created_at: string
+  updated_at: string
+  quote?: ResearchServiceQuote | null
+  custody_events: ResearchServiceCustodyEvent[]
+  result_assets: ResearchServiceResultAsset[]
+}
+
 export interface ResearchAction {
   id: string
   run_id: string
@@ -350,6 +439,7 @@ export interface ResearchAction {
   work_item?: ResearchHumanWorkItem | null
   tool_job?: ResearchToolJob | null
   instrument_job?: ResearchInstrumentJob | null
+  service_job?: ResearchServiceJob | null
   wait_event?: ResearchWaitEvent | null
   resource_reservation?: ResearchResourceReservation | null
   approval?: ResearchApproval | null
@@ -461,6 +551,8 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   permissions: {
     can_run: boolean
     can_approve: boolean
+    can_use_services: boolean
+    can_manage_services: boolean
   }
 }
 

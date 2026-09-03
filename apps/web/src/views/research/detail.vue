@@ -60,6 +60,12 @@
               :requirements="task.resources"
               @created="() => loadTask(true)"
             />
+            <research-service-action-modal
+              v-if="canAddServiceAction"
+              :task-id="task.id"
+              :services="task.services"
+              @created="() => loadTask(true)"
+            />
             <n-button v-if="task.status === 'active'" :loading="mutating" @click="pauseTask">
               {{ $t("page.research.pause") }}
             </n-button>
@@ -351,6 +357,15 @@
                       </n-alert>
                       <pre v-if="Object.keys(action.instrument_job.result || {}).length" class="mt-3">{{ formatPayload(action.instrument_job.result) }}</pre>
                     </div>
+                    <research-service-job-actions
+                      v-if="action.service_job"
+                      class="mt-3"
+                      :job="action.service_job"
+                      :task-id="task.id"
+                      :lab-id="task.lab_id"
+                      :can-manage="task.permissions.can_manage_services"
+                      @changed="() => loadTask(true)"
+                    />
                     <div v-if="action.wait_event" class="research-digital-result mt-3">
                       <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
@@ -780,6 +795,8 @@ import ResearchDigitalActionModal from "./components/research-digital-action-mod
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
 import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
+import ResearchServiceActionModal from "./components/research-service-action-modal.vue"
+import ResearchServiceJobActions from "./components/research-service-job-actions.vue"
 import ResearchWaitEventSignal from "./components/research-wait-event-signal.vue"
 
 const route = useRoute()
@@ -828,6 +845,11 @@ const hasAiraCapabilities = computed(() => Boolean(
 ))
 const canAddAction = computed(() => ["active", "paused"].includes(task.value?.status || ""))
 const canAddDigitalAction = computed(() => task.value?.status === "active")
+const canAddServiceAction = computed(() => Boolean(
+  task.value?.status === "active"
+  && task.value.permissions.can_use_services
+  && task.value.services.some(item => item.available),
+))
 const canCancel = computed(() => !["completed", "cancelled", "archived"].includes(task.value?.status || ""))
 const canReview = computed(() => Boolean(
   task.value
@@ -1291,6 +1313,14 @@ function eventLabel(kind: string) {
     "instrument_job.stopped",
     "wait_event.created",
     "wait_event.received",
+    "external_service.quote_requested",
+    "external_service.catalog_quote_created",
+    "external_service.quote_recorded",
+    "external_service.order_approved",
+    "external_service.in_fulfillment",
+    "external_service.custody_recorded",
+    "external_service.failed",
+    "external_service.completed",
   ]
   return known.includes(kind)
     ? $t(`page.research.event.${kind.replaceAll(".", "_")}` as I18n.I18nKey)

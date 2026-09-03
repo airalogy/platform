@@ -94,6 +94,15 @@ def test_service_contract_requires_local_object_schemas_and_price_pair():
                 },
             }
         )
+    with pytest.raises(ValidationError, match="requires a catalog price"):
+        ServiceOfferingDraft(
+            **{
+                **valid.model_dump(),
+                "quote_required": False,
+                "base_price": None,
+                "currency": None,
+            }
+        )
 
 
 def test_service_provider_rejects_non_http_website():

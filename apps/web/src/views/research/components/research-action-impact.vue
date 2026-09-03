@@ -19,6 +19,9 @@
           · {{ resolvedResource.resource_code }}
         </template>
       </span>
+      <span v-else-if="action.service_job" class="aira-type-meta">
+        {{ action.service_job.provider_snapshot.name }} · {{ action.service_job.offering_snapshot.name }} · v{{ action.service_job.service_version }}
+      </span>
       <span v-else-if="action.protocol" class="aira-type-meta">
         {{ action.protocol.name }} · v{{ action.protocol.version }}
       </span>
@@ -65,6 +68,17 @@
         {{ action.resource_reservation.purpose }}
       </p>
     </div>
+    <div v-else-if="action.service_job" class="mt-2 space-y-2">
+      <div class="flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+        <span>{{ $t("page.research.serviceJobStatusLabel") }} · {{ $t(`page.research.serviceJobStatus.${action.service_job.status}` as I18n.I18nKey) }}</span>
+        <span>{{ $t("page.research.serviceContractRevision") }} · r{{ action.service_job.service_offering_revision }}</span>
+        <span v-if="action.service_job.quote">{{ action.service_job.quote.amount }} {{ action.service_job.quote.currency }}</span>
+      </div>
+      <div>
+        <div class="aira-type-meta">{{ $t("page.research.serviceRequestPayload") }}</div>
+        <pre>{{ formatted(action.service_job.request_payload) }}</pre>
+      </div>
+    </div>
     <div v-else-if="action.protocol_run && Object.keys(action.protocol_run.initial_values || {}).length" class="mt-2">
       <div class="aira-type-meta">{{ $t("page.research.initialValues") }}</div>
       <pre>{{ formatted(action.protocol_run.initial_values) }}</pre>
@@ -80,7 +94,7 @@ import { $t } from "@airalogy/shared/locales"
 const props = defineProps<{ action: ResearchAction }>()
 
 const kindLabel = computed(() => {
-  const known = ["protocol_run", "tool_job", "instrument_job", "resource_reservation", "wait_event", "human_work_item"]
+  const known = ["protocol_run", "tool_job", "instrument_job", "external_service_job", "resource_reservation", "wait_event", "human_work_item"]
   return known.includes(props.action.kind)
     ? $t(`page.research.actionKind.${props.action.kind}` as I18n.I18nKey)
     : props.action.kind.replaceAll("_", " ")
@@ -94,6 +108,8 @@ const kindTagType = computed<TagProps["type"]>(() => {
   if (props.action.kind === "instrument_job")
     return "warning"
   if (props.action.kind === "resource_reservation")
+    return "warning"
+  if (props.action.kind === "external_service_job")
     return "warning"
   return "default"
 })

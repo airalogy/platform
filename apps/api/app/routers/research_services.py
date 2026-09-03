@@ -151,6 +151,8 @@ class ServiceOfferingDraft(BaseModel):
         )
         if (self.base_price is None) != (self.currency is None):
             raise ValueError("Base price and currency must be provided together")
+        if not self.quote_required and self.base_price is None:
+            raise ValueError("A service without provider quotes requires a catalog price")
         if self.currency is not None:
             self.currency = normalize_currency(self.currency)
         if len(str(self.sample_requirements)) > 50_000:

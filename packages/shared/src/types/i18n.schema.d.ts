@@ -1012,6 +1012,77 @@ declare namespace I18n {
         externalServicesPlaceholder: string
         externalServicesHint: string
         noExternalServices: string
+        externalService: string
+        requestExternalService: string
+        serviceRequestHint: string
+        serviceRequestPayload: string
+        serviceSchemaHint: string
+        pinnedContract: string
+        serviceRequestPreviewHint: string
+        quoteRequired: string
+        catalogPrice: string
+        confirmServiceRequest: string
+        serviceRequestCreated: string
+        serviceJobStatusLabel: string
+        serviceContractRevision: string
+        externalOrderRef: string
+        approvedQuote: string
+        actualCost: string
+        expectedCompletion: string
+        recordQuote: string
+        updateServiceProgress: string
+        recordCustody: string
+        receiveServiceResult: string
+        sampleCustodyHistory: string
+        serviceResult: string
+        currency: string
+        providerQuoteRef: string
+        quoteValidUntil: string
+        serviceTerms: string
+        serviceStatus: string
+        providerStatus: string
+        failureReason: string
+        custodyKind: string
+        fromParty: string
+        toParty: string
+        occurredAt: string
+        carrier: string
+        trackingRef: string
+        location: string
+        notes: string
+        serviceResultPayload: string
+        serviceResultSchemaHint: string
+        resultDataAssets: string
+        serviceOperationPreviewHint: string
+        serviceOperationSaved: string
+        serviceJobStatus: {
+          awaiting_quote: string
+          awaiting_approval: string
+          ordered: string
+          in_fulfillment: string
+          completed: string
+          failed: string
+          cancelled: string
+        }
+        serviceOperation: {
+          quote: string
+          progress: string
+          custody: string
+          result: string
+        }
+        serviceOperationHint: {
+          quote: string
+          progress: string
+          custody: string
+          result: string
+        }
+        custodyKinds: {
+          prepared: string
+          released_to_carrier: string
+          received_by_provider: string
+          returned_to_lab: string
+          disposed_by_provider: string
+        }
         reserveResource: string
         resourceReservationHint: string
         reservationImpact: string
@@ -1418,6 +1489,7 @@ declare namespace I18n {
           tool_job: string
           human_work_item: string
           instrument_job: string
+          external_service_job: string
           resource_reservation: string
           wait_event: string
         }
@@ -1485,6 +1557,14 @@ declare namespace I18n {
           tool_job_failed: string
           wait_event_created: string
           wait_event_received: string
+          external_service_quote_requested: string
+          external_service_catalog_quote_created: string
+          external_service_quote_recorded: string
+          external_service_order_approved: string
+          external_service_in_fulfillment: string
+          external_service_custody_recorded: string
+          external_service_failed: string
+          external_service_completed: string
         }
       }
       recordDiary: {

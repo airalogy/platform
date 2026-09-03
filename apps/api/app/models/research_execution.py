@@ -90,6 +90,16 @@ class ResearchInstrumentJobStatus(StrEnum):
     STOPPED = "stopped"
 
 
+class ResearchServiceJobStatus(StrEnum):
+    AWAITING_QUOTE = "awaiting_quote"
+    AWAITING_APPROVAL = "awaiting_approval"
+    ORDERED = "ordered"
+    IN_FULFILLMENT = "in_fulfillment"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class ResearchServiceProvider(Base):
     """Lab-governed identity for an external research-service provider."""
 
@@ -276,6 +286,236 @@ class ResearchServiceOfferingRevision(Base):
     risk: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchServiceJob(Base):
+    """A governed external-service order attached to one Research Action."""
+
+    __tablename__ = "research_service_jobs"
+    __table_args__ = (
+        UniqueConstraint("action_id", name="uq_research_service_job_action"),
+        CheckConstraint(
+            "status IN ('awaiting_quote', 'awaiting_approval', 'ordered', "
+            "'in_fulfillment', 'completed', 'failed', 'cancelled')",
+            name="ck_research_service_job_status",
+        ),
+        CheckConstraint(
+            "length(creation_digest) = 64",
+            name="ck_research_service_job_creation_digest",
+        ),
+        CheckConstraint(
+            "risk IN ('low', 'medium', 'high')",
+            name="ck_research_service_job_risk",
+        ),
+        Index(
+            "ix_research_service_jobs_offering_status",
+            "service_offering_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    provider_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_providers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    service_offering_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_offerings.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    service_offering_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_offering_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    service_offering_revision: Mapped[int] = mapped_column(nullable=False)
+    service_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    offering_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    request_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    input_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    risk: Mapped[str] = mapped_column(String(16), nullable=False)
+    quote_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    creation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    current_quote_revision: Mapped[int | None] = mapped_column()
+    external_order_ref: Mapped[str] = mapped_column(
+        String(255), nullable=False, default=""
+    )
+    provider_status: Mapped[str] = mapped_column(
+        String(255), nullable=False, default=""
+    )
+    expected_completion_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    actual_amount: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    error: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ResearchServiceJobStatus.AWAITING_QUOTE.value
+    )
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    quote_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchServiceQuote(Base):
+    """An immutable provider or catalog quote for one service job."""
+
+    __tablename__ = "research_service_quotes"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_job_id", "revision", name="uq_research_service_quote_revision"
+        ),
+        CheckConstraint("amount >= 0", name="ck_research_service_quote_amount"),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_research_service_quote_currency",
+        ),
+        CheckConstraint(
+            "source IN ('catalog', 'provider')",
+            name="ck_research_service_quote_source",
+        ),
+        CheckConstraint(
+            "length(quote_digest) = 64",
+            name="ck_research_service_quote_digest",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    service_job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    provider_quote_ref: Mapped[str] = mapped_column(
+        String(255), nullable=False, default=""
+    )
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    quote_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchServiceCustodyEvent(Base):
+    """Append-only sample custody checkpoint for an approved service order."""
+
+    __tablename__ = "research_service_custody_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_job_id",
+            "sequence",
+            name="uq_research_service_custody_sequence",
+        ),
+        CheckConstraint(
+            "kind IN ('prepared', 'released_to_carrier', 'received_by_provider', "
+            "'returned_to_lab', 'disposed_by_provider')",
+            name="ck_research_service_custody_kind",
+        ),
+        CheckConstraint(
+            "length(event_digest) = 64",
+            name="ck_research_service_custody_digest",
+        ),
+        Index(
+            "ix_research_service_custody_resource_created",
+            "resource_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    service_job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    resource_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    container_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("resource_containers.id", ondelete="RESTRICT")
+    )
+    from_party: Mapped[str] = mapped_column(String(255), nullable=False)
+    to_party: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    carrier: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    tracking_ref: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    condition: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchServiceResultAsset(Base):
+    __tablename__ = "research_service_result_assets"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_job_id",
+            "data_asset_version_id",
+            name="uq_research_service_result_asset",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    service_job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_service_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    data_asset_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("data_asset_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

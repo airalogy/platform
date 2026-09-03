@@ -57,6 +57,8 @@ from app.models.research_execution import (
     ResearchInstrumentJobStatus,
     ResearchResourceReservation,
     ResearchResourceReservationStatus,
+    ResearchServiceJob,
+    ResearchServiceJobStatus,
     ResearchServiceOffering,
     ResearchServiceOfferingRevision,
     ResearchServiceProvider,
@@ -75,7 +77,11 @@ from app.services.access_control import (
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
-from app.services.research_budget import normalize_currency, reached_operational_limit
+from app.services.research_budget import (
+    ResearchBudgetError,
+    normalize_currency,
+    reached_operational_limit,
+)
 from app.services.research_capabilities import (
     protocol_capability,
     resource_capability,
@@ -84,6 +90,11 @@ from app.services.research_capabilities import (
 from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
     resolve_executor_binding,
+)
+from app.services.research_external_services import (
+    activate_service_order,
+    release_service_budget,
+    service_job_snapshot,
 )
 from app.services.research_instruments import activate_aira_instrument_action
 from app.services.research_resources import (
@@ -918,6 +929,9 @@ async def _action_data(
     resource_reservation = await ResearchResourceReservation.find_by(
         db_session, [ResearchResourceReservation.action_id == action.id]
     )
+    service_job = await ResearchServiceJob.find_by(
+        db_session, [ResearchServiceJob.action_id == action.id]
+    )
     approval = (
         await db_session.scalars(
             select(ResearchApproval)
@@ -949,6 +963,11 @@ async def _action_data(
         "wait_event": wait_event.as_dict() if wait_event else None,
         "resource_reservation": (
             resource_reservation.as_dict() if resource_reservation else None
+        ),
+        "service_job": (
+            await service_job_snapshot(db_session, service_job)
+            if service_job is not None
+            else None
         ),
         "approval": (
             await _approval_summary(db_session, approval)
@@ -1178,6 +1197,9 @@ async def _task_detail(
             )
         ).all()
     )
+    resource_access = await resolve_resource_access(
+        db_session, current_user.id, task.lab_id
+    )
     return {
         **summary,
         "runs": [run.as_dict() for run in runs],
@@ -1204,6 +1226,15 @@ async def _task_detail(
                 user=current_user,
                 project=project,
                 capability="research.approve",
+            ),
+            "can_use_services": await has_research_capability(
+                db_session,
+                user=current_user,
+                project=project,
+                capability="research.service.use",
+            ),
+            "can_manage_services": resource_access.allows(
+                "research.service.manage"
             ),
         },
     }
@@ -2028,6 +2059,48 @@ async def cancel_research_task(
                     instrument_job.status = (
                         ResearchInstrumentJobStatus.STOP_REQUESTED.value
                     )
+            service_jobs = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchServiceJob).where(
+                            ResearchServiceJob.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchServiceJob.status.not_in(
+                                [
+                                    ResearchServiceJobStatus.COMPLETED.value,
+                                    ResearchServiceJobStatus.FAILED.value,
+                                    ResearchServiceJobStatus.CANCELLED.value,
+                                ]
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            actions_by_id = {action.id: action for action in actions}
+            for service_job in service_jobs:
+                service_action = actions_by_id[service_job.action_id]
+                if service_job.status in {
+                    ResearchServiceJobStatus.ORDERED.value,
+                    ResearchServiceJobStatus.IN_FULFILLMENT.value,
+                }:
+                    try:
+                        await release_service_budget(
+                            db_session,
+                            task=task,
+                            run=run,
+                            action=service_action,
+                            job=service_job,
+                            actor_user_id=current_user.id,
+                            suffix="task-cancel-release",
+                        )
+                    except ResearchBudgetError as error:
+                        await db_session.rollback()
+                        raise HTTPException(status_code=409, detail=str(error)) from error
+                service_job.status = ResearchServiceJobStatus.CANCELLED.value
+                service_job.error = params.reason or "Research Task cancelled"
+                service_job.completed_at = now
+                service_job.revision += 1
             wait_events = list(
                 (
                     await db_session.scalars(
@@ -3479,6 +3552,7 @@ async def approve_research_action(
         ResearchActionKind.TOOL_JOB.value,
         ResearchActionKind.RESOURCE_RESERVATION.value,
         ResearchActionKind.INSTRUMENT_JOB.value,
+        ResearchActionKind.EXTERNAL_SERVICE_JOB.value,
         ResearchActionKind.WAIT_EVENT.value,
     }:
         raise HTTPException(
@@ -3560,6 +3634,33 @@ async def approve_research_action(
             await db_session.rollback()
             raise HTTPException(status_code=409, detail=str(error)) from error
         activation_event = ("instrument_job.queued", instrument_payload)
+    elif action.kind == ResearchActionKind.EXTERNAL_SERVICE_JOB.value:
+        try:
+            service_job, quote = await activate_service_order(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                actor_user_id=current_user.id,
+            )
+        except (ValueError, ResearchBudgetError) as error:
+            await db_session.rollback()
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="external_service.order_approved",
+            actor_user_id=current_user.id,
+            payload={
+                "service_job_id": str(service_job.id),
+                "quote_id": str(quote.id),
+                "amount": str(quote.amount),
+                "currency": quote.currency,
+            },
+            idempotency_key=f"service-job:{service_job.id}:order-approved",
+        )
     else:
         try:
             await activate_wait_event_action(
@@ -3673,6 +3774,18 @@ async def reject_research_action(
         instrument_job.status = ResearchInstrumentJobStatus.CANCELLED.value
         instrument_job.completed_at = now
         instrument_job.revision += 1
+    service_job = await ResearchServiceJob.find_by(
+        db_session, [ResearchServiceJob.action_id == action.id]
+    )
+    if (
+        service_job is not None
+        and service_job.status
+        == ResearchServiceJobStatus.AWAITING_APPROVAL.value
+    ):
+        service_job.status = ResearchServiceJobStatus.CANCELLED.value
+        service_job.error = f"Order rejected: {approval.decision_reason}"
+        service_job.completed_at = now
+        service_job.revision += 1
 
     state = dict(run.aira_state or initial_aira_state(task.goal))
     run.aira_state = {

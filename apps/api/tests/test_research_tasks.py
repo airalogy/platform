@@ -298,6 +298,13 @@ def test_typed_action_results_reach_aira_without_becoming_records():
                     "status": "approved",
                 }
             ],
+            "service_results": [
+                {
+                    "service_job_id": "service-job-1",
+                    "status": "completed",
+                    "result": {"reads": 42},
+                }
+            ],
         }
     )
 
@@ -307,6 +314,7 @@ def test_typed_action_results_reach_aira_without_becoming_records():
     assert "data_asset.ready" in prompt
     assert "incubator.set-temperature" in prompt
     assert '"status":"approved"' in prompt
+    assert '"reads":42' in prompt
 
 
 def test_append_aira_result_is_bounded_and_preserves_other_state():

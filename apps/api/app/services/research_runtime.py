@@ -348,6 +348,7 @@ def execution_context_for_prompt(state: dict[str, Any]) -> str:
         "tool_results": list(state.get("tool_results") or [])[-20:],
         "instrument_results": list(state.get("instrument_results") or [])[-20:],
         "resource_results": list(state.get("resource_results") or [])[-20:],
+        "service_results": list(state.get("service_results") or [])[-20:],
         "event_results": list(state.get("event_results") or [])[-20:],
         "rejected_actions": list(state.get("rejected_actions") or [])[-20:],
     }
@@ -1142,9 +1143,12 @@ async def _aira_planner_context(
         "instrument_results": list(
             (run.aira_state or {}).get("instrument_results") or []
         )[-20:],
-        "resource_results": list((run.aira_state or {}).get("resource_results") or [])[
-            -20:
-        ],
+        "resource_results": list(
+            (run.aira_state or {}).get("resource_results") or []
+        )[-20:],
+        "service_results": list(
+            (run.aira_state or {}).get("service_results") or []
+        )[-20:],
         "event_results": list((run.aira_state or {}).get("event_results") or [])[-20:],
         "rejected_actions": list((run.aira_state or {}).get("rejected_actions") or [])[
             -20:
