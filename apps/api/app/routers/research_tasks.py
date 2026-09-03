@@ -56,6 +56,8 @@ from app.models.research_asset import (
 from app.models.research_execution import (
     ResearchComputeEnvironment,
     ResearchComputeEnvironmentRevision,
+    ResearchComputeJob,
+    ResearchComputeJobStatus,
     ResearchInstrumentJob,
     ResearchInstrumentJobStatus,
     ResearchResourceReservation,
@@ -93,6 +95,11 @@ from app.services.research_capabilities import (
 from app.services.research_compute import (
     compute_environment_snapshot,
     latest_compute_environment_revision,
+)
+from app.services.research_compute_jobs import (
+    activate_compute_action,
+    compute_job_snapshot,
+    release_compute_budget,
 )
 from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
@@ -994,6 +1001,9 @@ async def _action_data(
     instrument_job = await ResearchInstrumentJob.find_by(
         db_session, [ResearchInstrumentJob.action_id == action.id]
     )
+    compute_job = await ResearchComputeJob.find_by(
+        db_session, [ResearchComputeJob.action_id == action.id]
+    )
     wait_event = await ResearchWaitEvent.find_by(
         db_session, [ResearchWaitEvent.action_id == action.id]
     )
@@ -1031,6 +1041,7 @@ async def _action_data(
         "work_item": work_item.as_dict() if work_item else None,
         "tool_job": tool_job.as_dict() if tool_job else None,
         "instrument_job": instrument_job.as_dict() if instrument_job else None,
+        "compute_job": compute_job_snapshot(compute_job) if compute_job else None,
         "wait_event": wait_event.as_dict() if wait_event else None,
         "resource_reservation": (
             resource_reservation.as_dict() if resource_reservation else None
@@ -1948,6 +1959,58 @@ async def pause_research_task(
                 f"{active_instrument_job.revision}"
             ),
         )
+    active_compute_job = (
+        await db_session.scalars(
+            select(ResearchComputeJob)
+            .join(ResearchAction, ResearchAction.id == ResearchComputeJob.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchComputeJob.status.in_(
+                    [
+                        ResearchComputeJobStatus.LEASED.value,
+                        ResearchComputeJobStatus.RUNNING.value,
+                        ResearchComputeJobStatus.CANCEL_REQUESTED.value,
+                    ]
+                ),
+            )
+            .limit(1)
+            .with_for_update()
+        )
+    ).first()
+    if active_compute_job is not None and active_compute_job.status in {
+        ResearchComputeJobStatus.LEASED.value,
+        ResearchComputeJobStatus.RUNNING.value,
+    }:
+        now = utcnow()
+        active_compute_job.status = ResearchComputeJobStatus.CANCEL_REQUESTED.value
+        active_compute_job.cancel_reason = params.reason or "Research Task paused"
+        active_compute_job.cancel_requested_at = now
+        active_compute_job.revision += 1
+        compute_action = await db_session.get(
+            ResearchAction, active_compute_job.action_id
+        )
+        if compute_action is not None:
+            compute_action.status = ResearchActionStatus.WAITING.value
+            compute_action.error = (
+                f"Cancellation requested: {active_compute_job.cancel_reason}"
+            )
+            compute_action.revision += 1
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=active_compute_job.action_id,
+            kind="compute_job.cancel_requested",
+            actor_user_id=current_user.id,
+            payload={
+                "compute_job_id": str(active_compute_job.id),
+                "reason": active_compute_job.cancel_reason,
+            },
+            idempotency_key=(
+                f"compute-job:{active_compute_job.id}:pause:"
+                f"{active_compute_job.revision}"
+            ),
+        )
     run.status = ResearchRunStatus.PAUSED.value
     task.status = ResearchTaskStatus.PAUSED.value
     task.revision += 1
@@ -1998,6 +2061,17 @@ async def resume_research_task(
             .limit(1)
         )
     ).first()
+    pending_approval = (
+        await db_session.scalars(
+            select(ResearchApproval)
+            .join(ResearchAction, ResearchAction.id == ResearchApproval.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchApproval.status == ResearchApprovalStatus.PENDING.value,
+            )
+            .limit(1)
+        )
+    ).first()
     active_instrument_job = (
         await db_session.scalars(
             select(ResearchInstrumentJob)
@@ -2016,6 +2090,24 @@ async def resume_research_task(
             .limit(1)
         )
     ).first()
+    active_compute_job = (
+        await db_session.scalars(
+            select(ResearchComputeJob)
+            .join(ResearchAction, ResearchAction.id == ResearchComputeJob.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchComputeJob.status.in_(
+                    [
+                        ResearchComputeJobStatus.QUEUED.value,
+                        ResearchComputeJobStatus.LEASED.value,
+                        ResearchComputeJobStatus.RUNNING.value,
+                        ResearchComputeJobStatus.CANCEL_REQUESTED.value,
+                    ]
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
     if (
         active_instrument_job is not None
         and active_instrument_job.status
@@ -2028,15 +2120,31 @@ async def resume_research_task(
                 "the equipment before resuming"
             ),
         )
+    if (
+        active_compute_job is not None
+        and active_compute_job.status
+        == ResearchComputeJobStatus.CANCEL_REQUESTED.value
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Wait for the Compute Runner to acknowledge cancellation and inspect "
+                "partial outputs before resuming"
+            ),
+        )
     task.status = ResearchTaskStatus.ACTIVE.value
     task.outcome = None
     task.revision += 1
     run.last_error = None
     run.completed_at = None
-    if open_work_item is not None:
+    if pending_approval is not None:
+        run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
+    elif open_work_item is not None:
         run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
     elif active_instrument_job is not None:
         run.status = ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
+    elif active_compute_job is not None:
+        run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
     else:
         run.status = ResearchRunStatus.RUNNING.value
         if config.effective_ai_enabled and research_environment_has_ai_path(
@@ -2170,6 +2278,57 @@ async def cancel_research_task(
                     instrument_job.status = (
                         ResearchInstrumentJobStatus.STOP_REQUESTED.value
                     )
+            compute_jobs = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchComputeJob).where(
+                            ResearchComputeJob.action_id.in_(
+                                [action.id for action in actions]
+                            ),
+                            ResearchComputeJob.status.not_in(
+                                [
+                                    ResearchComputeJobStatus.COMPLETED.value,
+                                    ResearchComputeJobStatus.FAILED.value,
+                                    ResearchComputeJobStatus.CANCELLED.value,
+                                ]
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            actions_by_id = {action.id: action for action in actions}
+            for compute_job in compute_jobs:
+                compute_action = actions_by_id[compute_job.action_id]
+                previous_status = compute_job.status
+                compute_job.cancel_reason = params.reason or "Task cancelled"
+                compute_job.cancel_requested_at = now
+                compute_job.revision += 1
+                if previous_status in {
+                    ResearchComputeJobStatus.AWAITING_APPROVAL.value,
+                    ResearchComputeJobStatus.QUEUED.value,
+                }:
+                    if previous_status == ResearchComputeJobStatus.QUEUED.value:
+                        try:
+                            await release_compute_budget(
+                                db_session,
+                                task=task,
+                                run=run,
+                                action=compute_action,
+                                job=compute_job,
+                                suffix="task-cancel-release",
+                                actor_user_id=current_user.id,
+                            )
+                        except ResearchBudgetError as error:
+                            await db_session.rollback()
+                            raise HTTPException(
+                                status_code=409, detail=str(error)
+                            ) from error
+                    compute_job.status = ResearchComputeJobStatus.CANCELLED.value
+                    compute_job.completed_at = now
+                else:
+                    compute_job.status = (
+                        ResearchComputeJobStatus.CANCEL_REQUESTED.value
+                    )
             service_jobs = list(
                 (
                     await db_session.scalars(
@@ -2188,7 +2347,6 @@ async def cancel_research_task(
                     )
                 ).all()
             )
-            actions_by_id = {action.id: action for action in actions}
             for service_job in service_jobs:
                 service_action = actions_by_id[service_job.action_id]
                 if service_job.status in {
@@ -3663,6 +3821,7 @@ async def approve_research_action(
         ResearchActionKind.TOOL_JOB.value,
         ResearchActionKind.RESOURCE_RESERVATION.value,
         ResearchActionKind.INSTRUMENT_JOB.value,
+        ResearchActionKind.COMPUTE_JOB.value,
         ResearchActionKind.EXTERNAL_SERVICE_JOB.value,
         ResearchActionKind.WAIT_EVENT.value,
     }:
@@ -3771,6 +3930,39 @@ async def approve_research_action(
                 "currency": quote.currency,
             },
             idempotency_key=f"service-job:{service_job.id}:order-approved",
+        )
+    elif action.kind == ResearchActionKind.COMPUTE_JOB.value:
+        try:
+            compute_job = await activate_compute_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                actor_user_id=current_user.id,
+            )
+        except (ValueError, ResearchBudgetError) as error:
+            await db_session.rollback()
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="compute_job.queued",
+            actor_user_id=current_user.id,
+            payload={
+                "compute_job_id": str(compute_job.id),
+                "environment_revision_id": str(
+                    compute_job.compute_environment_revision_id
+                ),
+                "estimated_cost": (
+                    str(compute_job.estimated_cost)
+                    if compute_job.estimated_cost is not None
+                    else None
+                ),
+                "currency": compute_job.currency,
+            },
+            idempotency_key=f"compute-job:{compute_job.id}:queued",
         )
     else:
         try:
@@ -3897,6 +4089,17 @@ async def reject_research_action(
         service_job.error = f"Order rejected: {approval.decision_reason}"
         service_job.completed_at = now
         service_job.revision += 1
+    compute_job = await ResearchComputeJob.find_by(
+        db_session, [ResearchComputeJob.action_id == action.id]
+    )
+    if (
+        compute_job is not None
+        and compute_job.status == ResearchComputeJobStatus.AWAITING_APPROVAL.value
+    ):
+        compute_job.status = ResearchComputeJobStatus.CANCELLED.value
+        compute_job.error = f"Execution rejected: {approval.decision_reason}"
+        compute_job.completed_at = now
+        compute_job.revision += 1
 
     state = dict(run.aira_state or initial_aira_state(task.goal))
     run.aira_state = {

@@ -66,6 +66,12 @@
               :services="task.services"
               @created="() => loadTask(true)"
             />
+            <research-compute-action-modal
+              v-if="canAddComputeAction"
+              :task-id="task.id"
+              :has-environments="task.compute.some(item => item.available)"
+              @created="() => loadTask(true)"
+            />
             <n-button v-if="task.status === 'active'" :loading="mutating" @click="pauseTask">
               {{ $t("page.research.pause") }}
             </n-button>
@@ -356,6 +362,50 @@
                         {{ action.instrument_job.error || action.instrument_job.stop_reason }}
                       </n-alert>
                       <pre v-if="Object.keys(action.instrument_job.result || {}).length" class="mt-3">{{ formatPayload(action.instrument_job.result) }}</pre>
+                    </div>
+                    <div v-if="action.compute_job" class="research-digital-result mt-3">
+                      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="aira-type-label">
+                              {{ $t("page.research.computeJob") }} · {{ action.compute_job.environment_snapshot.name || action.compute_job.compute_environment_id }} · r{{ action.compute_job.compute_environment_revision }}
+                            </span>
+                            <n-tag size="small" round>
+                              {{ computeJobStatusLabel(action.compute_job.status) }}
+                            </n-tag>
+                            <n-tag size="small" round>
+                              {{ action.compute_job.language === "python" ? "Python" : "R" }}
+                            </n-tag>
+                          </div>
+                          <div class="aira-type-meta mt-1">
+                            {{ $t("page.research.computeAttempt", { count: action.compute_job.attempt_count }) }}
+                            <template v-if="action.compute_job.actual_cost || action.compute_job.estimated_cost">
+                              · {{ action.compute_job.actual_cost || action.compute_job.estimated_cost }} {{ action.compute_job.currency }}
+                            </template>
+                          </div>
+                          <div v-if="action.compute_job.heartbeat_at" class="aira-type-meta mt-1">
+                            {{ $t("page.research.lastRunnerHeartbeat") }} · {{ formatDateTime(action.compute_job.heartbeat_at) }}
+                          </div>
+                          <div class="aira-type-meta mt-1 break-all">
+                            {{ $t("page.research.computeSourceDigest") }} · {{ action.compute_job.source_sha256 }}
+                          </div>
+                        </div>
+                        <research-compute-job-actions
+                          :job="action.compute_job"
+                          @changed="() => loadTask(true)"
+                        />
+                      </div>
+                      <n-alert v-if="action.compute_job.error || action.compute_job.cancel_reason" type="error" class="mt-2">
+                        {{ action.compute_job.error || action.compute_job.cancel_reason }}
+                      </n-alert>
+                      <div v-if="Object.keys(action.compute_job.result || {}).length" class="mt-3">
+                        <div class="aira-type-meta">{{ $t("page.research.computeResult") }}</div>
+                        <pre>{{ formatPayload(action.compute_job.result) }}</pre>
+                      </div>
+                      <div v-if="Object.keys(action.compute_job.usage || {}).length" class="mt-3">
+                        <div class="aira-type-meta">{{ $t("page.research.computeUsage") }}</div>
+                        <pre>{{ formatPayload(action.compute_job.usage) }}</pre>
+                      </div>
                     </div>
                     <research-service-job-actions
                       v-if="action.service_job"
@@ -809,6 +859,8 @@ import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
 import ResearchAssetsPanel from "./components/research-assets-panel.vue"
 import ResearchBudgetPanel from "./components/research-budget-panel.vue"
+import ResearchComputeActionModal from "./components/research-compute-action-modal.vue"
+import ResearchComputeJobActions from "./components/research-compute-job-actions.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
@@ -870,6 +922,11 @@ const canAddServiceAction = computed(() => Boolean(
   task.value?.status === "active"
   && task.value.permissions.can_use_services
   && task.value.services.some(item => item.available),
+))
+const canAddComputeAction = computed(() => Boolean(
+  task.value?.status === "active"
+  && task.value.permissions.can_use_compute
+  && task.value.compute.some(item => item.available),
 ))
 const canCancel = computed(() => !["completed", "cancelled", "archived"].includes(task.value?.status || ""))
 const canReview = computed(() => Boolean(
@@ -1110,6 +1167,10 @@ function instrumentJobStatusLabel(status: string) {
   return $t(`page.research.instrumentJobStatus.${status}` as I18n.I18nKey)
 }
 
+function computeJobStatusLabel(status: string) {
+  return $t(`page.research.computeJobStatus.${status}` as I18n.I18nKey)
+}
+
 function openReviewModal() {
   if (!task.value)
     return
@@ -1332,6 +1393,15 @@ function eventLabel(kind: string) {
     "instrument_job.completed",
     "instrument_job.failed",
     "instrument_job.stopped",
+    "compute_job.requested",
+    "compute_job.queued",
+    "compute_job.leased",
+    "compute_job.input_downloaded",
+    "compute_job.started",
+    "compute_job.cancel_requested",
+    "compute_job.completed",
+    "compute_job.failed",
+    "compute_job.cancelled",
     "wait_event.created",
     "wait_event.received",
     "external_service.quote_requested",

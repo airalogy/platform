@@ -16,11 +16,19 @@ Changing a Protocol or Knowledge item later does not silently change the capture
 
 Lab members with research-compute management access can open **Lab resource library → Compute environments**. Create a stable environment key, then declare an immutable OCI image digest, runtime and allowed language, hard CPU/memory/GPU/timeout/output limits, network policy, input/result JSON Schemas, software manifest, risk, and optional hourly cost. Preview the complete contract before confirmation. A revision creates a new immutable contract; existing Research Tasks remain pinned to the prior revision.
 
-Task creators with compute-use access can select an enabled environment during Task creation. Platform copies the exact revision into the Research Environment. This does not run code, reserve budget, or imply that an eligible Compute Runner exists. The current milestone provides governance, reproducible pinning, and Runner authorization only; until the Compute Job lifecycle and independent Runner process are delivered, compute-only Tasks remain under manual control and the Task page says that execution is unavailable.
+Task creators with compute-use access can select an enabled environment during Task creation. Platform copies the exact revision into the Research Environment. Selection alone does not run code, reserve budget, or imply that an eligible Compute Runner exists.
 
 ## Register a Compute Runner
 
 A Lab compute manager can add a Runner under **Lab resource library → Compute environments**, receive its credential once, and configure a hard concurrency limit. After installing the independent Runner process, its status appears as ready only when it reports non-root execution, a read-only root filesystem, network isolation, and no host mounts. Bind each Runner to the exact environment revisions it may execute; newer revisions require a separate review and binding. Disabling a Runner or removing a binding stops future work without deleting the audit history. Registration and binding alone still run no code.
+
+## Request a computation
+
+In an active Task, choose **Run computation**, select one of the exact environment revisions pinned to the Task, and choose an allowed language. Enter source code and a JSON input that satisfies the environment's input Schema. Optionally attach ready DataAssets from the same Project by selecting exact versions and safe mount names. Preview the destination, source digest, immutable image, resource and network limits, input versions, eligible Runner count, and maximum estimated cost, then confirm the request.
+
+Confirmation creates an approval request; it does not execute code. After an authorized person approves the exact impact, Platform reserves the maximum cost for a budgeted Task and queues the job. An independently supervised, compatible Runner must be online and explicitly bound to that exact environment revision. It pulls a signed short lease, downloads only the fixed input versions, executes outside the Platform API process, and reports heartbeat, result, declared usage, or failure. Platform validates the result Schema and hard usage limits, settles actual cost from measured wall time, and records the complete state trail. Use **Cancel computation** with a reason when needed. A delivered job remains cancellation-pending until the Runner acknowledges it; inspect partial outputs before resuming a paused Task.
+
+The current result channel is bounded JSON. Register output files as normal DataAssets before using them as formal Evidence; Runner-side arbitrary filesystem paths are never accepted as Platform assets.
 
 ## Register an external research service
 
@@ -90,7 +98,7 @@ The job stays queued until its booking window opens. The local Gateway pulls a s
 
 The Task page shows the pinned deadline and the budget's reserved, actual, committed, and remaining amounts. Users with research approval capability can record a reservation, release, expense, or credit. Each entry must be previewed and confirmed against the current Task revision and cannot be edited afterward. Release only an existing reservation; credit only an existing actual expense. Record the offset and the replacement as separate entries when correcting a mistake.
 
-Platform checks these limits in the API before any new manual or Aira-created Protocol, Tool, Wait, Resource, Instrument, or External Service Action. It rejects stale or over-limit writes, pauses immediately when a confirmed budget entry exhausts the ceiling, and otherwise pauses at the next runtime boundary after a deadline or budget limit is detected. Approved External Service Jobs automatically reserve their exact quote and settle confirmed actual cost; model, compute, and other non-integrated costs must still be recorded explicitly.
+Platform checks these limits in the API before any new manual or Aira-created Protocol, Tool, Wait, Resource, Instrument, External Service, or Compute Action. It rejects stale or over-limit writes, pauses immediately when a confirmed budget entry exhausts the ceiling, and otherwise pauses at the next runtime boundary after a deadline or budget limit is detected. Approved External Service Jobs reserve their exact quote; approved Compute Jobs reserve their maximum runtime estimate. Each converts the reservation to validated actual cost at completion. Model and other non-integrated costs must still be recorded explicitly.
 
 Search candidates remain Action output. Platform does not silently approve them as Knowledge, Evidence, or Claims.
 

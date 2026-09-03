@@ -1194,6 +1194,49 @@ declare namespace I18n {
           cancelled: string
           stopped: string
         }
+        computeAction: string
+        computeActionHint: string
+        computeEnvironment: string
+        computeRunnerAvailability: string
+        computeNoReadyRunner: string
+        computeLanguage: string
+        computeMaximumCost: string
+        computeUnpriced: string
+        computeSource: string
+        computeSourcePlaceholder: string
+        computeInputPayload: string
+        computeInputSchemaHint: string
+        computeInputAssets: string
+        computeInputAssetsPlaceholder: string
+        computeInputAssetsHint: string
+        computeMountName: string
+        computePreviewHint: string
+        computeReadyRunners: string
+        confirmComputeRequest: string
+        computeRequestCreated: string
+        computeJob: string
+        computeAttempt: string
+        lastRunnerHeartbeat: string
+        computeSourceDigest: string
+        computeResourceLimits: string
+        computeResult: string
+        computeUsage: string
+        cancelCompute: string
+        computeCancelReason: string
+        computeCancelHint: string
+        computeCancelPreviewHint: string
+        confirmComputeCancel: string
+        computeCancelRequested: string
+        computeJobStatus: {
+          awaiting_approval: string
+          queued: string
+          leased: string
+          running: string
+          cancel_requested: string
+          completed: string
+          failed: string
+          cancelled: string
+        }
         researchTool: string
         toolArguments: string
         expectedPayload: string
@@ -1468,6 +1511,7 @@ declare namespace I18n {
           waiting_for_human: string
           waiting_for_tool: string
           waiting_for_instrument: string
+          waiting_for_compute: string
           waiting_for_event: string
           waiting_for_approval: string
           validating: string
@@ -1494,6 +1538,7 @@ declare namespace I18n {
           tool_job: string
           human_work_item: string
           instrument_job: string
+          compute_job: string
           external_service_job: string
           resource_reservation: string
           wait_event: string
@@ -1560,6 +1605,15 @@ declare namespace I18n {
           tool_job_started: string
           tool_job_completed: string
           tool_job_failed: string
+          compute_job_requested: string
+          compute_job_queued: string
+          compute_job_leased: string
+          compute_job_input_downloaded: string
+          compute_job_started: string
+          compute_job_cancel_requested: string
+          compute_job_completed: string
+          compute_job_failed: string
+          compute_job_cancelled: string
           wait_event_created: string
           wait_event_received: string
           external_service_quote_requested: string

@@ -361,6 +361,7 @@ def execution_context_for_prompt(state: dict[str, Any]) -> str:
     context = {
         "tool_results": list(state.get("tool_results") or [])[-20:],
         "instrument_results": list(state.get("instrument_results") or [])[-20:],
+        "compute_results": list(state.get("compute_results") or [])[-20:],
         "resource_results": list(state.get("resource_results") or [])[-20:],
         "service_results": list(state.get("service_results") or [])[-20:],
         "event_results": list(state.get("event_results") or [])[-20:],
@@ -1044,7 +1045,7 @@ async def _next_action_sequence(
     ) + 1
 
 
-async def _request_action_approval(
+async def request_action_approval(
     db_session: AsyncSession,
     *,
     task: ResearchTask,
@@ -1669,7 +1670,7 @@ async def _materialize_aira_action(
     if proposal.decision == "service":
         pass
     elif policy_decision == "ask":
-        await _request_action_approval(
+        await request_action_approval(
             db_session,
             task=task,
             run=run,
@@ -1856,6 +1857,7 @@ async def process_research_run_advance(
             ResearchRunStatus.PAUSED.value,
             ResearchRunStatus.WAITING_FOR_TOOL.value,
             ResearchRunStatus.WAITING_FOR_INSTRUMENT.value,
+            ResearchRunStatus.WAITING_FOR_COMPUTE.value,
             ResearchRunStatus.WAITING_FOR_EVENT.value,
         }:
             return {"status": run.status}

@@ -52,6 +52,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增受治理的 Aira External Service 规划：模型只能为 Research Environment 中固定的准确服务生成符合 Schema 的请求草稿；AI 与手工路径共用同一套不可变报价、摘要绑定下单审批、预算、交接、履约和结果状态机，选择服务绝不等于自动下单。
 - 新增由 Lab 治理且保留版本的 Compute Environment 契约，固定不可变 OCI 镜像摘要，并明确语言、资源、网络、Schema、软件清单、风险与成本边界；Research Task 只固定准确修订，不会在独立 Compute Runner 尚未可用时执行代码或虚报 Aira 路径。
 - 新增由 Lab 治理的 Compute Runner 身份：使用仅显示一次的高熵凭据，配置与轮换均可审计，隔离能力未完整报告时失败关闭，限制并发数量，并且只能显式授权准确的 Compute Environment 修订；在 Compute Job 租约生命周期启用前，登记或绑定 Runner 仍不会执行代码。
+- 新增审批门禁的 Compute Job：固定准确环境和 DataAsset 版本输入，绑定源码摘要，通过签名短租约向 Runner 交付，受限下载输入并处理心跳与取消，回传经 Schema 校验的类型化结果和实测用量，按确定性规则预留与结算 Task 预算；任何代码都不会在 Platform API 进程中执行。
 - 新增独立且无运行时依赖的 Instrument Gateway 进程与适配器 SDK：受监管的本地进程拒绝重定向、无效签名和过期信封，执行第二层准确版本适配器白名单，以仅属主可读权限记录唯一活动租约，在关机或控制链路中断时安全停止，并可在崩溃后补交确认；只加载本地安装的适配器入口，Gateway 的结果、失败和停止回调支持网络安全的幂等重放。
 - 新增 Research 资源需求与受治理的 Resource Reservation Action：Task 固定 Lab 资源类型的具体修订，用户通过“预览→确认”预约准确的库存数量或设备时段；Platform 复用现有权限化库存与设备预约账本，可用量变化和时段冲突会失败关闭，待审批设备预约可同步状态，释放过程完整留痕，Task 进入终态时自动归还尚未使用的资源承诺。
 - 新增资源感知的 Aira 规划：模型只能请求已固定的资源类型及准确数量或设备时段，由 Platform 确定性选择有权使用的具体候选，始终要求人工审批，在锁内重新校验可用性后才写入权威库存或设备预约账本。

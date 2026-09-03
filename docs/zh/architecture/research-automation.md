@@ -200,7 +200,11 @@ External Service Job 是受治理的执行对象。Aira 规划器只能选择已
 
 执行平面使用独立鉴权的 `Compute Runner`。Lab 计算管理员通过“预览→确认”创建或轮换凭据、限制并发，并且只能把 Runner 绑定到已经审核的准确 Compute Environment 修订。绑定绝不会自动跟随可变环境谱系。Runner 状态契约会报告协议、执行后端、容量和四项强制隔离控制：非 root 执行、只读根文件系统、网络隔离、无宿主机挂载。任何一项缺失都会使 Runner 不具备执行资格，而不是放宽策略。
 
-当前里程碑有意止于 Compute Job 执行之前。Platform 已治理环境目录、Task 固定、Runner 身份与就绪状态，以及 Runner 到准确环境修订的授权，但不会在 API 进程中运行科研代码，不把容器运行时 Socket 挂载给 API，也不会把只有 Compute Environment 的任务标成可由 Aira 执行。真正执行仍须具备独立 Runner 进程和受治理的 Compute Job 租约、审批、预算、输入 DataAsset 与结果登记状态机。在这条边界交付前，界面会明确显示它只是执行契约，任何 Run 都不能通过它派发代码。
+`Compute Job` 是带审批门禁的执行对象。手工请求会通过 SHA-256 绑定源码字节，并固定语言、经过 Schema 校验的 JSON 输入、Project 内准确的 DataAsset 文件版本、Task 已固定的环境修订、资源与网络限制，以及最大预估成本。“预览→确认”只创建 Proposed Action 和独立审批；审批时会在锁内重新解析不可变契约与 Runner 授权，并在 Task 配有预算时预留最大成本。选择环境或登记 Runner 本身从不等于授权执行。
+
+只有已就绪 Runner 才能主动领取与其准确环境绑定匹配的排队作业。Platform 返回规范的 `airalogy.compute-job.v1` 信封、HMAC 签名和短时作业租约；只有该租约可以下载作业明确固定的输入 Blob。开始与心跳会续租；开始前租约过期可安全回到队列，开始后失联则因执行结果不确定而失败关闭并暂停 Task。暂停或取消 Task 会变成明确的 Runner 取消请求。完成时，Platform 会按硬上限校验申报用量、按固定 Schema 校验结果，把最大预留转换为确定性实际成本，追加不可变事件，并把类型化 Compute 结果交给后续重规划或人工继续。失败和取消确认如果携带部分用量，也会记录实际消耗并只释放未使用预留。
+
+Platform 永远不会在 API 进程中运行科研代码，也不会把容器运行时 Socket 挂载给 API。当前已经实现 Runner 运行时 API，但真正执行仍需要独立监管且兼容的 Runner。本里程碑回传结构化 JSON 结果；输出文件上传与 DataAsset 自动登记仍保留为独立资产摄取边界，不接受 Runner 提交任意文件系统路径。
 
 设备集成从数据导入、引导执行、需设备端确认的辅助控制，再到策略内闭环自动化逐级升级。Aira 不直接向设备发送任意指令。在下一 Action 边界，它只能从 Platform 根据当前 Research Environment 与请求人本人已批准设备预约提供的列表中选择准确指令 ID，并提供符合输入 Schema 的参数。Platform 确定性选择最早可用预约，固定完整指令与资源状态，并始终请求人员批准。批准时会在锁定下重新解析指令、Gateway、设备、权限、预约、Schema 和竞争作业状态，仅当全部一致时 Action 才可入队。本地 Instrument Gateway 只接收签名、结构化且列入允许清单的作业，并提供状态校验、审计和受治理的停止请求。
 
@@ -255,7 +259,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - Task 截止时间、预算上限、不可变预算账本和执行停止门禁（已交付）；
 - 人员、设备和外部服务 Executor Binding 适配器；
 - 保留修订的人员可用性、容量与已验证技能（已交付）；样品语义和自动成本采集；
-- 不可变 Compute Environment 目录、范围权限、“预览→确认”修订、Research Environment 准确版本固定，以及受治理的 Runner 身份、就绪报告和环境绑定（已交付）；Compute Job 租约、隔离运行、成本结算和 DataAsset 结果登记仍待后续实现；
+- 不可变 Compute Environment 目录、范围权限、“预览→确认”修订、Research Environment 准确版本固定、受治理的 Runner 身份/就绪报告/环境绑定，以及带审批、预算、租约和结果回传的 Compute Job API（已交付）；受监管参考 Runner 的实际执行和输出 DataAsset 登记仍待后续实现；
 - 消耗完成、风险策略、审批阈值和资源感知的计划重排。
 
 ### P3：设备、RaaS 与自我改进

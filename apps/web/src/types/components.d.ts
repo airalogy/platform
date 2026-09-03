@@ -229,6 +229,7 @@ declare module 'vue' {
     IconTablerSquareRoundedPlus: typeof import('~icons/tabler/square-rounded-plus')['default']
     IconTablerStar: typeof import('~icons/tabler/star')['default']
     IconTablerStarFilled: typeof import('~icons/tabler/star-filled')['default']
+    IconTablerTerminal2: typeof import('~icons/tabler/terminal2')['default']
     IconTablerTrash: typeof import('~icons/tabler/trash')['default']
     IconTablerUpload: typeof import('~icons/tabler/upload')['default']
     IconTablerUsers: typeof import('~icons/tabler/users')['default']

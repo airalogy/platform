@@ -1,3 +1,4 @@
+import type { ResearchComputeJob } from "./research-compute-jobs"
 import { request } from "../request"
 
 export type ResearchTaskStatus =
@@ -17,6 +18,7 @@ export type ResearchRunStatus =
   | "waiting_for_human"
   | "waiting_for_tool"
   | "waiting_for_instrument"
+  | "waiting_for_compute"
   | "waiting_for_event"
   | "waiting_for_approval"
   | "validating"
@@ -43,6 +45,7 @@ export type ResearchActionKind =
   | "tool_job"
   | "human_work_item"
   | "instrument_job"
+  | "compute_job"
   | "external_service_job"
   | "approval_request"
   | "resource_reservation"
@@ -472,6 +475,7 @@ export interface ResearchAction {
   work_item?: ResearchHumanWorkItem | null
   tool_job?: ResearchToolJob | null
   instrument_job?: ResearchInstrumentJob | null
+  compute_job?: ResearchComputeJob | null
   service_job?: ResearchServiceJob | null
   wait_event?: ResearchWaitEvent | null
   resource_reservation?: ResearchResourceReservation | null

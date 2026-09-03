@@ -57,6 +57,10 @@ from .research_assets import router as research_assets_router
 from .research_budget import router as research_budget_router
 from .research_capabilities import router as research_capabilities_router
 from .research_compute import router as research_compute_router
+from .research_compute_jobs import router as research_compute_jobs_router
+from .research_compute_jobs import (
+    runtime_router as research_compute_jobs_runtime_router,
+)
 from .research_compute_runners import router as research_compute_runners_router
 from .research_compute_runners import runtime_router as research_compute_runtime_router
 from .research_executor_bindings import router as research_executor_bindings_router
@@ -295,6 +299,8 @@ app.include_router(research_capabilities_router)
 app.include_router(research_compute_router)
 app.include_router(research_compute_runners_router)
 app.include_router(research_compute_runtime_router)
+app.include_router(research_compute_jobs_router)
+app.include_router(research_compute_jobs_runtime_router)
 app.include_router(research_executor_bindings_router)
 app.include_router(research_human_executors_router)
 app.include_router(research_instrument_gateways_router)

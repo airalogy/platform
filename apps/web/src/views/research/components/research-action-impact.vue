@@ -10,6 +10,9 @@
       <span v-else-if="action.instrument_job" class="aira-type-meta">
         {{ action.instrument_job.command_key }} · v{{ action.instrument_job.command_version }} · r{{ action.instrument_job.command_revision }}
       </span>
+      <span v-else-if="action.compute_job" class="aira-type-meta">
+        {{ action.compute_job.environment_snapshot.name || action.compute_job.compute_environment_id }} · r{{ action.compute_job.compute_environment_revision }} · {{ action.compute_job.language === "python" ? "Python" : "R" }}
+      </span>
       <span v-else-if="action.wait_event" class="aira-type-meta">
         {{ action.wait_event.expected_event_type }}
       </span>
@@ -48,6 +51,21 @@
       <div>
         <div class="aira-type-meta">{{ $t("page.research.instrumentArguments") }}</div>
         <pre>{{ formatted(action.instrument_job.arguments) }}</pre>
+      </div>
+    </div>
+    <div v-else-if="action.compute_job" class="mt-2 space-y-2">
+      <div class="flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+        <span>{{ $t("page.research.computeEnvironment") }} · {{ action.compute_job.environment_snapshot.name || action.compute_job.compute_environment_id }} · r{{ action.compute_job.compute_environment_revision }}</span>
+        <span>{{ $t("page.research.computeSourceDigest") }} · {{ action.compute_job.source_sha256 }}</span>
+        <span v-if="action.compute_job.estimated_cost">≤ {{ action.compute_job.estimated_cost }} {{ action.compute_job.currency }}</span>
+      </div>
+      <div>
+        <div class="aira-type-meta">{{ $t("page.research.computeResourceLimits") }}</div>
+        <pre>{{ formatted(action.compute_job.resource_limits) }}</pre>
+      </div>
+      <div>
+        <div class="aira-type-meta">{{ $t("page.research.computeInputPayload") }}</div>
+        <pre>{{ formatted(action.compute_job.input_payload) }}</pre>
       </div>
     </div>
     <div v-else-if="action.wait_event" class="mt-2">
@@ -94,7 +112,7 @@ import { $t } from "@airalogy/shared/locales"
 const props = defineProps<{ action: ResearchAction }>()
 
 const kindLabel = computed(() => {
-  const known = ["protocol_run", "tool_job", "instrument_job", "external_service_job", "resource_reservation", "wait_event", "human_work_item"]
+  const known = ["protocol_run", "tool_job", "instrument_job", "compute_job", "external_service_job", "resource_reservation", "wait_event", "human_work_item"]
   return known.includes(props.action.kind)
     ? $t(`page.research.actionKind.${props.action.kind}` as I18n.I18nKey)
     : props.action.kind.replaceAll("_", " ")
@@ -106,6 +124,8 @@ const kindTagType = computed<TagProps["type"]>(() => {
   if (props.action.kind === "wait_event")
     return "warning"
   if (props.action.kind === "instrument_job")
+    return "warning"
+  if (props.action.kind === "compute_job")
     return "warning"
   if (props.action.kind === "resource_reservation")
     return "warning"

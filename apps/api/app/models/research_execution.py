@@ -90,6 +90,17 @@ class ResearchInstrumentJobStatus(StrEnum):
     STOPPED = "stopped"
 
 
+class ResearchComputeJobStatus(StrEnum):
+    AWAITING_APPROVAL = "awaiting_approval"
+    QUEUED = "queued"
+    LEASED = "leased"
+    RUNNING = "running"
+    CANCEL_REQUESTED = "cancel_requested"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class ResearchServiceJobStatus(StrEnum):
     AWAITING_QUOTE = "awaiting_quote"
     AWAITING_APPROVAL = "awaiting_approval"
@@ -353,6 +364,161 @@ class ResearchComputeRunnerAudit(Base):
     actor_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchComputeJob(Base):
+    """One approved, version-pinned computation leased to an isolated Runner."""
+
+    __tablename__ = "research_compute_jobs"
+    __table_args__ = (
+        UniqueConstraint("action_id", name="uq_research_compute_job_action"),
+        CheckConstraint(
+            "status IN ('awaiting_approval', 'queued', 'leased', 'running', "
+            "'cancel_requested', 'completed', 'failed', 'cancelled')",
+            name="ck_research_compute_job_status",
+        ),
+        CheckConstraint(
+            "language IN ('python', 'r')",
+            name="ck_research_compute_job_language",
+        ),
+        CheckConstraint(
+            "length(source_sha256) = 64",
+            name="ck_research_compute_job_source_digest",
+        ),
+        CheckConstraint(
+            "lease_token_digest IS NULL OR length(lease_token_digest) = 64",
+            name="ck_research_compute_job_lease_digest",
+        ),
+        CheckConstraint(
+            "timeout_seconds BETWEEN 1 AND 86400",
+            name="ck_research_compute_job_timeout",
+        ),
+        CheckConstraint(
+            "((estimated_cost IS NULL AND currency IS NULL) OR "
+            "(estimated_cost >= 0 AND currency IS NOT NULL AND "
+            "length(currency) = 3 AND currency = upper(currency)))",
+            name="ck_research_compute_job_cost_pair",
+        ),
+        Index(
+            "ix_research_compute_jobs_status_lease",
+            "status",
+            "lease_expires_at",
+        ),
+        Index(
+            "ix_research_compute_jobs_runner_status",
+            "runner_id",
+            "status",
+        ),
+        Index(
+            "ix_research_compute_jobs_environment_status",
+            "compute_environment_revision_id",
+            "status",
+        ),
+    )
+
+    json_exclude_fields: ClassVar[list[str]] = ["lease_token_digest", "source_code"]
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    compute_environment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environments.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    compute_environment_revision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_environment_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    compute_environment_revision: Mapped[int] = mapped_column(nullable=False)
+    runner_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_compute_runners.id", ondelete="SET NULL"), index=True
+    )
+    language: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_code: Mapped[str] = mapped_column(Text, nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    input_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    environment_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    resource_limits: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    timeout_seconds: Mapped[int] = mapped_column(nullable=False)
+    estimated_cost: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    actual_cost: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ResearchComputeJobStatus.AWAITING_APPROVAL.value,
+    )
+    lease_token_digest: Mapped[str | None] = mapped_column(String(64))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    usage: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    leased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchComputeJobInput(Base):
+    """An exact, Platform-controlled DataAsset version exposed to one job."""
+
+    __tablename__ = "research_compute_job_inputs"
+    __table_args__ = (
+        UniqueConstraint(
+            "compute_job_id", "position", name="uq_research_compute_job_input_position"
+        ),
+        UniqueConstraint(
+            "compute_job_id",
+            "data_asset_version_id",
+            name="uq_research_compute_job_input_asset_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    compute_job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    data_asset_id: Mapped[UUID] = mapped_column(
+        ForeignKey("data_assets.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    data_asset_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("data_asset_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(nullable=False)
+    mount_name: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -366,7 +366,7 @@ def _audit(
     )
 
 
-async def _authenticate_runner(
+async def authenticate_compute_runner(
     db_session: DBSession,
     token: str,
 ) -> ResearchComputeRunner:
@@ -864,7 +864,7 @@ async def report_compute_runner_status(
     runner_token: RunnerToken,
     db_session: DBSession,
 ):
-    runner = await _authenticate_runner(db_session, runner_token)
+    runner = await authenticate_compute_runner(db_session, runner_token)
     if params.active_jobs + params.available_slots > runner.max_concurrent_jobs:
         raise HTTPException(
             status_code=422,

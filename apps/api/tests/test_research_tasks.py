@@ -355,8 +355,10 @@ def test_append_aira_result_is_bounded_and_preserves_other_state():
 def test_research_runtime_has_explicit_review_and_human_states():
     assert ResearchTaskStatus.REVIEW_REQUIRED.value == "review_required"
     assert ResearchRunStatus.WAITING_FOR_HUMAN.value == "waiting_for_human"
+    assert ResearchRunStatus.WAITING_FOR_COMPUTE.value == "waiting_for_compute"
     assert ResearchActionKind.PROTOCOL_RUN.value == "protocol_run"
     assert ResearchActionKind.HUMAN_WORK_ITEM.value == "human_work_item"
+    assert ResearchActionKind.COMPUTE_JOB.value == "compute_job"
     assert ResearchApprovalStatus.PENDING.value == "pending"
 
 
