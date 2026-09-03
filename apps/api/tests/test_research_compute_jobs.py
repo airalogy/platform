@@ -13,9 +13,18 @@ from app.models.research import ResearchActionKind, ResearchRunStatus
 from app.models.research_execution import (
     ResearchComputeJob,
     ResearchComputeJobInput,
+    ResearchComputeJobOutput,
     ResearchComputeJobStatus,
 )
-from app.routers.research_compute_jobs import ComputeActionDraft, ComputeUsage
+from app.routers.research_compute_jobs import (
+    ComputeActionDraft,
+    ComputeOutputDraft,
+    ComputeUsage,
+    RunnerComplete,
+    _completed_output_contract,
+    _manifest_output_contract,
+    _registered_output_results,
+)
 from app.services.research_compute_jobs import (
     MAX_SOURCE_BYTES,
     compute_actual_cost,
@@ -50,6 +59,7 @@ def valid_action(**updates):
 def test_compute_job_models_pin_execution_and_asset_versions():
     job_ddl = compile_table(ResearchComputeJob)
     input_ddl = compile_table(ResearchComputeJobInput)
+    output_ddl = compile_table(ResearchComputeJobOutput)
 
     assert "uq_research_compute_job_action" in job_ddl
     assert "ck_research_compute_job_status" in job_ddl
@@ -57,6 +67,9 @@ def test_compute_job_models_pin_execution_and_asset_versions():
     assert "compute_environment_revision_id" in job_ddl
     assert "data_asset_version_id" in input_ddl
     assert "uq_research_compute_job_input_asset_version" in input_ddl
+    assert "uq_research_compute_job_output_mount_name" in output_ddl
+    assert "data_asset_version_id" in output_ddl
+    assert "ck_research_compute_job_output_max_bytes" in output_ddl
 
 
 def test_compute_job_migration_follows_runner_governance():
@@ -67,6 +80,12 @@ def test_compute_job_migration_follows_runner_governance():
         "research_compute_jobs",
         "research_compute_job_inputs",
     )
+
+    output_migration = import_module(
+        "migrations.versions.0033_research_compute_outputs"
+    )
+    assert output_migration.down_revision == "0032_research_compute_jobs"
+    assert output_migration.TABLE_NAMES == ("research_compute_job_outputs",)
 
 
 def test_compute_action_is_bounded_and_uses_safe_mount_names():
@@ -93,6 +112,93 @@ def test_compute_usage_is_bounded():
         ComputeUsage(wall_seconds=86_401)
     with pytest.raises(ValidationError):
         ComputeUsage(wall_seconds=1, cpu_seconds=float("nan"))
+
+
+def test_compute_output_contract_is_typed_bounded_and_unique():
+    output = ComputeOutputDraft(
+        mount_name="analysis.csv",
+        asset_name="Analysis table",
+        kind="table",
+        media_type="text/csv",
+        max_bytes=4096,
+    )
+
+    assert output.required is True
+    with pytest.raises(ValidationError, match="mount name"):
+        ComputeOutputDraft(
+            mount_name="../analysis.csv",
+            asset_name="Analysis table",
+            media_type="text/csv",
+            max_bytes=4096,
+        )
+    with pytest.raises(ValidationError, match="media type"):
+        ComputeOutputDraft(
+            mount_name="analysis.csv",
+            asset_name="Analysis table",
+            media_type="not a media type",
+            max_bytes=4096,
+        )
+    with pytest.raises(ValidationError, match="less than or equal"):
+        ComputeOutputDraft(
+            mount_name="analysis.bin",
+            asset_name="Oversized result",
+            media_type="application/octet-stream",
+            max_bytes=2_147_483_648,
+        )
+    with pytest.raises(ValidationError, match="must be unique"):
+        valid_action(output_files=[output, output])
+    with pytest.raises(ValidationError, match="must be unique"):
+        RunnerComplete(
+            result={},
+            usage={"wall_seconds": 1},
+            outputs=[
+                {
+                    "output_id": uuid4(),
+                    "checksum_sha256": "a" * 64,
+                    "byte_size": 10,
+                }
+            ]
+            * 2,
+        )
+
+
+def test_compute_output_receipts_bind_registered_assets_exactly():
+    output_id = uuid4()
+    completion = RunnerComplete(
+        result={"rows": 4},
+        usage={"wall_seconds": 1, "output_bytes": 128},
+        outputs=[
+            {
+                "output_id": output_id,
+                "checksum_sha256": "a" * 64,
+                "byte_size": 128,
+            }
+        ],
+    )
+    manifest = [
+        {
+            "id": str(output_id),
+            "mount_name": "analysis.csv",
+            "asset_name": "Analysis table",
+            "kind": "table",
+            "media_type": "text/csv",
+            "status": "registered",
+            "checksum_sha256": "a" * 64,
+            "byte_size": 128,
+            "research_file_id": str(uuid4()),
+            "data_asset_id": str(uuid4()),
+            "data_asset_version_id": str(uuid4()),
+        }
+    ]
+
+    assert _completed_output_contract(completion.outputs) == _manifest_output_contract(
+        manifest
+    )
+    result = _registered_output_results(manifest)
+    assert result[0]["output_id"] == str(output_id)
+    assert result[0]["data_asset_version_id"] == manifest[0][
+        "data_asset_version_id"
+    ]
 
 
 def test_compute_cost_is_deterministic_and_capped_by_timeout():
@@ -160,6 +266,7 @@ def test_compute_action_and_runtime_routes_are_registered():
     assert "/research-compute-jobs/{job_id}/cancel/preview" in paths
     assert "/compute-runner/v1/jobs/lease" in paths
     assert "/compute-runner/v1/jobs/{job_id}/inputs/{input_id}" in paths
+    assert "/compute-runner/v1/jobs/{job_id}/outputs/{output_id}" in paths
     assert "/compute-runner/v1/jobs/{job_id}/complete" in paths
 
 

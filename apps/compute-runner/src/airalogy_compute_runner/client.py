@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import ssl
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import (
@@ -34,10 +34,12 @@ class PlatformClient:
         runner_token: str,
         *,
         timeout_seconds: float = 15.0,
+        output_upload_timeout_seconds: float = 3600.0,
     ):
         self.platform_url = f"{platform_url.rstrip('/')}/"
         self.runner_token = runner_token
         self.timeout_seconds = timeout_seconds
+        self.output_upload_timeout_seconds = output_upload_timeout_seconds
         self._opener = build_opener(
             _RejectRedirects(), HTTPSHandler(context=ssl.create_default_context())
         )
@@ -169,6 +171,60 @@ class PlatformClient:
             lease_token=lease_token,
         )
 
+    def upload_output(
+        self,
+        path: str,
+        lease_token: str,
+        source: BinaryIO,
+        *,
+        expected_size: int,
+        checksum_sha256: str,
+        media_type: str,
+    ) -> dict[str, Any]:
+        request = Request(
+            self._url(path),
+            data=source,
+            headers={
+                "Accept": "application/json",
+                "Content-Length": str(expected_size),
+                "Content-Type": media_type,
+                "X-Airalogy-Compute-Runner-Token": self.runner_token,
+                "X-Airalogy-Compute-Lease": lease_token,
+                "X-Airalogy-Content-SHA256": checksum_sha256,
+            },
+            method="PUT",
+        )
+        try:
+            with self._opener.open(
+                request, timeout=self.output_upload_timeout_seconds
+            ) as response:
+                raw = response.read()
+        except HTTPError as error:
+            raw = error.read()
+            try:
+                detail = json.loads(raw.decode("utf-8")).get("detail")
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                detail = None
+            raise RunnerAPIError(
+                str(
+                    detail or f"Platform rejected Compute output with HTTP {error.code}"
+                ),
+                status=error.code,
+            ) from error
+        except (URLError, TimeoutError, OSError) as error:
+            raise RunnerAPIError(f"Compute output upload failed: {error}") from error
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RunnerAPIError("Platform returned invalid output receipt") from error
+        if (
+            not isinstance(value, dict)
+            or value.get("checksum_sha256") != checksum_sha256
+            or value.get("byte_size") != expected_size
+        ):
+            raise RunnerAPIError("Platform output receipt does not match the upload")
+        return value
+
     def heartbeat(self, job_id: str, lease_token: str) -> dict[str, Any]:
         return self._request(
             "POST",
@@ -182,12 +238,13 @@ class PlatformClient:
         lease_token: str,
         result: dict[str, Any],
         usage: dict[str, Any],
+        outputs: list[dict[str, Any]],
     ) -> dict[str, Any]:
         return self._request(
             "POST",
             f"/compute-runner/v1/jobs/{job_id}/complete",
             lease_token=lease_token,
-            payload={"result": result, "usage": usage},
+            payload={"result": result, "usage": usage, "outputs": outputs},
         )
 
     def fail(

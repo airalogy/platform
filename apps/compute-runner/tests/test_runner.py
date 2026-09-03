@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import stat
 import tempfile
 import unittest
@@ -9,8 +11,9 @@ from typing import Any
 from unittest.mock import patch
 from uuid import UUID
 
+from airalogy_compute_runner.client import RunnerAPIError
 from airalogy_compute_runner.config import RunnerConfig
-from airalogy_compute_runner.engine import ContainerEngine, JobProcess
+from airalogy_compute_runner.engine import ContainerEngine, JobProcess, OutputProcess
 from airalogy_compute_runner.models import ComputeJobEnvelope
 from airalogy_compute_runner.runtime import RunnerRuntime
 from airalogy_compute_runner.security import (
@@ -23,10 +26,13 @@ TOKEN = f"aicr_{'a' * 48}"
 HELPER = f"busybox@sha256:{'b' * 64}"
 
 
-def envelope(*, inputs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def envelope(
+    *,
+    inputs: list[dict[str, Any]] | None = None,
+    outputs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     now = datetime.now(UTC)
     source = "\nimport json, os\njson.dump({'value': 42}, open(os.environ['AIRALOGY_RESULT_JSON'], 'w'))\n"
-    import hashlib
 
     return {
         "schema": "airalogy.compute-job.v1",
@@ -59,6 +65,7 @@ def envelope(*, inputs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         },
         "input_payload": {"question": "answer"},
         "inputs": inputs or [],
+        "outputs": outputs or [],
         "result_schema": {"type": "object"},
     }
 
@@ -79,6 +86,24 @@ def config(state_file: Path) -> RunnerConfig:
     )
 
 
+def output_declaration(*, required: bool = True) -> dict[str, Any]:
+    job_id = "00000000-0000-0000-0000-000000000001"
+    output_id = "00000000-0000-0000-0000-000000000008"
+    return {
+        "id": output_id,
+        "mount_name": "analysis.json",
+        "upload_path": f"/compute-runner/v1/jobs/{job_id}/outputs/{output_id}",
+        "asset_name": "Analysis output",
+        "description": "Verified analysis artifact",
+        "kind": "file",
+        "media_type": "application/json",
+        "max_bytes": 2048,
+        "required": required,
+        "data_schema": {},
+        "metadata": {"role": "analysis"},
+    }
+
+
 class FakeProcess:
     def __init__(self, running: bool = False):
         self.returncode = None if running else 0
@@ -92,8 +117,9 @@ class FakeProcess:
 
 
 class FakeEngine:
-    def __init__(self, *, running: bool = False):
+    def __init__(self, *, running: bool = False, output_payload: bytes | None = None):
         self.running = running
+        self.output_payload = output_payload
         self.calls: list[str] = []
         self.process: FakeProcess | None = None
 
@@ -120,6 +146,24 @@ class FakeEngine:
     def stderr_tail(self, process, limit=8000):
         return ""
 
+    def output_metadata(self, output, volume_name):
+        self.calls.append("output-metadata")
+        if self.output_payload is None:
+            return None
+        return len(self.output_payload), hashlib.sha256(self.output_payload).hexdigest()
+
+    def open_output(self, output, volume_name):
+        self.calls.append("open-output")
+        return OutputProcess(FakeProcess(), io.BytesIO(self.output_payload or b""))
+
+    def finish_output(self, process):
+        self.calls.append("finish-output")
+        process.stream.close()
+
+    def abort_output(self, process):
+        self.calls.append("abort-output")
+        process.stream.close()
+
     def stop(self, container_name):
         self.calls.append("stop")
         if self.process is not None:
@@ -134,6 +178,7 @@ class FakeClient:
         self.raw = raw
         self.calls: list[tuple[str, Any]] = []
         self.cancel_on_heartbeat = False
+        self.completed_outputs: list[dict[str, Any]] = []
 
     def report_status(self, backend, *, active):
         self.calls.append(("status", active))
@@ -166,7 +211,28 @@ class FakeClient:
             "reason": "operator cancelled" if self.cancel_on_heartbeat else None,
         }
 
-    def complete(self, job_id, lease_token, result, usage):
+    def upload_output(
+        self,
+        path,
+        lease_token,
+        source,
+        *,
+        expected_size,
+        checksum_sha256,
+        media_type,
+    ):
+        payload = source.read()
+        self.calls.append(("upload-output", path))
+        if len(payload) != expected_size:
+            raise AssertionError("test output size mismatch")
+        return {
+            "status": "uploaded",
+            "checksum_sha256": checksum_sha256,
+            "byte_size": expected_size,
+        }
+
+    def complete(self, job_id, lease_token, result, usage, outputs):
+        self.completed_outputs = outputs
         self.calls.append(("complete", result))
         return {"status": "completed"}
 
@@ -177,6 +243,18 @@ class FakeClient:
     def cancelled(self, job_id, lease_token, reason, usage=None):
         self.calls.append(("cancelled", reason))
         return {"status": "cancelled"}
+
+
+class InterruptedUploadClient(FakeClient):
+    def __init__(self, raw: dict[str, Any]):
+        super().__init__(raw)
+        self.interrupted = False
+
+    def upload_output(self, *args, **kwargs):
+        if not self.interrupted:
+            self.interrupted = True
+            raise RunnerAPIError("simulated network interruption")
+        return super().upload_output(*args, **kwargs)
 
 
 class FailRunningSaveStore(StateStore):
@@ -238,6 +316,14 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             ComputeJobEnvelope.parse(raw)
 
+        output = output_declaration()
+        output["upload_path"] = (
+            "/compute-runner/v1/jobs/00000000-0000-0000-0000-000000000099/"
+            f"outputs/{output['id']}"
+        )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            ComputeJobEnvelope.parse(envelope(outputs=[output]))
+
     def test_config_requires_https_and_immutable_helper(self):
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -297,6 +383,65 @@ class RunnerTests(unittest.TestCase):
                 ["status", "lease", "start", "complete"],
             )
             self.assertEqual(engine.calls[-2:], ["result", "cleanup"])
+            self.assertFalse(state_path.exists())
+
+    def test_runtime_uploads_declared_output_before_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            payload = b'{"rows":42}'
+            client = FakeClient(envelope(outputs=[output_declaration()]))
+            engine = FakeEngine(output_payload=payload)
+            runtime = RunnerRuntime(
+                config(state_path), client, engine, StateStore(state_path)
+            )
+
+            self.assertTrue(runtime.run_once())
+
+            names = [name for name, _payload in client.calls]
+            self.assertLess(names.index("upload-output"), names.index("complete"))
+            self.assertEqual(
+                client.completed_outputs,
+                [
+                    {
+                        "output_id": output_declaration()["id"],
+                        "checksum_sha256": hashlib.sha256(payload).hexdigest(),
+                        "byte_size": len(payload),
+                    }
+                ],
+            )
+            self.assertFalse(state_path.exists())
+
+    def test_runtime_fails_when_required_output_is_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            client = FakeClient(envelope(outputs=[output_declaration()]))
+            engine = FakeEngine()
+            runtime = RunnerRuntime(
+                config(state_path), client, engine, StateStore(state_path)
+            )
+
+            self.assertTrue(runtime.run_once())
+
+            self.assertEqual(client.calls[-1][0], "fail")
+            self.assertIn("required", client.calls[-1][1].lower())
+            self.assertFalse(state_path.exists())
+
+    def test_runtime_retries_output_after_network_interruption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            payload = b'{"rows":42}'
+            client = InterruptedUploadClient(envelope(outputs=[output_declaration()]))
+            engine = FakeEngine(output_payload=payload)
+            runtime = RunnerRuntime(
+                config(state_path), client, engine, StateStore(state_path)
+            )
+
+            self.assertTrue(runtime.run_once())
+            self.assertEqual(StateStore(state_path).load().phase, "output_pending")
+            self.assertNotIn("fail", [name for name, _payload in client.calls])
+
+            self.assertTrue(runtime.run_once())
+            self.assertEqual(client.calls[-1][0], "complete")
             self.assertFalse(state_path.exists())
 
     def test_runtime_stops_before_acknowledging_cancellation(self):

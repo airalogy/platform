@@ -2,22 +2,37 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import json
+import math
 import re
+import tempfile
 from datetime import timedelta
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
 from app.config import config
 from app.database import DBSession
-from app.libs.file_storage import get_file_with_stream
-from app.models.knowledge import ResearchFile, ResearchFileBlob
+from app.libs.file_storage import (
+    default_storage_backend,
+    default_storage_namespace,
+    get_file_with_stream,
+    upload_file,
+)
+from app.models.knowledge import (
+    OwnerScope,
+    ResearchFile,
+    ResearchFileBlob,
+    Visibility,
+)
 from app.models.lab import Lab
 from app.models.project import Project
 from app.models.research import (
@@ -32,11 +47,12 @@ from app.models.research import (
     ResearchTaskComputeEnvironment,
     ResearchTaskStatus,
 )
-from app.models.research_asset import DataAsset, DataAssetVersion
+from app.models.research_asset import DataAsset, DataAssetStatus, DataAssetVersion
 from app.models.research_execution import (
     ResearchComputeEnvironmentRevision,
     ResearchComputeJob,
     ResearchComputeJobInput,
+    ResearchComputeJobOutput,
     ResearchComputeJobStatus,
     ResearchComputeRunner,
     ResearchComputeRunnerEnvironment,
@@ -47,6 +63,7 @@ from app.routers.research_compute_runners import (
     RunnerToken,
     authenticate_compute_runner,
 )
+from app.services.knowledge import assert_research_file_upload_quota
 from app.services.research_budget import (
     ResearchBudgetError,
     project_budget_change,
@@ -93,6 +110,12 @@ runtime_router = APIRouter(
 
 LeaseToken = Annotated[str, Header(alias="X-Airalogy-Compute-Lease")]
 MOUNT_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
+MEDIA_TYPE_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$"
+)
+MAX_OUTPUT_FILES = 16
+MAX_OUTPUT_FILE_BYTES = 2_147_483_647
+OUTPUT_UPLOAD_MIN_BYTES_PER_SECOND = 256 * 1024
 
 
 class ComputeInputDraft(BaseModel):
@@ -109,6 +132,38 @@ class ComputeInputDraft(BaseModel):
         return self
 
 
+class ComputeOutputDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mount_name: str = Field(min_length=1, max_length=128)
+    asset_name: str = Field(min_length=1, max_length=512)
+    description: str = Field(default="", max_length=20_000)
+    kind: Literal["file", "table", "image", "model", "archive"] = "file"
+    media_type: str = Field(min_length=3, max_length=255)
+    max_bytes: int = Field(ge=1, le=MAX_OUTPUT_FILE_BYTES)
+    required: bool = True
+    data_schema: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.mount_name = self.mount_name.strip()
+        self.asset_name = self.asset_name.strip()
+        self.description = self.description.strip()
+        self.media_type = self.media_type.strip().lower()
+        if not MOUNT_NAME_RE.fullmatch(self.mount_name):
+            raise ValueError("Invalid Compute output mount name")
+        if not self.asset_name:
+            raise ValueError("Compute output asset name is required")
+        if not MEDIA_TYPE_RE.fullmatch(self.media_type):
+            raise ValueError("Invalid Compute output media type")
+        if len(str(self.data_schema)) > 100_000:
+            raise ValueError("Compute output data Schema is too large")
+        if len(str(self.metadata)) > 100_000:
+            raise ValueError("Compute output metadata is too large")
+        return self
+
+
 class ComputeActionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -117,6 +172,9 @@ class ComputeActionDraft(BaseModel):
     source_code: str = Field(min_length=1, max_length=MAX_SOURCE_BYTES)
     input_payload: dict[str, Any] = Field(default_factory=dict)
     input_assets: list[ComputeInputDraft] = Field(default_factory=list, max_length=32)
+    output_files: list[ComputeOutputDraft] = Field(
+        default_factory=list, max_length=MAX_OUTPUT_FILES
+    )
     title: str = Field(default="", max_length=255)
     description: str = Field(default="", max_length=20_000)
     idempotency_key: str = Field(min_length=8, max_length=160)
@@ -132,6 +190,11 @@ class ComputeActionDraft(BaseModel):
             raise ValueError("Compute source code is too large")
         if len(str(self.input_payload)) > 100_000:
             raise ValueError("Compute input payload is too large")
+        output_mounts = [item.mount_name for item in self.output_files]
+        if len(output_mounts) != len(set(output_mounts)):
+            raise ValueError("Compute output mount names must be unique")
+        if len(str([item.model_dump(mode="json") for item in self.output_files])) > 200_000:
+            raise ValueError("Compute output declarations are too large")
         return self
 
 
@@ -169,11 +232,36 @@ class ComputeUsage(BaseModel):
     output_bytes: int = Field(default=0, ge=0, le=10 * 1024 * 1024 * 1024)
 
 
+class RunnerCompletedOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    output_id: UUID
+    checksum_sha256: str = Field(min_length=64, max_length=64)
+    byte_size: int = Field(ge=0, le=10 * 1024 * 1024 * 1024)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.checksum_sha256 = self.checksum_sha256.strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", self.checksum_sha256):
+            raise ValueError("Compute output checksum is invalid")
+        return self
+
+
 class RunnerComplete(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     result: dict[str, Any] = Field(default_factory=dict)
     usage: ComputeUsage
+    outputs: list[RunnerCompletedOutput] = Field(
+        default_factory=list, max_length=MAX_OUTPUT_FILES
+    )
+
+    @model_validator(mode="after")
+    def validate_outputs(self):
+        output_ids = [item.output_id for item in self.outputs]
+        if len(output_ids) != len(set(output_ids)):
+            raise ValueError("Completed Compute outputs must be unique")
+        return self
 
 
 class RunnerFail(BaseModel):
@@ -253,6 +341,7 @@ async def _validated_action_command(
     task: ResearchTask,
     run: ResearchRun,
     params: ComputeActionDraft,
+    requesting_user_id: UUID,
 ):
     if task.status != ResearchTaskStatus.ACTIVE.value:
         raise HTTPException(status_code=409, detail="Research Task must be active")
@@ -286,6 +375,22 @@ async def _validated_action_command(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    output_limit = int(revision.resource_limits.get("max_output_bytes") or 0)
+    if sum(item.max_bytes for item in params.output_files) > max(0, output_limit - 1024):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Declared Compute output files must leave at least 1024 bytes "
+                "for the structured result"
+            ),
+        )
+    if params.output_files:
+        await assert_research_file_upload_quota(
+            db_session,
+            requesting_user_id,
+            sum(item.max_bytes for item in params.output_files),
+            incoming_count=len(params.output_files),
+        )
     authorized_runners = await eligible_runner_count(
         db_session,
         environment_revision_id=revision.id,
@@ -324,6 +429,7 @@ async def _validated_action_command(
         source_code=params.source_code,
         input_payload=params.input_payload,
         input_versions=inputs,
+        output_files=[item.model_dump(mode="json") for item in params.output_files],
         title=title,
         description=params.description,
         idempotency_key=params.idempotency_key,
@@ -404,7 +510,11 @@ async def preview_compute_action(
     )
     command, _environment, revision, inputs, authorized, ready = (
         await _validated_action_command(
-            db_session, task=task, run=run, params=params
+            db_session,
+            task=task,
+            run=run,
+            params=params,
+            requesting_user_id=current_user.id,
         )
     )
     return {
@@ -423,6 +533,7 @@ async def preview_compute_action(
             "bytes": len(params.source_code.encode("utf-8")),
         },
         "input_asset_count": len(inputs),
+        "output_file_count": len(params.output_files),
         "authorized_runner_count": authorized,
         "ready_runner_count": ready,
         "effects": [
@@ -430,6 +541,7 @@ async def preview_compute_action(
             "Reserve the maximum estimated cost after approval when the Task has a budget",
             "Queue execution only for an isolated Runner authorized for this exact revision",
             "Keep source, inputs, result Schema, usage, cost, and events in the Task audit trail",
+            "Register only declared and checksum-verified output files as draft DataAssets",
         ],
     }
 
@@ -446,7 +558,11 @@ async def create_compute_action(
     )
     command, environment, revision, inputs, _authorized, _ready = (
         await _validated_action_command(
-            db_session, task=task, run=run, params=params
+            db_session,
+            task=task,
+            run=run,
+            params=params,
+            requesting_user_id=current_user.id,
         )
     )
     digest = canonical_digest(command)
@@ -505,6 +621,7 @@ async def create_compute_action(
             "source_sha256": command["source_sha256"],
             "input_payload": params.input_payload,
             "input_assets": command["input_assets"],
+            "output_files": command["output_files"],
             "source": "manual",
             "resume_run": True,
         },
@@ -545,6 +662,7 @@ async def create_compute_action(
         estimated_cost=compute_estimated_cost(revision),
         currency=revision.currency,
         created_by_user_id=current_user.id,
+        output_manifest=[],
     )
     db_session.add(job)
     await db_session.flush()
@@ -558,6 +676,25 @@ async def create_compute_action(
                 mount_name=mount_name,
             )
         )
+    output_rows = []
+    for position, output in enumerate(params.output_files, start=1):
+        row = ResearchComputeJobOutput(
+            compute_job_id=job.id,
+            position=position,
+            mount_name=output.mount_name,
+            asset_name=output.asset_name,
+            description=output.description,
+            kind=output.kind,
+            media_type=output.media_type,
+            max_bytes=output.max_bytes,
+            required=output.required,
+            data_schema=output.data_schema,
+            version_metadata=output.metadata,
+        )
+        db_session.add(row)
+        output_rows.append(row)
+    await db_session.flush()
+    job.output_manifest = [_compute_output_snapshot(row) for row in output_rows]
     approval = await request_action_approval(
         db_session,
         task=task,
@@ -892,6 +1029,75 @@ async def _input_rows(db_session: DBSession, job_id: UUID):
     )
 
 
+def _compute_output_snapshot(
+    output: ResearchComputeJobOutput,
+    blob: ResearchFileBlob | None = None,
+) -> dict[str, Any]:
+    status = (
+        "registered"
+        if output.data_asset_version_id is not None
+        else "uploaded"
+        if output.blob_id is not None
+        else "declared"
+    )
+    return {
+        "id": str(output.id),
+        "position": output.position,
+        "mount_name": output.mount_name,
+        "asset_name": output.asset_name,
+        "description": output.description,
+        "kind": output.kind,
+        "media_type": output.media_type,
+        "max_bytes": output.max_bytes,
+        "required": output.required,
+        "data_schema": output.data_schema,
+        "metadata": output.version_metadata,
+        "status": status,
+        "checksum_sha256": blob.checksum_sha256 if blob is not None else None,
+        "byte_size": blob.size_bytes if blob is not None else None,
+        "research_file_id": (
+            str(output.research_file_id) if output.research_file_id else None
+        ),
+        "data_asset_id": str(output.data_asset_id) if output.data_asset_id else None,
+        "data_asset_version_id": (
+            str(output.data_asset_version_id)
+            if output.data_asset_version_id
+            else None
+        ),
+        "uploaded_at": output.uploaded_at.isoformat() if output.uploaded_at else None,
+        "registered_at": (
+            output.registered_at.isoformat() if output.registered_at else None
+        ),
+    }
+
+
+async def _output_rows(db_session: DBSession, job_id: UUID):
+    return list(
+        (
+            await db_session.execute(
+                select(ResearchComputeJobOutput, ResearchFileBlob)
+                .outerjoin(
+                    ResearchFileBlob,
+                    ResearchFileBlob.id == ResearchComputeJobOutput.blob_id,
+                )
+                .where(ResearchComputeJobOutput.compute_job_id == job_id)
+                .order_by(ResearchComputeJobOutput.position)
+            )
+        ).all()
+    )
+
+
+async def _refresh_output_manifest(
+    db_session: DBSession, job: ResearchComputeJob
+) -> list[dict[str, Any]]:
+    manifest = [
+        _compute_output_snapshot(output, blob)
+        for output, blob in await _output_rows(db_session, job.id)
+    ]
+    job.output_manifest = manifest
+    return manifest
+
+
 @runtime_router.post("/jobs/lease")
 async def lease_compute_job(
     runner_token: RunnerToken,
@@ -1090,6 +1296,7 @@ async def lease_compute_job(
         return {"job": None, "retry_after_seconds": 15}
 
     input_rows = await _input_rows(db_session, job.id)
+    output_rows = await _output_rows(db_session, job.id)
     expected_inputs = await db_session.scalar(
         select(func.count())
         .select_from(ResearchComputeJobInput)
@@ -1178,6 +1385,24 @@ async def lease_compute_job(
                 ),
             }
             for input_row, asset, version, research_file, blob in input_rows
+        ],
+        "outputs": [
+            {
+                "id": str(output.id),
+                "mount_name": output.mount_name,
+                "asset_name": output.asset_name,
+                "description": output.description,
+                "kind": output.kind,
+                "media_type": output.media_type,
+                "max_bytes": output.max_bytes,
+                "required": output.required,
+                "data_schema": output.data_schema,
+                "metadata": output.version_metadata,
+                "upload_path": (
+                    f"/compute-runner/v1/jobs/{job.id}/outputs/{output.id}"
+                ),
+            }
+            for output, _blob in output_rows
         ],
         "result_schema": job.result_schema,
     }
@@ -1393,6 +1618,385 @@ async def heartbeat_compute_job(
     }
 
 
+@runtime_router.put("/jobs/{job_id}/outputs/{output_id}")
+async def upload_compute_output(
+    job_id: UUID,
+    output_id: UUID,
+    request: Request,
+    runner_token: RunnerToken,
+    lease_token: LeaseToken,
+    content_length: Annotated[int, Header(alias="Content-Length", ge=0)],
+    checksum_sha256: Annotated[
+        str, Header(alias="X-Airalogy-Content-SHA256", min_length=64, max_length=64)
+    ],
+    content_type: Annotated[
+        str, Header(alias="Content-Type", min_length=3, max_length=255)
+    ],
+    db_session: DBSession,
+):
+    checksum_sha256 = checksum_sha256.strip().lower()
+    content_type = content_type.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", checksum_sha256):
+        raise HTTPException(status_code=422, detail="Compute output checksum is invalid")
+    runner = await authenticate_compute_runner(db_session, runner_token)
+    job, _action, _run, _task = await _runner_job_context(
+        db_session, runner=runner, job_id=job_id, lease_token=lease_token
+    )
+    output = (
+        await db_session.scalars(
+            select(ResearchComputeJobOutput)
+            .where(
+                ResearchComputeJobOutput.id == output_id,
+                ResearchComputeJobOutput.compute_job_id == job.id,
+            )
+            .with_for_update()
+        )
+    ).first()
+    if output is None:
+        raise HTTPException(status_code=404, detail="Compute output is not declared")
+    if output.blob_id is not None:
+        blob = await db_session.get(ResearchFileBlob, output.blob_id)
+        if (
+            blob is None
+            or blob.checksum_sha256 != checksum_sha256
+            or blob.size_bytes != content_length
+            or output.media_type != content_type
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Compute output was already uploaded with different content",
+            )
+        await db_session.commit()
+        return {
+            "status": "uploaded",
+            "output_id": str(output.id),
+            "checksum_sha256": blob.checksum_sha256,
+            "byte_size": blob.size_bytes,
+        }
+    if job.status != ResearchComputeJobStatus.RUNNING.value:
+        raise HTTPException(status_code=409, detail="Compute Job is not running")
+    _ensure_live_lease(job)
+    if content_length > output.max_bytes:
+        raise HTTPException(
+            status_code=413, detail="Compute output exceeds its declared limit"
+        )
+    if content_type != output.media_type:
+        raise HTTPException(
+            status_code=415, detail="Compute output media type changed"
+        )
+    await assert_research_file_upload_quota(
+        db_session,
+        job.created_by_user_id,
+        content_length,
+    )
+    upload_window = min(
+        86_400,
+        max(
+            LEASE_SECONDS,
+            math.ceil(content_length / OUTPUT_UPLOAD_MIN_BYTES_PER_SECOND) + 120,
+        ),
+    )
+    now = utcnow()
+    job.lease_expires_at = now + timedelta(seconds=upload_window)
+    job.heartbeat_at = now
+    runner.last_seen_at = now
+    await db_session.commit()
+
+    digest = hashlib.sha256()
+    received = 0
+    with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b") as staged:
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            received += len(chunk)
+            if received > content_length or received > output.max_bytes:
+                raise HTTPException(
+                    status_code=413, detail="Compute output exceeded its declared size"
+                )
+            digest.update(chunk)
+            staged.write(chunk)
+        if received != content_length:
+            raise HTTPException(
+                status_code=422, detail="Compute output byte count changed during upload"
+            )
+        if not hmac.compare_digest(digest.hexdigest(), checksum_sha256):
+            raise HTTPException(
+                status_code=422, detail="Compute output checksum does not match"
+            )
+
+        existing_blob = await db_session.scalar(
+            select(ResearchFileBlob).where(
+                ResearchFileBlob.checksum_sha256 == checksum_sha256
+            )
+        )
+        object_key = f"knowledge/blobs/{checksum_sha256[:2]}/{checksum_sha256}"
+        if existing_blob is None:
+            staged.seek(0)
+            await upload_file(
+                object_key,
+                staged,
+                content_type=content_type,
+                length=content_length,
+            )
+
+    db_session.expire_all()
+    runner = await authenticate_compute_runner(db_session, runner_token)
+    job, action, run, task = await _runner_job_context(
+        db_session, runner=runner, job_id=job_id, lease_token=lease_token
+    )
+    if job.status != ResearchComputeJobStatus.RUNNING.value:
+        raise HTTPException(status_code=409, detail="Compute Job is not running")
+    _ensure_live_lease(job)
+    output = (
+        await db_session.scalars(
+            select(ResearchComputeJobOutput)
+            .where(
+                ResearchComputeJobOutput.id == output_id,
+                ResearchComputeJobOutput.compute_job_id == job.id,
+            )
+            .with_for_update()
+        )
+    ).first()
+    if output is None:
+        raise HTTPException(status_code=404, detail="Compute output is not declared")
+    if output.blob_id is None:
+        inserted_id = await db_session.scalar(
+            postgresql_insert(ResearchFileBlob)
+            .values(
+                checksum_sha256=checksum_sha256,
+                content_type=content_type,
+                size_bytes=content_length,
+                storage_backend=default_storage_backend(),
+                storage_namespace=default_storage_namespace(),
+                storage_object_key=object_key,
+                extracted_text="",
+            )
+            .on_conflict_do_nothing(index_elements=["checksum_sha256"])
+            .returning(ResearchFileBlob.id)
+        )
+        blob = (
+            await db_session.get(ResearchFileBlob, inserted_id)
+            if inserted_id is not None
+            else await db_session.scalar(
+                select(ResearchFileBlob).where(
+                    ResearchFileBlob.checksum_sha256 == checksum_sha256
+                )
+            )
+        )
+        if (
+            blob is None
+            or blob.size_bytes != content_length
+            or blob.content_type != content_type
+        ):
+            raise HTTPException(
+                status_code=409, detail="Stored Compute output metadata conflicts"
+            )
+        output.blob_id = blob.id
+        output.uploaded_at = utcnow()
+        job.revision += 1
+    else:
+        blob = await db_session.get(ResearchFileBlob, output.blob_id)
+        if (
+            blob is None
+            or blob.checksum_sha256 != checksum_sha256
+            or blob.size_bytes != content_length
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Compute output was concurrently uploaded with different content",
+            )
+    await _refresh_output_manifest(db_session, job)
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="compute_output.uploaded",
+        actor_user_id=None,
+        payload={
+            "compute_job_id": str(job.id),
+            "output_id": str(output.id),
+            "mount_name": output.mount_name,
+            "checksum_sha256": blob.checksum_sha256,
+            "byte_size": blob.size_bytes,
+        },
+        idempotency_key=f"compute-output:{output.id}:uploaded:{blob.checksum_sha256}",
+    )
+    await db_session.commit()
+    return {
+        "status": "uploaded",
+        "output_id": str(output.id),
+        "checksum_sha256": blob.checksum_sha256,
+        "byte_size": blob.size_bytes,
+        "lease_expires_at": job.lease_expires_at,
+    }
+
+
+def _completed_output_contract(
+    outputs: list[RunnerCompletedOutput],
+) -> list[dict[str, Any]]:
+    return sorted(
+        [
+            {
+                "output_id": str(output.output_id),
+                "checksum_sha256": output.checksum_sha256,
+                "byte_size": output.byte_size,
+            }
+            for output in outputs
+        ],
+        key=lambda item: item["output_id"],
+    )
+
+
+def _manifest_output_contract(manifest: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        [
+            {
+                "output_id": str(item["id"]),
+                "checksum_sha256": item["checksum_sha256"],
+                "byte_size": item["byte_size"],
+            }
+            for item in manifest
+            if item.get("status") == "registered"
+        ],
+        key=lambda item: item["output_id"],
+    )
+
+
+def _registered_output_results(
+    manifest: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "output_id": item["id"],
+            "mount_name": item["mount_name"],
+            "asset_name": item["asset_name"],
+            "kind": item["kind"],
+            "media_type": item["media_type"],
+            "checksum_sha256": item["checksum_sha256"],
+            "byte_size": item["byte_size"],
+            "research_file_id": item["research_file_id"],
+            "data_asset_id": item["data_asset_id"],
+            "data_asset_version_id": item["data_asset_version_id"],
+        }
+        for item in manifest
+        if item.get("status") == "registered"
+    ]
+
+
+async def _register_compute_output_assets(
+    db_session: DBSession,
+    *,
+    job: ResearchComputeJob,
+    task: ResearchTask,
+    completed_outputs: list[RunnerCompletedOutput],
+) -> list[dict[str, Any]]:
+    rows = await _output_rows(db_session, job.id)
+    provided = {item.output_id: item for item in completed_outputs}
+    declared_ids = {output.id for output, _blob in rows}
+    if set(provided) - declared_ids:
+        raise HTTPException(status_code=422, detail="Compute output was not declared")
+    uploaded: list[tuple[ResearchComputeJobOutput, ResearchFileBlob]] = []
+    for output, blob in rows:
+        completion = provided.get(output.id)
+        if blob is None:
+            if output.required:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Required Compute output {output.mount_name} was not uploaded",
+                )
+            if completion is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Compute completion references an output that was not uploaded",
+                )
+            continue
+        if completion is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Uploaded Compute output {output.mount_name} is missing from completion",
+            )
+        if (
+            completion.checksum_sha256 != blob.checksum_sha256
+            or completion.byte_size != blob.size_bytes
+            or blob.content_type != output.media_type
+            or blob.size_bytes > output.max_bytes
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Compute output {output.mount_name} changed after upload",
+            )
+        uploaded.append((output, blob))
+
+    if uploaded:
+        await assert_research_file_upload_quota(
+            db_session,
+            job.created_by_user_id,
+            sum(blob.size_bytes for _output, blob in uploaded),
+            incoming_count=len(uploaded),
+        )
+    now = utcnow()
+    for output, blob in uploaded:
+        if output.data_asset_version_id is not None:
+            continue
+        research_file = ResearchFile(
+            blob_id=blob.id,
+            filename=output.mount_name,
+            scope_type=OwnerScope.PROJECT.value,
+            owner_user_id=None,
+            lab_id=task.lab_id,
+            project_id=task.project_id,
+            visibility=Visibility.PROJECT.value,
+            uploaded_by_user_id=job.created_by_user_id,
+        )
+        db_session.add(research_file)
+        await db_session.flush()
+        asset = DataAsset(
+            lab_id=task.lab_id,
+            project_id=task.project_id,
+            task_id=task.id,
+            name=output.asset_name,
+            description=output.description,
+            kind=output.kind,
+            status=DataAssetStatus.DRAFT.value,
+            current_version=1,
+            created_by_user_id=job.created_by_user_id,
+        )
+        db_session.add(asset)
+        await db_session.flush()
+        version = DataAssetVersion(
+            data_asset_id=asset.id,
+            version=1,
+            research_file_id=research_file.id,
+            external_uri="",
+            media_type=output.media_type,
+            checksum=blob.checksum_sha256,
+            byte_size=blob.size_bytes,
+            data_schema=output.data_schema,
+            version_metadata=output.version_metadata,
+            source={
+                "type": "research_compute_job_output",
+                "compute_job_id": str(job.id),
+                "action_id": str(job.action_id),
+                "compute_environment_revision_id": str(
+                    job.compute_environment_revision_id
+                ),
+                "source_sha256": job.source_sha256,
+                "output_id": str(output.id),
+                "mount_name": output.mount_name,
+            },
+            change_summary="Created from checksum-verified Compute Job output",
+            created_by_user_id=job.created_by_user_id,
+        )
+        db_session.add(version)
+        await db_session.flush()
+        output.research_file_id = research_file.id
+        output.data_asset_id = asset.id
+        output.data_asset_version_id = version.id
+        output.registered_at = now
+    return await _refresh_output_manifest(db_session, job)
+
+
 @runtime_router.post("/jobs/{job_id}/complete")
 async def complete_compute_job(
     job_id: UUID,
@@ -1406,7 +2010,12 @@ async def complete_compute_job(
         db_session, runner=runner, job_id=job_id, lease_token=lease_token
     )
     if job.status == ResearchComputeJobStatus.COMPLETED.value:
-        if job.result != params.result or job.usage != params.usage.model_dump(mode="json"):
+        if (
+            job.result != params.result
+            or job.usage != params.usage.model_dump(mode="json")
+            or _manifest_output_contract(job.output_manifest or [])
+            != _completed_output_contract(params.outputs)
+        ):
             raise HTTPException(
                 status_code=409,
                 detail="Compute Job was already completed with a different result",
@@ -1417,6 +2026,23 @@ async def complete_compute_job(
         raise HTTPException(status_code=409, detail="Compute Job is not running")
     _ensure_live_lease(job)
     _validate_usage(job, params.usage)
+    output_rows = await _output_rows(db_session, job.id)
+    uploaded_output_bytes = sum(
+        blob.size_bytes for _output, blob in output_rows if blob is not None
+    )
+    result_bytes = len(
+        json.dumps(
+            params.result,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    if params.usage.output_bytes < uploaded_output_bytes + result_bytes:
+        raise HTTPException(
+            status_code=422,
+            detail="Compute output usage is smaller than the submitted results",
+        )
     try:
         validate_schema_payload(job.result_schema, params.result, "compute result")
         actual_cost = await settle_compute_budget(
@@ -1429,6 +2055,13 @@ async def complete_compute_job(
         )
     except (ValueError, ResearchBudgetError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    output_manifest = await _register_compute_output_assets(
+        db_session,
+        job=job,
+        task=task,
+        completed_outputs=params.outputs,
+    )
+    output_results = _registered_output_results(output_manifest)
     now = utcnow()
     runner.last_seen_at = now
     job.status = ResearchComputeJobStatus.COMPLETED.value
@@ -1444,6 +2077,7 @@ async def complete_compute_job(
         "environment_revision_id": str(job.compute_environment_revision_id),
         "source_sha256": job.source_sha256,
         "result": params.result,
+        "outputs": output_results,
         "usage": job.usage,
         "actual_cost": str(actual_cost) if actual_cost is not None else None,
         "currency": job.currency,
@@ -1460,6 +2094,7 @@ async def complete_compute_job(
             "environment_revision_id": str(job.compute_environment_revision_id),
             "source_sha256": job.source_sha256,
             "result": params.result,
+            "outputs": output_results,
             "usage": job.usage,
             "actual_cost": str(actual_cost) if actual_cost is not None else None,
             "currency": job.currency,
@@ -1484,6 +2119,7 @@ async def complete_compute_job(
             "runner_id": str(runner.id),
             "source_sha256": job.source_sha256,
             "usage": job.usage,
+            "outputs": output_results,
             "actual_cost": str(actual_cost) if actual_cost is not None else None,
             "currency": job.currency,
         },

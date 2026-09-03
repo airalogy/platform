@@ -123,13 +123,28 @@ class RunnerRuntime:
         job = ComputeJobEnvelope.parse(state.envelope)
         try:
             if state.phase == "completion_pending" and state.result is not None:
+                output_receipts = state.metadata.get("output_receipts") or []
+                if not isinstance(output_receipts, list):
+                    raise ValueError("Runner output receipt journal is invalid")
                 self.client.complete(
                     job.job_id,
                     state.lease_token,
                     state.result,
                     state.usage or self._usage(time.monotonic()),
+                    output_receipts,
                 )
                 self._cleanup_state(state)
+                return True
+            if state.phase == "output_pending":
+                try:
+                    self._deliver_success(job, state)
+                except EngineError as error:
+                    self._report_failure(
+                        job,
+                        state,
+                        f"Compute output collection failed: {error}",
+                        state.usage,
+                    )
                 return True
             if state.phase == "failure_pending" and state.error:
                 self.client.fail(
@@ -166,7 +181,34 @@ class RunnerRuntime:
             )
             return True
         except RunnerAPIError as error:
+            if error.status in {413, 415, 422} and state.phase in {
+                "output_pending",
+                "completion_pending",
+            }:
+                self._report_failure(
+                    job,
+                    state,
+                    f"Platform rejected Compute output: {error}",
+                    state.usage,
+                )
+                return True
             if error.status == 409:
+                if state.phase in {"output_pending", "completion_pending"}:
+                    try:
+                        heartbeat = self.client.heartbeat(job.job_id, state.lease_token)
+                    except RunnerAPIError:
+                        heartbeat = {}
+                    if heartbeat.get("cancel_requested") is True:
+                        self._report_cancelled(
+                            job,
+                            state,
+                            str(
+                                heartbeat.get("reason")
+                                or "Platform requested cancellation"
+                            ),
+                            state.usage or self._usage(time.monotonic()),
+                        )
+                        return True
                 LOGGER.error(
                     "Pending callback can no longer be accepted; preserving fail-closed "
                     "Platform state and cleaning local resources: %s",
@@ -197,6 +239,80 @@ class RunnerRuntime:
                 )
             paths[item.id] = destination
         return paths
+
+    def _deliver_success(
+        self,
+        job: ComputeJobEnvelope,
+        state: RunnerState,
+    ) -> None:
+        usage = dict(state.usage or self._usage(time.monotonic()))
+        if state.result is None:
+            result, result_bytes = self.engine.read_result(job, state.volume_name)
+            usage["output_bytes"] = result_bytes
+            self._save_pending(
+                state,
+                "output_pending",
+                result=result,
+                usage=usage,
+            )
+        else:
+            result = state.result
+        receipts: list[dict[str, Any]] = []
+        output_bytes = int(usage.get("output_bytes") or 0)
+        for output in job.outputs:
+            metadata = self.engine.output_metadata(output, state.volume_name)
+            if metadata is None:
+                if output.required:
+                    raise EngineError(
+                        f"Required Compute output {output.mount_name} is missing"
+                    )
+                continue
+            byte_size, checksum = metadata
+            output_bytes += byte_size
+            if output_bytes > job.max_output_bytes:
+                raise EngineError("Combined Compute outputs exceed the approved limit")
+            output_process = self.engine.open_output(output, state.volume_name)
+            try:
+                response = self.client.upload_output(
+                    output.upload_path,
+                    state.lease_token,
+                    output_process.stream,
+                    expected_size=byte_size,
+                    checksum_sha256=checksum,
+                    media_type=output.media_type,
+                )
+            except Exception:
+                self.engine.abort_output(output_process)
+                raise
+            self.engine.finish_output(output_process)
+            lease_expiry = response.get("lease_expires_at")
+            if isinstance(lease_expiry, str):
+                state.metadata["lease_expires_at"] = lease_expiry
+            receipts.append(
+                {
+                    "output_id": output.id,
+                    "checksum_sha256": checksum,
+                    "byte_size": byte_size,
+                }
+            )
+            state.metadata["output_receipts"] = list(receipts)
+            self.state_store.save(state)
+        usage["output_bytes"] = output_bytes
+        state.metadata["output_receipts"] = receipts
+        self._save_pending(
+            state,
+            "completion_pending",
+            result=result,
+            usage=usage,
+        )
+        self.client.complete(
+            job.job_id,
+            state.lease_token,
+            result,
+            usage,
+            receipts,
+        )
+        self._cleanup_state(state)
 
     def _stop_process(self, process: JobProcess) -> None:
         try:
@@ -281,20 +397,33 @@ class RunnerRuntime:
                 usage,
             )
             return True
-        try:
-            result, output_bytes = self.engine.read_result(job, state.volume_name)
-        except EngineError as error:
-            self._report_failure(job, state, str(error), usage)
-            return True
-        usage["output_bytes"] = output_bytes
         self._save_pending(
             state,
-            "completion_pending",
-            result=result,
+            "output_pending",
             usage=usage,
         )
-        self.client.complete(job.job_id, state.lease_token, result, usage)
-        self._cleanup_state(state)
+        try:
+            self._deliver_success(job, state)
+        except EngineError as error:
+            self._report_failure(
+                job,
+                state,
+                f"Compute output collection failed: {error}",
+                usage,
+            )
+        except RunnerAPIError as error:
+            if error.status in {413, 415, 422}:
+                self._report_failure(
+                    job,
+                    state,
+                    f"Platform rejected Compute output: {error}",
+                    state.usage,
+                )
+            else:
+                LOGGER.warning(
+                    "Compute result delivery is pending and will be retried: %s",
+                    error,
+                )
         return True
 
     def run_once(self) -> bool:

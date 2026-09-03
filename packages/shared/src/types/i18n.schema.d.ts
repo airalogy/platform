@@ -1210,6 +1210,34 @@ declare namespace I18n {
         computeInputAssetsPlaceholder: string
         computeInputAssetsHint: string
         computeMountName: string
+        computeOutputFiles: string
+        computeOutputFilesHint: string
+        addComputeOutput: string
+        computeOutputNumber: string
+        computeOutputAssetName: string
+        computeOutputMountName: string
+        computeOutputKind: string
+        computeOutputMediaType: string
+        computeOutputMaximumBytes: string
+        computeOutputRequired: string
+        computeOutputDescription: string
+        computeOutputDefaultName: string
+        computeOutputCount: string
+        computeOutputLimit: string
+        computeOutputs: string
+        computeOutputDraftHint: string
+        computeOutputKinds: {
+          file: string
+          table: string
+          image: string
+          model: string
+          archive: string
+        }
+        computeOutputStatus: {
+          declared: string
+          uploaded: string
+          registered: string
+        }
         computePreviewHint: string
         computeReadyRunners: string
         confirmComputeRequest: string
@@ -1610,6 +1638,7 @@ declare namespace I18n {
           compute_job_leased: string
           compute_job_input_downloaded: string
           compute_job_started: string
+          compute_output_uploaded: string
           compute_job_cancel_requested: string
           compute_job_completed: string
           compute_job_failed: string

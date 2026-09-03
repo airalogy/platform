@@ -106,6 +106,66 @@
               />
             </div>
           </div>
+          <section class="mb-4">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <div class="aira-type-label">
+                  {{ $t("page.research.computeOutputFiles") }}
+                </div>
+                <div class="aira-type-meta mt-1">
+                  {{ $t("page.research.computeOutputFilesHint") }}
+                </div>
+              </div>
+              <n-button
+                size="small"
+                secondary
+                :disabled="maximumOutputBytes < 1 || outputFiles.length >= 16"
+                @click="addOutputFile"
+              >
+                {{ $t("page.research.addComputeOutput") }}
+              </n-button>
+            </div>
+            <div v-if="outputFiles.length" class="compute-output-list">
+              <div v-for="(output, index) in outputFiles" :key="output.key" class="compute-output-card">
+                <div class="mb-3 flex items-center justify-between gap-3">
+                  <span class="aira-type-eyebrow">
+                    {{ $t("page.research.computeOutputNumber", { number: index + 1 }) }}
+                  </span>
+                  <n-button text type="error" @click="removeOutputFile(index)">
+                    {{ $t("common.delete") }}
+                  </n-button>
+                </div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <n-form-item :label="$t('page.research.computeOutputAssetName')" required>
+                    <n-input v-model:value="output.asset_name" />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.computeOutputMountName')" required>
+                    <n-input v-model:value="output.mount_name" placeholder="analysis.csv" />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.computeOutputKind')" required>
+                    <n-select v-model:value="output.kind" :options="outputKindOptions" />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.computeOutputMediaType')" required>
+                    <n-input v-model:value="output.media_type" placeholder="text/csv" />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.computeOutputMaximumBytes')" required>
+                    <n-input-number
+                      v-model:value="output.max_bytes"
+                      :min="1"
+                      :max="maximumOutputBytes"
+                      class="w-full"
+                    />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.computeOutputRequired')">
+                    <n-switch v-model:value="output.required" />
+                  </n-form-item>
+                </div>
+                <n-form-item :label="$t('page.research.computeOutputDescription')">
+                  <n-input v-model:value="output.description" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" />
+                </n-form-item>
+              </div>
+            </div>
+          </section>
           <n-form-item :label="$t('page.research.actionTitle')">
             <n-input v-model:value="draft.title" />
           </n-form-item>
@@ -131,6 +191,9 @@
             </n-tag>
             <n-tag v-if="preview.command.estimated_cost" size="small" type="warning">
               ≤ {{ preview.command.estimated_cost }} {{ preview.command.currency }}
+            </n-tag>
+            <n-tag v-if="preview.output_file_count" size="small" type="info">
+              {{ $t("page.research.computeOutputCount", { count: preview.output_file_count }) }}
             </n-tag>
           </div>
           <div class="aira-type-meta mt-3 break-all">
@@ -170,6 +233,7 @@ import type {
   ComputeActionDraft,
   ComputeActionPreview,
   ComputeOption,
+  ComputeOutputDraft,
 } from "@/service/api/research-compute-jobs"
 import { fetchResearchAssets } from "@/service/api/research-assets"
 import {
@@ -190,6 +254,7 @@ const assets = ref<DataAsset[]>([])
 const inputText = ref("{}")
 const selectedVersionIds = ref<string[]>([])
 const mountNames = reactive<Record<string, string>>({})
+const outputFiles = ref<Array<ComputeOutputDraft & { key: string }>>([])
 const preview = ref<ComputeActionPreview | null>(null)
 const previewPayload = ref<ComputeActionDraft | null>(null)
 const draft = reactive({
@@ -238,12 +303,40 @@ const assetVersionOptions = computed(() => assets.value
 const validMountNames = computed(() => selectedVersionIds.value.every(
   id => /^[a-z0-9][\w.-]{0,127}$/i.test(mountNames[id] || ""),
 ))
+const maximumOutputBytes = computed(() => Math.max(
+  0,
+  Math.min(
+    2_147_483_647,
+    (selectedEnvironment.value?.resource_limits.max_output_bytes || 1025) - 1024,
+  ),
+))
+const validOutputFiles = computed(() => {
+  const mountNames = outputFiles.value.map(item => item.mount_name.trim())
+  return outputFiles.value.length <= 16
+    && new Set(mountNames).size === mountNames.length
+    && outputFiles.value.every(item => Boolean(
+      item.asset_name.trim()
+      && /^[a-z0-9][\w.-]{0,127}$/i.test(item.mount_name.trim())
+      && /^[a-z\d][\w!#$&^.+-]*\/[a-z\d][\w!#$&^.+-]*$/i.test(item.media_type.trim())
+      && item.max_bytes >= 1,
+    ))
+    && outputFiles.value.reduce((sum, item) => sum + item.max_bytes, 0) <= maximumOutputBytes.value
+})
 const valid = computed(() => Boolean(
   selectedEnvironment.value
   && draft.source_code.trim()
   && inputPayload.value
-  && validMountNames.value,
+  && validMountNames.value
+  && validOutputFiles.value,
 ))
+
+const outputKindOptions = computed(() => [
+  { label: $t("page.research.computeOutputKinds.file"), value: "file" },
+  { label: $t("page.research.computeOutputKinds.table"), value: "table" },
+  { label: $t("page.research.computeOutputKinds.image"), value: "image" },
+  { label: $t("page.research.computeOutputKinds.model"), value: "model" },
+  { label: $t("page.research.computeOutputKinds.archive"), value: "archive" },
+])
 
 function safeMountName(value: string) {
   const normalized = value.trim().replace(/[^\w.-]+/g, "-").replace(/^[^a-z0-9]+/i, "")
@@ -252,6 +345,28 @@ function safeMountName(value: string) {
 
 function assetVersionLabel(versionId: string) {
   return assetVersionOptions.value.find(item => item.value === versionId)?.label || versionId
+}
+
+function addOutputFile() {
+  if (outputFiles.value.length >= 16 || maximumOutputBytes.value < 1)
+    return
+  const number = outputFiles.value.length + 1
+  outputFiles.value.push({
+    key: nanoid(),
+    mount_name: `output-${number}.json`,
+    asset_name: $t("page.research.computeOutputDefaultName", { number }),
+    description: "",
+    kind: "file",
+    media_type: "application/json",
+    max_bytes: Math.min(10 * 1024 * 1024, maximumOutputBytes.value),
+    required: true,
+    data_schema: {},
+    metadata: {},
+  })
+}
+
+function removeOutputFile(index: number) {
+  outputFiles.value.splice(index, 1)
 }
 
 watch(selectedVersionIds, (next) => {
@@ -269,6 +384,12 @@ function selectEnvironment(value: string) {
   const selected = options.value.find(item => item.compute_environment_revision_id === value)
   if (selected && !selected.allowed_languages.includes(draft.language))
     draft.language = selected.allowed_languages[0] || "python"
+  if (maximumOutputBytes.value < 1) {
+    outputFiles.value = []
+    return
+  }
+  for (const output of outputFiles.value)
+    output.max_bytes = Math.min(output.max_bytes, maximumOutputBytes.value)
 }
 
 function payload(): ComputeActionDraft {
@@ -280,6 +401,17 @@ function payload(): ComputeActionDraft {
     input_assets: selectedVersionIds.value.map(data_asset_version_id => ({
       data_asset_version_id,
       mount_name: mountNames[data_asset_version_id],
+    })),
+    output_files: outputFiles.value.map(output => ({
+      mount_name: output.mount_name.trim(),
+      asset_name: output.asset_name.trim(),
+      description: output.description.trim(),
+      kind: output.kind,
+      media_type: output.media_type.trim().toLowerCase(),
+      max_bytes: output.max_bytes,
+      required: output.required,
+      data_schema: output.data_schema,
+      metadata: output.metadata,
     })),
     title: draft.title.trim(),
     description: draft.description.trim(),
@@ -345,6 +477,7 @@ function reset() {
   previewPayload.value = null
   inputText.value = "{}"
   selectedVersionIds.value = []
+  outputFiles.value = []
   Object.keys(mountNames).forEach(key => delete mountNames[key])
   draft.compute_environment_revision_id = ""
   draft.language = "python"
@@ -357,9 +490,11 @@ function reset() {
 <style scoped>
 .research-compute-modal { width: min(52rem, calc(100vw - 2rem)); }
 .compute-preview,
-.compute-input-list { border: 1px solid rgb(226 232 240); border-radius: 1rem; padding: 1rem; }
+.compute-input-list,
+.compute-output-list { border: 1px solid rgb(226 232 240); border-radius: 1rem; padding: 1rem; }
 .compute-input-row { display: flex; align-items: center; gap: 0.75rem; }
 .compute-input-row + .compute-input-row { margin-top: 0.625rem; }
 .compute-input-row :deep(.n-input) { width: min(16rem, 48%); }
+.compute-output-card + .compute-output-card { margin-top: 1rem; border-top: 1px solid rgb(226 232 240); padding-top: 1rem; }
 pre { overflow: auto; max-height: 18rem; border-radius: 0.75rem; background: rgb(248 250 252); padding: 0.75rem; font-size: 0.75rem; }
 </style>

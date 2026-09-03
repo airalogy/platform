@@ -46,6 +46,7 @@ class RunnerConfig:
     poll_interval_seconds: float = 15.0
     heartbeat_interval_seconds: float = 20.0
     request_timeout_seconds: float = 15.0
+    output_upload_timeout_seconds: float = 3600.0
     stop_timeout_seconds: float = 20.0
     max_workspace_bytes: int = 10 * 1024 * 1024 * 1024
     allow_insecure_http: bool = False
@@ -83,6 +84,10 @@ class RunnerConfig:
             )
         if not 0 < self.request_timeout_seconds <= 120:
             raise ValueError("Runner request timeout must be between 0 and 120 seconds")
+        if not 0 < self.output_upload_timeout_seconds <= 86_400:
+            raise ValueError(
+                "Runner output upload timeout must be between 0 and 86400 seconds"
+            )
         if not 0 < self.stop_timeout_seconds <= 300:
             raise ValueError("Runner stop timeout must be between 0 and 300 seconds")
         if not 64 * 1024 * 1024 <= self.max_workspace_bytes <= 100 * 1024**3:
@@ -118,6 +123,9 @@ class RunnerConfig:
             ),
             request_timeout_seconds=float(
                 os.environ.get("AIRALOGY_COMPUTE_REQUEST_TIMEOUT_SECONDS", "15")
+            ),
+            output_upload_timeout_seconds=float(
+                os.environ.get("AIRALOGY_COMPUTE_OUTPUT_UPLOAD_TIMEOUT_SECONDS", "3600")
             ),
             stop_timeout_seconds=float(
                 os.environ.get("AIRALOGY_COMPUTE_STOP_TIMEOUT_SECONDS", "20")

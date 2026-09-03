@@ -23,6 +23,7 @@ def main() -> None:
         config.platform_url,
         config.runner_token,
         timeout_seconds=config.request_timeout_seconds,
+        output_upload_timeout_seconds=config.output_upload_timeout_seconds,
     )
     runtime = RunnerRuntime(config, client, engine, StateStore(config.state_file))
     runtime.run_forever()

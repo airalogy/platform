@@ -37,12 +37,25 @@ export interface ComputeInputDraft {
   mount_name: string
 }
 
+export interface ComputeOutputDraft {
+  mount_name: string
+  asset_name: string
+  description: string
+  kind: "file" | "table" | "image" | "model" | "archive"
+  media_type: string
+  max_bytes: number
+  required: boolean
+  data_schema: Record<string, unknown>
+  metadata: Record<string, unknown>
+}
+
 export interface ComputeActionDraft {
   compute_environment_revision_id: string
   language: "python" | "r"
   source_code: string
   input_payload: Record<string, unknown>
   input_assets: ComputeInputDraft[]
+  output_files: ComputeOutputDraft[]
   title: string
   description: string
   idempotency_key: string
@@ -65,6 +78,7 @@ export interface ComputeActionPreview {
   }
   source: { language: string, sha256: string, bytes: number }
   input_asset_count: number
+  output_file_count: number
   authorized_runner_count: number
   ready_runner_count: number
   effects: string[]
@@ -96,6 +110,22 @@ export interface ResearchComputeJob {
   status: ResearchComputeJobStatus
   attempt_count: number
   result: Record<string, unknown>
+  output_manifest: Array<{
+    id: string
+    mount_name: string
+    asset_name: string
+    description: string
+    kind: "file" | "table" | "image" | "model" | "archive"
+    media_type: string
+    max_bytes: number
+    required: boolean
+    status: "declared" | "uploaded" | "registered"
+    checksum_sha256?: string | null
+    byte_size?: number | null
+    research_file_id?: string | null
+    data_asset_id?: string | null
+    data_asset_version_id?: string | null
+  }>
   usage: Record<string, number>
   error?: string | null
   cancel_reason?: string | null

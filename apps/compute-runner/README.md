@@ -18,11 +18,13 @@ The selected Compute Environment image must provide `python` for Python jobs or 
 - `AIRALOGY_INPUT_DIR=/airalogy/input`
 - `AIRALOGY_RESULT_JSON=/airalogy/output/result.json`
 
-The source must write one UTF-8 JSON object to `AIRALOGY_RESULT_JSON`. Platform validates it against the immutable result Schema before accepting completion. The reference Runner disables the container log driver and discards untrusted standard output so code cannot bypass the output limit and fill host storage; use the bounded result object for diagnostics that must be retained. Output files are not imported automatically in this version; register them through the normal DataAsset workflow.
+The source must write one UTF-8 JSON object to `AIRALOGY_RESULT_JSON`. Platform validates it against the immutable result Schema before accepting completion. A request may also declare up to 16 output files. Source writes each one to `/airalogy/output/files/<declared-mount-name>`; the Runner rejects undeclared references, missing required files, per-file or combined size overflow, and content that changes while being streamed. It computes SHA-256 inside the read-only helper, streams the bytes through the job lease, and Platform registers a Project-visible draft DataAsset only after the structured result and every receipt pass final validation.
+
+The reference Runner disables the research container log driver and discards untrusted standard output so code cannot bypass the output limit and fill host storage; use the bounded result object for diagnostics that must be retained. The immutable helper image must provide `tar`, `test`, `wc`, `sha256sum`, and `cat`.
 
 ## Configuration
 
-Create a Runner in **Lab resource library → Compute environments**, copy its one-time credential, and bind it only to reviewed Compute Environment revisions. Install the exact helper image locally before startup; it must provide `tar`, `wc`, and `cat` (for example, a reviewed BusyBox image pinned by digest).
+Create a Runner in **Lab resource library → Compute environments**, copy its one-time credential, and bind it only to reviewed Compute Environment revisions. Install the exact helper image locally before startup (for example, a reviewed BusyBox image pinned by digest).
 
 ```bash
 export AIRALOGY_PLATFORM_URL=https://lab.example.edu
@@ -37,6 +39,7 @@ Additional settings:
 
 - `AIRALOGY_COMPUTE_EGRESS_NETWORKS_JSON`: exact host-set keys to preconfigured enforcement network names.
 - `AIRALOGY_COMPUTE_POLL_SECONDS`, `AIRALOGY_COMPUTE_HEARTBEAT_SECONDS`, and `AIRALOGY_COMPUTE_REQUEST_TIMEOUT_SECONDS`.
+- `AIRALOGY_COMPUTE_OUTPUT_UPLOAD_TIMEOUT_SECONDS`: bounded timeout for streaming a declared result file back to Platform.
 - `AIRALOGY_COMPUTE_STOP_TIMEOUT_SECONDS`: local grace period before stop is considered unsafe.
 - `AIRALOGY_COMPUTE_MAX_WORKSPACE_BYTES`: hard local ceiling over input, source, and approved output capacity.
 - `AIRALOGY_COMPUTE_ALLOW_INSECURE_HTTP=true`: test-only escape hatch for an isolated non-loopback network.

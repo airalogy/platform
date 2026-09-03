@@ -17,9 +17,10 @@ from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import config
 from app.models.knowledge import (
     KnowledgeAccessGrant,
     KnowledgeItem,
@@ -27,6 +28,7 @@ from app.models.knowledge import (
     PaperImportDraft,
     PaperLibraryEntry,
     ResearchFile,
+    ResearchFileBlob,
     Visibility,
 )
 from app.models.lab import LabRole, LabUser
@@ -43,6 +45,35 @@ DOI_URL_PREFIX = re.compile(r"^https?://(?:dx\.)?doi\.org/", re.IGNORECASE)
 DOI_LABEL_PREFIX = re.compile(r"^doi:\s*", re.IGNORECASE)
 WHITESPACE = re.compile(r"\s+")
 logger = logging.getLogger("app")
+
+
+async def assert_research_file_upload_quota(
+    db_session: AsyncSession,
+    user_id: UUID,
+    incoming_size: int,
+    *,
+    incoming_count: int = 1,
+) -> None:
+    count, total = (
+        await db_session.execute(
+            select(
+                func.count(ResearchFile.id),
+                func.coalesce(func.sum(ResearchFileBlob.size_bytes), 0),
+            )
+            .select_from(ResearchFile)
+            .join(ResearchFileBlob, ResearchFileBlob.id == ResearchFile.blob_id)
+            .where(
+                ResearchFile.uploaded_by_user_id == user_id,
+                ResearchFile.archived_at.is_(None),
+            )
+        )
+    ).one()
+    if count + incoming_count > config.KNOWLEDGE_USER_FILE_COUNT_LIMIT:
+        raise HTTPException(status_code=413, detail="Research file count quota exceeded")
+    if total + incoming_size > config.KNOWLEDGE_USER_STORAGE_QUOTA_BYTES:
+        raise HTTPException(
+            status_code=413, detail="Research file storage quota exceeded"
+        )
 
 
 @dataclass(frozen=True)

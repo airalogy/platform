@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import Text, cast, exists, func, or_, select
+from sqlalchemy import Text, cast, exists, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
 from app.config import config
@@ -56,6 +56,7 @@ from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.knowledge import (
     ScopeContext,
+    assert_research_file_upload_quota,
     authorize_knowledge_item,
     authorize_library_entry,
     authorize_research_file,
@@ -410,33 +411,6 @@ async def preview_paper_import(
     return await _draft_response(db_session, draft)
 
 
-async def _assert_upload_quota(
-    db_session: DBSession, user_id: UUID, incoming_size: int
-) -> None:
-    count, total = (
-        await db_session.execute(
-            select(
-                func.count(ResearchFile.id),
-                func.coalesce(func.sum(ResearchFileBlob.size_bytes), 0),
-            )
-            .select_from(ResearchFile)
-            .join(ResearchFileBlob, ResearchFileBlob.id == ResearchFile.blob_id)
-            .where(
-                ResearchFile.uploaded_by_user_id == user_id,
-                ResearchFile.archived_at.is_(None),
-            )
-        )
-    ).one()
-    if count >= config.KNOWLEDGE_USER_FILE_COUNT_LIMIT:
-        raise HTTPException(
-            status_code=413, detail="Research file count quota exceeded"
-        )
-    if total + incoming_size > config.KNOWLEDGE_USER_STORAGE_QUOTA_BYTES:
-        raise HTTPException(
-            status_code=413, detail="Research file storage quota exceeded"
-        )
-
-
 @router.post("/papers/import/pdf/preview")
 async def preview_pdf_import(
     db_session: DBSession,
@@ -495,7 +469,7 @@ async def preview_pdf_import(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    await _assert_upload_quota(db_session, current_user.id, len(data))
+    await assert_research_file_upload_quota(db_session, current_user.id, len(data))
     checksum = hashlib.sha256(data).hexdigest()
     blob = await db_session.scalar(
         select(ResearchFileBlob).where(ResearchFileBlob.checksum_sha256 == checksum)

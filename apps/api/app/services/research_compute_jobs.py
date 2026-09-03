@@ -116,6 +116,7 @@ def compute_action_command(
     source_code: str,
     input_payload: dict[str, Any],
     input_versions: list[tuple[DataAsset, DataAssetVersion, str]],
+    output_files: list[dict[str, Any]],
     title: str,
     description: str,
     idempotency_key: str,
@@ -144,6 +145,7 @@ def compute_action_command(
             }
             for asset, version, mount_name in input_versions
         ],
+        "output_files": output_files,
         "resource_limits": revision.resource_limits,
         "network_policy": revision.network_policy,
         "allowed_egress_hosts": revision.allowed_egress_hosts,

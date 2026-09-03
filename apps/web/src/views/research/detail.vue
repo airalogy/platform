@@ -402,6 +402,45 @@
                         <div class="aira-type-meta">{{ $t("page.research.computeResult") }}</div>
                         <pre>{{ formatPayload(action.compute_job.result) }}</pre>
                       </div>
+                      <div v-if="action.compute_job.output_manifest?.length" class="mt-3">
+                        <div class="aira-type-meta">
+                          {{ $t("page.research.computeOutputs") }}
+                        </div>
+                        <div class="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                          <div
+                            v-for="output in action.compute_job.output_manifest"
+                            :key="output.id"
+                            class="research-method"
+                          >
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                              <div class="min-w-0">
+                                <div class="aira-type-label truncate">
+                                  {{ output.asset_name }}
+                                </div>
+                                <div class="aira-type-meta mt-1 break-all">
+                                  {{ output.mount_name }} · {{ output.media_type }}
+                                </div>
+                              </div>
+                              <n-tag
+                                size="small"
+                                round
+                                :type="output.status === 'registered' ? 'success' : output.status === 'uploaded' ? 'info' : 'default'"
+                              >
+                                {{ computeOutputStatusLabel(output.status) }}
+                              </n-tag>
+                            </div>
+                            <div class="aira-type-meta mt-2">
+                              {{ output.byte_size == null ? $t("page.research.computeOutputLimit", { size: formatFileSize(output.max_bytes) }) : formatFileSize(output.byte_size) }}
+                              <template v-if="output.required">
+                                · {{ $t("page.research.computeOutputRequired") }}
+                              </template>
+                            </div>
+                            <div v-if="output.status === 'registered'" class="aira-type-meta mt-1">
+                              {{ $t("page.research.computeOutputDraftHint") }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div v-if="Object.keys(action.compute_job.usage || {}).length" class="mt-3">
                         <div class="aira-type-meta">{{ $t("page.research.computeUsage") }}</div>
                         <pre>{{ formatPayload(action.compute_job.usage) }}</pre>
@@ -1171,6 +1210,23 @@ function computeJobStatusLabel(status: string) {
   return $t(`page.research.computeJobStatus.${status}` as I18n.I18nKey)
 }
 
+function computeOutputStatusLabel(status: string) {
+  return $t(`page.research.computeOutputStatus.${status}` as I18n.I18nKey)
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024)
+    return `${bytes} B`
+  const units = ["KB", "MB", "GB"]
+  let value = bytes / 1024
+  let index = 0
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024
+    index += 1
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`
+}
+
 function openReviewModal() {
   if (!task.value)
     return
@@ -1398,6 +1454,7 @@ function eventLabel(kind: string) {
     "compute_job.leased",
     "compute_job.input_downloaded",
     "compute_job.started",
+    "compute_output.uploaded",
     "compute_job.cancel_requested",
     "compute_job.completed",
     "compute_job.failed",

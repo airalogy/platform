@@ -10,6 +10,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -465,6 +466,7 @@ class ResearchComputeJob(Base):
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
     result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    output_manifest: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     usage: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error: Mapped[str | None] = mapped_column(Text)
     cancel_reason: Mapped[str | None] = mapped_column(Text)
@@ -519,6 +521,68 @@ class ResearchComputeJobInput(Base):
     )
     position: Mapped[int] = mapped_column(nullable=False)
     mount_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ResearchComputeJobOutput(Base):
+    """A declared, bounded output promoted to a DataAsset only on completion."""
+
+    __tablename__ = "research_compute_job_outputs"
+    __table_args__ = (
+        UniqueConstraint(
+            "compute_job_id", "position", name="uq_research_compute_job_output_position"
+        ),
+        UniqueConstraint(
+            "compute_job_id",
+            "mount_name",
+            name="uq_research_compute_job_output_mount_name",
+        ),
+        CheckConstraint(
+            "kind IN ('file', 'table', 'image', 'model', 'archive')",
+            name="ck_research_compute_job_output_kind",
+        ),
+        CheckConstraint(
+            "max_bytes BETWEEN 1 AND 2147483647",
+            name="ck_research_compute_job_output_max_bytes",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    compute_job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(nullable=False)
+    mount_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    asset_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    max_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    data_schema: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    version_metadata: Mapped[dict] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
+    blob_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_file_blobs.id", ondelete="RESTRICT"), index=True
+    )
+    research_file_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_files.id", ondelete="RESTRICT"), index=True
+    )
+    data_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("data_assets.id", ondelete="RESTRICT"), index=True
+    )
+    data_asset_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("data_asset_versions.id", ondelete="RESTRICT"), index=True
+    )
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

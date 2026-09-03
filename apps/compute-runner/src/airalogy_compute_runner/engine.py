@@ -10,9 +10,10 @@ import subprocess
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 from .config import RunnerConfig
-from .models import ComputeJobEnvelope
+from .models import ComputeJobEnvelope, ComputeOutput
 
 
 class EngineError(RuntimeError):
@@ -24,6 +25,12 @@ class JobProcess:
     process: subprocess.Popen[bytes]
     container_name: str
     volume_name: str
+
+
+@dataclass
+class OutputProcess:
+    process: subprocess.Popen[bytes]
+    stream: BinaryIO
 
 
 class ContainerEngine:
@@ -172,6 +179,7 @@ class ContainerEngine:
                 archive.addfile(self._directory("source", 0o555))
                 archive.addfile(self._directory("input", 0o555))
                 archive.addfile(self._directory("output", 0o700, 65532, 65532))
+                archive.addfile(self._directory("output/files", 0o700, 65532, 65532))
                 extension = "py" if job.language == "python" else "R"
                 self._bytes_entry(
                     archive,
@@ -352,6 +360,139 @@ class ContainerEngine:
         if not isinstance(value, dict):
             raise EngineError("Compute result must be a JSON object")
         return value, size
+
+    def _readonly_helper_base(self, volume_name: str) -> list[str]:
+        return [
+            self.executable,
+            "run",
+            "--rm",
+            "--log-driver",
+            "none",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            f"type=volume,source={volume_name},target=/airalogy,readonly",
+        ]
+
+    @staticmethod
+    def output_path(output: ComputeOutput) -> str:
+        return f"/airalogy/output/files/{output.mount_name}"
+
+    def output_metadata(
+        self,
+        output: ComputeOutput,
+        volume_name: str,
+    ) -> tuple[int, str] | None:
+        path = self.output_path(output)
+        base = self._readonly_helper_base(volume_name)
+        exists = subprocess.run(
+            [
+                *base,
+                "--entrypoint",
+                "test",
+                self.config.helper_image,
+                "!",
+                "-L",
+                path,
+                "-a",
+                "-f",
+                path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+            check=False,
+        )
+        if exists.returncode == 1:
+            return None
+        if exists.returncode != 0:
+            raise EngineError("Could not inspect declared Compute output")
+        size_result = self._run(
+            [
+                *base[1:],
+                "--entrypoint",
+                "wc",
+                self.config.helper_image,
+                "-c",
+                path,
+            ],
+            timeout=30,
+        )
+        try:
+            size = int(size_result.stdout.decode("ascii").strip().split()[0])
+        except (ValueError, IndexError, UnicodeDecodeError) as error:
+            raise EngineError(
+                "Helper returned an invalid Compute output size"
+            ) from error
+        if size > output.max_bytes:
+            raise EngineError(
+                f"Compute output {output.mount_name} exceeds its declared limit"
+            )
+        digest_result = self._run(
+            [
+                *base[1:],
+                "--entrypoint",
+                "sha256sum",
+                self.config.helper_image,
+                path,
+            ],
+            timeout=60,
+        )
+        try:
+            digest = digest_result.stdout.decode("ascii").strip().split()[0]
+        except (IndexError, UnicodeDecodeError) as error:
+            raise EngineError(
+                "Helper returned an invalid Compute output digest"
+            ) from error
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise EngineError("Helper returned an invalid Compute output digest")
+        return size, digest
+
+    def open_output(self, output: ComputeOutput, volume_name: str) -> OutputProcess:
+        command = [
+            *self._readonly_helper_base(volume_name),
+            "--entrypoint",
+            "cat",
+            self.config.helper_image,
+            self.output_path(output),
+        ]
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        if process.stdout is None:
+            process.kill()
+            process.wait()
+            raise EngineError("Unable to stream declared Compute output")
+        return OutputProcess(process=process, stream=process.stdout)
+
+    @staticmethod
+    def finish_output(process: OutputProcess) -> None:
+        try:
+            return_code = process.process.wait(timeout=120)
+        except subprocess.TimeoutExpired as error:
+            process.process.kill()
+            process.process.wait()
+            raise EngineError("Compute output helper did not exit") from error
+        finally:
+            process.stream.close()
+        if return_code != 0:
+            raise EngineError("Compute output changed while it was being streamed")
+
+    @staticmethod
+    def abort_output(process: OutputProcess) -> None:
+        process.stream.close()
+        if process.process.poll() is None:
+            process.process.kill()
+        process.process.wait()
 
     def cleanup(self, container_name: str, volume_name: str) -> None:
         if container_name:
