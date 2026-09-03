@@ -59,7 +59,9 @@ class AiraActionProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    decision: Literal["protocol", "tool", "resource", "instrument", "wait", "finish"]
+    decision: Literal[
+        "protocol", "tool", "resource", "instrument", "service", "wait", "finish"
+    ]
     thought: str = Field(default="", max_length=4000)
     tool_key: str | None = Field(default=None, max_length=128)
     instrument_command_id: UUID | None = None
@@ -75,6 +77,8 @@ class AiraActionProposal(BaseModel):
     wait_title: str | None = Field(default=None, max_length=255)
     wait_description: str | None = Field(default=None, max_length=20_000)
     resource_request: AiraResourceRequest | None = None
+    service_offering_id: UUID | None = None
+    service_request: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_decision_fields(self):
@@ -108,6 +112,14 @@ class AiraActionProposal(BaseModel):
             raise ValueError("A resource proposal requires resource_request")
         if self.decision != "resource" and self.resource_request is not None:
             raise ValueError("resource_request is only valid for a resource proposal")
+        if self.decision == "service" and self.service_offering_id is None:
+            raise ValueError("A service proposal requires service_offering_id")
+        if self.decision != "service" and self.service_offering_id is not None:
+            raise ValueError(
+                "service_offering_id is only valid for a service proposal"
+            )
+        if self.decision != "service" and self.service_request:
+            raise ValueError("service_request is only valid for a service proposal")
         return self
 
 
@@ -206,8 +218,31 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         for item in list(context.get("instrument_commands") or [])
         if item.get("available", True)
     ]
+    services = [
+        {
+            "id": item.get("source_id"),
+            "revision_id": item.get("source_revision_id"),
+            "version": item.get("version"),
+            "provider": (item.get("metadata") or {}).get("provider") or {},
+            "name": item.get("name"),
+            "description": item.get("description"),
+            "input_schema": item.get("input_schema") or {},
+            "result_schema": item.get("output_schema") or {},
+            "risk": item.get("risk"),
+            "quote_required": (item.get("metadata") or {}).get("quote_required"),
+            "base_price": (item.get("metadata") or {}).get("base_price"),
+            "currency": (item.get("metadata") or {}).get("currency"),
+            "sla_hours": (item.get("metadata") or {}).get("sla_hours"),
+            "sample_requirements": (item.get("metadata") or {}).get(
+                "sample_requirements"
+            )
+            or {},
+        }
+        for item in list(context.get("services") or [])
+        if item.get("available", True)
+    ]
     decision_schema = {
-        "decision": "protocol | tool | resource | instrument | wait | finish",
+        "decision": "protocol | tool | resource | instrument | service | wait | finish",
         "thought": "short scientific reason",
         "tool_key": "required only for tool",
         "instrument_command_id": "required only for instrument; choose one listed ID",
@@ -221,6 +256,8 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "ends_at": "ISO timestamp required only for equipment",
             "purpose": "required operational purpose",
         },
+        "service_offering_id": "required only for service; choose one listed ID",
+        "service_request": "required service request object; must match its input_schema",
         "wait_template_key": "required only for wait",
         "wait_title": "optional for wait",
         "wait_description": "optional for wait",
@@ -228,11 +265,12 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, resource, instrument, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, resource, instrument, service, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
+            "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
             "Wait only when progress truly depends on an external result that is not available yet.",
             "Finish only when the research path can proceed to its final evidence-based conclusion.",
             "Do not repeat a completed Tool with equivalent arguments unless new evidence requires it.",
@@ -242,6 +280,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             f"AVAILABLE_TOOLS={_bounded_json(tools)}",
             f"AVAILABLE_RESOURCE_REQUIREMENTS={_bounded_json(resources)}",
             f"AVAILABLE_INSTRUMENT_COMMANDS={_bounded_json(instrument_commands)}",
+            f"AVAILABLE_SERVICES={_bounded_json(services)}",
             f"WAIT_TEMPLATES={_bounded_json(AIRA_WAIT_TEMPLATES)}",
             f"RESEARCH_CONTEXT={_bounded_json(context)}",
         ]
@@ -327,5 +366,26 @@ async def plan_next_research_action(
             dict(pinned.get("input_schema") or {}),
             proposal.arguments,
             "Instrument arguments",
+        )
+    if proposal.decision == "service":
+        from app.services.research_instruments import validate_schema_payload
+
+        pinned = next(
+            (
+                item
+                for item in list(context.get("services") or [])
+                if str(item.get("source_id") or "")
+                == str(proposal.service_offering_id or "")
+            ),
+            None,
+        )
+        if pinned is None:
+            raise ValueError("Aira proposed a Service outside the environment")
+        if not pinned.get("available", True):
+            raise ValueError("Aira proposed an unavailable Service")
+        validate_schema_payload(
+            dict(pinned.get("input_schema") or {}),
+            proposal.service_request,
+            "Service request",
         )
     return proposal

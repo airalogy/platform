@@ -528,8 +528,14 @@ def test_research_action_policy_fails_closed_for_aira_execution():
     )
 
 
-def test_resource_only_environment_can_enter_aira_planning():
+def test_resource_or_service_only_environment_can_enter_aira_planning():
     assert research_environment_has_ai_path({"resources": [{"key": "equipment"}]})
+    assert research_environment_has_ai_path(
+        {"services": [{"source_id": str(uuid4())}]}
+    )
+    assert not research_environment_has_ai_path(
+        {"services": [{"source_id": str(uuid4()), "available": False}]}
+    )
     assert not research_environment_has_ai_path({"resources": []})
 
 

@@ -19,8 +19,6 @@ from app.models.research import (
     ResearchAction,
     ResearchActionKind,
     ResearchActionStatus,
-    ResearchApproval,
-    ResearchApprovalStatus,
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
@@ -47,8 +45,8 @@ from app.services.research_external_services import (
     latest_service_quote,
     pinned_service_job_context,
     release_service_budget,
+    request_service_order_approval,
     service_job_snapshot,
-    service_order_command,
     settle_service_budget,
     validate_quote_budget,
 )
@@ -338,59 +336,6 @@ def _quote_command(job: ResearchServiceJob, params: ServiceQuoteDraft) -> dict[s
         "valid_until": params.valid_until.isoformat() if params.valid_until else None,
         "terms": params.terms,
     }
-
-
-async def _request_order_approval(
-    db_session: DBSession,
-    *,
-    task: ResearchTask,
-    run: ResearchRun,
-    action: ResearchAction,
-    job: ResearchServiceJob,
-    quote: ResearchServiceQuote,
-    actor_user_id: UUID,
-) -> ResearchApproval:
-    job.status = ResearchServiceJobStatus.AWAITING_APPROVAL.value
-    job.current_quote_revision = quote.revision
-    job.revision += 1
-    command = service_order_command(job, quote)
-    action.preview_digest = canonical_digest(command)
-    action.status = ResearchActionStatus.PROPOSED.value
-    action.policy_decision = "ask"
-    action.revision += 1
-    approval = ResearchApproval(
-        action_id=action.id,
-        approver_user_id=task.owner_user_id,
-        requested_by_user_id=actor_user_id,
-        status=ResearchApprovalStatus.PENDING.value,
-        preview_digest=action.preview_digest,
-        reason=(
-            f"Approve external service order for {quote.amount} {quote.currency}"
-        ),
-    )
-    db_session.add(approval)
-    run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
-    run.last_error = None
-    task.revision += 1
-    await db_session.flush()
-    await emit_research_event(
-        db_session,
-        task_id=task.id,
-        run_id=run.id,
-        action_id=action.id,
-        kind="approval.requested",
-        actor_user_id=actor_user_id,
-        payload={
-            "approval_id": str(approval.id),
-            "approver_user_id": str(approval.approver_user_id),
-            "preview_digest": approval.preview_digest,
-            "reason": approval.reason,
-            "service_job_id": str(job.id),
-            "quote_id": str(quote.id),
-        },
-        idempotency_key=f"service-job:{job.id}:quote:{quote.revision}:approval",
-    )
-    return approval
 
 
 def _progress_command(
@@ -687,13 +632,14 @@ async def create_service_action(
         )
         db_session.add(quote)
         await db_session.flush()
-        await _request_order_approval(
+        await request_service_order_approval(
             db_session,
             task=task,
             run=run,
             action=action,
             job=job,
             quote=quote,
+            requested_by_user_id=current_user.id,
             actor_user_id=current_user.id,
         )
         event_kind = "external_service.catalog_quote_created"
@@ -792,13 +738,14 @@ async def create_service_quote(
     )
     db_session.add(quote)
     await db_session.flush()
-    await _request_order_approval(
+    await request_service_order_approval(
         db_session,
         task=task,
         run=run,
         action=action,
         job=job,
         quote=quote,
+        requested_by_user_id=current_user.id,
         actor_user_id=current_user.id,
     )
     await emit_research_event(

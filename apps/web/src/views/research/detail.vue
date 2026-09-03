@@ -841,7 +841,10 @@ const pinnedExecutorBindings = computed<ResearchEnvironmentExecutorBinding[]>(()
   return Array.isArray(bindings) ? bindings as ResearchEnvironmentExecutorBinding[] : []
 })
 const hasAiraCapabilities = computed(() => Boolean(
-  task.value?.protocols.length || pinnedTools.value.some(item => item.available),
+  task.value?.protocols.length
+  || pinnedTools.value.some(item => item.available)
+  || task.value?.resources.some(item => item.available)
+  || task.value?.services.some(item => item.available),
 ))
 const canAddAction = computed(() => ["active", "paused"].includes(task.value?.status || ""))
 const canAddDigitalAction = computed(() => task.value?.status === "active")

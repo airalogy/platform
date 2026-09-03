@@ -84,7 +84,9 @@ Platform 会在 API 层创建每个新的人工或 Aira Protocol、Tool、Wait�
 
 检索候选项只是 Action 输出。Platform 不会将其静默采纳为 Knowledge、Evidence 或 Claim。
 
-每次到达“下一步做什么”的边界时，Aira 会先在固定版本的 Protocol、可用 Tool、固定的资源需求、符合条件的 Instrument 指令、类型化外部 Wait 与结束当前路径之间选择。只有你拥有已批准且未过期的设备预约时，对应设备指令才会向 Aira 显示。模型只选择列表中的指令 ID 和输入参数；Platform 确定性选择预约，并把准确指令、设备、时段、风险和本地确认要求作为普通审批展示。批准前任何 Instrument Job 都无法被 Gateway 领取；指令、权限、预约过期或预约被其他作业占用都会让批准失败关闭。Action Planner 不会直接执行模型自由文本：Platform 会先校验 Action 类型、白名单、固定版本、输入参数、资源需求和结果契约，再创建正式 Action。物理 Action 始终需要审批，其他 Aira Action 则继续按对应准确风险策略治理。
+每次到达“下一步做什么”的边界时，Aira 会先在固定版本的 Protocol、可用 Tool、固定的资源需求、符合条件的 Instrument 指令、固定的 External Service、类型化外部 Wait 与结束当前路径之间选择。只有你拥有已批准且未过期的设备预约时，对应设备指令才会向 Aira 显示。模型只选择列表中的指令 ID 和输入参数；Platform 确定性选择预约，并把准确指令、设备、时段、风险和本地确认要求作为普通审批展示。批准前任何 Instrument Job 都无法被 Gateway 领取；指令、权限、预约过期或预约被其他作业占用都会让批准失败关闭。
+
+对于 External Service，Aira 只能选择已固定到 Research Environment 的准确服务，并生成符合固定输入 Schema 的请求草稿；这不等于已下单。Platform 会创建与手工路径相同的受治理 Service Job：需要时由服务管理员登记服务商报价，每个准确报价都会生成绑定摘要的下单审批，预算预留、样本交接、履约和结果接收仍由确定性界面控制。Action Planner 不会直接执行模型自由文本：Platform 会先校验 Action 类型、白名单、固定版本、输入参数、资源需求和结果契约，再创建正式 Action。物理 Action 和服务下单始终需要审批，其他 Aira Action 则继续按对应准确风险策略治理。
 
 已完成的 Tool、Instrument、Resource、External Service 和外部 Wait Action 会把类型明确的结果回传给后续 Aira 规划与结论。Platform 只保留有上限的近期结果窗口，并将其作为不可信证据提供；除非用户主动登记并校验对应的 Record、DataAsset、Evidence 或 Knowledge 资产，它们始终只是 Action 输出。
 

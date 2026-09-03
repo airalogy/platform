@@ -44,6 +44,9 @@ from app.models.research_execution import (
     ResearchInstrumentJob,
     ResearchInstrumentJobStatus,
     ResearchResourceReservation,
+    ResearchServiceJob,
+    ResearchServiceJobStatus,
+    ResearchServiceQuote,
     ResearchToolJob,
     ResearchToolJobStatus,
     ResearchWaitEvent,
@@ -142,10 +145,12 @@ def utcnow() -> datetime:
 def research_environment_has_ai_path(environment_snapshot: dict[str, Any]) -> bool:
     """AI needs at least one explicitly pinned executable capability."""
 
-    return bool(
-        list(environment_snapshot.get("protocols") or [])
-        or list(environment_snapshot.get("tools") or [])
-        or list(environment_snapshot.get("resources") or [])
+    if list(environment_snapshot.get("protocols") or []):
+        return True
+    return any(
+        item.get("available", True)
+        for key in ("tools", "resources", "services")
+        for item in list(environment_snapshot.get(key) or [])
     )
 
 
@@ -1102,6 +1107,7 @@ async def _aira_planner_context(
         "resource_requirements": list(
             (run.environment_snapshot or {}).get("resources") or []
         ),
+        "services": list((run.environment_snapshot or {}).get("services") or []),
         "instrument_commands": [
             {
                 "id": item["id"],
@@ -1178,7 +1184,13 @@ async def _materialize_aira_action(
 ) -> ResearchAction:
     """Turn one validated Aira decision into a governed typed Action."""
 
-    if proposal.decision not in {"tool", "resource", "instrument", "wait"}:
+    if proposal.decision not in {
+        "tool",
+        "resource",
+        "instrument",
+        "service",
+        "wait",
+    }:
         raise ValueError("This Aira proposal cannot be materialized here")
     proposal_data = proposal.model_dump(mode="json", exclude_none=True)
     proposal_digest = canonical_digest(proposal_data)
@@ -1358,6 +1370,63 @@ async def _materialize_aira_action(
             "source": "aira",
             "resume_run": True,
         }
+    elif proposal.decision == "service":
+        if proposal.service_offering_id is None:
+            raise ValueError("Aira Service proposal is incomplete")
+        from app.services.research_external_services import (
+            pinned_service_job_context,
+        )
+        from app.services.research_instruments import validate_schema_payload
+
+        (
+            pinned_service,
+            service_provider,
+            service_offering,
+            service_revision,
+        ) = await pinned_service_job_context(
+            db_session,
+            run=run,
+            service_offering_id=proposal.service_offering_id,
+            lock=True,
+        )
+        validate_schema_payload(
+            service_revision.input_schema,
+            proposal.service_request,
+            "Service request",
+        )
+        project = await db_session.get(Project, task.project_id)
+        requester = await db_session.get(User, run.requested_by_user_id)
+        if (
+            project is None
+            or requester is None
+            or not await has_research_capability(
+                db_session,
+                user=requester,
+                project=project,
+                capability="research.service.use",
+            )
+        ):
+            raise ValueError("Research service use access was revoked")
+        requirements = {
+            "risk": service_revision.risk,
+            "approval_policy": "always_ask",
+            "input_schema": service_revision.input_schema,
+            "result_schema": service_revision.result_schema,
+            "quote_required": service_revision.quote_required,
+            "order_approval_required": True,
+            "pinned_contract": pinned_service,
+        }
+        executor_type = "external_service"
+        kind = ResearchActionKind.EXTERNAL_SERVICE_JOB.value
+        title = f"Request {pinned_service['name']}"
+        description = proposal.thought
+        input_data = {
+            "service_offering_id": str(service_offering.id),
+            "service_offering_revision_id": str(service_revision.id),
+            "request_payload": proposal.service_request,
+            "source": "aira",
+            "resume_run": True,
+        }
     else:
         template = AIRA_WAIT_TEMPLATES[proposal.wait_template_key]
         requirements = {"payload_schema": template["payload_schema"]}
@@ -1469,6 +1538,99 @@ async def _materialize_aira_action(
             status=ResearchInstrumentJobStatus.QUEUED.value,
         )
         db_session.add(instrument_job)
+    elif proposal.decision == "service":
+        service_job = ResearchServiceJob(
+            action_id=action.id,
+            provider_id=service_provider.id,
+            service_offering_id=service_offering.id,
+            service_offering_revision_id=service_revision.id,
+            service_offering_revision=service_revision.revision,
+            service_version=service_revision.service_version,
+            provider_snapshot=pinned_service["metadata"]["provider"],
+            offering_snapshot=pinned_service,
+            request_payload=proposal.service_request,
+            input_schema=service_revision.input_schema,
+            result_schema=service_revision.result_schema,
+            risk=service_revision.risk,
+            quote_required=service_revision.quote_required,
+            creation_digest=action.preview_digest,
+            status=ResearchServiceJobStatus.AWAITING_QUOTE.value,
+            quote_requested_at=utcnow(),
+        )
+        db_session.add(service_job)
+        await db_session.flush()
+        if service_revision.quote_required:
+            action.status = ResearchActionStatus.WAITING.value
+            action.policy_decision = "allow"
+            action.revision += 1
+            run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
+            task.status = ResearchTaskStatus.ACTIVE.value
+            task.revision += 1
+            service_event_kind = "external_service.quote_requested"
+        else:
+            if service_revision.base_price is None or service_revision.currency is None:
+                raise ValueError("Pinned Service has no catalog price")
+            from app.services.research_external_services import (
+                request_service_order_approval,
+                validate_quote_budget,
+            )
+
+            await validate_quote_budget(
+                db_session,
+                task=task,
+                amount=Decimal(service_revision.base_price),
+                currency=service_revision.currency,
+            )
+            quote_command = {
+                "operation": "create_catalog_service_quote",
+                "service_job_id": str(service_job.id),
+                "amount": str(service_revision.base_price),
+                "currency": service_revision.currency,
+                "service_offering_revision_id": str(service_revision.id),
+            }
+            service_quote = ResearchServiceQuote(
+                service_job_id=service_job.id,
+                revision=1,
+                amount=service_revision.base_price,
+                currency=service_revision.currency,
+                terms=service_revision.terms,
+                source="catalog",
+                quote_digest=canonical_digest(quote_command),
+                created_by_user_id=run.requested_by_user_id,
+            )
+            db_session.add(service_quote)
+            await db_session.flush()
+            await request_service_order_approval(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                job=service_job,
+                quote=service_quote,
+                requested_by_user_id=run.requested_by_user_id,
+                actor_user_id=None,
+                reason=(
+                    "Approve Aira's external service order for "
+                    f"{service_quote.amount} {service_quote.currency}"
+                ),
+            )
+            service_event_kind = "external_service.catalog_quote_created"
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind=service_event_kind,
+            actor_user_id=None,
+            payload={
+                "service_job_id": str(service_job.id),
+                "provider_id": str(service_provider.id),
+                "service_offering_id": str(service_offering.id),
+                "service_version": service_revision.service_version,
+                "source": "aira",
+            },
+            idempotency_key=f"service-job:{service_job.id}:created",
+        )
     else:
         wait_event = ResearchWaitEvent(
             action_id=action.id,
@@ -1491,11 +1653,13 @@ async def _materialize_aira_action(
             "decision": proposal.decision,
             "kind": kind,
             "plan_version": run.plan_version,
-            "policy_decision": policy_decision,
+            "policy_decision": action.policy_decision,
         },
         idempotency_key=f"action:{action.id}:aira-proposed",
     )
-    if policy_decision == "ask":
+    if proposal.decision == "service":
+        pass
+    elif policy_decision == "ask":
         await _request_action_approval(
             db_session,
             task=task,
@@ -1793,7 +1957,13 @@ async def process_research_run_advance(
                     await db_session.commit()
                 raise
             planner_decision = proposal.decision
-            if proposal.decision in {"tool", "resource", "instrument", "wait"}:
+            if proposal.decision in {
+                "tool",
+                "resource",
+                "instrument",
+                "service",
+                "wait",
+            }:
                 current_run = (
                     await db_session.execute(
                         select(ResearchRun)

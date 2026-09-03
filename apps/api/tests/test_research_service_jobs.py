@@ -1,6 +1,8 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -21,7 +23,11 @@ from app.routers.research_service_jobs import (
     ServiceResultDraft,
     _custody_command,
 )
-from app.services.research_external_services import service_order_command
+from app.services import research_external_services
+from app.services.research_external_services import (
+    request_service_order_approval,
+    service_order_command,
+)
 from app.services.research_runtime import canonical_digest
 
 
@@ -135,6 +141,72 @@ def test_order_and_custody_commands_bind_exact_versions_and_state():
     command = _custody_command(job, 2, custody)
     assert command["sequence"] == 2
     assert len(canonical_digest(command)) == 64
+
+
+def test_manual_and_aira_service_orders_share_the_same_approval_gate(monkeypatch):
+    added = []
+    db_session = SimpleNamespace(
+        add=added.append,
+        flush=AsyncMock(),
+    )
+    task = SimpleNamespace(id=uuid4(), owner_user_id=uuid4(), revision=7)
+    run = SimpleNamespace(id=uuid4(), status="waiting_for_event", last_error="old")
+    action = SimpleNamespace(
+        id=uuid4(),
+        preview_digest="a" * 64,
+        status="waiting",
+        policy_decision="allow",
+        revision=2,
+    )
+    job = SimpleNamespace(
+        id=uuid4(),
+        revision=4,
+        status="awaiting_quote",
+        current_quote_revision=None,
+        provider_id=uuid4(),
+        service_offering_id=uuid4(),
+        service_offering_revision_id=uuid4(),
+        service_version="2026.1",
+        request_payload={"sample_count": 4},
+    )
+    quote = SimpleNamespace(
+        id=uuid4(),
+        revision=3,
+        quote_digest="b" * 64,
+        amount="1250",
+        currency="USD",
+        valid_until=None,
+    )
+    event = AsyncMock()
+    monkeypatch.setattr(research_external_services, "emit_research_event", event)
+
+    approval = asyncio.run(
+        request_service_order_approval(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            job=job,
+            quote=quote,
+            requested_by_user_id=uuid4(),
+            actor_user_id=None,
+            reason="Approve Aira service order",
+        )
+    )
+
+    assert approval in added
+    assert approval.preview_digest == action.preview_digest
+    assert approval.reason == "Approve Aira service order"
+    assert job.status == "awaiting_approval"
+    assert job.current_quote_revision == 3
+    assert job.revision == 5
+    assert action.status == "proposed"
+    assert action.policy_decision == "ask"
+    assert action.revision == 3
+    assert run.status == "waiting_for_approval"
+    assert run.last_error is None
+    assert task.revision == 8
+    event.assert_awaited_once()
 
 
 def test_external_service_job_routes_are_registered():

@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.research import (
     ResearchAction,
     ResearchActionStatus,
+    ResearchApproval,
+    ResearchApprovalStatus,
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
@@ -36,7 +38,7 @@ from app.services.research_budget import (
     research_budget_snapshot,
 )
 from app.services.research_instruments import validate_schema_payload
-from app.services.research_runtime import canonical_digest, utcnow
+from app.services.research_runtime import canonical_digest, emit_research_event, utcnow
 
 TERMINAL_SERVICE_JOB_STATUSES = {
     ResearchServiceJobStatus.COMPLETED.value,
@@ -64,6 +66,62 @@ def service_order_command(
         "currency": quote.currency,
         "valid_until": quote.valid_until.isoformat() if quote.valid_until else None,
     }
+
+
+async def request_service_order_approval(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    job: ResearchServiceJob,
+    quote: ResearchServiceQuote,
+    requested_by_user_id: UUID,
+    actor_user_id: UUID | None,
+    reason: str | None = None,
+) -> ResearchApproval:
+    """Move one exact quote into the shared digest-bound order gate."""
+
+    job.status = ResearchServiceJobStatus.AWAITING_APPROVAL.value
+    job.current_quote_revision = quote.revision
+    job.revision += 1
+    command = service_order_command(job, quote)
+    action.preview_digest = canonical_digest(command)
+    action.status = ResearchActionStatus.PROPOSED.value
+    action.policy_decision = "ask"
+    action.revision += 1
+    approval = ResearchApproval(
+        action_id=action.id,
+        approver_user_id=task.owner_user_id,
+        requested_by_user_id=requested_by_user_id,
+        status=ResearchApprovalStatus.PENDING.value,
+        preview_digest=action.preview_digest,
+        reason=reason
+        or f"Approve external service order for {quote.amount} {quote.currency}",
+    )
+    db_session.add(approval)
+    run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
+    run.last_error = None
+    task.revision += 1
+    await db_session.flush()
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="approval.requested",
+        actor_user_id=actor_user_id,
+        payload={
+            "approval_id": str(approval.id),
+            "approver_user_id": str(approval.approver_user_id),
+            "preview_digest": approval.preview_digest,
+            "reason": approval.reason,
+            "service_job_id": str(job.id),
+            "quote_id": str(quote.id),
+        },
+        idempotency_key=f"service-job:{job.id}:quote:{quote.revision}:approval",
+    )
+    return approval
 
 
 def _money(value: Decimal) -> str:
