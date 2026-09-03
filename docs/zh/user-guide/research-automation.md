@@ -60,6 +60,12 @@ Platform 不接受 Runner 提交的任意文件系统路径作为资产。新增
 
 Platform 会创建 Project 范围的可编辑 Suggested Knowledge，并保留不可变 Evidence 快照和版本关系；它不会宣布该候选已经成立或被组织采纳。进入 Project Knowledge 可继续修订，Knowledge Reviewer 评估证据后再使用独立的“审核并采纳”操作。待审核、已拒绝或非 Record/DataAsset 的 Evidence 不会出现在可选列表中。该确定性路径在 AI 关闭时仍可完整使用。
 
+## 从已校验 Evidence 生成科学 Claim 草稿
+
+在“科研结果资产”中选择“添加 Claim”，先选择用于界定科学上下文的 Evidence。你始终可以手工填写判断、置信度、不确定性和 Evidence 关系。AI 可用且所选条目都已校验时，可选填写希望比较的问题或约束，再选择“让 Aira 生成草稿”。
+
+Aira 必须评估每一项所选 Evidence，包括与主要判断冲突的反证，且只会返回可编辑 Suggested Claim。预览确认前，请检查并按需修改判断、置信度、不确定性和证据关系。Platform 在生成后和确认时都会重新校验准确 Evidence 及来源版本。签名凭据一小时后过期、不能重复确认，且 Evidence 选择变化时原草稿会被清除。即使修改草稿，原始生成内容仍保留在来源记录中。Aira 不能采纳 Claim，只能由获授权人员另行审核。AI 关闭时，同一手工 Claim 与审核流程仍可使用。
+
 ## 用已校验 Evidence 改进 Protocol
 
 在“科研结果资产”中选择“提议改进 Protocol”。选择已固定到当前 Task 的 Protocol，说明科学依据和具体建议改动，并关联已校验的 Record 或 DataAsset Evidence。确认前先预览准确 Project、Protocol 基线版本和不可变 Evidence 快照。此时只创建建议，不会修改 Protocol。

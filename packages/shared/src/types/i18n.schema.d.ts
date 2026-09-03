@@ -1440,6 +1440,20 @@ declare namespace I18n {
         evidenceSummary: string
         claimStatement: string
         linkEvidence: string
+        validatedClaimEvidence: string
+        claimDraftBoundary: string
+        airaClaimDraft: string
+        airaClaimInstructionPlaceholder: string
+        airaClaimDraftHint: string
+        airaClaimGenerated: string
+        airaClaimDraftReady: string
+        airaClaimContextChanged: string
+        claimEvidenceRationalePlaceholder: string
+        claimEvidenceRelation: {
+          supports: string
+          contradicts: string
+          context: string
+        }
         validatedEvidence: string
         knowledgeSuggestionBoundary: string
         protocolImprovementBoundary: string

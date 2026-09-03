@@ -21,6 +21,7 @@ from app.models.research_asset import (
     ResearchEvidence,
 )
 from app.routers.research_assets import (
+    AiraClaimDraftRequest,
     ClaimDraft,
     DataAssetDraft,
     EvidenceDraft,
@@ -28,6 +29,14 @@ from app.routers.research_assets import (
     ProtocolImprovementDraft,
     _knowledge_suggestion_command,
     _protocol_improvement_command,
+)
+from app.services.research_claims import (
+    AiraClaimEvidenceOutput,
+    AiraClaimOutput,
+    create_claim_generation,
+    generate_claim,
+    sign_claim_generation_receipt,
+    verify_claim_generation_receipt,
 )
 from app.services.research_protocol_improvements import (
     AiraProtocolImprovementOutput,
@@ -74,6 +83,19 @@ def test_claims_are_revisioned_and_link_to_evidence_with_semantics():
     assert "UNIQUE (claim_id, revision)" in revision_ddl
     assert "relation" in relation_ddl
     assert "UNIQUE (claim_id, evidence_id)" in relation_ddl
+    assert "ck_research_claim_generation_provenance" in claim_ddl
+    assert "uq_research_claims_generation_id" in {
+        index.name for index in ResearchClaim.__table__.indexes
+    }
+
+    migration = import_module("migrations.versions.0034_research_claim_ai_provenance")
+    assert migration.down_revision == "0033_research_compute_outputs"
+    assert set(migration.ADDED_COLUMNS) == {
+        "generation_id",
+        "generation_model",
+        "generation_snapshot",
+        "generation_receipt_digest",
+    }
 
 
 def test_suggested_knowledge_pins_validated_evidence_provenance():
@@ -180,6 +202,147 @@ def test_evidence_and_claim_inputs_are_task_scoped_and_deduplicate_relations():
                 {"evidence_id": evidence_id},
                 {"evidence_id": evidence_id, "relation": "context"},
             ],
+        )
+    with pytest.raises(ValidationError, match="provided together"):
+        ClaimDraft(
+            task_id=task_id,
+            statement="Generated statement",
+            aira_receipt="orphaned-receipt",
+        )
+    with pytest.raises(ValidationError, match="duplicates"):
+        AiraClaimDraftRequest(
+            task_id=task_id,
+            evidence_ids=[evidence_id, evidence_id],
+        )
+
+
+def test_aira_claim_receipt_is_user_and_context_bound():
+    user_id = uuid4()
+    task_id = uuid4()
+    evidence_id = uuid4()
+    generation = create_claim_generation(
+        output=AiraClaimOutput(
+            statement="The measured response was reproducible in this dataset.",
+            confidence=0.8,
+            uncertainty="The Evidence does not establish generality beyond this dataset.",
+            evidence=[
+                AiraClaimEvidenceOutput(
+                    evidence_id=evidence_id,
+                    relation="supports",
+                    rationale="The validated replicate result directly supports the statement.",
+                )
+            ],
+        ),
+        model_name="qwen3.5-plus",
+        context_digest="c" * 64,
+        instruction="Keep the scope narrow.",
+        source_snapshot={"task": {"goal": "Assess reproducibility"}},
+    )
+    receipt = sign_claim_generation_receipt(
+        generation,
+        user_id=user_id,
+        task_id=task_id,
+    )
+
+    verify_claim_generation_receipt(
+        receipt,
+        generation,
+        user_id=user_id,
+        task_id=task_id,
+        context_digest="c" * 64,
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        verify_claim_generation_receipt(
+            receipt,
+            generation,
+            user_id=uuid4(),
+            task_id=task_id,
+            context_digest="c" * 64,
+        )
+    tampered = generation.model_copy(deep=True)
+    tampered.output.statement = "The result applies universally."
+    with pytest.raises(ValueError, match="does not match"):
+        verify_claim_generation_receipt(
+            receipt,
+            tampered,
+            user_id=user_id,
+            task_id=task_id,
+            context_digest="c" * 64,
+        )
+
+
+def test_aira_claim_requires_one_relation_for_every_selected_evidence(monkeypatch):
+    supporting_id = uuid4()
+    contradicting_id = uuid4()
+
+    async def fake_proposal(prompt, model_name, *, usage_context):
+        assert "Use every supplied validated Evidence item exactly once" in prompt
+        assert "do not force every relation to supports" in prompt
+        assert model_name == "qwen3.5-plus"
+        return {
+            "statement": "The response appears under the tested conditions.",
+            "confidence": 0.65,
+            "uncertainty": "One validated result contradicts the primary observation.",
+            "evidence": [
+                {
+                    "evidence_id": str(supporting_id),
+                    "relation": "supports",
+                    "rationale": "The primary measurement supports the bounded response.",
+                },
+                {
+                    "evidence_id": str(contradicting_id),
+                    "relation": "contradicts",
+                    "rationale": "The replicate did not reproduce the same response.",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.services.research_claims.aira_structured_proposal",
+        fake_proposal,
+    )
+    output = asyncio.run(
+        generate_claim(
+            context={"task": {"goal": "Assess the response"}},
+            instruction="Preserve conflicting results",
+            evidence_ids=[supporting_id, contradicting_id],
+            model_name="qwen3.5-plus",
+            usage_context=None,
+        )
+    )
+
+    assert [item.relation for item in output.evidence] == [
+        "supports",
+        "contradicts",
+    ]
+
+    async def missing_evidence(*_args, **_kwargs):
+        return {
+            "statement": "Incomplete synthesis",
+            "confidence": 0.5,
+            "uncertainty": "A source was omitted.",
+            "evidence": [
+                {
+                    "evidence_id": str(supporting_id),
+                    "relation": "supports",
+                    "rationale": "Only one source was assessed.",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "app.services.research_claims.aira_structured_proposal",
+        missing_evidence,
+    )
+    with pytest.raises(ValueError, match="every selected Evidence"):
+        asyncio.run(
+            generate_claim(
+                context={"task": {"goal": "Assess the response"}},
+                instruction="",
+                evidence_ids=[supporting_id, contradicting_id],
+                model_name="qwen3.5-plus",
+                usage_context=None,
+            )
         )
 
 
@@ -420,6 +583,7 @@ def test_research_asset_openapi_exposes_preview_confirm_and_review_boundaries():
     assert "/research-assets/evidence/preview" in paths
     assert "/research-assets/evidence/{evidence_id}/review" in paths
     assert "/research-assets/claims/preview" in paths
+    assert "/research-assets/claims/aira-draft" in paths
     assert "/research-assets/claims/{claim_id}/review" in paths
     assert "/research-assets/knowledge-suggestions/preview" in paths
     assert "/research-assets/knowledge-suggestions" in paths

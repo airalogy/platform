@@ -66,6 +66,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增受 Evidence 门禁的反向流转：只有已校验的 Record/DataAsset Evidence 才能经预览确认生成可编辑的 Project Suggested Knowledge；确认时锁定来源状态，保留不可变 Evidence 快照和修订来源关系，同时保持独立 Knowledge 审核边界与完整非 AI 路径。
 - 新增受治理的 Protocol 演进闭环：用户可从 Research Task 中已校验 Evidence 发起固定方法版本的改进建议，经“预览→确认”保留不可变来源快照；只有同时具备科研审批和 Protocol 更新权的人员审核后才能创建可编辑新版本草稿，最终保存会失败关闭地重新校验基线，并精确记录 Evidence→建议→Protocol 新版本来源链，不改写既有版本或活动 Run。
 - 在同一受治理流程上新增 Aira 辅助的 Protocol 改进草稿：模型调用不占用数据库事务，返回后重新绑定并校验当前 Task、Protocol 与 Evidence 状态；一小时有效的签名凭据保留可防篡改的模型来源，用户仍须编辑或核对、预览、确认、审核，并创建普通的 Protocol 新版本。
+- 新增基于 Task 已校验 Evidence 的 Aira 科学 Claim 草拟：每一项所选来源都必须标明支持、反驳或上下文关系，生成后与确认时都会重新校验来源状态，有效期一小时的签名来源凭据只能使用一次，可编辑 Suggested Claim 仍需独立人工审核。
 - 新增基于准确 Research Result 上下文的独立建议型 Reviewer Agent：使用独立提示的深度模型检查成功条件、支持与反驳 Evidence、不确定性、缺失对照、失败尝试、风险和可复现性；系统会校验引用的 Evidence，将建议保存为绑定上下文的不可变资产，最终 Task 结论只能由获授权人员复制、编辑并确认。
 
 ### 变更

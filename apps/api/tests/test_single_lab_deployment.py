@@ -91,6 +91,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     compute_output_revision = import_module(
         "migrations.versions.0033_research_compute_outputs"
     )
+    claim_ai_revision = import_module(
+        "migrations.versions.0034_research_claim_ai_provenance"
+    )
     import_models()
 
     later_tables = {
@@ -128,6 +131,7 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(compute_runner_revision.TABLE_NAMES)
     later_tables.update(compute_job_revision.TABLE_NAMES)
     later_tables.update(compute_output_revision.TABLE_NAMES)
+    assert claim_ai_revision.down_revision == "0033_research_compute_outputs"
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

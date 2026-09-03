@@ -60,6 +60,12 @@ On a Research Task, register a Record or exact DataAsset version as Evidence and
 
 Platform creates editable Project-scoped Suggested Knowledge and preserves immutable Evidence snapshots and version links. It does not declare the candidate true or adopted. Open Project Knowledge to revise it and use the separate **Review and adopt** action when a Knowledge Reviewer has assessed the evidence. Pending, rejected, or non-Record/DataAsset Evidence is intentionally unavailable. This deterministic path works when AI is disabled.
 
+## Draft a scientific Claim from validated Evidence
+
+In **Scientific assets**, choose **Add Claim** and select the Evidence that defines the scientific context. You can always write the statement, confidence, uncertainty, and Evidence relations manually. When AI is enabled and every selected item is validated, optionally describe the comparison or constraint and choose **Draft with Aira**.
+
+Aira must assess every selected Evidence item, including contradictions, and returns only an editable Suggested Claim. Inspect and revise the statement, confidence, uncertainty, and relations before previewing and confirming. Platform rechecks the exact Evidence and source versions after generation and again at confirmation. The signed receipt expires after one hour, cannot be confirmed twice, and is cleared if the Evidence selection changes. The original generated output remains in provenance even when you edit the draft. Aira cannot accept the Claim; an authorized human must review it separately. With AI disabled, the same manual Claim and review flow remains available.
+
 ## Improve a Protocol from validated Evidence
 
 In **Scientific assets**, choose **Propose Protocol improvement**. Select a Protocol already pinned to the Task, describe the scientific rationale and concrete proposed changes, and attach validated Record or DataAsset Evidence. Preview the exact Project, base Protocol version, and immutable Evidence snapshots before confirming. This creates a proposal only; it does not edit the Protocol.

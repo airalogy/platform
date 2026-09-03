@@ -64,6 +64,9 @@
                     <n-tag size="small" round :type="claimStateType(claim.state)">
                       {{ claimStateLabel(claim.state) }}
                     </n-tag>
+                    <n-tag v-if="claim.generated_by === 'aira_assisted'" size="small" round type="info">
+                      {{ $t("page.research.airaAssisted") }}
+                    </n-tag>
                     <span class="aira-type-meta">r{{ claim.revision }}</span>
                     <span v-if="claim.confidence != null" class="aira-type-meta">
                       {{ $t("page.research.confidence") }} {{ Math.round(claim.confidence * 100) }}%
@@ -77,6 +80,21 @@
                   </p>
                   <div v-if="claim.evidence.length" class="aira-type-meta mt-2">
                     {{ $t("page.research.linkedEvidenceCount", { count: claim.evidence.length }) }}
+                  </div>
+                  <div v-if="claim.evidence.length" class="mt-2 space-y-2">
+                    <div v-for="relation in claim.evidence" :key="relation.evidence_id" class="claim-evidence-row">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <n-tag size="tiny" round :type="claimRelationType(relation.relation)">
+                          {{ claimRelationLabel(relation.relation) }}
+                        </n-tag>
+                        <span class="aira-type-meta break-all">
+                          {{ evidenceLabelById(relation.evidence_id) }}
+                        </span>
+                      </div>
+                      <p v-if="relation.rationale" class="aira-type-meta aira-text-secondary mb-0 mt-1 whitespace-pre-wrap">
+                        {{ relation.rationale }}
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <div v-if="claim.state === 'draft' || claim.state === 'suggested'" class="flex gap-1">
@@ -306,6 +324,64 @@
         </n-form>
 
         <n-form v-else-if="modalKind === 'claim'" label-placement="top">
+          <n-alert type="warning" class="mb-4">
+            {{ $t("page.research.claimDraftBoundary") }}
+          </n-alert>
+          <n-form-item :label="$t('page.research.validatedClaimEvidence')">
+            <n-select
+              v-model:value="selectedEvidenceIds"
+              multiple
+              clearable
+              :options="evidenceOptions"
+              @update:value="clearClaimGeneration"
+            />
+          </n-form-item>
+          <div v-if="selectedEvidenceIds.length" class="mb-4 space-y-2">
+            <div v-for="evidenceId in selectedEvidenceIds" :key="evidenceId" class="claim-evidence-editor">
+              <div class="aira-type-meta mb-2 break-all">
+                {{ evidenceLabelById(evidenceId) }}
+              </div>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                <n-select
+                  :value="claimEvidenceValue(evidenceId).relation"
+                  :options="claimEvidenceRelationOptions"
+                  @update:value="value => updateClaimEvidence(evidenceId, { relation: value })"
+                />
+                <n-input
+                  :value="claimEvidenceValue(evidenceId).rationale"
+                  :placeholder="$t('page.research.claimEvidenceRationalePlaceholder')"
+                  @update:value="value => updateClaimEvidence(evidenceId, { rationale: value })"
+                />
+              </div>
+            </div>
+          </div>
+          <div v-if="instanceStore.aiEnabled" class="mb-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+            <div class="aira-type-label mb-2">
+              {{ $t("page.research.airaClaimDraft") }}
+            </div>
+            <n-input
+              v-model:value="airaClaimInstruction"
+              type="textarea"
+              :placeholder="$t('page.research.airaClaimInstructionPlaceholder')"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+            />
+            <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <span class="aira-type-meta">{{ $t("page.research.airaClaimDraftHint") }}</span>
+              <n-button
+                size="small"
+                type="primary"
+                secondary
+                :disabled="!canGenerateClaim"
+                :loading="airaGenerating"
+                @click="generateClaimDraft"
+              >
+                {{ $t("page.research.generateDraftWithAira") }}
+              </n-button>
+            </div>
+          </div>
+          <n-alert v-if="claimDraft.aira_generation" type="success" class="mb-4">
+            {{ $t("page.research.airaClaimGenerated", { model: claimDraft.aira_generation.model }) }}
+          </n-alert>
           <n-form-item :label="$t('page.research.claimStatement')" required>
             <n-input v-model:value="claimDraft.statement" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" />
           </n-form-item>
@@ -314,9 +390,6 @@
           </n-form-item>
           <n-form-item :label="$t('page.research.uncertainty')">
             <n-input v-model:value="claimDraft.uncertainty" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" />
-          </n-form-item>
-          <n-form-item :label="$t('page.research.linkEvidence')">
-            <n-select v-model:value="selectedEvidenceIds" multiple clearable :options="evidenceOptions" />
           </n-form-item>
         </n-form>
 
@@ -450,6 +523,7 @@
 import type {
   AssetPreview,
   ClaimDraft,
+  ClaimEvidenceRelation,
   ClaimState,
   DataAsset,
   DataAssetDraft,
@@ -476,6 +550,7 @@ import {
   createEvidence,
   createKnowledgeSuggestion,
   createProtocolImprovement,
+  draftClaimWithAira,
   draftProtocolImprovementWithAira,
   fetchResearchAssets,
   previewClaim,
@@ -524,6 +599,7 @@ const evidenceDraft = reactive<EvidenceDraft>(newEvidenceDraft())
 const claimDraft = reactive<ClaimDraft>(newClaimDraft())
 const knowledgeDraft = reactive<KnowledgeSuggestionDraft>(newKnowledgeDraft())
 const protocolImprovementDraft = reactive<ProtocolImprovementDraft>(newProtocolImprovementDraft())
+const airaClaimInstruction = ref("")
 const airaImprovementInstruction = ref("")
 const airaGenerating = ref(false)
 
@@ -552,8 +628,18 @@ const dataAssetOptions = computed(() => bundle.value.data_assets.map(asset => ({
 })))
 const evidenceOptions = computed(() => bundle.value.evidence.map(item => ({
   value: item.id,
-  label: item.summary || artifactLabel(item),
+  label: `${item.summary || artifactLabel(item)} · ${evidenceStateLabel(item.quality_state)}`,
 })))
+const claimEvidenceRelationValues: ClaimEvidenceRelation[] = ["supports", "contradicts", "context"]
+const claimEvidenceRelationOptions = computed(() => claimEvidenceRelationValues.map(value => ({
+  value,
+  label: claimRelationLabel(value),
+})))
+const validatedEvidenceIds = computed(() => new Set(
+  bundle.value.evidence
+    .filter(item => item.quality_state === "validated")
+    .map(item => item.id),
+))
 const knowledgeKindValues: ResearchKnowledgeKind[] = ["note", "method", "decision", "finding"]
 const knowledgeKindOptions = computed(() => knowledgeKindValues.map(value => ({ value, label: knowledgeKindLabel(value) })))
 const knowledgeEvidenceOptions = computed(() => bundle.value.evidence
@@ -569,6 +655,10 @@ const protocolOptions = computed(() => props.protocols.map(protocol => ({
 const canGenerateProtocolImprovement = computed(() => Boolean(
   protocolImprovementDraft.protocol_id
   && protocolImprovementDraft.evidence_ids.length,
+))
+const canGenerateClaim = computed(() => Boolean(
+  selectedEvidenceIds.value.length
+  && selectedEvidenceIds.value.every(id => validatedEvidenceIds.value.has(id)),
 ))
 const canPreview = computed(() => {
   if (modalKind.value === "asset")
@@ -693,7 +783,61 @@ function resetModal() {
   Object.assign(claimDraft, newClaimDraft())
   Object.assign(knowledgeDraft, newKnowledgeDraft())
   Object.assign(protocolImprovementDraft, newProtocolImprovementDraft())
+  airaClaimInstruction.value = ""
   airaImprovementInstruction.value = ""
+}
+
+function clearClaimGeneration() {
+  const hadGeneration = Boolean(claimDraft.aira_generation)
+  delete claimDraft.aira_generation
+  delete claimDraft.aira_receipt
+  if (hadGeneration) {
+    claimDraft.statement = ""
+    claimDraft.confidence = 0.5
+    claimDraft.uncertainty = ""
+    claimDraft.evidence = []
+    window.$message?.info($t("page.research.airaClaimContextChanged"))
+  }
+}
+
+function claimEvidenceValue(evidenceId: string): ClaimDraft["evidence"][number] {
+  return claimDraft.evidence.find(item => item.evidence_id === evidenceId) || {
+    evidence_id: evidenceId,
+    relation: "supports",
+    rationale: "",
+  }
+}
+
+function updateClaimEvidence(
+  evidenceId: string,
+  update: Partial<Pick<ClaimDraft["evidence"][number], "relation" | "rationale">>,
+) {
+  const current = claimEvidenceValue(evidenceId)
+  const next = { ...current, ...update }
+  const index = claimDraft.evidence.findIndex(item => item.evidence_id === evidenceId)
+  if (index === -1)
+    claimDraft.evidence.push(next)
+  else
+    claimDraft.evidence.splice(index, 1, next)
+}
+
+async function generateClaimDraft() {
+  if (!canGenerateClaim.value)
+    return
+  airaGenerating.value = true
+  try {
+    const draft = await draftClaimWithAira({
+      task_id: props.taskId,
+      evidence_ids: [...selectedEvidenceIds.value],
+      instruction: airaClaimInstruction.value.trim(),
+    })
+    Object.assign(claimDraft, draft)
+    selectedEvidenceIds.value = draft.evidence.map(item => item.evidence_id)
+    window.$message?.success($t("page.research.airaClaimDraftReady"))
+  }
+  finally {
+    airaGenerating.value = false
+  }
 }
 
 function clearProtocolImprovementGeneration() {
@@ -746,11 +890,14 @@ function normalizedEvidenceDraft(): EvidenceDraft {
 function normalizedClaimDraft(): ClaimDraft {
   return {
     ...claimDraft,
-    evidence: selectedEvidenceIds.value.map(evidenceId => ({
-      evidence_id: evidenceId,
-      relation: "supports",
-      rationale: "",
-    })),
+    evidence: selectedEvidenceIds.value.map((evidenceId) => {
+      const generated = claimDraft.evidence.find(item => item.evidence_id === evidenceId)
+      return generated || {
+        evidence_id: evidenceId,
+        relation: "supports",
+        rationale: "",
+      }
+    }),
   }
 }
 
@@ -901,6 +1048,23 @@ function artifactLabel(item: ResearchEvidence) {
   return `${artifactTypeLabel(item.artifact_type)} · ${item.artifact_id}${item.artifact_version ? ` · v${item.artifact_version}` : ""}`
 }
 
+function evidenceLabelById(evidenceId: string) {
+  const evidence = bundle.value.evidence.find(item => item.id === evidenceId)
+  return evidence ? evidence.summary || artifactLabel(evidence) : evidenceId
+}
+
+function claimRelationLabel(value: ClaimEvidenceRelation) {
+  return $t(`page.research.claimEvidenceRelation.${value}` as I18n.I18nKey)
+}
+
+function claimRelationType(value: ClaimEvidenceRelation): TagProps["type"] {
+  if (value === "supports")
+    return "success"
+  if (value === "contradicts")
+    return "error"
+  return "default"
+}
+
 function claimStateType(state: ClaimState): TagProps["type"] {
   if (state === "reviewed")
     return "success"
@@ -1003,6 +1167,14 @@ watch(() => props.taskId, () => {
   border-left: 3px solid rgb(245 158 11 / 60%);
   background: rgb(255 251 235 / 75%);
   padding: 0.75rem 0.875rem;
+}
+
+.claim-evidence-row,
+.claim-evidence-editor {
+  border: 1px solid rgb(226 232 240 / 85%);
+  border-radius: 0.75rem;
+  background: rgb(248 250 252 / 75%);
+  padding: 0.75rem;
 }
 
 .research-asset-modal {

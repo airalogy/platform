@@ -76,7 +76,11 @@ export interface ResearchClaim {
   state: ClaimState
   confidence?: number | null
   uncertainty: string
-  generated_by: "human" | "aira"
+  generated_by: "human" | "aira_assisted"
+  generation_id?: string | null
+  generation_model?: string | null
+  generation_snapshot?: AiraClaimGeneration | null
+  generation_receipt_digest?: string | null
   revision: number
   created_by_user_id: string
   reviewed_by_user_id?: string | null
@@ -186,6 +190,33 @@ export interface ClaimDraft {
     relation: ClaimEvidenceRelation
     rationale: string
   }>
+  aira_generation?: AiraClaimGeneration
+  aira_receipt?: string
+}
+
+export interface AiraClaimGeneration {
+  id: string
+  model: string
+  generated_at: string
+  context_digest: string
+  instruction: string
+  source_snapshot: Record<string, unknown>
+  output: {
+    statement: string
+    confidence?: number | null
+    uncertainty: string
+    evidence: Array<{
+      evidence_id: string
+      relation: ClaimEvidenceRelation
+      rationale: string
+    }>
+  }
+}
+
+export interface AiraClaimDraftRequest {
+  task_id: string
+  evidence_ids: string[]
+  instruction: string
 }
 
 export interface KnowledgeSuggestionDraft {
@@ -307,6 +338,14 @@ export function reviewEvidence(evidence: ResearchEvidence, qualityState: "valida
 export function previewClaim(payload: ClaimDraft) {
   return getData<AssetPreview<ClaimDraft>>({
     url: "/research-assets/claims/preview",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function draftClaimWithAira(payload: AiraClaimDraftRequest) {
+  return getData<ClaimDraft>({
+    url: "/research-assets/claims/aira-draft",
     method: "POST",
     data: payload,
   })

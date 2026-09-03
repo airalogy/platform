@@ -67,6 +67,13 @@ from app.services.knowledge import (
 )
 from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
+from app.services.research_claims import (
+    AiraClaimGeneration,
+    create_claim_generation,
+    generate_claim,
+    sign_claim_generation_receipt,
+    verify_claim_generation_receipt,
+)
 from app.services.research_protocol_improvements import (
     AiraProtocolImprovementGeneration,
     create_generation,
@@ -224,6 +231,8 @@ class ClaimDraft(BaseModel):
     confidence: Decimal | None = Field(default=None, ge=0, le=1, decimal_places=4)
     uncertainty: str = Field(default="", max_length=100_000)
     evidence: list[ClaimEvidenceInput] = Field(default_factory=list, max_length=100)
+    aira_generation: AiraClaimGeneration | None = None
+    aira_receipt: str | None = Field(default=None, min_length=1, max_length=20_000)
 
     @model_validator(mode="after")
     def normalize(self):
@@ -234,11 +243,28 @@ class ClaimDraft(BaseModel):
         ids = [item.evidence_id for item in self.evidence]
         if len(ids) != len(set(ids)):
             raise ValueError("Claim evidence contains duplicates")
+        if bool(self.aira_generation) != bool(self.aira_receipt):
+            raise ValueError("Aira generation and receipt must be provided together")
         return self
 
 
 class ClaimCreate(ClaimDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class AiraClaimDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    evidence_ids: list[UUID] = Field(min_length=1, max_length=100)
+    instruction: str = Field(default="", max_length=4_000)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.instruction = self.instruction.strip()
+        if len(self.evidence_ids) != len(set(self.evidence_ids)):
+            raise ValueError("Claim Evidence contains duplicates")
+        return self
 
 
 class ClaimRevisionDraft(BaseModel):
@@ -621,6 +647,44 @@ async def _evidence_for_task(
     return evidence
 
 
+async def _validated_claim_evidence(
+    db_session: DBSession,
+    current_user: User,
+    context: TaskContext,
+    evidence_ids: list[UUID],
+    *,
+    with_for_update: bool = False,
+) -> list[ResearchEvidence]:
+    statement = select(ResearchEvidence).where(
+        ResearchEvidence.id.in_(evidence_ids),
+        ResearchEvidence.task_id == context.task.id,
+    )
+    if with_for_update:
+        statement = statement.with_for_update()
+    found = list((await db_session.scalars(statement)).all())
+    by_id = {item.id: item for item in found}
+    if set(by_id) != set(evidence_ids):
+        raise HTTPException(status_code=422, detail="Claim Evidence is not in this Task")
+    evidence = [by_id[item_id] for item_id in evidence_ids]
+    for item in evidence:
+        if item.quality_state != EvidenceQuality.VALIDATED.value:
+            raise HTTPException(
+                status_code=409,
+                detail="Aira can draft Claims only from validated Evidence",
+            )
+        version = await _validate_evidence_artifact(
+            db_session,
+            current_user,
+            context,
+            artifact_type=item.artifact_type,
+            artifact_id=item.artifact_id,
+            artifact_version=item.artifact_version,
+        )
+        if version != item.artifact_version:
+            raise HTTPException(status_code=409, detail="Evidence source has changed")
+    return evidence
+
+
 def _evidence_snapshot(evidence: ResearchEvidence) -> dict[str, Any]:
     return {
         "id": str(evidence.id),
@@ -851,6 +915,48 @@ def _claim_command(params: ClaimDraft | ClaimRevisionDraft) -> dict[str, Any]:
     return params.model_dump(mode="json", exclude=excluded)
 
 
+def _claim_ai_context(
+    *,
+    context: TaskContext,
+    evidence: list[ResearchEvidence],
+    instruction: str,
+) -> dict[str, Any]:
+    return {
+        "task": {
+            "id": str(context.task.id),
+            "title": context.task.title,
+            "goal": context.task.goal,
+            "success_criteria": context.task.success_criteria,
+            "stop_conditions": context.task.stop_conditions,
+        },
+        "evidence": [_evidence_snapshot(item) for item in evidence],
+        "instruction": instruction,
+    }
+
+
+def _verify_claim_generation(
+    params: ClaimDraft,
+    *,
+    current_user: User,
+    context_digest: str,
+) -> AiraClaimGeneration | None:
+    generation = params.aira_generation
+    receipt = params.aira_receipt
+    if generation is None or receipt is None:
+        return None
+    try:
+        verify_claim_generation_receipt(
+            receipt,
+            generation,
+            user_id=current_user.id,
+            task_id=params.task_id,
+            context_digest=context_digest,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return generation
+
+
 def _claim_snapshot(
     claim: ResearchClaim, relations: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -860,6 +966,10 @@ def _claim_snapshot(
         "uncertainty": claim.uncertainty,
         "state": claim.state,
         "generated_by": claim.generated_by,
+        "generation_id": str(claim.generation_id) if claim.generation_id else None,
+        "generation_model": claim.generation_model,
+        "generation_snapshot": claim.generation_snapshot,
+        "generation_receipt_digest": claim.generation_receipt_digest,
         "evidence": relations,
     }
 
@@ -1242,6 +1352,100 @@ async def review_evidence(
     return evidence.as_dict()
 
 
+@router.post("/claims/aira-draft")
+async def draft_claim_with_aira(
+    params: AiraClaimDraftRequest,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    if not config.effective_ai_enabled:
+        raise HTTPException(status_code=503, detail="Aira is not available")
+    context = await _task_context(
+        db_session, current_user, params.task_id, "research.run"
+    )
+    evidence = await _validated_claim_evidence(
+        db_session, current_user, context, params.evidence_ids
+    )
+    ai_context = _claim_ai_context(
+        context=context,
+        evidence=evidence,
+        instruction=params.instruction,
+    )
+    context_digest = canonical_digest(ai_context)
+    model_name = context.task.ai_model or config.CHAT_MODEL_ACCURATE
+    usage_context = create_usage_context(
+        feature="research.claim.draft",
+        user_id=current_user.id,
+        lab_id=context.lab.id,
+        project_id=context.project.id,
+        attributes={
+            "task_id": str(context.task.id),
+            "evidence_count": len(evidence),
+        },
+    )
+    # Model latency must not hold database locks or an open transaction.
+    await db_session.commit()
+    output = await generate_claim(
+        context=ai_context,
+        instruction=params.instruction,
+        evidence_ids=params.evidence_ids,
+        model_name=model_name,
+        usage_context=usage_context,
+    )
+
+    current_context = await _task_context(
+        db_session, current_user, params.task_id, "research.run"
+    )
+    current_evidence = await _validated_claim_evidence(
+        db_session,
+        current_user,
+        current_context,
+        params.evidence_ids,
+        with_for_update=True,
+    )
+    current_ai_context = _claim_ai_context(
+        context=current_context,
+        evidence=current_evidence,
+        instruction=params.instruction,
+    )
+    if canonical_digest(current_ai_context) != context_digest:
+        raise HTTPException(
+            status_code=409,
+            detail="Research context changed while Aira prepared the Claim",
+        )
+    generation = create_claim_generation(
+        output=output,
+        model_name=model_name,
+        context_digest=context_digest,
+        instruction=params.instruction,
+        source_snapshot={
+            "task": ai_context["task"],
+            "evidence": [
+                {
+                    "id": str(item.id),
+                    "snapshot_digest": canonical_digest(_evidence_snapshot(item)),
+                }
+                for item in current_evidence
+            ],
+        },
+    )
+    receipt = sign_claim_generation_receipt(
+        generation,
+        user_id=current_user.id,
+        task_id=params.task_id,
+    )
+    await db_session.commit()
+    return {
+        "task_id": str(params.task_id),
+        "statement": output.statement,
+        "confidence": output.confidence,
+        "uncertainty": output.uncertainty,
+        "evidence": [item.model_dump(mode="json") for item in output.evidence],
+        "aira_generation": generation.model_dump(mode="json"),
+        "aira_receipt": receipt,
+    }
+
+
 @router.post("/claims/preview")
 async def preview_claim(
     params: ClaimDraft,
@@ -1251,7 +1455,25 @@ async def preview_claim(
     context = await _task_context(
         db_session, current_user, params.task_id, "research.run"
     )
-    await _evidence_for_task(db_session, context.task.id, params.evidence)
+    evidence_ids = [item.evidence_id for item in params.evidence]
+    if params.aira_generation:
+        evidence = await _validated_claim_evidence(
+            db_session, current_user, context, evidence_ids
+        )
+        generation = _verify_claim_generation(
+            params,
+            current_user=current_user,
+            context_digest=canonical_digest(
+                _claim_ai_context(
+                    context=context,
+                    evidence=evidence,
+                    instruction=params.aira_generation.instruction,
+                )
+            ),
+        )
+    else:
+        await _evidence_for_task(db_session, context.task.id, params.evidence)
+        generation = None
     command = _claim_command(params)
     return {
         "preview_digest": canonical_digest(command),
@@ -1260,7 +1482,14 @@ async def preview_claim(
             "task_id": str(context.task.id),
             "task_title": context.task.title,
         },
-        "effect": "Create editable draft Claim",
+        "effect": {
+            "state": (
+                ClaimState.SUGGESTED.value if generation else ClaimState.DRAFT.value
+            ),
+            "generated_by": "aira_assisted" if generation else "human",
+            "evidence_count": len(params.evidence),
+            "requires_human_review": True,
+        },
     }
 
 
@@ -1274,21 +1503,58 @@ async def create_claim(
     context = await _task_context(
         db_session, current_user, draft.task_id, "research.run"
     )
-    await _evidence_for_task(db_session, context.task.id, draft.evidence)
+    evidence_ids = [item.evidence_id for item in draft.evidence]
+    if draft.aira_generation:
+        evidence = await _validated_claim_evidence(
+            db_session,
+            current_user,
+            context,
+            evidence_ids,
+            with_for_update=True,
+        )
+        generation = _verify_claim_generation(
+            draft,
+            current_user=current_user,
+            context_digest=canonical_digest(
+                _claim_ai_context(
+                    context=context,
+                    evidence=evidence,
+                    instruction=draft.aira_generation.instruction,
+                )
+            ),
+        )
+    else:
+        await _evidence_for_task(db_session, context.task.id, draft.evidence)
+        generation = None
     command = _claim_command(draft)
     if canonical_digest(command) != params.preview_digest:
         raise HTTPException(status_code=409, detail="Claim preview has changed")
     claim = ResearchClaim(
         task_id=context.task.id,
         statement=draft.statement,
-        state=ClaimState.DRAFT.value,
+        state=(ClaimState.SUGGESTED.value if generation else ClaimState.DRAFT.value),
         confidence=draft.confidence,
         uncertainty=draft.uncertainty,
-        generated_by="human",
+        generated_by="aira_assisted" if generation else "human",
+        generation_id=generation.id if generation else None,
+        generation_model=generation.model if generation else None,
+        generation_snapshot=generation.model_dump(mode="json") if generation else None,
+        generation_receipt_digest=(
+            canonical_digest(draft.aira_receipt) if generation else None
+        ),
         created_by_user_id=current_user.id,
     )
     db_session.add(claim)
-    await db_session.flush()
+    try:
+        await db_session.flush()
+    except IntegrityError as error:
+        await db_session.rollback()
+        if generation is None:
+            raise
+        raise HTTPException(
+            status_code=409,
+            detail="This Aira Claim draft has already been confirmed",
+        ) from error
     relations = await _add_claim_relations(
         db_session, current_user, claim, draft.evidence
     )
