@@ -28,6 +28,7 @@ from app.models.user import User
 ACTIVE_HUMAN_WORK_STATUSES = {
     HumanWorkItemStatus.OPEN.value,
     HumanWorkItemStatus.IN_PROGRESS.value,
+    HumanWorkItemStatus.SUBMITTED.value,
     HumanWorkItemStatus.CHANGES_REQUESTED.value,
 }
 
@@ -56,7 +57,7 @@ def derived_executor_binding(
     capability: dict[str, Any],
     owner_user_id: UUID,
 ) -> dict[str, Any]:
-    if capability["kind"] == "protocol":
+    if capability["kind"] in {"protocol", "human"}:
         return {
             "id": None,
             "revision": 1,
@@ -66,7 +67,11 @@ def derived_executor_binding(
             "executor_type": "human",
             "executor_ref": {"type": "task_role", "id": "task.owner"},
             "resolved_executor_ref": {"type": "user", "id": str(owner_user_id)},
-            "mode": "protocol_record",
+            "mode": (
+                "protocol_record"
+                if capability["kind"] == "protocol"
+                else "structured_submission"
+            ),
             "approval_policy": "always_ask",
             "constraints": {},
             "priority": 0,

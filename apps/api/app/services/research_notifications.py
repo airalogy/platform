@@ -30,9 +30,16 @@ from app.models.research_execution import (
 from app.models.user import User
 from app.services.persistent_jobs import enqueue_job
 
-ATTENTION_EVENT_KINDS = {"work_item.assigned", "approval.requested"}
+ATTENTION_EVENT_KINDS = {
+    "work_item.assigned",
+    "work_item.submitted",
+    "work_item.changes_requested",
+    "approval.requested",
+}
 RESOLVED_ATTENTION_EVENT_KINDS = {
     "work_item.started",
+    "work_item.submitted",
+    "work_item.changes_requested",
     "work_item.completed",
     "approval.approved",
     "approval.rejected",
@@ -119,13 +126,21 @@ async def materialize_research_attention_notification(
 
     work_item: ResearchHumanWorkItem | None = None
     approval: ResearchApproval | None = None
-    if event.kind == "work_item.assigned":
+    if event.kind in {
+        "work_item.assigned",
+        "work_item.submitted",
+        "work_item.changes_requested",
+    }:
         if event.work_item_id is None:
             return None
         work_item = await db_session.get(ResearchHumanWorkItem, event.work_item_id)
         if work_item is None:
             return None
-        recipient_user_id = work_item.assignee_user_id
+        recipient_user_id = (
+            task.owner_user_id
+            if event.kind == "work_item.submitted"
+            else work_item.assignee_user_id
+        )
         await db_session.execute(
             update(ResearchNotification)
             .where(
@@ -135,10 +150,21 @@ async def materialize_research_attention_notification(
             )
             .values(read_at=_utcnow())
         )
-        kind = "work_item_assigned"
-        title = "Research work assigned"
-        message = action.title
-        priority = "high" if work_item.due_at is not None else "normal"
+        if event.kind == "work_item.submitted":
+            kind = "work_item_review_requested"
+            title = "Research work ready for review"
+            message = action.title
+            priority = "high"
+        elif event.kind == "work_item.changes_requested":
+            kind = "work_item_assigned"
+            title = "Research work needs changes"
+            message = str((event.payload or {}).get("reason") or action.title)
+            priority = "high"
+        else:
+            kind = "work_item_assigned"
+            title = "Research work assigned"
+            message = action.title
+            priority = "high" if work_item.due_at is not None else "normal"
     else:
         raw_approval_id = (event.payload or {}).get("approval_id")
         if not raw_approval_id:
@@ -181,7 +207,11 @@ async def materialize_research_attention_notification(
         priority=priority,
         title=title,
         message=message,
-        target_path=f"/research/tasks/{task.id}",
+        target_path=(
+            f"/research/work-items/{work_item.id}"
+            if work_item
+            else f"/research/tasks/{task.id}"
+        ),
         deduplication_key=deduplication_key,
     )
     db_session.add(notification)

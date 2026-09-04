@@ -96,6 +96,7 @@ TERMINAL_RUN_STATUSES = {
 ACTIVE_WORK_ITEM_STATUSES = {
     HumanWorkItemStatus.OPEN.value,
     HumanWorkItemStatus.IN_PROGRESS.value,
+    HumanWorkItemStatus.SUBMITTED.value,
     HumanWorkItemStatus.CHANGES_REQUESTED.value,
 }
 
@@ -142,7 +143,7 @@ def research_environment_has_ai_path(environment_snapshot: dict[str, Any]) -> bo
         return True
     return any(
         item.get("available", True)
-        for key in ("tools", "resources", "services", "compute")
+        for key in ("human_work", "tools", "resources", "services", "compute")
         for item in list(environment_snapshot.get(key) or [])
     )
 
@@ -160,7 +161,7 @@ async def research_run_has_executable_ai_path(
         return True
     if any(
         item.get("available", True)
-        for key in ("tools", "resources", "services")
+        for key in ("human_work", "tools", "resources", "services")
         for item in list(snapshot.get(key) or [])
     ):
         return True
@@ -426,6 +427,7 @@ def execution_context_for_prompt(state: dict[str, Any]) -> str:
         "resource_results": list(state.get("resource_results") or [])[-20:],
         "service_results": list(state.get("service_results") or [])[-20:],
         "event_results": list(state.get("event_results") or [])[-20:],
+        "human_results": list(state.get("human_results") or [])[-20:],
         "rejected_actions": list(state.get("rejected_actions") or [])[-20:],
     }
     if not any(context.values()):
@@ -609,14 +611,10 @@ async def emit_research_event(
     )
     db_session.add(event)
     await db_session.flush()
-    if kind in {"work_item.assigned", "approval.requested"}:
-        from app.services.research_notifications import (
-            materialize_research_attention_notification,
-        )
-
-        await materialize_research_attention_notification(db_session, event=event)
-    elif kind in {
+    if kind in {
         "work_item.started",
+        "work_item.submitted",
+        "work_item.changes_requested",
         "work_item.completed",
         "approval.approved",
         "approval.rejected",
@@ -627,6 +625,17 @@ async def emit_research_event(
         )
 
         await resolve_research_attention_notifications(db_session, event=event)
+    if kind in {
+        "work_item.assigned",
+        "work_item.submitted",
+        "work_item.changes_requested",
+        "approval.requested",
+    }:
+        from app.services.research_notifications import (
+            materialize_research_attention_notification,
+        )
+
+        await materialize_research_attention_notification(db_session, event=event)
     return event
 
 
@@ -720,27 +729,12 @@ def _latest_step(state: dict[str, Any], kind: str) -> dict[str, Any] | None:
     )
 
 
-async def activate_protocol_action(
+async def _validated_human_action_assignee(
     db_session: AsyncSession,
     *,
     task: ResearchTask,
-    run: ResearchRun,
     action: ResearchAction,
-    protocol: Protocol,
-    version: ProtocolVersion,
-    instructions: str,
-    actor_user_id: UUID | None,
-) -> ResearchHumanWorkItem:
-    """Materialize executable human work only after the Action is allowed."""
-
-    existing = await ResearchHumanWorkItem.find_by(
-        db_session, [ResearchHumanWorkItem.action_id == action.id]
-    )
-    if existing is not None:
-        return existing
-    if action.policy_decision not in {"allow", "ask"}:
-        raise ValueError("A denied Research Action cannot be activated")
-
+) -> UUID:
     assignee_user_id = action.assignee_user_id or task.owner_user_id
     project = await db_session.get(Project, task.project_id)
     assignee = await db_session.get(User, assignee_user_id)
@@ -766,6 +760,33 @@ async def activate_protocol_action(
         binding=dict((action.requirements or {}).get("executor_binding") or {}),
         lab_id=task.lab_id,
         assignee_user_id=assignee_user_id,
+    )
+    return assignee_user_id
+
+
+async def activate_protocol_action(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    protocol: Protocol,
+    version: ProtocolVersion,
+    instructions: str,
+    actor_user_id: UUID | None,
+) -> ResearchHumanWorkItem:
+    """Materialize executable human work only after the Action is allowed."""
+
+    existing = await ResearchHumanWorkItem.find_by(
+        db_session, [ResearchHumanWorkItem.action_id == action.id]
+    )
+    if existing is not None:
+        return existing
+    if action.policy_decision not in {"allow", "ask"}:
+        raise ValueError("A denied Research Action cannot be activated")
+
+    assignee_user_id = await _validated_human_action_assignee(
+        db_session, task=task, action=action
     )
 
     work_item = ResearchHumanWorkItem(
@@ -797,6 +818,67 @@ async def activate_protocol_action(
             "assignee_user_id": str(work_item.assignee_user_id),
             "protocol_id": str(protocol.id),
             "protocol_version": version.version,
+        },
+        idempotency_key=f"action:{action.id}:assigned:{action.revision}",
+    )
+    return work_item
+
+
+async def activate_human_work_action(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    actor_user_id: UUID | None,
+) -> ResearchHumanWorkItem:
+    """Assign bounded non-Protocol work only after policy and dependency gates."""
+
+    if action.kind != ResearchActionKind.HUMAN_WORK_ITEM.value:
+        raise ValueError("Research Action is not a generic Human Work Item")
+    existing = await ResearchHumanWorkItem.find_by(
+        db_session, [ResearchHumanWorkItem.action_id == action.id]
+    )
+    if existing is not None:
+        return existing
+    if action.policy_decision not in {"allow", "ask"}:
+        raise ValueError("A denied Research Action cannot be activated")
+    from app.services.research_human_work import human_work_request_from_contract
+
+    contract = dict((action.requirements or {}).get("submission_contract") or {})
+    request = human_work_request_from_contract(
+        title=action.title,
+        instructions=action.description,
+        contract=contract,
+    )
+    assignee_user_id = await _validated_human_action_assignee(
+        db_session, task=task, action=action
+    )
+    work_item = ResearchHumanWorkItem(
+        action_id=action.id,
+        assignee_user_id=assignee_user_id,
+        instructions=request.instructions,
+        submission_contract=request.submission_contract(),
+        due_at=action.due_at,
+    )
+    db_session.add(work_item)
+    action.status = ResearchActionStatus.WAITING.value
+    action.revision += 1
+    run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
+    task.status = ResearchTaskStatus.ACTIVE.value
+    await db_session.flush()
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        work_item_id=work_item.id,
+        kind="work_item.assigned",
+        actor_user_id=actor_user_id,
+        payload={
+            "assignee_user_id": str(work_item.assignee_user_id),
+            "submission_schema": request.submission_contract()["schema"],
+            "field_count": len(request.fields),
         },
         idempotency_key=f"action:{action.id}:assigned:{action.revision}",
     )
@@ -1226,6 +1308,7 @@ async def _aira_planner_context(
             }
             for task_protocol, protocol, version in rows
         ],
+        "human_work": list((run.environment_snapshot or {}).get("human_work") or []),
         "tools": list((run.environment_snapshot or {}).get("tools") or []),
         "resource_requirements": list(
             (run.environment_snapshot or {}).get("resources") or []
@@ -1282,6 +1365,7 @@ async def _aira_planner_context(
             -20:
         ],
         "event_results": list((run.aira_state or {}).get("event_results") or [])[-20:],
+        "human_results": list((run.aira_state or {}).get("human_results") or [])[-20:],
         "rejected_actions": list((run.aira_state or {}).get("rejected_actions") or [])[
             -20:
         ],
@@ -1320,6 +1404,7 @@ async def _materialize_aira_action(
 
     if proposal.decision not in {
         "protocol",
+        "human",
         "tool",
         "resource",
         "instrument",
@@ -1442,6 +1527,70 @@ async def _materialize_aira_action(
             "protocol_version": version.version,
             "protocol_position": task_protocol.position,
             "initial_values": proposal.protocol_initial_values,
+            "source": "aira",
+            "resume_run": True,
+        }
+    elif proposal.decision == "human":
+        request = proposal.human_request
+        if request is None:
+            raise ValueError("Aira Human Work proposal is incomplete")
+        from app.services.research_executor_bindings import (
+            enforce_environment_binding_action_limit,
+            environment_executor_binding,
+        )
+        from app.services.research_human_work import (
+            HUMAN_WORK_CAPABILITY_KEY,
+            HUMAN_WORK_CAPABILITY_VERSION,
+        )
+
+        pinned_human_work = next(
+            (
+                item
+                for item in list(
+                    (run.environment_snapshot or {}).get("human_work") or []
+                )
+                if item.get("key") == HUMAN_WORK_CAPABILITY_KEY
+                and str(item.get("version") or "") == HUMAN_WORK_CAPABILITY_VERSION
+                and item.get("available", True)
+            ),
+            None,
+        )
+        if pinned_human_work is None:
+            raise ValueError("Structured Human Work is not pinned in this environment")
+        executor_binding = environment_executor_binding(
+            run.environment_snapshot or {},
+            HUMAN_WORK_CAPABILITY_KEY,
+            HUMAN_WORK_CAPABILITY_VERSION,
+        )
+        if (
+            executor_binding.get("executor_type") != "human"
+            or executor_binding.get("mode") != "structured_submission"
+        ):
+            raise ValueError("Pinned Human Work Executor Binding is invalid")
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
+        executor_ref = executor_binding.get(
+            "resolved_executor_ref"
+        ) or executor_binding.get("executor_ref")
+        if (executor_ref or {}).get("type") != "user":
+            raise ValueError("Pinned Human Work Executor did not resolve to a user")
+        try:
+            assignee_user_id = UUID(str(executor_ref["id"]))
+        except ValueError as error:
+            raise ValueError("Pinned Human Work executor user is invalid") from error
+        requirements = {
+            "submission_contract": request.submission_contract(),
+            "approval_policy": executor_binding["approval_policy"],
+            "executor_binding": executor_binding,
+            "human_review_required": True,
+        }
+        executor_type = "human"
+        kind = ResearchActionKind.HUMAN_WORK_ITEM.value
+        title = request.title
+        description = request.instructions
+        input_data = {
+            "human_work_request": request.model_dump(mode="json"),
             "source": "aira",
             "resume_run": True,
         }
@@ -2045,7 +2194,7 @@ async def _materialize_aira_action(
         compute_job.output_manifest = [
             compute_output_snapshot(output) for output in output_rows
         ]
-    else:
+    elif proposal.decision == "wait":
         wait_event = ResearchWaitEvent(
             action_id=action.id,
             event_key=input_data["event_key"],
@@ -2114,6 +2263,14 @@ async def _materialize_aira_action(
             protocol=protocol,
             version=version,
             instructions=action.description,
+            actor_user_id=None,
+        )
+    elif proposal.decision == "human":
+        await activate_human_work_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
             actor_user_id=None,
         )
     elif proposal.decision == "tool":
@@ -2527,6 +2684,13 @@ async def _cancel_blocked_graph_action(
         if protocol_run is None:
             raise ValueError("Blocked graph Protocol Action has no Protocol Run")
         return
+    if action.kind == ResearchActionKind.HUMAN_WORK_ITEM.value:
+        work_item = await ResearchHumanWorkItem.find_by(
+            db_session, [ResearchHumanWorkItem.action_id == action.id]
+        )
+        if work_item is not None:
+            raise ValueError("Blocked graph Human Work was assigned before release")
+        return
     if action.kind == ResearchActionKind.TOOL_JOB.value:
         tool_job = await ResearchToolJob.find_by(
             db_session, [ResearchToolJob.action_id == action.id]
@@ -2726,6 +2890,15 @@ async def _activate_released_graph_action(
             actor_user_id=None,
         )
         return
+    if action.kind == ResearchActionKind.HUMAN_WORK_ITEM.value:
+        await activate_human_work_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=None,
+        )
+        return
     if action.kind == ResearchActionKind.TOOL_JOB.value:
         await activate_tool_action(
             db_session,
@@ -2842,6 +3015,7 @@ async def hold_or_release_aira_action_group(
         else (
             {
                 ResearchActionKind.PROTOCOL_RUN.value,
+                ResearchActionKind.HUMAN_WORK_ITEM.value,
                 ResearchActionKind.TOOL_JOB.value,
                 ResearchActionKind.RESOURCE_RESERVATION.value,
                 ResearchActionKind.INSTRUMENT_JOB.value,
@@ -3070,7 +3244,12 @@ async def hold_or_release_aira_action_group(
     ):
         run.status = ResearchRunStatus.WAITING_FOR_TOOL.value
     elif any(
-        item.kind == ResearchActionKind.PROTOCOL_RUN.value for item in active_remaining
+        item.kind
+        in {
+            ResearchActionKind.PROTOCOL_RUN.value,
+            ResearchActionKind.HUMAN_WORK_ITEM.value,
+        }
+        for item in active_remaining
     ):
         run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
     elif any(
@@ -3689,6 +3868,7 @@ async def process_research_run_advance(
                 raise
             planner_decision = proposal.decision
             if proposal.decision in {
+                "human",
                 "tool",
                 "parallel_tools",
                 "tool_graph",

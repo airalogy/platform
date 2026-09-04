@@ -652,7 +652,14 @@ def test_openapi_exposes_research_task_and_human_work_contracts():
     assert "/research-tasks/{task_id}/runs" in paths
     assert "/research-tasks/{task_id}/start" in paths
     assert "/research-tasks/{task_id}/actions/preview" in paths
+    assert "/research-tasks/{task_id}/human-actions/preview" in paths
+    assert "/research-tasks/{task_id}/human-actions" in paths
     assert "/research-work-items" in paths
+    assert "/research-work-items/{work_item_id}" in paths
+    assert "/research-work-items/{work_item_id}/submission/preview" in paths
+    assert "/research-work-items/{work_item_id}/submission" in paths
+    assert "/research-work-items/{work_item_id}/review/preview" in paths
+    assert "/research-work-items/{work_item_id}/review" in paths
     assert "/research-work-items/{work_item_id}/submit" in paths
     assert "/research-approvals" in paths
     assert "/research-approvals/{approval_id}/approve" in paths

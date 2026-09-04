@@ -21,13 +21,20 @@ from app.services.research_compute import (
     compute_environment_snapshot,
     latest_compute_environment_rows,
 )
+from app.services.research_human_work import (
+    HUMAN_WORK_CAPABILITY_KEY,
+    HUMAN_WORK_CAPABILITY_VERSION,
+    HumanWorkRequest,
+)
 from app.services.research_services import (
     latest_service_offering_rows,
     offering_snapshot,
 )
 from app.services.research_tools import ResearchToolDefinition, research_tool_catalog
 
-CapabilityKind = Literal["protocol", "tool", "resource", "service", "compute"]
+CapabilityKind = Literal[
+    "protocol", "tool", "human", "resource", "service", "compute"
+]
 
 
 @dataclass(frozen=True)
@@ -93,6 +100,43 @@ def protocol_capability(
         output_schema=version.json_schema or {},
         available=True,
         metadata={"protocol_uid": protocol.uid},
+    )
+
+
+def human_work_capability() -> ResearchCapabilityDescriptor:
+    """Return the built-in contract for bounded non-Protocol human work."""
+
+    return ResearchCapabilityDescriptor(
+        key=HUMAN_WORK_CAPABILITY_KEY,
+        version=HUMAN_WORK_CAPABILITY_VERSION,
+        kind="human",
+        name="Structured human work",
+        description=(
+            "Assign a bounded, schema-validated observation, collection, or review "
+            "task that is not a scientific method execution."
+        ),
+        source_type="platform_human_work_contract",
+        source_id=HUMAN_WORK_CAPABILITY_KEY,
+        source_revision_id=(
+            f"{HUMAN_WORK_CAPABILITY_KEY}@{HUMAN_WORK_CAPABILITY_VERSION}"
+        ),
+        executor_types=["human"],
+        risk="human_execution",
+        input_schema=HumanWorkRequest.model_json_schema(),
+        output_schema={
+            "type": "object",
+            "required": ["values", "data_asset_version_ids"],
+            "properties": {
+                "values": {"type": "object"},
+                "data_asset_version_ids": {
+                    "type": "array",
+                    "items": {"type": "string", "format": "uuid"},
+                },
+            },
+            "additionalProperties": False,
+        },
+        available=True,
+        metadata={"submission_schema": "airalogy.human-work-submission.v1"},
     )
 
 
@@ -184,6 +228,7 @@ async def research_capability_catalog(
             for protocol, version in protocol_rows
         ],
         "tools": [tool_capability(item) for item in research_tool_catalog().values()],
+        "human_work": [human_work_capability()],
         "resources": [
             resource_capability(resource_type, revision)
             for resource_type, revision in resource_rows

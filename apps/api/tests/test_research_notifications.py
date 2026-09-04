@@ -1,4 +1,5 @@
 import asyncio
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, Mock
 from uuid import uuid4
@@ -38,11 +39,43 @@ def test_research_notifications_are_private_and_delivery_is_tracked():
     assert "recipient_user_id" in notification_sql
     assert "deduplication_key" in notification_sql
     assert "work_item_assigned" in notification_sql
+    assert "work_item_review_requested" in notification_sql
     assert "approval_requested" in notification_sql
     assert "notification_id" in delivery_sql
     assert "attempt_count" in delivery_sql
     assert "pending" in delivery_sql
     assert "failed" in delivery_sql
+
+
+def test_human_work_review_notification_migration_is_linear_and_replaces_constraint(
+    monkeypatch,
+):
+    migration = import_module(
+        "migrations.versions.0042_human_work_review_notifications"
+    )
+    calls = []
+
+    class Inspector:
+        def get_check_constraints(self, _table: str):
+            return [{"name": migration.CONSTRAINT_NAME}]
+
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: Inspector())
+    monkeypatch.setattr(
+        migration.op,
+        "drop_constraint",
+        lambda *args, **kwargs: calls.append(("drop", args, kwargs)),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "create_check_constraint",
+        lambda *args, **kwargs: calls.append(("create", args, kwargs)),
+    )
+
+    migration.upgrade()
+
+    assert migration.down_revision == "0041_research_service_graph_state"
+    assert [item[0] for item in calls] == ["drop", "create"]
 
 
 def test_notification_payload_masks_email_destination():
@@ -142,12 +175,83 @@ def test_work_assignment_event_materializes_private_inbox_item(monkeypatch):
     assert notification is not None
     assert notification.recipient_user_id == recipient_id
     assert notification.kind == "work_item_assigned"
-    assert notification.target_path == f"/research/tasks/{task.id}"
+    assert notification.target_path == f"/research/work-items/{work_item.id}"
     delivery = next(
         item for item in added if isinstance(item, ResearchNotificationDelivery)
     )
     assert delivery.status == "skipped"
     enqueue.assert_not_awaited()
+
+
+def test_submitted_human_work_notifies_task_owner_for_review(monkeypatch):
+    owner_id = uuid4()
+    assignee_id = uuid4()
+    task = ResearchTask(
+        id=uuid4(),
+        lab_id=uuid4(),
+        project_id=uuid4(),
+        owner_user_id=owner_id,
+        created_by_user_id=owner_id,
+        title="Field study",
+        goal="Collect validated observations",
+        success_criteria=[],
+        stop_conditions=[],
+        autonomy_level="assisted",
+        status="active",
+    )
+    action = ResearchAction(
+        id=uuid4(),
+        run_id=uuid4(),
+        sequence=1,
+        plan_version=1,
+        kind="human_work_item",
+        status="submitted",
+        title="Inspect samples",
+        executor_type="human",
+        policy_decision="allow",
+        preview_digest="a" * 64,
+    )
+    work_item = ResearchHumanWorkItem(
+        id=uuid4(),
+        action_id=action.id,
+        assignee_user_id=assignee_id,
+        status="submitted",
+    )
+    event = ResearchEvent(
+        id=uuid4(),
+        task_id=task.id,
+        action_id=action.id,
+        work_item_id=work_item.id,
+        kind="work_item.submitted",
+        actor_user_id=assignee_id,
+    )
+    recipient = SimpleNamespace(id=owner_id, email="owner@example.org")
+    added = []
+
+    def add(item):
+        if getattr(item, "id", None) is None:
+            item.id = uuid4()
+        added.append(item)
+
+    db_session = SimpleNamespace(
+        get=AsyncMock(side_effect=[task, action, work_item, recipient]),
+        scalars=AsyncMock(return_value=SimpleNamespace(first=lambda: None)),
+        add=add,
+        execute=AsyncMock(),
+        flush=AsyncMock(),
+    )
+    monkeypatch.setattr(research_notifications, "enqueue_job", AsyncMock())
+    monkeypatch.setattr(config, "RESEARCH_EMAIL_NOTIFICATIONS_ENABLED", False)
+
+    notification = asyncio.run(
+        materialize_research_attention_notification(db_session, event=event)
+    )
+
+    assert notification is not None
+    assert notification.recipient_user_id == owner_id
+    assert notification.kind == "work_item_review_requested"
+    assert notification.priority == "high"
+    assert notification.target_path == f"/research/work-items/{work_item.id}"
 
 
 def test_resolved_work_event_closes_stale_attention_item():

@@ -191,6 +191,28 @@ def test_action_planner_uses_existing_masterbrain_transport(monkeypatch):
 
 def test_action_proposal_is_strict_and_decision_specific():
     assert AiraActionProposal(decision="protocol").decision == "protocol"
+    human = AiraActionProposal.model_validate(
+        {
+            "decision": "human",
+            "thought": "Collect a non-Protocol observation",
+            "human_request": {
+                "title": "Inspect sample labels",
+                "instructions": "Confirm whether every label is readable.",
+                "completion_criteria": "All containers have been inspected.",
+                "evidence_kind": "observation",
+                "fields": [
+                    {
+                        "key": "labels_readable",
+                        "label": "Labels readable",
+                        "value_type": "boolean",
+                    }
+                ],
+            },
+        }
+    )
+    assert human.human_request.fields[0].key == "labels_readable"
+    with pytest.raises(ValidationError, match="requires human_request"):
+        AiraActionProposal(decision="human")
     assert (
         AiraActionProposal(
             decision="tool",
@@ -448,6 +470,38 @@ def test_action_proposal_is_strict_and_decision_specific():
             ],
         }
     )
+    human_graph = AiraActionProposal.model_validate(
+        {
+            "decision": "action_graph",
+            "thought": "Collect labels, then search with the verified identifier",
+            "action_graph": [
+                {
+                    "node_id": "inspect_labels",
+                    "decision": "human",
+                    "human_request": {
+                        "title": "Inspect labels",
+                        "instructions": "Read the label and record its identifier.",
+                        "fields": [
+                            {
+                                "key": "identifier",
+                                "label": "Identifier",
+                                "value_type": "text",
+                            }
+                        ],
+                    },
+                },
+                {
+                    "node_id": "search_context",
+                    "decision": "tool",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "verified identifier"},
+                    "thought": "Search after the observation is accepted",
+                    "depends_on": ["inspect_labels"],
+                },
+            ],
+        }
+    )
+    assert human_graph.action_graph[0].decision == "human"
     assert mixed_graph.action_graph[1].decision == "wait"
     assert mixed_graph.action_graph[1].depends_on == ["search"]
     governed_graph = AiraActionProposal.model_validate(

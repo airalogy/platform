@@ -50,8 +50,12 @@ from app.models.research import (
 )
 from app.models.research_asset import (
     ClaimState,
+    DataAsset,
+    DataAssetStatus,
+    DataAssetVersion,
     EvidenceKind,
     EvidenceQuality,
+    ResearchActionOutputSnapshot,
     ResearchClaim,
     ResearchEvidence,
 )
@@ -85,6 +89,7 @@ from app.services.access_control import (
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
+from app.services.research_action_outputs import action_output_digest, action_output_payload
 from app.services.research_autonomy_policy import current_autonomy_policy_snapshot
 from app.services.research_budget import (
     ResearchBudgetError,
@@ -92,6 +97,7 @@ from app.services.research_budget import (
     reached_operational_limit,
 )
 from app.services.research_capabilities import (
+    human_work_capability,
     protocol_capability,
     research_capability_catalog,
     resource_capability,
@@ -110,6 +116,11 @@ from app.services.research_compute_jobs import (
 from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
     resolve_executor_binding,
+)
+from app.services.research_human_work import (
+    HumanWorkRequest,
+    human_work_request_from_contract,
+    validate_human_work_submission,
 )
 from app.services.research_external_services import (
     activate_service_order,
@@ -131,9 +142,11 @@ from app.services.research_review import generate_research_review
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
     TERMINAL_RUN_STATUSES,
+    activate_human_work_action,
     activate_protocol_action,
     activate_tool_action,
     activate_wait_event_action,
+    append_aira_result,
     build_research_result_package,
     canonical_digest,
     create_plan_version,
@@ -307,6 +320,28 @@ class ManualProtocolActionCreate(ManualProtocolActionDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
 
 
+class ManualHumanWorkActionDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assignee_user_id: UUID | None = None
+    request: HumanWorkRequest
+    due_at: datetime | None = None
+    idempotency_key: str = Field(min_length=8, max_length=160)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        if self.due_at is not None:
+            if self.due_at.tzinfo is None:
+                self.due_at = self.due_at.replace(tzinfo=UTC)
+            if self.due_at <= utcnow():
+                raise ValueError("Human Work due time must be in the future")
+        return self
+
+
+class ManualHumanWorkActionCreate(ManualHumanWorkActionDraft):
+    preview_digest: str = Field(min_length=64, max_length=64)
+
+
 class WorkItemRevisionParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -322,6 +357,40 @@ class WorkItemSubmitParams(WorkItemRevisionParams):
     record_id: UUID
     record_version: int | None = Field(default=None, ge=1)
     note: str = Field(default="", max_length=20_000)
+
+
+class HumanWorkSubmissionDraft(WorkItemRevisionParams):
+    values: dict[str, Any] = Field(default_factory=dict)
+    data_asset_version_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    note: str = Field(default="", max_length=20_000)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.note = self.note.strip()
+        if len(self.data_asset_version_ids) != len(set(self.data_asset_version_ids)):
+            raise ValueError("Human Work DataAsset versions contain duplicates")
+        return self
+
+
+class HumanWorkSubmissionCreate(HumanWorkSubmissionDraft):
+    preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class HumanWorkReviewDraft(WorkItemRevisionParams):
+    expected_action_revision: int = Field(ge=1)
+    decision: Literal["accept", "changes_requested"]
+    reason: str = Field(default="", max_length=4_000)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.reason = self.reason.strip()
+        if self.decision == "changes_requested" and not self.reason:
+            raise ValueError("A change request requires a reason")
+        return self
+
+
+class HumanWorkReviewCreate(HumanWorkReviewDraft):
+    preview_digest: str = Field(min_length=64, max_length=64)
 
 
 class ApprovalDecisionParams(BaseModel):
@@ -735,6 +804,7 @@ async def _validate_task_draft(
             raise HTTPException(status_code=422, detail=str(error)) from error
 
     capability_snapshots = [
+        human_work_capability().payload(),
         *[
             protocol_capability(protocol, version).payload()
             for protocol, version in protocols
@@ -1051,13 +1121,7 @@ def _task_preview(
     autonomy_policy: dict[str, Any],
     compute_runtime_available: bool,
 ) -> dict[str, Any]:
-    ai_path_available = config.effective_ai_enabled and bool(
-        protocols
-        or tools
-        or resources
-        or service_offerings
-        or (compute_environments and compute_runtime_available)
-    )
+    ai_path_available = config.effective_ai_enabled
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
@@ -1084,6 +1148,7 @@ def _task_preview(
             for protocol, version in protocols
         ],
         "tools": [definition.payload() for definition in tools],
+        "human_work": [human_work_capability().payload()],
         "executor_bindings": executor_bindings,
         "autonomy_policy": autonomy_policy,
         "knowledge": [
@@ -1117,6 +1182,7 @@ def _task_preview(
             "Create a versioned Research Task and draft Research Run",
             "Pin the selected Protocol versions in the Research Environment",
             "Pin the selected digital Tool versions in the Research Environment",
+            "Pin the built-in structured Human Work contract and executor policy",
             "Pin reviewed Knowledge revisions in the Research Environment",
             "Pin selected resource-type revisions as explicit requirements",
             "Pin selected external-service contract revisions",
@@ -1935,6 +2001,7 @@ async def create_research_task(
         for _task_protocol, protocol, version in rows
     ]
     tool_capabilities = [tool_capability(definition).payload() for definition in tools]
+    human_work_capabilities = [human_work_capability().payload()]
     environment_snapshot = {
         "schema": "airalogy.research-environment.v2",
         "captured_at": utcnow().isoformat(),
@@ -1951,12 +2018,14 @@ async def create_research_task(
             for _task_protocol, protocol, version in rows
         ],
         "tools": [definition.payload() for definition in tools],
+        "human_work": human_work_capabilities,
         "resources": pinned_resources,
         "services": pinned_services,
         "compute": pinned_compute,
         "capabilities": [
             *protocol_capabilities,
             *tool_capabilities,
+            *human_work_capabilities,
             *pinned_resources,
             *pinned_services,
             *pinned_compute,
@@ -3603,6 +3672,188 @@ async def create_manual_protocol_action(
     return await _action_data(db_session, action, project=project, lab=lab)
 
 
+async def _manual_human_action_context(
+    db_session: DBSession,
+    current_user: User,
+    task_id: UUID,
+    params: ManualHumanWorkActionDraft,
+) -> tuple[
+    ResearchTask,
+    Project,
+    Lab,
+    ResearchRun,
+    User,
+    dict[str, Any],
+]:
+    task, project, lab = await _task_context(
+        db_session, current_user, task_id, "research.run"
+    )
+    if task.status not in {
+        ResearchTaskStatus.ACTIVE.value,
+        ResearchTaskStatus.PAUSED.value,
+    }:
+        raise HTTPException(status_code=409, detail="Start the Research Task first")
+    run = await _latest_run(db_session, task.id)
+    if run is None or run.status in TERMINAL_RUN_STATUSES:
+        raise HTTPException(status_code=409, detail="Active Research Run not found")
+    operational_limit = await reached_operational_limit(db_session, task=task)
+    if operational_limit is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research Task {operational_limit[0]} limit has been reached",
+        )
+    assignee = await db_session.get(User, params.assignee_user_id or task.owner_user_id)
+    if assignee is None:
+        raise HTTPException(status_code=404, detail="Assignee not found")
+    await require_research_capability(
+        db_session,
+        user=assignee,
+        project=project,
+        capability="research.run",
+    )
+    if assignee.id != current_user.id:
+        await require_research_capability(
+            db_session,
+            user=current_user,
+            project=project,
+            capability="research.assign",
+        )
+    command = {
+        "task_id": str(task.id),
+        "task_revision": task.revision,
+        "run_id": str(run.id),
+        "run_plan_version": run.plan_version,
+        "assignee_user_id": str(assignee.id),
+        "request": params.request.model_dump(mode="json"),
+        "due_at": params.due_at.isoformat() if params.due_at else None,
+        "idempotency_key": params.idempotency_key,
+    }
+    return task, project, lab, run, assignee, command
+
+
+@router.post("/{task_id}/human-actions/preview")
+async def preview_manual_human_action(
+    task_id: UUID,
+    params: ManualHumanWorkActionDraft,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    task, project, lab, run, assignee, command = await _manual_human_action_context(
+        db_session, current_user, task_id, params
+    )
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "destination": {
+            "lab": {"id": str(lab.id), "uid": lab.uid, "name": lab.name},
+            "project": {
+                "id": str(project.id),
+                "uid": project.uid,
+                "name": project.name,
+            },
+            "task": {"id": str(task.id), "title": task.title},
+            "run": {"id": str(run.id), "number": run.run_number},
+        },
+        "assignee": _user_data(assignee),
+        "effects": [
+            "Create and assign a structured Human Work Item",
+            "Validate the assignee submission against the confirmed field contract",
+            "Require an authorized review before creating Evidence",
+        ],
+    }
+
+
+@router.post("/{task_id}/human-actions")
+async def create_manual_human_action(
+    task_id: UUID,
+    params: ManualHumanWorkActionCreate,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    task, project, lab, run, assignee, command = await _manual_human_action_context(
+        db_session, current_user, task_id, params
+    )
+    digest = canonical_digest(command)
+    if params.preview_digest != digest:
+        raise HTTPException(
+            status_code=409,
+            detail="The Human Work preview is stale; preview it again before creating.",
+        )
+    existing = await ResearchAction.find_by(
+        db_session,
+        [
+            ResearchAction.run_id == run.id,
+            ResearchAction.idempotency_key == params.idempotency_key,
+        ],
+    )
+    if existing is not None:
+        if existing.preview_digest != digest:
+            raise HTTPException(
+                status_code=409,
+                detail="This idempotency key was already used for another Action",
+            )
+        return await _action_data(db_session, existing, project=project, lab=lab)
+    await create_plan_version(
+        db_session,
+        task=task,
+        run=run,
+        kind="manual",
+        plan={
+            "human_action": command,
+            "previous_plan_version": command["run_plan_version"],
+        },
+        summary=f"Manually assign {params.request.title}",
+    )
+    action = ResearchAction(
+        run_id=run.id,
+        sequence=(
+            (
+                await db_session.scalar(
+                    select(func.max(ResearchAction.sequence)).where(
+                        ResearchAction.run_id == run.id
+                    )
+                )
+                or 0
+            )
+            + 1
+        ),
+        plan_version=run.plan_version,
+        kind=ResearchActionKind.HUMAN_WORK_ITEM.value,
+        status=ResearchActionStatus.APPROVED.value,
+        title=params.request.title,
+        description=params.request.instructions,
+        executor_type="human",
+        assignee_user_id=assignee.id,
+        input_data={
+            "human_work_request": params.request.model_dump(mode="json"),
+            "source": "manual",
+            "resume_run": True,
+        },
+        requirements={
+            "submission_contract": params.request.submission_contract(),
+            "human_review_required": True,
+        },
+        policy_decision="allow",
+        policy_reason="The user confirmed the deterministic Human Work preview.",
+        preview_digest=digest,
+        idempotency_key=params.idempotency_key,
+        due_at=params.due_at,
+    )
+    db_session.add(action)
+    await db_session.flush()
+    await activate_human_work_action(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+        actor_user_id=current_user.id,
+    )
+    run.advance_generation += 1
+    task.revision += 1
+    await db_session.commit()
+    return await _action_data(db_session, action, project=project, lab=lab)
+
+
 async def _work_item_context(
     db_session: DBSession,
     current_user: User,
@@ -3658,6 +3909,7 @@ async def _can_manage_work_item(
 
 async def _work_item_data(
     db_session: DBSession,
+    current_user: User,
     item: ResearchHumanWorkItem,
     action: ResearchAction,
     run: ResearchRun,
@@ -3666,6 +3918,19 @@ async def _work_item_data(
     lab: Lab,
 ) -> dict[str, Any]:
     action_data = await _action_data(db_session, action, project=project, lab=lab)
+    can_assign = await has_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.assign",
+    )
+    can_review = current_user.id == task.owner_user_id or await has_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.approve",
+    )
+    can_work = item.assignee_user_id == current_user.id
     return {
         **item.as_dict(),
         "assignee": action_data["assignee"],
@@ -3677,6 +3942,7 @@ async def _work_item_data(
             "goal": task.goal,
             "status": task.status,
             "revision": task.revision,
+            "owner_user_id": str(task.owner_user_id),
         },
         "project": {
             "id": str(project.id),
@@ -3684,6 +3950,26 @@ async def _work_item_data(
             "name": project.name,
         },
         "lab": {"id": str(lab.id), "uid": lab.uid, "name": lab.name},
+        "permissions": {
+            "can_assign": can_assign,
+            "can_start": can_work
+            and item.status
+            in {
+                HumanWorkItemStatus.OPEN.value,
+                HumanWorkItemStatus.CHANGES_REQUESTED.value,
+            },
+            "can_submit": can_work
+            and action.kind == ResearchActionKind.HUMAN_WORK_ITEM.value
+            and item.status
+            in {
+                HumanWorkItemStatus.OPEN.value,
+                HumanWorkItemStatus.IN_PROGRESS.value,
+                HumanWorkItemStatus.CHANGES_REQUESTED.value,
+            },
+            "can_review": can_review
+            and action.kind == ResearchActionKind.HUMAN_WORK_ITEM.value
+            and item.status == HumanWorkItemStatus.SUBMITTED.value,
+        },
     }
 
 
@@ -3720,7 +4006,7 @@ async def list_research_work_items(
             if error.status_code == 403:
                 continue
             raise
-        result.append(await _work_item_data(db_session, *context))
+        result.append(await _work_item_data(db_session, current_user, *context))
     total = len(result)
     return {
         "work_items": result[(page - 1) * page_size : page * page_size],
@@ -3735,7 +4021,7 @@ async def get_research_work_item(
     db_session: DBSession,
 ):
     context = await _work_item_context(db_session, current_user, work_item_id)
-    return await _work_item_data(db_session, *context)
+    return await _work_item_data(db_session, current_user, *context)
 
 
 @work_items_router.post("/{work_item_id}/start")
@@ -3781,7 +4067,9 @@ async def start_research_work_item(
         actor_user_id=current_user.id,
     )
     await db_session.commit()
-    return await _work_item_data(db_session, item, action, run, task, project, lab)
+    return await _work_item_data(
+        db_session, current_user, item, action, run, task, project, lab
+    )
 
 
 @work_items_router.post("/{work_item_id}/assign")
@@ -3802,7 +4090,11 @@ async def assign_research_work_item(
     )
     if item.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Human Work Item has changed")
-    if item.status not in ACTIVE_WORK_ITEM_STATUSES:
+    if item.status not in {
+        HumanWorkItemStatus.OPEN.value,
+        HumanWorkItemStatus.IN_PROGRESS.value,
+        HumanWorkItemStatus.CHANGES_REQUESTED.value,
+    }:
         raise HTTPException(
             status_code=409, detail="Human Work Item cannot be assigned"
         )
@@ -3839,7 +4131,9 @@ async def assign_research_work_item(
         idempotency_key=f"work-item:{item.id}:assigned:{item.revision}",
     )
     await db_session.commit()
-    return await _work_item_data(db_session, item, action, run, task, project, lab)
+    return await _work_item_data(
+        db_session, current_user, item, action, run, task, project, lab
+    )
 
 
 def _record_payload(
@@ -3876,6 +4170,629 @@ def _record_payload(
     }
 
 
+async def _human_work_data_assets(
+    db_session: DBSession,
+    *,
+    task: ResearchTask,
+    version_ids: list[UUID],
+    lock: bool = False,
+) -> list[tuple[DataAssetVersion, DataAsset]]:
+    if not version_ids:
+        return []
+    statement = (
+        select(DataAssetVersion, DataAsset)
+        .join(DataAsset, DataAsset.id == DataAssetVersion.data_asset_id)
+        .where(DataAssetVersion.id.in_(version_ids))
+    )
+    if lock:
+        statement = statement.with_for_update()
+    rows = list((await db_session.execute(statement)).all())
+    by_id = {version.id: (version, asset) for version, asset in rows}
+    if len(by_id) != len(version_ids):
+        raise HTTPException(status_code=404, detail="Human Work DataAsset not found")
+    result: list[tuple[DataAssetVersion, DataAsset]] = []
+    for version_id in version_ids:
+        version, asset = by_id[version_id]
+        if (
+            asset.task_id != task.id
+            or asset.archived_at is not None
+            or asset.status
+            not in {DataAssetStatus.DRAFT.value, DataAssetStatus.READY.value}
+            or asset.current_version != version.version
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Human Work requires the current draft or ready version of a "
+                    "DataAsset from the same Research Task"
+                ),
+            )
+        result.append((version, asset))
+    return result
+
+
+def _human_work_asset_snapshot(
+    version: DataAssetVersion, asset: DataAsset
+) -> dict[str, Any]:
+    return {
+        "data_asset_id": str(asset.id),
+        "data_asset_version_id": str(version.id),
+        "version": version.version,
+        "name": asset.name,
+        "kind": asset.kind,
+        "status": asset.status,
+    }
+
+
+async def _validated_human_work_submission_command(
+    db_session: DBSession,
+    *,
+    item: ResearchHumanWorkItem,
+    action: ResearchAction,
+    task: ResearchTask,
+    params: HumanWorkSubmissionDraft,
+    lock_assets: bool = False,
+) -> tuple[dict[str, Any], HumanWorkRequest, list[tuple[DataAssetVersion, DataAsset]]]:
+    if action.kind != ResearchActionKind.HUMAN_WORK_ITEM.value:
+        raise HTTPException(
+            status_code=409,
+            detail="Use the Protocol Record workflow for this Human Work Item",
+        )
+    try:
+        request = human_work_request_from_contract(
+            title=action.title,
+            instructions=item.instructions,
+            contract=dict(item.submission_contract or {}),
+        )
+        values = validate_human_work_submission(
+            request,
+            values=params.values,
+            data_asset_count=len(params.data_asset_version_ids),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    assets = await _human_work_data_assets(
+        db_session,
+        task=task,
+        version_ids=params.data_asset_version_ids,
+        lock=lock_assets,
+    )
+    command = {
+        "work_item_id": str(item.id),
+        "work_item_revision": item.revision,
+        "action_id": str(action.id),
+        "action_revision": action.revision,
+        "contract_digest": canonical_digest(item.submission_contract or {}),
+        "values": values,
+        "data_assets": [
+            _human_work_asset_snapshot(version, asset)
+            for version, asset in assets
+        ],
+        "note": params.note,
+    }
+    return command, request, assets
+
+
+@work_items_router.post("/{work_item_id}/submission/preview")
+async def preview_human_work_submission(
+    work_item_id: UUID,
+    params: HumanWorkSubmissionDraft,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    item, action, _run, task, project, _lab = await _work_item_context(
+        db_session, current_user, work_item_id
+    )
+    if item.assignee_user_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the assignee can submit this work"
+        )
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.run",
+    )
+    if item.revision != params.expected_revision:
+        raise HTTPException(status_code=409, detail="Human Work Item has changed")
+    if item.status not in ACTIVE_WORK_ITEM_STATUSES - {
+        HumanWorkItemStatus.SUBMITTED.value
+    }:
+        raise HTTPException(
+            status_code=409, detail="Human Work Item cannot be submitted"
+        )
+    command, request, assets = await _validated_human_work_submission_command(
+        db_session,
+        item=item,
+        action=action,
+        task=task,
+        params=params,
+    )
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "effects": [
+            "Submit structured values for authorized review",
+            *(
+                [f"Link {len(assets)} exact DataAsset version(s)"]
+                if assets
+                else []
+            ),
+            "Keep downstream Actions blocked until the submission is accepted",
+        ],
+        "completion_criteria": request.completion_criteria,
+    }
+
+
+@work_items_router.post("/{work_item_id}/submission")
+async def create_human_work_submission(
+    work_item_id: UUID,
+    params: HumanWorkSubmissionCreate,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    item, action, run, task, project, lab = await _work_item_context(
+        db_session, current_user, work_item_id
+    )
+    if item.assignee_user_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the assignee can submit this work"
+        )
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.run",
+    )
+    if item.status == HumanWorkItemStatus.SUBMITTED.value:
+        if (item.submission or {}).get("preview_digest") == params.preview_digest:
+            return await _work_item_data(
+                db_session, current_user, item, action, run, task, project, lab
+            )
+        raise HTTPException(status_code=409, detail="Human Work is already submitted")
+    if item.revision != params.expected_revision:
+        raise HTTPException(status_code=409, detail="Human Work Item has changed")
+    if item.status not in ACTIVE_WORK_ITEM_STATUSES - {
+        HumanWorkItemStatus.SUBMITTED.value
+    }:
+        raise HTTPException(
+            status_code=409, detail="Human Work Item cannot be submitted"
+        )
+    command, _request, _assets = await _validated_human_work_submission_command(
+        db_session,
+        item=item,
+        action=action,
+        task=task,
+        params=params,
+        lock_assets=True,
+    )
+    digest = canonical_digest(command)
+    if params.preview_digest != digest:
+        raise HTTPException(
+            status_code=409,
+            detail="Human Work submission preview has changed",
+        )
+    now = utcnow()
+    item.status = HumanWorkItemStatus.SUBMITTED.value
+    item.submission = {**command, "preview_digest": digest}
+    item.validation_issues = []
+    item.submitted_at = now
+    item.revision += 1
+    action.status = ResearchActionStatus.SUBMITTED.value
+    action.revision += 1
+    run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
+    task.status = ResearchTaskStatus.ACTIVE.value
+    task.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        work_item_id=item.id,
+        kind="work_item.submitted",
+        actor_user_id=current_user.id,
+        payload={
+            "preview_digest": digest,
+            "field_count": len(command["values"]),
+            "data_asset_count": len(command["data_assets"]),
+        },
+        idempotency_key=f"work-item:{item.id}:submitted:{digest}",
+    )
+    await db_session.commit()
+    return await _work_item_data(
+        db_session, current_user, item, action, run, task, project, lab
+    )
+
+
+async def _require_human_work_reviewer(
+    db_session: DBSession,
+    *,
+    current_user: User,
+    task: ResearchTask,
+    project: Project,
+) -> None:
+    if current_user.id == task.owner_user_id:
+        return
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.approve",
+    )
+
+
+async def _human_work_review_command(
+    db_session: DBSession,
+    *,
+    item: ResearchHumanWorkItem,
+    action: ResearchAction,
+    task: ResearchTask,
+    params: HumanWorkReviewDraft,
+    lock_assets: bool = False,
+) -> tuple[dict[str, Any], HumanWorkRequest, list[tuple[DataAssetVersion, DataAsset]]]:
+    if action.kind != ResearchActionKind.HUMAN_WORK_ITEM.value:
+        raise HTTPException(status_code=409, detail="This work uses Protocol validation")
+    if item.status != HumanWorkItemStatus.SUBMITTED.value:
+        raise HTTPException(status_code=409, detail="Human Work is not awaiting review")
+    if item.revision != params.expected_revision:
+        raise HTTPException(status_code=409, detail="Human Work Item has changed")
+    if action.revision != params.expected_action_revision:
+        raise HTTPException(status_code=409, detail="Research Action has changed")
+    try:
+        request = human_work_request_from_contract(
+            title=action.title,
+            instructions=item.instructions,
+            contract=dict(item.submission_contract or {}),
+        )
+        values = validate_human_work_submission(
+            request,
+            values=dict((item.submission or {}).get("values") or {}),
+            data_asset_count=len((item.submission or {}).get("data_assets") or []),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    try:
+        version_ids = [
+            UUID(str(value["data_asset_version_id"]))
+            for value in list((item.submission or {}).get("data_assets") or [])
+        ]
+    except (KeyError, ValueError) as error:
+        raise HTTPException(
+            status_code=409, detail="Human Work DataAsset receipt is invalid"
+        ) from error
+    assets = await _human_work_data_assets(
+        db_session,
+        task=task,
+        version_ids=version_ids,
+        lock=lock_assets,
+    )
+    command = {
+        "work_item_id": str(item.id),
+        "work_item_revision": item.revision,
+        "action_id": str(action.id),
+        "action_revision": action.revision,
+        "submission_digest": canonical_digest(item.submission or {}),
+        "decision": params.decision,
+        "reason": params.reason,
+        "values": values,
+        "data_assets": [
+            _human_work_asset_snapshot(version, asset)
+            for version, asset in assets
+        ],
+    }
+    return command, request, assets
+
+
+@work_items_router.post("/{work_item_id}/review/preview")
+async def preview_human_work_review(
+    work_item_id: UUID,
+    params: HumanWorkReviewDraft,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    item, action, _run, task, project, _lab = await _work_item_context(
+        db_session, current_user, work_item_id
+    )
+    await _require_human_work_reviewer(
+        db_session, current_user=current_user, task=task, project=project
+    )
+    command, request, assets = await _human_work_review_command(
+        db_session,
+        item=item,
+        action=action,
+        task=task,
+        params=params,
+    )
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "effects": (
+            [
+                "Accept the structured submission as validated Evidence",
+                *(
+                    [f"Promote {len(assets)} linked draft DataAsset(s) to ready"]
+                    if any(
+                        asset.status == DataAssetStatus.DRAFT.value
+                        for _version, asset in assets
+                    )
+                    else []
+                ),
+                "Complete this Action and release dependency-ready downstream work",
+            ]
+            if params.decision == "accept"
+            else [
+                "Return the Human Work Item to its assignee with required changes",
+                "Keep this Action and every dependent Action incomplete",
+            ]
+        ),
+        "evidence_kind": request.evidence_kind.value,
+    }
+
+
+@work_items_router.post("/{work_item_id}/review")
+async def review_human_work_submission(
+    work_item_id: UUID,
+    params: HumanWorkReviewCreate,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    item, action, run, task, project, lab = await _work_item_context(
+        db_session, current_user, work_item_id
+    )
+    await _require_human_work_reviewer(
+        db_session, current_user=current_user, task=task, project=project
+    )
+    existing_review = dict((item.submission or {}).get("review") or {})
+    if (
+        item.status
+        in {
+            HumanWorkItemStatus.ACCEPTED.value,
+            HumanWorkItemStatus.CHANGES_REQUESTED.value,
+        }
+        and existing_review.get("decision") == params.decision
+        and existing_review.get("preview_digest") == params.preview_digest
+    ):
+        return await _work_item_data(
+            db_session, current_user, item, action, run, task, project, lab
+        )
+    command, request, assets = await _human_work_review_command(
+        db_session,
+        item=item,
+        action=action,
+        task=task,
+        params=params,
+        lock_assets=True,
+    )
+    digest = canonical_digest(command)
+    if params.preview_digest != digest:
+        raise HTTPException(status_code=409, detail="Human Work review has changed")
+    now = utcnow()
+    if params.decision == "changes_requested":
+        item.status = HumanWorkItemStatus.CHANGES_REQUESTED.value
+        item.submission = {
+            **(item.submission or {}),
+            "review": {
+                "decision": "changes_requested",
+                "reason": params.reason,
+                "preview_digest": digest,
+                "reviewed_by_user_id": str(current_user.id),
+                "reviewed_at": now.isoformat(),
+            },
+        }
+        item.validation_issues = [{"message": params.reason}]
+        item.revision += 1
+        action.status = ResearchActionStatus.WAITING.value
+        action.revision += 1
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            work_item_id=item.id,
+            kind="work_item.changes_requested",
+            actor_user_id=current_user.id,
+            payload={"reason": params.reason, "preview_digest": digest},
+            idempotency_key=f"work-item:{item.id}:changes:{item.revision}",
+        )
+        task.revision += 1
+        await db_session.commit()
+        return await _work_item_data(
+            db_session, current_user, item, action, run, task, project, lab
+        )
+
+    for version, asset in assets:
+        if asset.status == DataAssetStatus.DRAFT.value:
+            asset.status = DataAssetStatus.READY.value
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                work_item_id=item.id,
+                kind="data_asset.status_changed",
+                actor_user_id=current_user.id,
+                payload={
+                    "data_asset_id": str(asset.id),
+                    "version": version.version,
+                    "status": asset.status,
+                    "source": "human_work_review",
+                },
+                idempotency_key=(
+                    f"work-item:{item.id}:data-asset:{asset.id}:v{version.version}:ready"
+                ),
+            )
+        existing_link = await ResearchArtifactLink.find_by(
+            db_session,
+            [
+                ResearchArtifactLink.action_id == action.id,
+                ResearchArtifactLink.artifact_type == "data_asset",
+                ResearchArtifactLink.artifact_id == str(asset.id),
+                ResearchArtifactLink.artifact_version == str(version.version),
+                ResearchArtifactLink.relation == "evidence",
+            ],
+        )
+        if existing_link is None:
+            db_session.add(
+                ResearchArtifactLink(
+                    task_id=task.id,
+                    run_id=run.id,
+                    action_id=action.id,
+                    artifact_type="data_asset",
+                    artifact_id=str(asset.id),
+                    artifact_version=str(version.version),
+                    relation="evidence",
+                    link_metadata={"name": asset.name, "kind": asset.kind},
+                )
+            )
+    output = {
+        "schema": "airalogy.human-work-result.v1",
+        "values": command["values"],
+        "data_assets": command["data_assets"],
+        "note": (item.submission or {}).get("note") or "",
+        "completion_criteria": request.completion_criteria,
+        "submitted_by_user_id": str(item.assignee_user_id),
+        "reviewed_by_user_id": str(current_user.id),
+        "reviewed_at": now.isoformat(),
+    }
+    item.status = HumanWorkItemStatus.ACCEPTED.value
+    item.submission = {
+        **(item.submission or {}),
+        "review": {
+            "decision": "accept",
+            "reason": params.reason,
+            "preview_digest": digest,
+            "reviewed_by_user_id": str(current_user.id),
+            "reviewed_at": now.isoformat(),
+        },
+    }
+    item.validation_issues = []
+    item.accepted_at = now
+    item.revision += 1
+    action.status = ResearchActionStatus.COMPLETED.value
+    action.output_data = output
+    action.completed_at = now
+    action.error = None
+    action.revision += 1
+    await db_session.flush()
+    snapshot_payload = action_output_payload(action, task_id=task.id)
+    snapshot_digest = action_output_digest(snapshot_payload)
+    snapshot = ResearchActionOutputSnapshot(
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        action_revision=action.revision,
+        action_kind=action.kind,
+        output_data=action.output_data,
+        digest=snapshot_digest,
+        created_by_user_id=current_user.id,
+    )
+    db_session.add(snapshot)
+    evidence = ResearchEvidence(
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind=request.evidence_kind.value,
+        artifact_type="action_output",
+        artifact_id=str(action.id),
+        artifact_version=snapshot_digest,
+        summary=params.reason or f"Reviewed Human Work: {action.title}",
+        quality_state=EvidenceQuality.VALIDATED.value,
+        validation_report={
+            "submission_contract": item.submission_contract,
+            "contract_valid": True,
+            "review_preview_digest": digest,
+            "reviewed_at": now.isoformat(),
+        },
+        created_by_user_id=item.assignee_user_id,
+        reviewed_by_user_id=current_user.id,
+        reviewed_at=now,
+    )
+    db_session.add(evidence)
+    db_session.add(
+        ResearchArtifactLink(
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            artifact_type="action_output",
+            artifact_id=str(action.id),
+            artifact_version=snapshot_digest,
+            relation="evidence",
+            link_metadata={"evidence_kind": request.evidence_kind.value},
+        )
+    )
+    await db_session.flush()
+    append_aira_result(
+        run,
+        "human_results",
+        {
+            "action_id": str(action.id),
+            "work_item_id": str(item.id),
+            "status": "accepted",
+            "evidence_id": str(evidence.id),
+            "output": output,
+        },
+    )
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        work_item_id=item.id,
+        kind="evidence.registered",
+        actor_user_id=current_user.id,
+        payload={
+            "evidence_id": str(evidence.id),
+            "kind": evidence.kind,
+            "quality_state": evidence.quality_state,
+            "artifact_digest": snapshot_digest,
+        },
+        idempotency_key=f"evidence:{evidence.id}:registered",
+    )
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        work_item_id=item.id,
+        kind="work_item.completed",
+        actor_user_id=current_user.id,
+        payload={
+            "evidence_id": str(evidence.id),
+            "preview_digest": digest,
+        },
+        idempotency_key=f"work-item:{item.id}:accepted:{digest}",
+    )
+    graph_settled = await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
+    task.status = ResearchTaskStatus.ACTIVE.value
+    task.revision += 1
+    if graph_settled:
+        run.status = ResearchRunStatus.RUNNING.value
+        run.last_error = None
+        if config.effective_ai_enabled and await research_run_has_executable_ai_path(
+            db_session, task=task, run=run
+        ):
+            await enqueue_research_advance(db_session, task=task, run=run)
+        else:
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                kind="run.manual_control_required",
+                actor_user_id=current_user.id,
+                payload={"reason": "ai_disabled_or_no_capability_after_human_work"},
+                idempotency_key=f"run:{run.id}:manual:human-work:{item.id}",
+            )
+    await db_session.commit()
+    return await _work_item_data(
+        db_session, current_user, item, action, run, task, project, lab
+    )
+
+
 @work_items_router.post("/{work_item_id}/submit")
 async def submit_research_work_item(
     work_item_id: UUID,
@@ -3896,7 +4813,7 @@ async def submit_research_work_item(
             or item.record_version == params.record_version
         ):
             return await _work_item_data(
-                db_session, item, action, run, task, project, lab
+                db_session, current_user, item, action, run, task, project, lab
             )
         raise HTTPException(
             status_code=409, detail="Human Work Item is already complete"
@@ -4118,7 +5035,9 @@ async def submit_research_work_item(
                 ),
             )
     await db_session.commit()
-    return await _work_item_data(db_session, item, action, run, task, project, lab)
+    return await _work_item_data(
+        db_session, current_user, item, action, run, task, project, lab
+    )
 
 
 async def _approval_context(
@@ -4309,6 +5228,7 @@ async def approve_research_action(
         )
     if action.kind not in {
         ResearchActionKind.PROTOCOL_RUN.value,
+        ResearchActionKind.HUMAN_WORK_ITEM.value,
         ResearchActionKind.TOOL_JOB.value,
         ResearchActionKind.RESOURCE_RESERVATION.value,
         ResearchActionKind.INSTRUMENT_JOB.value,
@@ -4349,6 +5269,17 @@ async def approve_research_action(
                 protocol=protocol,
                 version=version,
                 instructions=action.description,
+                actor_user_id=current_user.id,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+    elif action.kind == ResearchActionKind.HUMAN_WORK_ITEM.value:
+        try:
+            await activate_human_work_action(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
                 actor_user_id=current_user.id,
             )
         except ValueError as error:

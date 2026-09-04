@@ -933,6 +933,110 @@ def test_protocol_graph_node_materializes_without_assigning_human_work(monkeypat
     )
 
 
+def test_generic_human_graph_node_waits_for_dependencies_before_assignment(
+    monkeypatch,
+):
+    assignee_id = uuid4()
+    task = ResearchTask(
+        id=uuid4(),
+        project_id=uuid4(),
+        owner_user_id=uuid4(),
+        autonomy_level="assisted",
+        status=ResearchTaskStatus.ACTIVE.value,
+    )
+    run = ResearchRun(
+        id=uuid4(),
+        plan_version=4,
+        requested_by_user_id=uuid4(),
+        environment_snapshot={
+            "human_work": [
+                {
+                    "key": "human:structured-work",
+                    "version": "1",
+                    "kind": "human",
+                    "available": True,
+                }
+            ],
+            "executor_bindings": [
+                {
+                    "capability_key": "human:structured-work",
+                    "capability_version": "1",
+                    "approval_policy": "always_ask",
+                    "executor_type": "human",
+                    "mode": "structured_submission",
+                    "resolved_executor_ref": {
+                        "type": "user",
+                        "id": str(assignee_id),
+                    },
+                }
+            ],
+        },
+    )
+    proposal = AiraActionProposal.model_validate(
+        {
+            "decision": "human",
+            "thought": "Collect the missing sample observation",
+            "human_request": {
+                "title": "Inspect sample label",
+                "instructions": "Record whether the label is readable.",
+                "completion_criteria": "The label state is recorded.",
+                "evidence_kind": "observation",
+                "fields": [
+                    {
+                        "key": "label_readable",
+                        "label": "Label readable",
+                        "value_type": "boolean",
+                    }
+                ],
+            },
+        }
+    )
+    added = []
+    db_session = AsyncMock()
+    db_session.add = added.append
+    db_session.scalar.side_effect = [0, 0]
+    monkeypatch.setattr(ResearchAction, "find_by", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        research_executor_bindings,
+        "enforce_environment_binding_action_limit",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    action = asyncio.run(
+        research_runtime._materialize_aira_action(
+            db_session,
+            task=task,
+            run=run,
+            proposal=proposal,
+            step_index=7,
+            create_plan=False,
+            action_graph={
+                "id": "aira-action-graph:7:human",
+                "type": "mixed_governed",
+                "node_id": "inspect",
+                "position": 2,
+                "size": 2,
+                "depends_on_count": 1,
+                "dependency_count": 1,
+                "result_bindings": [],
+            },
+            defer_activation=True,
+        )
+    )
+
+    assert action.kind == "human_work_item"
+    assert action.status == ResearchActionStatus.BLOCKED.value
+    assert action.assignee_user_id == assignee_id
+    assert action.requirements["human_review_required"] is True
+    assert action.requirements["submission_contract"]["schema"] == (
+        "airalogy.human-work-submission.v1"
+    )
+    assert not any(
+        isinstance(item, research_runtime.ResearchHumanWorkItem) for item in added
+    )
+
+
 def test_governed_action_graph_releases_an_instrument_after_resource_completion(
     monkeypatch,
 ):

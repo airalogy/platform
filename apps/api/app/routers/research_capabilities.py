@@ -50,6 +50,7 @@ async def list_research_capabilities(
         "lab_id": str(project.lab_id),
         "protocols": [item.payload() for item in catalog["protocols"]],
         "tools": [item.payload() for item in catalog["tools"]],
+        "human_work": [item.payload() for item in catalog["human_work"]],
         "resources": [item.payload() for item in catalog["resources"]],
         "services": [item.payload() for item in catalog["services"]],
         "compute": [item.payload() for item in catalog["compute"]],

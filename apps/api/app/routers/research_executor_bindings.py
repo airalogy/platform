@@ -85,7 +85,7 @@ class ExecutorBindingDraft(BaseModel):
     executor_type: Literal["human", "platform_tool"]
     executor_ref_type: Literal["task_role", "user", "skill_pool", "platform_worker"]
     executor_ref_id: str = Field(min_length=1, max_length=255)
-    mode: Literal["protocol_record", "durable_job"]
+    mode: Literal["protocol_record", "structured_submission", "durable_job"]
     approval_policy: Literal["always_ask", "allow_read_only", "deny"] = "always_ask"
     constraints: dict[str, Any] = Field(default_factory=dict)
     priority: int = Field(default=0, ge=-1000, le=1000)
@@ -104,10 +104,17 @@ class ExecutorBindingDraft(BaseModel):
                 raise ValueError(
                     "Human executors require a task role, user, or skill-pool reference"
                 )
-            if self.mode != "protocol_record":
+            expected_mode = (
+                "protocol_record"
+                if self.capability_key.startswith("protocol:")
+                else "structured_submission"
+            )
+            if self.mode != expected_mode:
                 raise ValueError(
-                    "Human Protocol execution requires protocol_record mode"
+                    f"Human execution for this capability requires {expected_mode} mode"
                 )
+            if self.approval_policy == "allow_read_only":
+                raise ValueError("Human execution cannot use read-only auto-approval")
             required_skills = self.constraints.get("required_skill_keys") or []
             if self.executor_ref_type == "skill_pool":
                 if self.executor_ref_id != "lab.skills" or not required_skills:

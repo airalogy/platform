@@ -1753,7 +1753,8 @@ class ResearchNotification(Base):
             name="uq_research_notification_recipient_dedupe",
         ),
         CheckConstraint(
-            "kind IN ('work_item_assigned', 'approval_requested')",
+            "kind IN ('work_item_assigned', 'work_item_review_requested', "
+            "'approval_requested')",
             name="ck_research_notification_kind",
         ),
         CheckConstraint(
