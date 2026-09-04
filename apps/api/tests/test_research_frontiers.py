@@ -5,9 +5,13 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.models.research import (
     ResearchAction,
     ResearchActionDependency,
+    ResearchActionKind,
     ResearchActionStatus,
     ResearchArtifactLink,
     ResearchProtocolRun,
@@ -27,6 +31,11 @@ from app.models.research_execution import (
     ResearchToolJobStatus,
 )
 from app.services import research_executor_bindings, research_runtime
+from app.services.research_autonomy_evaluations import (
+    policy_snapshot_with_grants,
+    tool_autonomy_target,
+)
+from app.services.research_autonomy_policy import autonomy_policy_snapshot
 from app.services.research_frontiers import (
     frontier_run_status,
     hold_or_release_parallel_frontier,
@@ -34,8 +43,6 @@ from app.services.research_frontiers import (
 )
 from app.services.research_planner import AiraActionProposal
 from app.services.research_tools import research_tool_catalog
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def test_action_dependency_schema_rejects_self_edges_and_migration_is_linear():
@@ -1328,6 +1335,74 @@ def test_governed_service_release_failure_is_typed_and_auditable(monkeypatch):
     assert run.aira_state["service_results"][0]["status"] == "failed"
     event.assert_awaited_once()
     assert event.await_args.kwargs["kind"] == "external_service.release_failed"
+
+
+def test_delayed_graph_action_rechecks_expired_autonomy_grant(monkeypatch):
+    target = tool_autonomy_target("project.summary", "1")
+    policy_snapshot = policy_snapshot_with_grants(
+        autonomy_policy_snapshot(None),
+        [
+            {
+                "enabled": True,
+                "target": target,
+                "allowed_levels": ["bounded_autopilot"],
+                "valid_until": "2020-01-01T00:00:00+00:00",
+            }
+        ],
+    )
+    action = ResearchAction(
+        id=uuid4(),
+        kind=ResearchActionKind.TOOL_JOB.value,
+        status=ResearchActionStatus.PROPOSED.value,
+        executor_type="platform_tool",
+        input_data={"source": "aira"},
+        requirements={
+            "risk": "read_only",
+            "approval_policy": "allow_read_only",
+            "autonomy_target": target,
+        },
+        policy_decision="allow",
+        policy_reason="Previously allowed",
+        preview_digest="a" * 64,
+        revision=1,
+    )
+    task = ResearchTask(
+        id=uuid4(),
+        owner_user_id=uuid4(),
+        status=ResearchTaskStatus.ACTIVE.value,
+        autonomy_level="bounded_autopilot",
+        revision=1,
+    )
+    run = ResearchRun(
+        id=uuid4(),
+        requested_by_user_id=uuid4(),
+        environment_snapshot={"autonomy_policy": policy_snapshot},
+    )
+    approval = AsyncMock()
+    activation = AsyncMock()
+    event = AsyncMock()
+    monkeypatch.setattr(research_runtime, "request_action_approval", approval)
+    monkeypatch.setattr(research_runtime, "activate_tool_action", activation)
+    monkeypatch.setattr(research_runtime, "emit_research_event", event)
+
+    asyncio.run(
+        research_runtime._activate_released_graph_action(
+            AsyncMock(),
+            task=task,
+            run=run,
+            action=action,
+        )
+    )
+
+    assert action.policy_decision == "ask"
+    assert "expired" in action.policy_reason
+    assert action.revision == 2
+    approval.assert_awaited_once()
+    assert approval.await_args.kwargs["reason"] == action.policy_reason
+    activation.assert_not_awaited()
+    event.assert_awaited_once()
+    assert event.await_args.kwargs["kind"] == "action.policy_revalidated"
+    assert event.await_args.kwargs["payload"]["boundary"] == "dependency_release"
 
 
 def test_dependency_skip_cancels_typed_governed_executions(monkeypatch):

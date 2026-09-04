@@ -107,6 +107,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Revalidated evaluated autonomy grants when dependency-delayed digital Actions are actually released, so an expired or no-longer-matching grant falls back to a fresh human approval instead of reusing an earlier automatic decision.
 - Fixed fresh PostgreSQL deployments failing before the research migrations could complete by widening Alembic's internal version column before the first descriptive revision ID exceeds its legacy 32-character limit.
 - Updated independent runtime packaging workflows for the current pinned uv CLI: lockfiles are verified explicitly before building instead of passing the removed `build --locked` option, and release coverage now includes both runtime packages.
 - Fixed narrow-screen typography collisions by keeping the global fallback line height proportional, moving the public landing page and showcase cards onto the shared semantic type system, and delaying its two-column composition until sufficient width is available.

@@ -2847,13 +2847,53 @@ async def _activate_released_graph_action(
                 idempotency_key=f"service-job:{service_job.id}:release-failed",
             )
         return
+    if (
+        action.policy_decision == "allow"
+        and (action.input_data or {}).get("source") == "aira"
+        and action.kind
+        in {
+            ResearchActionKind.TOOL_JOB.value,
+            ResearchActionKind.WAIT_EVENT.value,
+            ResearchActionKind.COMPUTE_JOB.value,
+        }
+    ):
+        refreshed_decision, refreshed_reason = evaluate_research_action_policy(
+            autonomy_level=task.autonomy_level,
+            source="aira",
+            executor_type=action.executor_type,
+            requirements=action.requirements or {},
+            policy_snapshot=(run.environment_snapshot or {}).get("autonomy_policy"),
+        )
+        if refreshed_decision != action.policy_decision:
+            previous_decision = action.policy_decision
+            action.policy_decision = refreshed_decision
+            action.policy_reason = refreshed_reason
+            action.revision += 1
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                kind="action.policy_revalidated",
+                actor_user_id=None,
+                payload={
+                    "previous_decision": previous_decision,
+                    "decision": refreshed_decision,
+                    "reason": refreshed_reason,
+                    "boundary": "dependency_release",
+                },
+                idempotency_key=(
+                    f"action:{action.id}:policy-revalidated:{action.revision}"
+                ),
+            )
     if action.policy_decision == "ask":
         approval = await request_action_approval(
             db_session,
             task=task,
             run=run,
             action=action,
-            reason=(
+            reason=action.policy_reason
+            or (
                 "Aira dependency graph released this exact Action after all "
                 "prerequisites completed."
             ),
