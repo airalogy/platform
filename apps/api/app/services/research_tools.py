@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from jsonschema import Draft202012Validator
+from masterbrain.usage import UsageContext
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,7 @@ from app.models.research import (
 )
 from app.models.research_execution import ResearchToolJob, ResearchToolJobStatus
 from app.services.literature_provider import get_literature_provider
+from app.services.model_usage import create_usage_context
 from app.services.research_runtime import (
     emit_research_event,
     enqueue_research_advance,
@@ -49,6 +51,13 @@ class ResearchToolDefinition:
 
 
 def research_tool_catalog() -> dict[str, ResearchToolDefinition]:
+    from app.services.research_specialists import (
+        SPECIALIST_TOOL_KEY,
+        SPECIALIST_TOOL_VERSION,
+        SpecialistAgentRequest,
+        SpecialistAgentResult,
+    )
+
     literature_available = get_literature_provider() is not None
     return {
         "knowledge.search": ResearchToolDefinition(
@@ -171,6 +180,28 @@ def research_tool_catalog() -> dict[str, ResearchToolDefinition]:
             unavailable_reason=(
                 "No LiteratureProvider is configured"
                 if not literature_available
+                else ""
+            ),
+        ),
+        SPECIALIST_TOOL_KEY: ResearchToolDefinition(
+            key=SPECIALIST_TOOL_KEY,
+            version=SPECIALIST_TOOL_VERSION,
+            name="Ask a bounded research specialist",
+            description=(
+                "Ask one source-grounded Literature, Experiment Design, Data, or "
+                "Research Critic specialist for structured advice. The specialist "
+                "cannot execute Actions, approve work, or write research assets."
+            ),
+            input_schema=SpecialistAgentRequest.model_json_schema(),
+            output_schema=SpecialistAgentResult.model_json_schema(
+                by_alias=True, mode="serialization"
+            ),
+            risk="model_advisory",
+            executor_type="platform_tool",
+            available=config.effective_ai_enabled,
+            unavailable_reason=(
+                "AI is disabled or no model provider is configured"
+                if not config.effective_ai_enabled
                 else ""
             ),
         ),
@@ -356,6 +387,9 @@ async def execute_research_tool(
     task: ResearchTask,
     definition: ResearchToolDefinition,
     arguments: dict[str, Any],
+    context_snapshot: dict[str, Any] | None = None,
+    model_name: str | None = None,
+    usage_context: UsageContext | None = None,
 ) -> dict[str, Any]:
     validate_tool_arguments(definition, arguments)
     if definition.key == "knowledge.search":
@@ -364,6 +398,21 @@ async def execute_research_tool(
         result = await _search_literature(arguments)
     elif definition.key == "literature.resolve_doi":
         result = await _resolve_literature_doi(arguments)
+    elif definition.key == "aira.specialist":
+        from app.services.research_specialists import (
+            run_specialist_agent,
+            validate_specialist_context_snapshot,
+        )
+
+        if context_snapshot is None or not model_name:
+            raise ValueError("Specialist Agent requires a pinned context and model")
+        validate_specialist_context_snapshot(context_snapshot, task=task)
+        result = await run_specialist_agent(
+            arguments=arguments,
+            context_snapshot=context_snapshot,
+            model_name=model_name,
+            usage_context=usage_context,
+        )
     else:  # pragma: no cover - registry and dispatch change together
         raise ValueError("Research Tool has no executor")
     output_issues = list(
@@ -409,6 +458,42 @@ async def process_research_tool_job(
     if definition.version != tool_job.tool_version:
         raise ValueError("Pinned Research Tool version is unavailable")
     validate_tool_arguments(definition, tool_job.arguments)
+    specialist_context: dict[str, Any] | None = None
+    specialist_model: str | None = None
+    specialist_usage: UsageContext | None = None
+    if definition.key == "aira.specialist":
+        from app.services.research_specialists import (
+            validate_specialist_context_snapshot,
+        )
+
+        raw_context = action.input_data.get("specialist_context")
+        if not isinstance(raw_context, dict):
+            raise ValueError("Specialist Agent context is missing")
+        specialist_context = dict(raw_context)
+        validate_specialist_context_snapshot(
+            specialist_context,
+            task=task,
+            run=run,
+        )
+        specialist_model = str(
+            action.input_data.get("specialist_model")
+            or specialist_context.get("model")
+            or ""
+        ).strip()
+        if not specialist_model or specialist_model != specialist_context.get("model"):
+            raise ValueError("Specialist Agent model does not match its context")
+        specialist_usage = create_usage_context(
+            feature="research.specialist_agent.run",
+            user_id=run.requested_by_user_id,
+            lab_id=task.lab_id,
+            project_id=task.project_id,
+            attributes={
+                "task_id": str(task.id),
+                "run_id": str(run.id),
+                "action_id": str(action.id),
+                "role": str(tool_job.arguments.get("role") or ""),
+            },
+        )
     now = utcnow()
     tool_job.status = ResearchToolJobStatus.RUNNING.value
     tool_job.started_at = tool_job.started_at or now
@@ -434,6 +519,9 @@ async def process_research_tool_job(
             task=task,
             definition=definition,
             arguments=tool_job.arguments,
+            context_snapshot=specialist_context,
+            model_name=specialist_model,
+            usage_context=specialist_usage,
         )
     # The tool call intentionally runs without a long-lived write transaction.
     # Re-lock and refresh the execution chain so a concurrent Task cancellation
@@ -546,7 +634,7 @@ async def process_research_tool_job(
         actor_user_id=None,
         payload={
             "tool_key": definition.key,
-            "result_count": len(result.get("items") or []),
+            "result_count": len(result.get("items") or result.get("findings") or []),
         },
         idempotency_key=f"tool-job:{tool_job.id}:completed",
     )

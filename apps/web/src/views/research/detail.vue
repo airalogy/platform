@@ -367,13 +367,83 @@
                           {{ $t("page.research.researchTool") }} · {{ action.tool_job.tool_key }} · v{{ action.tool_job.tool_version }}
                         </span>
                         <span class="aira-type-meta">
-                          {{ $t("page.research.resultCount", { count: toolResultItems(action).length }) }}
+                          {{ $t("page.research.resultCount", { count: toolResultCount(action) }) }}
                         </span>
                       </div>
                       <n-alert v-if="action.tool_job.error" type="error" class="mt-2">
                         {{ action.tool_job.error }}
                       </n-alert>
-                      <div v-if="toolResultItems(action).length" class="mt-2 space-y-2">
+                      <div v-if="specialistResult(action)" class="specialist-result mt-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <n-tag type="warning" size="small" round>
+                            {{ specialistRoleLabel(specialistResult(action)?.role || "") }}
+                          </n-tag>
+                          <n-tag size="small" round>
+                            {{ $t("page.research.adviceOnly") }}
+                          </n-tag>
+                        </div>
+                        <p class="aira-type-body mb-0 mt-2">
+                          {{ specialistResult(action)?.summary }}
+                        </p>
+                        <div v-if="specialistResult(action)?.findings.length" class="mt-3 space-y-2">
+                          <div class="aira-type-eyebrow">
+                            {{ $t("page.research.specialistFindings") }}
+                          </div>
+                          <div
+                            v-for="(finding, index) in specialistResult(action)?.findings.slice(0, 4)"
+                            :key="`finding-${index}`"
+                            class="research-tool-result"
+                          >
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                              <strong class="aira-type-label">{{ finding.statement }}</strong>
+                              <n-tag :type="specialistConfidenceType(finding.confidence)" size="small" round>
+                                {{ specialistConfidenceLabel(finding.confidence) }}
+                              </n-tag>
+                            </div>
+                            <p v-if="finding.limitation" class="aira-type-meta mb-0 mt-1">
+                              {{ finding.limitation }}
+                            </p>
+                            <div class="aira-type-meta mt-1 font-mono">
+                              {{ finding.source_refs.join(" · ") }}
+                            </div>
+                          </div>
+                        </div>
+                        <div v-if="specialistResult(action)?.recommendations.length" class="mt-3 space-y-2">
+                          <div class="aira-type-eyebrow">
+                            {{ $t("page.research.specialistRecommendations") }}
+                          </div>
+                          <div
+                            v-for="(recommendation, index) in specialistResult(action)?.recommendations.slice(0, 3)"
+                            :key="`recommendation-${index}`"
+                            class="research-tool-result"
+                          >
+                            <div class="flex flex-wrap items-center gap-2">
+                              <strong class="aira-type-label">{{ recommendation.title }}</strong>
+                              <n-tag size="small" round>
+                                {{ recommendation.suggested_next_action }}
+                              </n-tag>
+                            </div>
+                            <p class="aira-type-meta mb-0 mt-1">
+                              {{ recommendation.rationale }}
+                            </p>
+                          </div>
+                        </div>
+                        <n-alert
+                          v-if="specialistResult(action)?.uncertainties.length || specialistResult(action)?.risks.length"
+                          type="warning"
+                          class="mt-3"
+                        >
+                          <div v-for="item in [...(specialistResult(action)?.uncertainties || []), ...(specialistResult(action)?.risks || [])].slice(0, 5)" :key="item">
+                            • {{ item }}
+                          </div>
+                        </n-alert>
+                        <div class="aira-type-meta mt-3 font-mono">
+                          {{ $t("page.research.specialistContext") }}:
+                          {{ shortDigest(specialistResult(action)?.context_digest || "") }}
+                          · {{ specialistResult(action)?.model }}
+                        </div>
+                      </div>
+                      <div v-else-if="toolResultItems(action).length" class="mt-2 space-y-2">
                         <div
                           v-for="(item, index) in toolResultItems(action).slice(0, 3)"
                           :key="String(item.id || item.doi || index)"
@@ -1017,7 +1087,11 @@
 </template>
 
 <script setup lang="ts">
-import type { ResearchToolDefinition } from "@/service/api/research-actions"
+import type {
+  ResearchSpecialistResult,
+  ResearchSpecialistRole,
+  ResearchToolDefinition,
+} from "@/service/api/research-actions"
 import type { ResearchAutonomyPolicySnapshot } from "@/service/api/research-autonomy-policies"
 import type {
   HumanWorkItemStatus,
@@ -1734,6 +1808,49 @@ function actionStatusLabel(status: ResearchActionStatus) {
 function toolResultItems(action: ResearchAction): Array<Record<string, any>> {
   const items = action.tool_job?.output?.items
   return Array.isArray(items) ? items : []
+}
+
+function specialistResult(action: ResearchAction): ResearchSpecialistResult | null {
+  if (action.tool_job?.tool_key !== "aira.specialist")
+    return null
+  const result = action.tool_job.output
+  if (
+    !result
+    || result.schema !== "airalogy.research-specialist-advice.v1"
+    || !Array.isArray(result.findings)
+    || !Array.isArray(result.recommendations)
+  ) {
+    return null
+  }
+  return result as unknown as ResearchSpecialistResult
+}
+
+function toolResultCount(action: ResearchAction) {
+  return specialistResult(action)?.findings.length || toolResultItems(action).length
+}
+
+function specialistRoleLabel(role: ResearchSpecialistRole | "") {
+  return role
+    ? $t(`page.research.specialistRoles.${role}` as I18n.I18nKey)
+    : "—"
+}
+
+function specialistConfidenceLabel(confidence: ResearchSpecialistResult["findings"][number]["confidence"]) {
+  return $t(`page.research.specialistConfidence.${confidence}` as I18n.I18nKey)
+}
+
+function specialistConfidenceType(
+  confidence: ResearchSpecialistResult["findings"][number]["confidence"],
+): TagProps["type"] {
+  if (confidence === "high")
+    return "success"
+  if (confidence === "low")
+    return "warning"
+  return "info"
+}
+
+function shortDigest(value: string) {
+  return value ? `${value.slice(0, 12)}…` : "—"
 }
 
 function formatPayload(payload: Record<string, any>) {

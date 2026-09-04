@@ -14,6 +14,14 @@ When AI is available, you can instead begin by describing the scientific questio
 
 Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new Research Task when the new version should apply; a descendant Run intentionally inherits its source environment.
 
+## Ask bounded Specialist Agents
+
+When AI is available, include **Ask a bounded research specialist** in the Task's digital tools. During a Run, Aira may propose one specialist or a panel of two to four distinct roles for one shared scientific question: Literature Analyst, Experimental Designer, Data Analyst, and Research Critic. You can also choose **Add Action → Run a research tool**, select the specialist, choose a role, and write the question and requested deliverable manually.
+
+Before confirming a manual request, inspect the role, question, destination, and pinned-context digest. Confirmation creates an advisory Tool Action; an Aira-proposed request still stops at the ordinary approval boundary. Every specialist sees only the same fixed, bounded snapshot of the Task, current strategy, reviewed non-Restricted Knowledge, and typed results already returned to the Run. It has no web or nested Tool access. Its findings and recommendations must cite source references from that snapshot, and Platform rejects invented references. A Run accepts no more than four Specialist Actions. Platform does not automatically repeat a failed model call and incur another model charge; inspect the failure before intentionally creating another Action.
+
+Read the result as analysis, not as validated Evidence or completed work. The workbench shows its role, confidence, source references, uncertainties, risks, suggested next Action type, model, and context digest. A specialist cannot create or edit a Protocol, accept a Claim, write Knowledge, assign a person, spend funds, order a service, run code, or operate equipment. Aira receives the structured advice only after the full panel settles, then returns to the normal Planner and deterministic Action/approval flows. When AI is disabled, this tool is unavailable; manual Knowledge review, Protocol design, computation, Human Work, and all core execution paths remain available.
+
 ## Enable evaluated autonomy safely
 
 Automatic execution is never enabled by selecting an autonomy level alone. An eligible Action proceeds without another approval only when all three controls agree: the Lab Research policy enables its category; the exact Executor Binding and technical, risk, cost, and runtime limits permit it; and an unexpired evaluated grant matches the exact Capability version and Executor digest. Internal read-only Tools, passive typed Wait Events, and low-risk network-disabled Compute are currently eligible. People, Protocol work, structured Human Work, instruments, resource commitments, and external-service orders continue to require approval.

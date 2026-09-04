@@ -29,14 +29,60 @@
                 {{ selectedTool?.description || $t("page.research.noToolsAvailable") }}
               </template>
             </n-form-item>
-            <n-form-item :label="$t('page.research.searchQuery')" required>
+            <template v-if="toolArgumentKind === 'search'">
+              <n-form-item :label="$t('page.research.searchQuery')" required>
+                <n-input
+                  v-model:value="toolQuery"
+                  :placeholder="$t('page.research.searchQueryPlaceholder')"
+                />
+              </n-form-item>
+              <n-form-item :label="$t('page.research.resultLimit')">
+                <n-input-number v-model:value="toolLimit" :min="1" :max="50" />
+              </n-form-item>
+            </template>
+            <n-form-item v-else-if="toolArgumentKind === 'doi'" :label="$t('page.research.doi')" required>
               <n-input
-                v-model:value="toolQuery"
-                :placeholder="$t('page.research.searchQueryPlaceholder')"
+                v-model:value="toolDoi"
+                :placeholder="$t('page.research.doiPlaceholder')"
               />
             </n-form-item>
-            <n-form-item :label="$t('page.research.resultLimit')">
-              <n-input-number v-model:value="toolLimit" :min="1" :max="50" />
+            <template v-else-if="toolArgumentKind === 'specialist'">
+              <n-alert type="warning" class="mb-4">
+                {{ $t("page.research.specialistBoundaryHint") }}
+              </n-alert>
+              <n-form-item :label="$t('page.research.specialistRole')" required>
+                <n-select v-model:value="specialistRole" :options="specialistRoleOptions" />
+              </n-form-item>
+              <n-form-item :label="$t('page.research.specialistQuestion')" required>
+                <n-input
+                  v-model:value="specialistQuestion"
+                  type="textarea"
+                  :autosize="{ minRows: 3, maxRows: 8 }"
+                  :placeholder="$t('page.research.specialistQuestionPlaceholder')"
+                />
+              </n-form-item>
+              <n-form-item :label="$t('page.research.specialistDeliverable')">
+                <n-input
+                  v-model:value="specialistDeliverable"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 5 }"
+                  :placeholder="$t('page.research.specialistDeliverablePlaceholder')"
+                />
+              </n-form-item>
+            </template>
+            <n-form-item
+              v-else
+              :label="$t('page.research.toolArguments')"
+              required
+              :validation-status="genericToolArguments ? undefined : 'error'"
+              :feedback="genericToolArguments ? $t('page.research.toolSchemaHint') : $t('page.research.invalidJsonObject')"
+            >
+              <n-input
+                v-model:value="toolArgumentsText"
+                type="textarea"
+                :autosize="{ minRows: 5, maxRows: 12 }"
+                class="font-mono"
+              />
             </n-form-item>
             <n-form-item :label="$t('page.research.actionTitle')">
               <n-input v-model:value="toolDraft.title" />
@@ -369,16 +415,50 @@
             </n-tag>
             <span class="aira-type-meta">v{{ preview.tool?.version }}</span>
           </div>
-          <p class="aira-type-body aira-text-secondary mb-0 mt-3">
-            {{
-              $t("page.research.queryPreview", {
-                query: String(preview.command.arguments?.query || ""),
-              })
-            }}
-          </p>
-          <p class="aira-type-meta mb-0 mt-2">
-            {{ $t("page.research.toolResultsStayDraft") }}
-          </p>
+          <template v-if="preview.command.tool_key === 'aira.specialist'">
+            <dl class="digital-preview__facts mt-3">
+              <div>
+                <dt>{{ $t("page.research.specialistRole") }}</dt>
+                <dd>{{ specialistRoleLabel(String(preview.command.arguments?.role || "")) }}</dd>
+              </div>
+              <div>
+                <dt>{{ $t("page.research.specialistContext") }}</dt>
+                <dd class="font-mono">{{ shortDigest(String(preview.command.specialist_context?.digest || "")) }}</dd>
+              </div>
+            </dl>
+            <p class="aira-type-body aira-text-secondary mb-0 mt-3">
+              {{ String(preview.command.arguments?.question || "") }}
+            </p>
+            <n-collapse class="mt-3">
+              <n-collapse-item
+                :title="$t('page.research.specialistContextSources', { count: preview.command.specialist_context?.sources?.length || 0 })"
+                name="specialist-context"
+              >
+                <div class="space-y-2">
+                  <div
+                    v-for="source in (preview.command.specialist_context?.sources || [])"
+                    :key="String(source.ref)"
+                    class="specialist-context-source"
+                  >
+                    <strong class="aira-type-label">{{ String(source.title) }}</strong>
+                    <div class="aira-type-meta mt-1 font-mono">
+                      {{ String(source.ref) }}
+                    </div>
+                    <pre>{{ String(source.content) }}</pre>
+                  </div>
+                </div>
+              </n-collapse-item>
+            </n-collapse>
+            <n-alert type="warning" class="mt-3">
+              {{ $t("page.research.specialistPreviewBoundary") }}
+            </n-alert>
+          </template>
+          <template v-else>
+            <pre class="mt-3">{{ JSON.stringify(preview.command.arguments, null, 2) }}</pre>
+            <p class="aira-type-meta mb-0 mt-2">
+              {{ $t("page.research.toolResultsStayDraft") }}
+            </p>
+          </template>
         </template>
         <template v-else-if="previewKind === 'instrument'">
           <div class="mt-4 flex flex-wrap items-center gap-2">
@@ -527,6 +607,7 @@ import type {
   InstrumentControlDraft,
   InstrumentControlStepDraft,
   ResearchInstrumentCommandOption,
+  ResearchSpecialistRole,
   ResearchToolDefinition,
   ToolActionDraft,
   WaitActionDraft,
@@ -576,6 +657,11 @@ const tools = ref<ResearchToolDefinition[]>([])
 const instruments = ref<ResearchInstrumentCommandOption[]>([])
 const toolQuery = ref("")
 const toolLimit = ref(20)
+const toolDoi = ref("")
+const toolArgumentsText = ref("{}")
+const specialistRole = ref<ResearchSpecialistRole>("literature_analyst")
+const specialistQuestion = ref("")
+const specialistDeliverable = ref("")
 const waitPreset = ref<WaitPreset>("data_asset")
 const waitDueAt = ref<number | null>(null)
 const instrumentArgumentsText = ref("{}")
@@ -666,6 +752,44 @@ const toolOptions = computed(() =>
   })),
 )
 const selectedTool = computed(() => tools.value.find(item => item.key === toolDraft.tool_key))
+const toolArgumentKind = computed<"search" | "doi" | "specialist" | "json">(() => {
+  if (["knowledge.search", "literature.search"].includes(toolDraft.tool_key))
+    return "search"
+  if (toolDraft.tool_key === "literature.resolve_doi")
+    return "doi"
+  if (toolDraft.tool_key === "aira.specialist")
+    return "specialist"
+  return "json"
+})
+const genericToolArguments = computed(() => parseJsonObject(toolArgumentsText.value))
+const specialistRoleOptions = computed(() => [
+  "literature_analyst",
+  "experimental_designer",
+  "data_analyst",
+  "research_critic",
+].map(value => ({
+  value,
+  label: specialistRoleLabel(value),
+})))
+const toolArguments = computed<Record<string, unknown> | null>(() => {
+  if (toolArgumentKind.value === "search") {
+    return toolQuery.value.trim()
+      ? { query: toolQuery.value.trim(), limit: toolLimit.value }
+      : null
+  }
+  if (toolArgumentKind.value === "doi")
+    return toolDoi.value.trim() ? { doi: toolDoi.value.trim() } : null
+  if (toolArgumentKind.value === "specialist") {
+    return specialistQuestion.value.trim()
+      ? {
+          role: specialistRole.value,
+          question: specialistQuestion.value.trim(),
+          deliverable: specialistDeliverable.value.trim(),
+        }
+      : null
+  }
+  return genericToolArguments.value
+})
 const selectedInstrument = computed(() =>
   instruments.value.find(item => item.id === instrumentDraft.command_id),
 )
@@ -789,7 +913,7 @@ const waitPresetOptions = computed(() => [
 ])
 const canPreview = computed(() =>
   mode.value === "tool"
-    ? Boolean(toolDraft.tool_key && toolQuery.value.trim())
+    ? Boolean(toolDraft.tool_key && selectedTool.value?.available && toolArguments.value)
     : mode.value === "instrument"
       ? Boolean(
         instrumentDraft.command_id
@@ -841,6 +965,22 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null
+}
+
+function specialistRoleLabel(role: string) {
+  const knownRoles = new Set([
+    "literature_analyst",
+    "experimental_designer",
+    "data_analyst",
+    "research_critic",
+  ])
+  return knownRoles.has(role)
+    ? $t(`page.research.specialistRoles.${role}` as I18n.I18nKey)
+    : role
+}
+
+function shortDigest(value: string) {
+  return value ? `${value.slice(0, 12)}…` : "—"
 }
 
 function addControlStep() {
@@ -997,6 +1137,11 @@ function reset() {
   previewKind.value = "tool"
   toolQuery.value = ""
   toolLimit.value = 20
+  toolDoi.value = ""
+  toolArgumentsText.value = "{}"
+  specialistRole.value = "literature_analyst"
+  specialistQuestion.value = ""
+  specialistDeliverable.value = ""
   toolDraft.title = ""
   toolDraft.description = ""
   toolDraft.idempotency_key = ""
@@ -1041,7 +1186,7 @@ async function previewAction() {
   previewKind.value = mode.value
   try {
     if (mode.value === "tool") {
-      toolDraft.arguments = { query: toolQuery.value.trim(), limit: toolLimit.value }
+      toolDraft.arguments = toolArguments.value || {}
       toolDraft.idempotency_key ||= `tool-${nanoid(16)}`
       preview.value = await previewToolAction(props.taskId, { ...toolDraft })
     }
@@ -1156,6 +1301,24 @@ watch(controlMode, (value) => {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 0.8125rem;
+}
+
+.specialist-context-source {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.625rem;
+  background: white;
+  padding: 0.75rem;
+}
+
+.specialist-context-source pre {
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: rgb(71 85 105);
+  font-size: 0.75rem;
+  line-height: 1.55;
 }
 
 .control-grid {

@@ -923,7 +923,7 @@ async def activate_tool_action(
         lab_id=task.lab_id,
         payload={"tool_job_id": str(tool_job.id), "action_id": str(action.id)},
         idempotency_key=f"research-tool-job:{tool_job.id}",
-        max_attempts=3,
+        max_attempts=1 if tool_job.tool_key == "aira.specialist" else 3,
     )
     await emit_research_event(
         db_session,
@@ -1406,6 +1406,7 @@ async def _materialize_aira_action(
     parallel_group: dict[str, Any] | None = None,
     action_graph: dict[str, Any] | None = None,
     defer_activation: bool = False,
+    specialist_context: dict[str, Any] | None = None,
 ) -> ResearchAction:
     """Turn one validated Aira decision into a governed typed Action."""
 
@@ -1646,6 +1647,23 @@ async def _materialize_aira_action(
             )
         else:
             validate_tool_arguments(definition, proposal.arguments)
+        if definition.key == "aira.specialist":
+            from app.services.research_specialists import (
+                build_specialist_context_snapshot,
+                ensure_specialist_action_capacity,
+            )
+
+            if action_graph is not None:
+                raise ValueError(
+                    "Specialist Agents cannot run inside a dependent Action graph"
+                )
+            await ensure_specialist_action_capacity(db_session, run_id=run.id)
+            if specialist_context is None:
+                specialist_context = build_specialist_context_snapshot(
+                    task=task,
+                    run=run,
+                    model_name=task.ai_model or config.CHAT_MODEL_FAST,
+                )
         from app.services.research_autonomy_evaluations import tool_autonomy_target
 
         executor_ref = executor_binding.get(
@@ -1653,7 +1671,7 @@ async def _materialize_aira_action(
         ) or executor_binding.get("executor_ref")
         requirements = {
             "risk": definition.risk,
-            "read_only": True,
+            "read_only": definition.risk in {"read_only", "external_read_only"},
             "approval_policy": executor_binding["approval_policy"],
             "executor_binding": executor_binding,
             "autonomy_target": tool_autonomy_target(
@@ -1670,6 +1688,14 @@ async def _materialize_aira_action(
             "tool_key": definition.key,
             "tool_version": definition.version,
             "arguments": proposal.arguments,
+            **(
+                {
+                    "specialist_context": specialist_context,
+                    "specialist_model": specialist_context["model"],
+                }
+                if definition.key == "aira.specialist"
+                else {}
+            ),
             "source": "aira",
             "resume_run": True,
         }
@@ -2114,6 +2140,7 @@ async def _materialize_aira_action(
             tool_version=definition.version,
             arguments=proposal.arguments,
             status=ResearchToolJobStatus.QUEUED.value,
+            timeout_seconds=300 if definition.key == "aira.specialist" else 60,
         )
         db_session.add(tool_job)
     elif proposal.decision == "resource":
@@ -2545,6 +2572,15 @@ async def _materialize_aira_parallel_tools(
             raise ValueError("Parallel Tool frontier is only partially materialized")
         return sorted(existing, key=lambda item: item.sequence)
 
+    if any(call.tool_key == "aira.specialist" for call in proposal.parallel_tools):
+        from app.services.research_specialists import ensure_specialist_action_capacity
+
+        await ensure_specialist_action_capacity(
+            db_session,
+            run_id=run.id,
+            requested=len(proposal.parallel_tools),
+        )
+
     await create_plan_version(
         db_session,
         task=task,
@@ -2556,6 +2592,17 @@ async def _materialize_aira_parallel_tools(
         },
         summary=proposal.thought or "Aira proposed parallel Research Tools",
     )
+    shared_specialist_context = None
+    if any(call.tool_key == "aira.specialist" for call in proposal.parallel_tools):
+        from app.services.research_specialists import (
+            build_specialist_context_snapshot,
+        )
+
+        shared_specialist_context = build_specialist_context_snapshot(
+            task=task,
+            run=run,
+            model_name=task.ai_model or config.CHAT_MODEL_FAST,
+        )
     actions: list[ResearchAction] = []
     size = len(proposal.parallel_tools)
     for position, call in enumerate(proposal.parallel_tools, start=1):
@@ -2577,6 +2624,7 @@ async def _materialize_aira_parallel_tools(
                 "position": position,
                 "size": size,
             },
+            specialist_context=shared_specialist_context,
         )
         actions.append(action)
     await emit_research_event(

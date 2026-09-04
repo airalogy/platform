@@ -15,6 +15,39 @@ export interface ResearchToolDefinition {
   unavailable_reason: string
 }
 
+export type ResearchSpecialistRole = "literature_analyst" | "experimental_designer" | "data_analyst" | "research_critic"
+
+export interface ResearchSpecialistFinding {
+  statement: string
+  source_refs: string[]
+  confidence: "low" | "medium" | "high"
+  limitation: string
+}
+
+export interface ResearchSpecialistRecommendation {
+  title: string
+  rationale: string
+  suggested_next_action: "protocol" | "human" | "tool" | "resource" | "instrument" | "service" | "compute" | "wait" | "finish" | "none"
+  prerequisites: string[]
+  basis_refs: string[]
+}
+
+export interface ResearchSpecialistResult {
+  schema: "airalogy.research-specialist-advice.v1"
+  role: ResearchSpecialistRole
+  question: string
+  deliverable: string
+  summary: string
+  findings: ResearchSpecialistFinding[]
+  recommendations: ResearchSpecialistRecommendation[]
+  uncertainties: string[]
+  risks: string[]
+  next_questions: string[]
+  model: string
+  context_digest: string
+  advisory_boundary: "advice_only_no_execution_approval_or_asset_write"
+}
+
 export interface ResearchActionDestination {
   lab: { id: string, uid: string, name: string }
   project: { id: string, uid: string, name: string }

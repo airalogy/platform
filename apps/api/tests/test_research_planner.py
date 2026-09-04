@@ -1,9 +1,12 @@
 import asyncio
 import json
+from dataclasses import replace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+
 from app.libs import masterbrain
 from app.libs.masterbrain import _extract_json_object
 from app.services import research_planner, research_tools
@@ -14,7 +17,6 @@ from app.services.research_planner import (
     aira_action_planner_prompt,
     plan_next_research_action,
 )
-from pydantic import ValidationError
 
 PINNED_PROTOCOLS = [
     {
@@ -771,6 +773,107 @@ def test_planner_validates_parallel_tools_against_environment(monkeypatch):
                 "qwen3.5-flash",
             )
         )
+
+
+def test_planner_validates_bounded_specialist_panels(monkeypatch):
+    specialist = replace(
+        research_tools.research_tool_catalog()["aira.specialist"],
+        available=True,
+        unavailable_reason="",
+    )
+    catalog = {
+        **research_tools.research_tool_catalog(),
+        "aira.specialist": specialist,
+    }
+    monkeypatch.setattr(research_tools, "research_tool_catalog", lambda: catalog)
+    proposal = AsyncMock(
+        return_value={
+            "decision": "parallel_tools",
+            "thought": "Get independent scientific perspectives",
+            "parallel_tools": [
+                {
+                    "tool_key": "aira.specialist",
+                    "arguments": {
+                        "role": "experimental_designer",
+                        "question": "How should the hypotheses be discriminated?",
+                        "deliverable": "A controlled experimental design",
+                    },
+                    "purpose": "Evaluate experimental design",
+                },
+                {
+                    "tool_key": "aira.specialist",
+                    "arguments": {
+                        "role": "research_critic",
+                        "question": "How should the hypotheses be discriminated?",
+                        "deliverable": "Alternative explanations and failure modes",
+                    },
+                    "purpose": "Challenge the proposed logic",
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(research_planner, "aira_action_proposal", proposal)
+    context = {
+        "goal": "Discriminate two hypotheses",
+        "protocols": [],
+        "tools": [specialist.payload()],
+    }
+
+    result = asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+    assert [call.arguments["role"] for call in result.parallel_tools] == [
+        "experimental_designer",
+        "research_critic",
+    ]
+
+    proposal.return_value["parallel_tools"][1]["arguments"]["role"] = (
+        "experimental_designer"
+    )
+    with pytest.raises(ValueError, match="requires distinct roles"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    proposal.return_value["parallel_tools"][1]["arguments"] = {
+        "role": "research_critic",
+        "question": "What literature is missing?",
+    }
+    with pytest.raises(ValueError, match="shared scientific question"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    proposal.return_value["parallel_tools"][1] = {
+        "tool_key": "knowledge.search",
+        "arguments": {"query": "hypothesis"},
+        "purpose": "Search Knowledge",
+    }
+    context["tools"] = [specialist.payload(), *PINNED_TOOLS]
+    with pytest.raises(ValueError, match="cannot mix"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    proposal.return_value = {
+        "decision": "tool_graph",
+        "thought": "Invalid dependent specialists",
+        "tool_graph": [
+            {
+                "node_id": "design",
+                "tool_key": "aira.specialist",
+                "arguments": {
+                    "role": "experimental_designer",
+                    "question": "Design the study",
+                },
+                "purpose": "Design",
+            },
+            {
+                "node_id": "critic",
+                "tool_key": "aira.specialist",
+                "arguments": {
+                    "role": "research_critic",
+                    "question": "Critique the design",
+                },
+                "purpose": "Critique",
+                "depends_on": ["design"],
+            },
+        ],
+    }
+    with pytest.raises(ValueError, match="dependent Tool graph"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
 
 
 def test_planner_validates_tool_graph_against_environment(monkeypatch):

@@ -108,6 +108,8 @@ Research Task
 
 目标计划是可版本化的自适应 DAG，而不是只能向前的页面步骤。当前运行时支持三种有边界的受治理执行：2–4 个相互独立的只读 Tool Action 并行前沿、2–8 个只读 Tool Action 组成的无环依赖图，以及 2–8 个 Protocol Run、结构化 Human Work、Tool、Resource Reservation、Instrument Job、External Service Job、隔离 Compute 与类型化 Wait Action 组成的混合无环图。依赖边持久化保存，初始只释放根节点；下游节点仅在全部前置完成后才进入自己的权限、策略、审批、资源、预算和执行器边界，任一前置失败或被拒绝会确定性跳过其后代。在同类 Tool 图中，下游节点可将一个已声明参数绑定到直接前置的有界结构化输出路径。Platform 只在该前置完成后解析值，记录来源 Action 修订和输出摘要，重建下游预览摘要，再于审批或执行前校验完整输入 Schema。路径缺失、数组下标越界、未声明目标或解析后类型不符时必须失败关闭，并沿图向后传播。混合图当前使用完整静态输入、已有的批准设备预订、准确固定的服务请求和 DataAsset 版本，不在不同 Action 类型之间隐式传递未校验数据。Protocol Record 提交、Human Work 审核以及 Resource、Instrument 与 External Service 的完成、取消和失败会进入同一个图屏障，因此只要依赖的人员、物理或外包工作尚未落定，Run 就不会提前重规划。由图规划的 Protocol Run 在前置完成且通过普通审批与固定 Executor Binding 校验前，不会创建 Human Work Item；之后被指派人员仍使用现有 Record 流程，只有经校验且与固定 Protocol 匹配的 Record 才能完成节点。由图规划的结构化 Human Work 节点使用同一依赖和指派门禁，校验固定的类型化字段与 DataAsset 版本契约；提交后保持不可变，直到有权审核人接受或要求修改。接受会封存 Action 输出、生成已校验 Evidence 并释放下游节点。由图规划的 Service 请求在前置完成前保持阻塞，不请求报价、不创建下单审批；所有前置完成后，Platform 会重新校验不可变契约快照、权限、输入 Schema 和预算，再进入普通报价与下单流程。循环和任意多 Agent 图仍是受控的后续能力。修改目标、成功标准、预算或高风险路径必须产生新的计划版本并重新确认。
 
+有界 Specialist Agent Panel 是对“所有认知步骤都由一个模型完成”的明确修正。Aira 可以围绕同一个科学问题，并行提议 2–4 个角色不同的 `aira.specialist` Tool Action：Literature Analyst、Experimental Designer、Data Analyst 或 Research Critic。每个分支都只接收同一份经摘要绑定的 Task、当前策略、已审核且非 Restricted 的 Knowledge，以及有上限的类型化 Action 结果快照。模型在该次调用中没有网络或 Tool 访问权；每条发现和建议都必须引用快照中存在的来源标识，Platform 会拒绝未知引用。Specialist 输出只是建议，不是 Evidence、审批、资产写入、下单、代码执行或设备控制。每次调用都保留审批门禁，记入 Task 预算，并持久化、可审计；每个 Run 最多四次。整个 Panel 稳定后，协调器才返回普通 Planner 和类型化 Action 边界。相互依赖的 Agent 对话、递归委派、共享隐藏记忆和任意 Agent 集群仍不支持。
+
 ## 人机协作
 
 物理实验是一个异步执行器，不是 AI 流程中的特例：
@@ -295,7 +297,7 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - 受治理服务商目录、不可变服务契约、范围权限和 Research Environment 准确版本固定（已交付）；
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
-- 独立建议型 Reviewer Agent、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；有界 Instrument 反馈循环只存在于其明确控制会话契约内，任意 Action 图循环和任意多 Agent 执行仍待后续实现；
+- 独立建议型 Reviewer Agent、有来源依据的 2–4 角色 Specialist Agent Panel、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；有界 Instrument 反馈循环只存在于其明确控制会话契约内，任意 Action 图循环、相互依赖的 Agent 对话和无限制多 Agent 执行仍待后续实现；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性

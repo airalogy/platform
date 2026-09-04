@@ -1500,6 +1500,32 @@ declare namespace I18n {
         searchQuery: string
         searchQueryPlaceholder: string
         resultLimit: string
+        doi: string
+        doiPlaceholder: string
+        toolSchemaHint: string
+        specialistRole: string
+        specialistQuestion: string
+        specialistQuestionPlaceholder: string
+        specialistDeliverable: string
+        specialistDeliverablePlaceholder: string
+        specialistBoundaryHint: string
+        specialistPreviewBoundary: string
+        specialistContext: string
+        specialistContextSources: string
+        specialistFindings: string
+        specialistRecommendations: string
+        adviceOnly: string
+        specialistRoles: {
+          literature_analyst: string
+          experimental_designer: string
+          data_analyst: string
+          research_critic: string
+        }
+        specialistConfidence: {
+          low: string
+          medium: string
+          high: string
+        }
         actionTitle: string
         actionDescription: string
         waitEventAction: string

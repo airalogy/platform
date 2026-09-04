@@ -14,6 +14,14 @@ AI 可用时，也可先在 **Aira 意图入口**中说明科学问题和可选�
 
 之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。需要使用新版本时应创建新 Research Task；后续 Run 会按设计继承来源环境。
 
+## 请有界 Specialist Agent 提供建议
+
+AI 可用时，可在 Task 的数字工具中加入“询问有界科研 Specialist”。Run 执行中，Aira 可以提议一个 Specialist，也可以围绕同一个科学问题，组成 2–4 个角色不重复的 Panel：文献分析专家、实验设计专家、数据分析专家和科研质疑专家。也可手工选择“增加 Action → 运行科研工具”，选择 Specialist、角色，填写准确问题和期望交付内容。
+
+手工确认前，请核对角色、问题、保存位置和已锁定上下文摘要。确认只会创建建议型 Tool Action；Aira 提议仍停在普通审批边界。每个 Specialist 只能看到同一份固定、有上限的 Task、当前策略、已审核且非 Restricted 的 Knowledge，以及已回传到 Run 的类型化结果快照；不能上网或嵌套调用 Tool。每条发现和建议都必须引用快照中的来源标识，Platform 会拒绝虚构引用。每个 Run 最多接受四个 Specialist Action。Platform 不会自动重复失败的模型调用并再次计费；需要重试时，请先检查失败原因，再有意创建新 Action。
+
+结果是分析建议，不是已验证 Evidence 或已完成工作。工作台会展示角色、置信度、来源标识、不确定性、风险、建议的下一个 Action 类型、模型与上下文摘要。Specialist 不能创建或编辑 Protocol、采纳 Claim、写入 Knowledge、指派人员、支出、下单、运行代码或操作设备。整个 Panel 结束后，Aira 才获取结构化建议，然后回到普通 Planner 和确定性 Action/审批流程。AI 关闭时该工具不可用；手工 Knowledge 审核、Protocol 设计、Compute、Human Work 和所有核心执行路径仍完整保留。
+
 ## 安全开启经评估的自主执行
 
 仅选择自主等级不会开启自动执行。符合类型的 Action 只有在三道控制同时同意时才可不经再次审批执行：Lab Research 策略开启该类别；精确 Executor Binding 以及技术、风险、费用和时间限制允许；未过期的已评估授权严格匹配 Capability 版本和 Executor 摘要。当前可准入类型包括内部只读 Tool、被动类型化 Wait Event，以及低风险且禁止网络的 Compute。人员、Protocol 工作、结构化 Human Work、仪器、资源承诺和外部服务下单仍需审批。

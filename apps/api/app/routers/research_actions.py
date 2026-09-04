@@ -49,6 +49,11 @@ from app.services.research_runtime import (
     require_research_capability,
     utcnow,
 )
+from app.services.research_specialists import (
+    SPECIALIST_TOOL_KEY,
+    build_specialist_context_snapshot,
+    ensure_specialist_action_capacity,
+)
 from app.services.research_tools import (
     research_tool_catalog,
     validate_tool_arguments,
@@ -197,7 +202,7 @@ def _tool_command(
 ) -> dict[str, Any]:
     definition = pinned_tool_definition(run.environment_snapshot or {}, params.tool_key)
     validate_tool_arguments(definition, params.arguments)
-    return {
+    command = {
         "task_id": str(task.id),
         "task_revision": task.revision,
         "run_id": str(run.id),
@@ -209,6 +214,15 @@ def _tool_command(
         "description": params.description,
         "idempotency_key": params.idempotency_key,
     }
+    if definition.key == SPECIALIST_TOOL_KEY:
+        model_name = task.ai_model or config.CHAT_MODEL_FAST
+        command["specialist_model"] = model_name
+        command["specialist_context"] = build_specialist_context_snapshot(
+            task=task,
+            run=run,
+            model_name=model_name,
+        )
+    return command
 
 
 def _wait_command(
@@ -307,6 +321,8 @@ async def preview_tool_action(
         db_session, current_user, task_id, enforce_limits=True
     )
     try:
+        if params.tool_key == SPECIALIST_TOOL_KEY:
+            await ensure_specialist_action_capacity(db_session, run_id=run.id)
         command = _tool_command(task=task, run=run, params=params)
         definition = pinned_tool_definition(
             run.environment_snapshot or {}, params.tool_key
@@ -318,11 +334,19 @@ async def preview_tool_action(
         "command": command,
         "destination": _destination(task=task, project=project, lab=lab, run=run),
         "tool": definition.payload(),
-        "effects": [
-            "Create a version-pinned Tool Job Action",
-            "Execute it through the retryable Platform job worker",
-            "Persist output and provenance without importing formal Knowledge automatically",
-        ],
+        "effects": (
+            [
+                "Create an approval-gated, version-pinned advisory Tool Action",
+                "Send only the displayed digest-bound Research context to the selected model",
+                "Persist source-grounded advice and provenance without executing or accepting it",
+            ]
+            if definition.key == SPECIALIST_TOOL_KEY
+            else [
+                "Create a version-pinned Tool Job Action",
+                "Execute it through the retryable Platform job worker",
+                "Persist output and provenance without importing formal Knowledge automatically",
+            ]
+        ),
     }
 
 
@@ -336,6 +360,23 @@ async def create_tool_action(
     task, _project, _lab, run = await _active_task_context(
         db_session, current_user, task_id, enforce_limits=True
     )
+    if params.tool_key == SPECIALIST_TOOL_KEY:
+        task = (
+            await db_session.execute(
+                select(ResearchTask)
+                .where(ResearchTask.id == task.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        run = (
+            await db_session.execute(
+                select(ResearchRun)
+                .where(ResearchRun.id == run.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
     try:
         command = _tool_command(task=task, run=run, params=params)
         definition = pinned_tool_definition(
@@ -367,6 +408,11 @@ async def create_tool_action(
         if existing_job is None:
             raise HTTPException(status_code=409, detail="Tool Action is incomplete")
         return _digital_action_payload(existing, tool_job=existing_job)
+    if definition.key == SPECIALIST_TOOL_KEY:
+        try:
+            await ensure_specialist_action_capacity(db_session, run_id=run.id)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     await create_plan_version(
         db_session,
@@ -389,12 +435,20 @@ async def create_tool_action(
             "tool_key": definition.key,
             "tool_version": definition.version,
             "arguments": params.arguments,
+            **(
+                {
+                    "specialist_context": command["specialist_context"],
+                    "specialist_model": command["specialist_model"],
+                }
+                if definition.key == SPECIALIST_TOOL_KEY
+                else {}
+            ),
             "source": "manual",
             "resume_run": True,
         },
         requirements={
             "risk": definition.risk,
-            "read_only": True,
+            "read_only": definition.risk in {"read_only", "external_read_only"},
             "autonomy_target": tool_autonomy_target(definition.key, definition.version),
         },
         policy_decision="allow",
@@ -409,6 +463,7 @@ async def create_tool_action(
         tool_version=definition.version,
         arguments=params.arguments,
         status=ResearchToolJobStatus.QUEUED.value,
+        timeout_seconds=300 if definition.key == SPECIALIST_TOOL_KEY else 60,
     )
     db_session.add(tool_job)
     await db_session.flush()

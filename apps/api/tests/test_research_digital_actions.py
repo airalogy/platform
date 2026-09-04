@@ -875,6 +875,7 @@ def test_tool_catalog_is_allowlisted_versioned_and_schema_validated():
     catalog = research_tool_catalog()
 
     assert set(catalog) == {
+        "aira.specialist",
         "knowledge.search",
         "literature.search",
         "literature.resolve_doi",
@@ -1227,7 +1228,45 @@ def test_approved_tool_action_is_queued_at_a_durable_boundary(monkeypatch):
     assert run.status == ResearchRunStatus.WAITING_FOR_TOOL.value
     assert run.last_error is None
     enqueue.assert_awaited_once()
+    assert enqueue.await_args.kwargs["max_attempts"] == 3
     emit.assert_awaited_once()
+
+
+def test_specialist_tool_action_never_repeats_a_model_charge_automatically(
+    monkeypatch,
+):
+    job = SimpleNamespace(
+        id=uuid4(),
+        tool_key="aira.specialist",
+        tool_version="1",
+        status="queued",
+    )
+    action = SimpleNamespace(
+        id=uuid4(),
+        policy_decision="ask",
+        status=ResearchActionStatus.APPROVED.value,
+        revision=1,
+    )
+    run = SimpleNamespace(id=uuid4(), status="waiting_for_approval", last_error=None)
+    task = SimpleNamespace(
+        id=uuid4(), lab_id=uuid4(), status=ResearchTaskStatus.ACTIVE.value
+    )
+    monkeypatch.setattr(ResearchToolJob, "find_by", AsyncMock(return_value=job))
+    enqueue = AsyncMock()
+    monkeypatch.setattr(research_runtime, "enqueue_job", enqueue)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    asyncio.run(
+        activate_tool_action(
+            SimpleNamespace(),
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=uuid4(),
+        )
+    )
+
+    assert enqueue.await_args.kwargs["max_attempts"] == 1
 
 
 def test_approved_wait_action_opens_only_the_pinned_event(monkeypatch):

@@ -95,7 +95,7 @@ class AiraComputeRequest(BaseModel):
 
 
 class AiraToolRequest(BaseModel):
-    """One independently executable read-only Tool call."""
+    """One independently executable read-only or advisory Tool call."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -828,7 +828,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         "tool_key": "required only for tool",
         "parallel_tools": [
             {
-                "tool_key": "listed read-only Tool key",
+                "tool_key": "listed read-only Tool key or aira.specialist",
                 "arguments": "must match that Tool's input_schema",
                 "purpose": "why this independent call is needed",
             }
@@ -929,7 +929,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "Human Work is a bounded observation, collection, coordination, or review task that is not itself a reusable scientific method. Use the fixed field types and never choose a person; Platform resolves and rechecks the pinned Human executor. A submitted result requires human review before it becomes Evidence or releases dependencies.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
-            "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
+            "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning, or for one bounded Specialist Agent panel. A Specialist panel must contain two to four aira.specialist calls with distinct roles, a shared scientific question, and role-specific deliverables. Never mix Specialist calls with other Tools in one frontier, repeat a role, or ask a Specialist to execute, approve, write an asset, order, or operate equipment.",
             "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. When a downstream argument comes from a direct parent's output, omit that static argument and declare one result_binding using the parent's output_schema. Platform resolves and Schema-validates bindings before approval or execution. Platform will release a node only after every dependency completes; a failed dependency or invalid binding skips its descendants before replanning.",
             "Use action_graph only for a two-to-eight-node acyclic dependency graph that mixes at least two of Protocol, Human Work, Tool, Resource, Instrument, External Service, Compute, and Wait. Every node keeps its normal contract, permissions, approval, resource, budget, and executor gate. A Protocol, Human Work, Resource, Instrument, or External Service node is never permission to assign a person, reserve, operate, or order: Platform releases it only after prerequisites complete, then revalidates it and enters the ordinary human-work, approval, or quote workflow. Nodes may depend on completion but mixed graphs cannot bind one node's output into another node's input yet; use only complete static inputs, existing approved bookings, and exact pinned assets. A failed, cancelled, or rejected prerequisite skips its descendants before replanning.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
@@ -1006,8 +1006,11 @@ async def plan_next_research_action(
         if require_read_only and definition.risk not in {
             "read_only",
             "external_read_only",
+            "model_advisory",
         }:
-            raise ValueError("Parallel planning only supports read-only Research Tools")
+            raise ValueError(
+                "Parallel planning only supports read-only or advisory Research Tools"
+            )
         if bound_argument_names:
             validate_tool_argument_template(
                 definition,
@@ -1026,10 +1029,35 @@ async def plan_next_research_action(
                 call.arguments,
                 require_read_only=True,
             )
+        specialist_calls = [
+            call
+            for call in proposal.parallel_tools
+            if call.tool_key == "aira.specialist"
+        ]
+        if specialist_calls:
+            if len(specialist_calls) != len(proposal.parallel_tools):
+                raise ValueError(
+                    "A Specialist Agent panel cannot mix Specialist and other Tools"
+                )
+            roles = [str(call.arguments.get("role") or "") for call in specialist_calls]
+            if len(roles) != len(set(roles)):
+                raise ValueError("A Specialist Agent panel requires distinct roles")
+            questions = {
+                " ".join(str(call.arguments.get("question") or "").split()).casefold()
+                for call in specialist_calls
+            }
+            if len(questions) != 1:
+                raise ValueError(
+                    "A Specialist Agent panel requires one shared scientific question"
+                )
     if proposal.decision == "tool_graph":
         graph_nodes = {node.node_id: node for node in proposal.tool_graph}
         tool_catalog = research_tool_catalog()
         for node in proposal.tool_graph:
+            if node.tool_key == "aira.specialist":
+                raise ValueError(
+                    "Specialist Agents cannot run inside a dependent Tool graph"
+                )
             validate_tool_call(
                 node.tool_key,
                 node.arguments,
@@ -1142,6 +1170,10 @@ async def plan_next_research_action(
             elif node.decision == "human":
                 validate_human_work_request(node.human_request)
             elif node.decision == "tool":
+                if node.tool_key == "aira.specialist":
+                    raise ValueError(
+                        "Specialist Agents cannot run inside a dependent Action graph"
+                    )
                 validate_tool_call(
                     node.tool_key or "",
                     node.arguments,
