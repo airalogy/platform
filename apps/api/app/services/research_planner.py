@@ -162,6 +162,82 @@ class AiraToolGraphNode(AiraToolRequest):
         return self
 
 
+class AiraActionGraphNode(BaseModel):
+    """One governed digital Action in a bounded mixed dependency graph."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    decision: Literal["tool", "compute", "wait"]
+    thought: str = Field(default="", max_length=4000)
+    depends_on: list[str] = Field(default_factory=list, max_length=7)
+    tool_key: str | None = Field(default=None, max_length=128)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    compute_request: AiraComputeRequest | None = None
+    wait_template_key: (
+        Literal[
+            "data_asset.ready",
+            "research_file.received",
+            "external_service.finished",
+        ]
+        | None
+    ) = None
+    wait_title: str | None = Field(default=None, max_length=255)
+    wait_description: str | None = Field(default=None, max_length=20_000)
+
+    @model_validator(mode="after")
+    def normalize_graph_node(self):
+        self.thought = self.thought.strip()
+        self.depends_on = [item.strip() for item in self.depends_on]
+        self.tool_key = self.tool_key.strip() if self.tool_key else None
+        self.wait_title = self.wait_title.strip() if self.wait_title else None
+        self.wait_description = (
+            self.wait_description.strip() if self.wait_description else None
+        )
+        if any(not item for item in self.depends_on):
+            raise ValueError("Action graph dependencies cannot be blank")
+        if len(self.depends_on) != len(set(self.depends_on)):
+            raise ValueError("Action graph dependencies must be unique")
+        if self.node_id in self.depends_on:
+            raise ValueError("An Action graph node cannot depend on itself")
+        if self.decision == "tool":
+            if not self.tool_key:
+                raise ValueError("A Tool graph node requires tool_key")
+            if self.compute_request or self.wait_template_key:
+                raise ValueError("A Tool graph node contains fields for another type")
+        elif self.decision == "compute":
+            if self.compute_request is None:
+                raise ValueError("A Compute graph node requires compute_request")
+            if self.tool_key or self.arguments or self.wait_template_key:
+                raise ValueError(
+                    "A Compute graph node contains fields for another type"
+                )
+        else:
+            if not self.wait_template_key:
+                raise ValueError("A Wait graph node requires wait_template_key")
+            if self.tool_key or self.arguments or self.compute_request:
+                raise ValueError("A Wait graph node contains fields for another type")
+        if self.decision != "wait" and any([self.wait_title, self.wait_description]):
+            raise ValueError("Wait labels are only valid for a Wait graph node")
+        return self
+
+    def as_action_proposal(self) -> dict[str, Any]:
+        """Return the exact single-Action proposal represented by this node."""
+
+        data: dict[str, Any] = {"decision": self.decision, "thought": self.thought}
+        if self.decision == "tool":
+            data.update(tool_key=self.tool_key, arguments=self.arguments)
+        elif self.decision == "compute":
+            data["compute_request"] = self.compute_request
+        else:
+            data.update(
+                wait_template_key=self.wait_template_key,
+                wait_title=self.wait_title,
+                wait_description=self.wait_description,
+            )
+        return data
+
+
 class AiraActionProposal(BaseModel):
     """One untrusted AI proposal, validated before any Action is persisted."""
 
@@ -172,6 +248,7 @@ class AiraActionProposal(BaseModel):
         "tool",
         "parallel_tools",
         "tool_graph",
+        "action_graph",
         "resource",
         "instrument",
         "service",
@@ -185,6 +262,7 @@ class AiraActionProposal(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     parallel_tools: list[AiraToolRequest] = Field(default_factory=list, max_length=4)
     tool_graph: list[AiraToolGraphNode] = Field(default_factory=list, max_length=8)
+    action_graph: list[AiraActionGraphNode] = Field(default_factory=list, max_length=8)
     wait_template_key: (
         Literal[
             "data_asset.ready",
@@ -280,6 +358,45 @@ class AiraActionProposal(BaseModel):
                 raise ValueError("Tool graph calls contain duplicates")
         elif self.tool_graph:
             raise ValueError("tool_graph is only valid for a Tool graph proposal")
+        if self.decision == "action_graph":
+            if len(self.action_graph) < 2:
+                raise ValueError("An Action graph proposal requires at least two nodes")
+            node_ids = [item.node_id for item in self.action_graph]
+            if len(node_ids) != len(set(node_ids)):
+                raise ValueError("Action graph node IDs must be unique")
+            if len({item.decision for item in self.action_graph}) < 2:
+                raise ValueError(
+                    "A mixed Action graph requires at least two Action types"
+                )
+            known_ids = set(node_ids)
+            if not any(item.depends_on for item in self.action_graph):
+                raise ValueError("An Action graph proposal requires a dependency")
+            dependencies = {
+                item.node_id: set(item.depends_on) for item in self.action_graph
+            }
+            for item in self.action_graph:
+                if set(item.depends_on) - known_ids:
+                    raise ValueError(
+                        "Action graph dependency references an unknown node"
+                    )
+            visiting: set[str] = set()
+            visited: set[str] = set()
+
+            def visit_action(node_id: str) -> None:
+                if node_id in visited:
+                    return
+                if node_id in visiting:
+                    raise ValueError("Action graph dependencies contain a cycle")
+                visiting.add(node_id)
+                for parent_id in dependencies[node_id]:
+                    visit_action(parent_id)
+                visiting.remove(node_id)
+                visited.add(node_id)
+
+            for node_id in node_ids:
+                visit_action(node_id)
+        elif self.action_graph:
+            raise ValueError("action_graph is only valid for an Action graph proposal")
         if self.decision == "instrument" and self.instrument_command_id is None:
             raise ValueError("An instrument proposal requires instrument_command_id")
         if self.decision != "tool" and self.tool_key:
@@ -512,6 +629,20 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
                 ],
             }
         ],
+        "action_graph": [
+            {
+                "node_id": "stable local ID",
+                "decision": "tool | compute | wait",
+                "thought": "why this Action is needed",
+                "depends_on": "local node IDs that must complete first",
+                "tool_key": "required only for tool",
+                "arguments": "required only for tool and must match input_schema",
+                "compute_request": "the same bounded object used by compute",
+                "wait_template_key": "required only for wait",
+                "wait_title": "optional only for wait",
+                "wait_description": "optional only for wait",
+            }
+        ],
         "instrument_command_id": "required only for instrument; choose one listed ID",
         "arguments": "tool or instrument arguments; must match its input_schema",
         "resource_request": {
@@ -564,11 +695,12 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, parallel_tools, tool_graph, resource, instrument, service, compute, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, parallel_tools, tool_graph, action_graph, resource, instrument, service, compute, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
             "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. When a downstream argument comes from a direct parent's output, omit that static argument and declare one result_binding using the parent's output_schema. Platform resolves and Schema-validates bindings before approval or execution. Platform will release a node only after every dependency completes; a failed dependency or invalid binding skips its descendants before replanning.",
+            "Use action_graph only for a two-to-eight-node acyclic dependency graph that mixes at least two of Tool, Compute, and Wait. Every node keeps its normal contract and policy gate. Nodes may depend on completion but mixed graphs cannot bind one node's output into another node's input yet; use only complete static inputs and exact pinned assets. A failed, cancelled, or rejected prerequisite skips its descendants before replanning.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
@@ -676,6 +808,14 @@ async def plan_next_research_action(
                 validate_tool_output_path(
                     tool_catalog[source.tool_key], binding.source_path
                 )
+    if proposal.decision == "action_graph":
+        for node in proposal.action_graph:
+            if node.decision == "tool":
+                validate_tool_call(
+                    node.tool_key or "",
+                    node.arguments,
+                    require_read_only=True,
+                )
     if proposal.decision == "resource":
         request = proposal.resource_request
         if request is None:
@@ -741,10 +881,10 @@ async def plan_next_research_action(
             proposal.service_request,
             "Service request",
         )
-    if proposal.decision == "compute":
+
+    def validate_compute_request(request: AiraComputeRequest | None) -> None:
         from app.services.research_instruments import validate_schema_payload
 
-        request = proposal.compute_request
         if request is None:
             raise ValueError("Aira Compute proposal is incomplete")
         pinned = next(
@@ -782,4 +922,11 @@ async def plan_next_research_action(
         validate_compute_output_budget(
             request.output_files, dict(metadata.get("resource_limits") or {})
         )
+
+    if proposal.decision == "compute":
+        validate_compute_request(proposal.compute_request)
+    if proposal.decision == "action_graph":
+        for node in proposal.action_graph:
+            if node.decision == "compute":
+                validate_compute_request(node.compute_request)
     return proposal

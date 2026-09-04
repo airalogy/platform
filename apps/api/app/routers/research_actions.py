@@ -41,6 +41,7 @@ from app.services.research_runtime import (
     create_plan_version,
     emit_research_event,
     enqueue_research_advance,
+    hold_or_release_aira_action_group,
     require_research_capability,
     utcnow,
 )
@@ -264,9 +265,7 @@ async def list_research_tools(
     # Authentication is intentional even though definitions are instance-wide:
     # availability can reveal private deployment integrations.
     if task_id is None:
-        return {
-            "tools": [item.payload() for item in research_tool_catalog().values()]
-        }
+        return {"tools": [item.payload() for item in research_tool_catalog().values()]}
     _task, _project, _lab, run = await _active_task_context(
         db_session, current_user, task_id, capability="research.read"
     )
@@ -564,12 +563,18 @@ async def _wait_event_context(
     task = await db_session.get(ResearchTask, run.task_id) if run else None
     if action is None or run is None or task is None:
         raise HTTPException(status_code=404, detail="Wait Event context not found")
-    if task.status in {
-        ResearchTaskStatus.COMPLETED.value,
-        ResearchTaskStatus.CANCELLED.value,
-        ResearchTaskStatus.ARCHIVED.value,
-    } or action.status != ResearchActionStatus.WAITING.value:
-        raise HTTPException(status_code=409, detail="Wait Event can no longer be received")
+    if (
+        task.status
+        in {
+            ResearchTaskStatus.COMPLETED.value,
+            ResearchTaskStatus.CANCELLED.value,
+            ResearchTaskStatus.ARCHIVED.value,
+        }
+        or action.status != ResearchActionStatus.WAITING.value
+    ):
+        raise HTTPException(
+            status_code=409, detail="Wait Event can no longer be received"
+        )
     project = await _project(db_session, task.project_id)
     await require_research_capability(
         db_session, user=current_user, project=project, capability="research.run"
@@ -697,9 +702,19 @@ async def signal_wait_event(
         payload={"event_type": params.event_type, "event_key": wait_event.event_key},
         idempotency_key=f"wait-event:{wait_event.id}:received",
     )
-    if task.status == ResearchTaskStatus.ACTIVE.value and config.effective_ai_enabled:
+    graph_settled = await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
+    if (
+        graph_settled
+        and task.status == ResearchTaskStatus.ACTIVE.value
+        and config.effective_ai_enabled
+    ):
         await enqueue_research_advance(db_session, task=task, run=run)
-    elif task.status == ResearchTaskStatus.ACTIVE.value:
+    elif graph_settled and task.status == ResearchTaskStatus.ACTIVE.value:
         run.last_error = "AI is disabled; continue this Research Task manually."
         await emit_research_event(
             db_session,

@@ -1716,7 +1716,18 @@ async def _materialize_aira_action(
         kind = ResearchActionKind.WAIT_EVENT.value
         title = proposal.wait_title or template["title"]
         description = proposal.wait_description or template["description"]
-        event_key = f"aira.{run.id}.{step_index}.{proposal.wait_template_key}"
+        graph_node_id = str((action_graph or {}).get("node_id") or "").strip()
+        event_key = ".".join(
+            item
+            for item in [
+                "aira",
+                str(run.id),
+                str(step_index),
+                graph_node_id,
+                str(proposal.wait_template_key),
+            ]
+            if item
+        )
         input_data = {
             "event_key": event_key,
             "expected_event_type": template["expected_event_type"],
@@ -2281,6 +2292,156 @@ async def _resolve_aira_tool_result_bindings(
     return receipts
 
 
+async def _cancel_blocked_graph_action(
+    db_session: AsyncSession,
+    *,
+    action: ResearchAction,
+    error: str,
+    completed_at: datetime,
+) -> None:
+    """Mirror a dependency skip into the Action's typed execution object."""
+
+    if action.kind == ResearchActionKind.TOOL_JOB.value:
+        tool_job = await ResearchToolJob.find_by(
+            db_session, [ResearchToolJob.action_id == action.id]
+        )
+        if tool_job is None:
+            raise ValueError("Blocked graph Tool Action has no typed Tool Job")
+        tool_job.status = ResearchToolJobStatus.CANCELLED.value
+        tool_job.error = error
+        tool_job.completed_at = completed_at
+        return
+    if action.kind == ResearchActionKind.WAIT_EVENT.value:
+        wait_event = await ResearchWaitEvent.find_by(
+            db_session, [ResearchWaitEvent.action_id == action.id]
+        )
+        if wait_event is None:
+            raise ValueError("Blocked graph Wait Action has no typed Wait Event")
+        wait_event.status = ResearchWaitEventStatus.CANCELLED.value
+        wait_event.revision += 1
+        return
+    if action.kind == ResearchActionKind.COMPUTE_JOB.value:
+        from app.models.research_execution import (
+            ResearchComputeJob,
+            ResearchComputeJobStatus,
+        )
+
+        compute_job = await ResearchComputeJob.find_by(
+            db_session, [ResearchComputeJob.action_id == action.id]
+        )
+        if compute_job is None:
+            raise ValueError("Blocked graph Compute Action has no typed Compute Job")
+        compute_job.status = ResearchComputeJobStatus.CANCELLED.value
+        compute_job.error = error
+        compute_job.completed_at = completed_at
+        compute_job.revision += 1
+        return
+    raise ValueError("Blocked graph Action type cannot be cancelled")
+
+
+async def _activate_released_graph_action(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+) -> None:
+    """Apply the pinned policy and activate one newly unblocked graph node."""
+
+    if action.policy_decision == "ask":
+        approval = await request_action_approval(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            reason=(
+                "Aira dependency graph released this exact Action after all "
+                "prerequisites completed."
+            ),
+        )
+        if action.kind == ResearchActionKind.COMPUTE_JOB.value:
+            from app.models.research_execution import ResearchComputeJob
+
+            compute_job = await ResearchComputeJob.find_by(
+                db_session, [ResearchComputeJob.action_id == action.id]
+            )
+            if compute_job is None:
+                raise ValueError("Released graph Compute Action has no Compute Job")
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                kind="compute_job.requested",
+                actor_user_id=None,
+                payload={
+                    "compute_job_id": str(compute_job.id),
+                    "approval_id": str(approval.id),
+                    "environment_revision_id": str(
+                        compute_job.compute_environment_revision_id
+                    ),
+                    "source_sha256": compute_job.source_sha256,
+                    "source": "aira_action_graph",
+                },
+                idempotency_key=f"compute-job:{compute_job.id}:requested",
+            )
+        return
+    if action.policy_decision != "allow":
+        raise ValueError("Blocked graph Action has no executable policy")
+    if action.kind == ResearchActionKind.TOOL_JOB.value:
+        await activate_tool_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=None,
+        )
+        return
+    if action.kind == ResearchActionKind.WAIT_EVENT.value:
+        await activate_wait_event_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=None,
+        )
+        return
+    if action.kind == ResearchActionKind.COMPUTE_JOB.value:
+        from app.services.research_compute_jobs import activate_compute_action
+
+        compute_job = await activate_compute_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            actor_user_id=run.requested_by_user_id,
+        )
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="compute_job.queued",
+            actor_user_id=None,
+            payload={
+                "compute_job_id": str(compute_job.id),
+                "environment_revision_id": str(
+                    compute_job.compute_environment_revision_id
+                ),
+                "estimated_cost": (
+                    str(compute_job.estimated_cost)
+                    if compute_job.estimated_cost is not None
+                    else None
+                ),
+                "currency": compute_job.currency,
+                "source": "aira_action_graph",
+            },
+            idempotency_key=f"compute-job:{compute_job.id}:queued",
+        )
+        return
+    raise ValueError("Released graph Action type cannot be activated")
+
+
 async def hold_or_release_aira_action_group(
     db_session: AsyncSession,
     *,
@@ -2288,12 +2449,13 @@ async def hold_or_release_aira_action_group(
     run: ResearchRun,
     action: ResearchAction,
 ) -> bool:
-    """Advance a bounded Tool DAG or hold a legacy parallel Tool frontier.
+    """Advance a bounded dependency DAG or hold a legacy Tool frontier.
 
     Dependency rows are authoritative. A downstream node is released only when
     every parent completed. Any failed, rejected, cancelled, or skipped parent
-    deterministically skips its descendants, so no dependent Tool can execute
-    with missing inputs. The Run replans only after the whole graph settles.
+    deterministically skips its descendants. Tool result bindings remain
+    available only in the homogeneous Tool graph. The Run replans only after
+    the whole graph settles.
     """
 
     graph = _aira_action_graph(action)
@@ -2329,10 +2491,22 @@ async def hold_or_release_aira_action_group(
         for item in candidates
         if str((_aira_action_graph(item) or {}).get("id") or "") == graph_id
     ]
+    graph_type = str(graph.get("type") or "tool")
     if expected_size < 2 or len(actions) != expected_size:
-        raise ValueError("Aira Tool dependency graph is incomplete")
-    if any(item.kind != ResearchActionKind.TOOL_JOB.value for item in actions):
-        raise ValueError("Aira Tool dependency graph contains a non-Tool Action")
+        raise ValueError("Aira dependency graph is incomplete")
+    supported_kinds = (
+        {
+            ResearchActionKind.TOOL_JOB.value,
+            ResearchActionKind.COMPUTE_JOB.value,
+            ResearchActionKind.WAIT_EVENT.value,
+        }
+        if graph_type == "mixed_digital"
+        else {ResearchActionKind.TOOL_JOB.value}
+    )
+    if any(item.kind not in supported_kinds for item in actions):
+        raise ValueError("Aira dependency graph contains an unsupported Action type")
+    if graph_type == "mixed_digital" and len({item.kind for item in actions}) < 2:
+        raise ValueError("Aira mixed dependency graph does not mix Action types")
 
     action_ids = [item.id for item in actions]
     dependency_rows = list(
@@ -2345,32 +2519,34 @@ async def hold_or_release_aira_action_group(
         ).all()
     )
     if len(dependency_rows) != expected_dependency_count:
-        raise ValueError("Aira Tool dependency graph edge set is incomplete")
+        raise ValueError("Aira dependency graph edge set is incomplete")
     action_by_id = {item.id: item for item in actions}
     action_by_node_id: dict[str, ResearchAction] = {}
     for item in actions:
         node_id = str((_aira_action_graph(item) or {}).get("node_id") or "")
         if not node_id or node_id in action_by_node_id:
-            raise ValueError("Aira Tool dependency graph node IDs are invalid")
+            raise ValueError("Aira dependency graph node IDs are invalid")
         action_by_node_id[node_id] = item
     dependencies: dict[UUID, list[ResearchAction]] = {item.id: [] for item in actions}
     for dependency in dependency_rows:
         if dependency.action_id not in action_by_id:
-            raise ValueError("Aira Tool dependency child points outside its graph")
+            raise ValueError("Aira dependency child points outside its graph")
         parent = action_by_id.get(dependency.depends_on_action_id)
         if parent is None:
-            raise ValueError("Aira Tool dependency points outside its graph")
+            raise ValueError("Aira dependency points outside its graph")
         if dependency.action_id == dependency.depends_on_action_id:
-            raise ValueError("Aira Tool dependency graph contains a self edge")
+            raise ValueError("Aira dependency graph contains a self edge")
         dependencies[dependency.action_id].append(parent)
     for item in actions:
         item_graph = _aira_action_graph(item) or {}
         if len(dependencies[item.id]) != int(item_graph.get("depends_on_count") or 0):
-            raise ValueError("Aira Tool dependency graph node is incomplete")
+            raise ValueError("Aira dependency graph node is incomplete")
         parent_node_ids = {
             str((_aira_action_graph(parent) or {}).get("node_id") or "")
             for parent in dependencies[item.id]
         }
+        if graph_type != "tool" and list(item_graph.get("result_bindings") or []):
+            raise ValueError("Mixed Action graphs cannot contain result bindings")
         if any(
             str(binding.get("source_node_id") or "") not in parent_node_ids
             for binding in list(item_graph.get("result_bindings") or [])
@@ -2404,14 +2580,12 @@ async def hold_or_release_aira_action_group(
                 )
                 candidate.completed_at = now
                 candidate.revision += 1
-                tool_job = await ResearchToolJob.find_by(
-                    db_session, [ResearchToolJob.action_id == candidate.id]
+                await _cancel_blocked_graph_action(
+                    db_session,
+                    action=candidate,
+                    error=candidate.error,
+                    completed_at=now,
                 )
-                if tool_job is None:
-                    raise ValueError("Blocked Aira Tool Action has no typed Tool Job")
-                tool_job.status = ResearchToolJobStatus.CANCELLED.value
-                tool_job.error = candidate.error
-                tool_job.completed_at = now
                 await emit_research_event(
                     db_session,
                     task_id=task.id,
@@ -2438,13 +2612,14 @@ async def hold_or_release_aira_action_group(
                     for parent in parents
                 }
                 try:
-                    await _resolve_aira_tool_result_bindings(
-                        db_session,
-                        task=task,
-                        run=run,
-                        action=candidate,
-                        parents_by_node_id=parents_by_node_id,
-                    )
+                    if graph_type == "tool":
+                        await _resolve_aira_tool_result_bindings(
+                            db_session,
+                            task=task,
+                            run=run,
+                            action=candidate,
+                            parents_by_node_id=parents_by_node_id,
+                        )
                 except ValueError as error:
                     candidate.status = ResearchActionStatus.FAILED.value
                     candidate.error = f"Dependency result binding failed: {error}"
@@ -2477,29 +2652,12 @@ async def hold_or_release_aira_action_group(
                     continue
                 candidate.status = ResearchActionStatus.PROPOSED.value
                 candidate.revision += 1
-                if candidate.policy_decision == "ask":
-                    await request_action_approval(
-                        db_session,
-                        task=task,
-                        run=run,
-                        action=candidate,
-                        reason=(
-                            "Aira Tool dependency graph released this exact Action "
-                            "after all prerequisites completed."
-                        ),
-                    )
-                elif candidate.policy_decision == "allow":
-                    await activate_tool_action(
-                        db_session,
-                        task=task,
-                        run=run,
-                        action=candidate,
-                        actor_user_id=None,
-                    )
-                else:
-                    raise ValueError(
-                        "Blocked Aira Tool Action has no executable policy"
-                    )
+                await _activate_released_graph_action(
+                    db_session,
+                    task=task,
+                    run=run,
+                    action=candidate,
+                )
                 await emit_research_event(
                     db_session,
                     task_id=task.id,
@@ -2537,8 +2695,14 @@ async def hold_or_release_aira_action_group(
         run.status = ResearchRunStatus.PAUSED.value
     elif any(item.status == ResearchActionStatus.PROPOSED.value for item in remaining):
         run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
-    else:
+    elif any(item.kind == ResearchActionKind.COMPUTE_JOB.value for item in remaining):
+        run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
+    elif any(item.kind == ResearchActionKind.TOOL_JOB.value for item in remaining):
         run.status = ResearchRunStatus.WAITING_FOR_TOOL.value
+    elif any(item.kind == ResearchActionKind.WAIT_EVENT.value for item in remaining):
+        run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
+    else:
+        raise ValueError("Aira dependency graph has no aggregate waiting state")
     return False
 
 
@@ -2642,6 +2806,117 @@ async def _materialize_aira_tool_graph(
             "graph_id": graph_id,
             "plan_version": run.plan_version,
             "action_ids": [str(item.id) for item in actions],
+            "dependency_count": dependency_count,
+            "size": size,
+        },
+        idempotency_key=f"{graph_id}:created",
+    )
+    await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=actions[0],
+    )
+    return actions
+
+
+async def _materialize_aira_action_graph(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    proposal: AiraActionProposal,
+    step_index: int,
+) -> list[ResearchAction]:
+    """Persist and release one bounded mixed Tool/Compute/Wait graph."""
+
+    if proposal.decision != "action_graph" or len(proposal.action_graph) < 2:
+        raise ValueError("Aira mixed Action dependency graph is incomplete")
+    proposal_data = proposal.model_dump(mode="json", exclude_none=True)
+    proposal_digest = canonical_digest(proposal_data)
+    graph_id = f"aira-action-graph:{step_index}:{proposal_digest[:24]}"
+    existing = list(
+        (
+            await db_session.scalars(
+                select(ResearchAction).where(
+                    ResearchAction.run_id == run.id,
+                    ResearchAction.idempotency_key.like(f"{graph_id}:%"),
+                )
+            )
+        ).all()
+    )
+    if existing:
+        if len(existing) != len(proposal.action_graph):
+            raise ValueError(
+                "Aira mixed Action dependency graph is only partially materialized"
+            )
+        return sorted(existing, key=lambda item: item.sequence)
+
+    await create_plan_version(
+        db_session,
+        task=task,
+        run=run,
+        kind="aira",
+        plan={
+            "action_graph": proposal_data,
+            "previous_plan_version": run.plan_version,
+        },
+        summary=proposal.thought or "Aira proposed a mixed Action dependency graph",
+    )
+    actions: list[ResearchAction] = []
+    action_by_node_id: dict[str, ResearchAction] = {}
+    size = len(proposal.action_graph)
+    dependency_count = sum(len(node.depends_on) for node in proposal.action_graph)
+    for position, node in enumerate(proposal.action_graph, start=1):
+        node_proposal = AiraActionProposal.model_validate(node.as_action_proposal())
+        action = await _materialize_aira_action(
+            db_session,
+            task=task,
+            run=run,
+            proposal=node_proposal,
+            step_index=step_index,
+            create_plan=False,
+            idempotency_key_override=f"{graph_id}:{node.node_id}",
+            action_graph={
+                "id": graph_id,
+                "type": "mixed_digital",
+                "node_id": node.node_id,
+                "position": position,
+                "size": size,
+                "depends_on_count": len(node.depends_on),
+                "dependency_count": dependency_count,
+                "result_bindings": [],
+            },
+            defer_activation=True,
+        )
+        actions.append(action)
+        action_by_node_id[node.node_id] = action
+    for node in proposal.action_graph:
+        child = action_by_node_id[node.node_id]
+        for parent_node_id in node.depends_on:
+            db_session.add(
+                ResearchActionDependency(
+                    action_id=child.id,
+                    depends_on_action_id=action_by_node_id[parent_node_id].id,
+                    condition={
+                        "required_status": ResearchActionStatus.COMPLETED.value,
+                        "on_unsatisfied": ResearchActionStatus.SKIPPED.value,
+                    },
+                )
+            )
+    await db_session.flush()
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="aira.action_graph_created",
+        actor_user_id=None,
+        payload={
+            "graph_id": graph_id,
+            "graph_type": "mixed_digital",
+            "plan_version": run.plan_version,
+            "action_ids": [str(item.id) for item in actions],
+            "action_kinds": [item.kind for item in actions],
             "dependency_count": dependency_count,
             "size": size,
         },
@@ -2964,6 +3239,7 @@ async def process_research_run_advance(
                 "tool",
                 "parallel_tools",
                 "tool_graph",
+                "action_graph",
                 "resource",
                 "instrument",
                 "service",
@@ -2994,6 +3270,14 @@ async def process_research_run_advance(
                     )
                 elif proposal.decision == "tool_graph":
                     actions = await _materialize_aira_tool_graph(
+                        db_session,
+                        task=current_task,
+                        run=current_run,
+                        proposal=proposal,
+                        step_index=step_index,
+                    )
+                elif proposal.decision == "action_graph":
+                    actions = await _materialize_aira_action_graph(
                         db_session,
                         task=current_task,
                         run=current_run,

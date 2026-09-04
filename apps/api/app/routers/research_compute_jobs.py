@@ -105,6 +105,7 @@ from app.services.research_runtime import (
     create_plan_version,
     emit_research_event,
     enqueue_research_advance,
+    hold_or_release_aira_action_group,
     request_action_approval,
     require_research_capability,
     research_run_has_executable_ai_path,
@@ -2052,13 +2053,20 @@ async def complete_compute_job(
         },
         idempotency_key=f"compute-job:{job.id}:completed",
     )
+    graph_settled = await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
     if (
-        task.status == ResearchTaskStatus.ACTIVE.value
+        graph_settled
+        and task.status == ResearchTaskStatus.ACTIVE.value
         and config.effective_ai_enabled
         and await research_run_has_executable_ai_path(db_session, task=task, run=run)
     ):
         await enqueue_research_advance(db_session, task=task, run=run)
-    elif task.status == ResearchTaskStatus.ACTIVE.value:
+    elif graph_settled and task.status == ResearchTaskStatus.ACTIVE.value:
         run.last_error = "AI is unavailable; continue this Research Task manually."
         await emit_research_event(
             db_session,
@@ -2145,6 +2153,12 @@ async def fail_compute_job(
         },
         idempotency_key=f"compute-job:{job.id}:failed",
     )
+    await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
     await db_session.commit()
     return {"status": job.status}
 
@@ -2230,6 +2244,12 @@ async def acknowledge_compute_cancellation(
             "usage": job.usage,
         },
         idempotency_key=f"compute-job:{job.id}:cancelled",
+    )
+    await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
     )
     await db_session.commit()
     return {"status": job.status}

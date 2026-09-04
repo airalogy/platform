@@ -44,6 +44,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增由 Platform 治理的 Aira Action Planner，可在固定版本 Protocol、白名单且固定版本的 Tool、类型化外部 Wait 与结束研究路径之间选择；AI 提案必须经过 Schema 校验、摘要绑定、审批与完整留痕，也能在未预选 Protocol 的纯数字科研任务中运行，不会把 Tool 伪装成 Protocol。
 - 新增有界的 Aira 并行 Tool 前沿：规划器可同时发起 2–4 个相互独立且固定版本的只读检索，每个分支仍保留独立策略与审批边界，工作台明确标出并行分支，并且只有所有分支都完成、失败或被拒绝后才会重新规划，避免首个结果提前触发竞态。
 - 新增有界的 Aira Tool 依赖图：规划器可将 2–8 个固定版本的只读 Tool 节点持久化为无环图；Platform 只释放根节点和已满足前置条件的节点，失败或被拒绝的前置会确定性跳过其后代；准确边集在工作台可见并进入封存结果包，整张图稳定后才会重新规划。
+- 新增有界的混合数字 Action 图：Aira 可在同一无环计划中组合 2–8 个 Tool、隔离 Compute 和类型化 Wait 节点；每个节点仍保留自己的策略、审批、预算和执行器边界，完成回调只释放已满足依赖的工作，失败会先确定性跳过后代，整张图结束后再统一重规划。
 - 新增 Aira Tool 依赖节点之间的受治理数据流：下游只读 Tool 只能从直接前置的结构化输出路径绑定已声明参数，Platform 会记录来源 Action 修订与摘要回执，并在审批或执行前重新校验完整输入 Schema；无效绑定必须失败关闭。同时新增可选 DOI 解析 Tool，支持实用的“文献检索 → 元数据解析”链路，不会自动导入私有资产。
 - 新增版本化 Lab Research 自治策略：Owner 与 Manager 通过“预览 → 确认”配置受限的内部只读 Tool、被动 Wait Event 和隔离低风险 Compute 自动执行边界；辅助模式、人员、物理工作、资源与外部承诺始终需审批；Research Environment 固定精确策略修订，每个 Action 记录策略判定及原因。
 - 新增由 Project Protocol、白名单 Tool 与 Lab 资源定义派生的 Capability Registry；创建 Research Task 时现需明确选择并固定数字能力版本，记录初始 Executor Binding，Aira 和手工 Tool Action 对 Research Environment 之外的能力或已不可用的固定版本必须失败关闭。

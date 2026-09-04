@@ -415,6 +415,72 @@ def test_action_proposal_is_strict_and_decision_specific():
                 ],
             }
         )
+    mixed_graph = AiraActionProposal.model_validate(
+        {
+            "decision": "action_graph",
+            "thought": "Search first, then wait for the requested data",
+            "action_graph": [
+                {
+                    "node_id": "search",
+                    "decision": "tool",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "RNA"},
+                    "thought": "Find reviewed context",
+                },
+                {
+                    "node_id": "await_data",
+                    "decision": "wait",
+                    "wait_template_key": "data_asset.ready",
+                    "thought": "Wait for the selected measurements",
+                    "depends_on": ["search"],
+                },
+            ],
+        }
+    )
+    assert mixed_graph.action_graph[1].decision == "wait"
+    assert mixed_graph.action_graph[1].depends_on == ["search"]
+    with pytest.raises(ValidationError, match="at least two Action types"):
+        AiraActionProposal.model_validate(
+            {
+                "decision": "action_graph",
+                "action_graph": [
+                    {
+                        "node_id": "first",
+                        "decision": "tool",
+                        "tool_key": "knowledge.search",
+                        "arguments": {"query": "RNA"},
+                    },
+                    {
+                        "node_id": "second",
+                        "decision": "tool",
+                        "tool_key": "knowledge.search",
+                        "arguments": {"query": "protein"},
+                        "depends_on": ["first"],
+                    },
+                ],
+            }
+        )
+    with pytest.raises(ValidationError, match="contain a cycle"):
+        AiraActionProposal.model_validate(
+            {
+                "decision": "action_graph",
+                "action_graph": [
+                    {
+                        "node_id": "search",
+                        "decision": "tool",
+                        "tool_key": "knowledge.search",
+                        "arguments": {"query": "RNA"},
+                        "depends_on": ["await_data"],
+                    },
+                    {
+                        "node_id": "await_data",
+                        "decision": "wait",
+                        "wait_template_key": "data_asset.ready",
+                        "depends_on": ["search"],
+                    },
+                ],
+            }
+        )
     resource = AiraActionProposal.model_validate(
         {
             "decision": "resource",
@@ -710,6 +776,64 @@ def test_planner_validates_tool_graph_against_environment(monkeypatch):
                 "qwen3.5-flash",
             )
         )
+
+
+def test_planner_validates_mixed_action_graph_against_environment(monkeypatch):
+    proposal = AsyncMock(
+        return_value={
+            "decision": "action_graph",
+            "thought": "Collect context, then analyze the pinned measurements",
+            "action_graph": [
+                {
+                    "node_id": "context",
+                    "decision": "tool",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "RNA", "limit": 5},
+                    "thought": "Find reviewed context",
+                },
+                {
+                    "node_id": "analysis",
+                    "decision": "compute",
+                    "depends_on": ["context"],
+                    "thought": "Analyze the pinned measurements",
+                    "compute_request": {
+                        "compute_environment_revision_id": PINNED_COMPUTE[0][
+                            "source_revision_id"
+                        ],
+                        "language": "python",
+                        "source_code": "print('analysis')\n",
+                        "input_payload": {"alpha": 0.05},
+                        "input_assets": [
+                            {
+                                "data_asset_version_id": PINNED_COMPUTE_INPUTS[0][
+                                    "data_asset_version_id"
+                                ],
+                                "mount_name": "measurements.csv",
+                            }
+                        ],
+                    },
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(research_planner, "aira_action_proposal", proposal)
+    context = {
+        "goal": "Study RNA",
+        "protocols": [],
+        "tools": PINNED_TOOLS,
+        "compute": PINNED_COMPUTE,
+        "compute_inputs": PINNED_COMPUTE_INPUTS,
+    }
+
+    result = asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    assert result.decision == "action_graph"
+    assert result.action_graph[1].decision == "compute"
+    proposal.return_value["action_graph"][1]["compute_request"][
+        "compute_environment_revision_id"
+    ] = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    with pytest.raises(ValueError, match="outside the environment"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
 
 
 def test_planner_accepts_literature_search_to_doi_resolution_graph(monkeypatch):

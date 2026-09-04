@@ -275,12 +275,15 @@ def _graph_action(
     status: str = ResearchActionStatus.BLOCKED.value,
     depends_on_count: int = 0,
     dependency_count: int | None = None,
+    kind: str = "tool_job",
+    graph_type: str | None = None,
 ) -> ResearchAction:
     action = _action(status=status, position=position, size=size)
     action.run_id = run_id
     action.input_data = {
         "action_graph": {
             "id": "aira-tool-graph:5:abc",
+            **({"type": graph_type} if graph_type else {}),
             "node_id": node_id,
             "position": position,
             "size": size,
@@ -290,6 +293,7 @@ def _graph_action(
             ),
         }
     }
+    action.kind = kind
     action.revision = 1
     action.idempotency_key = f"graph:{node_id}"
     return action
@@ -649,6 +653,150 @@ def test_aira_tool_graph_persists_dependencies_before_release(monkeypatch):
 
     assert len(actions) == 2
     assert all(item[1]["defer_activation"] is True for item in materialized)
+    dependency = next(
+        call.args[0]
+        for call in db_session.add.call_args_list
+        if isinstance(call.args[0], ResearchActionDependency)
+    )
+    assert dependency.action_id == actions[1].id
+    assert dependency.depends_on_action_id == actions[0].id
+    release.assert_awaited_once()
+
+
+def test_mixed_action_graph_releases_each_typed_boundary_in_order(monkeypatch):
+    run_id = uuid4()
+    root = _graph_action(
+        run_id=run_id,
+        node_id="search",
+        position=1,
+        size=2,
+        graph_type="mixed_digital",
+    )
+    child = _graph_action(
+        run_id=run_id,
+        node_id="await_data",
+        position=2,
+        size=2,
+        depends_on_count=1,
+        kind="wait_event",
+        graph_type="mixed_digital",
+    )
+    for action in (root, child):
+        action.input_data["action_graph"]["id"] = "aira-action-graph:5:abc"
+    dependency = ResearchActionDependency(
+        action_id=child.id,
+        depends_on_action_id=root.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(id=run_id, status=ResearchRunStatus.RUNNING.value)
+    db_session = AsyncMock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [root, child]),
+        SimpleNamespace(all=lambda: [dependency]),
+        SimpleNamespace(all=lambda: [root, child]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+
+    async def activate(*_args, action, **_kwargs):
+        action.status = (
+            ResearchActionStatus.WAITING.value
+            if action.kind == "wait_event"
+            else ResearchActionStatus.QUEUED.value
+        )
+
+    monkeypatch.setattr(research_runtime, "_activate_released_graph_action", activate)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session, task=task, run=run, action=root
+        )
+    )
+    assert settled is False
+    assert root.status == ResearchActionStatus.QUEUED.value
+    assert child.status == ResearchActionStatus.BLOCKED.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_TOOL.value
+
+    root.status = ResearchActionStatus.COMPLETED.value
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session, task=task, run=run, action=root
+        )
+    )
+    assert settled is False
+    assert child.status == ResearchActionStatus.WAITING.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_EVENT.value
+
+
+def test_aira_mixed_action_graph_persists_dependencies_before_release(monkeypatch):
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(id=uuid4(), plan_version=4)
+    proposal = AiraActionProposal.model_validate(
+        {
+            "decision": "action_graph",
+            "thought": "Search, then wait for a Data Asset",
+            "action_graph": [
+                {
+                    "node_id": "search",
+                    "decision": "tool",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "RNA"},
+                },
+                {
+                    "node_id": "await_data",
+                    "decision": "wait",
+                    "wait_template_key": "data_asset.ready",
+                    "depends_on": ["search"],
+                },
+            ],
+        }
+    )
+    db_session = AsyncMock()
+    db_session.add = Mock()
+    db_session.scalars.return_value = SimpleNamespace(all=list)
+    materialized = []
+
+    async def create_plan(*_args, **_kwargs):
+        run.plan_version += 1
+
+    async def materialize(*_args, **kwargs):
+        metadata = kwargs["action_graph"]
+        node = proposal.action_graph[len(materialized)]
+        action = _graph_action(
+            run_id=run.id,
+            node_id=node.node_id,
+            position=len(materialized) + 1,
+            size=2,
+            kind=("tool_job" if node.decision == "tool" else "wait_event"),
+            graph_type="mixed_digital",
+        )
+        action.input_data["action_graph"] = metadata
+        action.plan_version = run.plan_version
+        materialized.append((action, kwargs))
+        return action
+
+    release = AsyncMock(return_value=False)
+    monkeypatch.setattr(research_runtime, "create_plan_version", create_plan)
+    monkeypatch.setattr(research_runtime, "_materialize_aira_action", materialize)
+    monkeypatch.setattr(research_runtime, "hold_or_release_aira_action_group", release)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    actions = asyncio.run(
+        research_runtime._materialize_aira_action_graph(
+            db_session,
+            task=task,
+            run=run,
+            proposal=proposal,
+            step_index=5,
+        )
+    )
+
+    assert [item.kind for item in actions] == ["tool_job", "wait_event"]
+    assert all(item[1]["defer_activation"] is True for item in materialized)
+    assert all(
+        item[1]["action_graph"]["type"] == "mixed_digital" for item in materialized
+    )
     dependency = next(
         call.args[0]
         for call in db_session.add.call_args_list
