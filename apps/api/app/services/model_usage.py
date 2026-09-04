@@ -1,5 +1,9 @@
+import hashlib
+import json
 from collections.abc import Callable, Mapping
-from typing import Any, AsyncContextManager
+from contextlib import AbstractAsyncContextManager
+from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI, Request
@@ -9,18 +13,37 @@ from masterbrain.fastapi.usage import (
 )
 from masterbrain.usage import (
     ModelUsageEvent as MasterbrainUsageEvent,
+)
+from masterbrain.usage import (
     UsageContext,
     configure_usage_sinks,
     get_usage_context,
 )
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import sessionmanager
 from app.libs.request_context import request_id_var
 from app.models.model_usage import ModelUsageEvent
+from app.models.research import (
+    ResearchEvent,
+    ResearchRun,
+    ResearchRunStatus,
+    ResearchTask,
+    ResearchTaskOutcome,
+    ResearchTaskStatus,
+)
+from app.models.research_execution import ResearchBudgetEntry, ResearchBudgetEntryKind
+from app.services.research_budget import research_budget_snapshot
 
-SessionFactory = Callable[[], AsyncContextManager[AsyncSession]]
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+TERMINAL_RESEARCH_RUN_STATUSES = {
+    ResearchRunStatus.COMPLETED.value,
+    ResearchRunStatus.FAILED.value,
+    ResearchRunStatus.CANCELLED.value,
+}
 
 
 def _optional_uuid(value: str | UUID | None) -> UUID | None:
@@ -125,6 +148,188 @@ def usage_event_values(event: MasterbrainUsageEvent) -> dict[str, Any]:
     }
 
 
+def research_model_cost_context(
+    event: MasterbrainUsageEvent,
+) -> dict[str, Any] | None:
+    """Return trusted, ledger-ready model cost identity for a Research Task."""
+
+    task_id = event.context.attributes.get("task_id")
+    cost = event.usage.provider_cost
+    raw_currency = event.usage.provider_cost_currency
+    if (
+        not (event.context.feature or "").startswith("research.")
+        or task_id is None
+        or cost is None
+        or raw_currency is None
+    ):
+        return None
+    try:
+        normalized_task_id = UUID(str(task_id))
+        normalized_run_id = _optional_uuid(event.context.attributes.get("run_id"))
+        normalized_user_id = _optional_uuid(event.context.user_id)
+        amount = Decimal(cost)
+    except (TypeError, ValueError):
+        return None
+    currency = str(raw_currency).strip().upper()
+    if (
+        amount <= 0
+        or len(currency) != 3
+        or not currency.isascii()
+        or not currency.isalpha()
+    ):
+        return None
+    command = {
+        "operation": "research_model_usage_cost",
+        "event_id": event.event_id,
+        "task_id": str(normalized_task_id),
+        "run_id": str(normalized_run_id) if normalized_run_id is not None else None,
+        "feature": event.context.feature,
+        "provider": event.usage.provider,
+        "model": event.usage.resolved_model,
+        "amount": format(amount.normalize(), "f"),
+        "currency": currency,
+        "cost_source": event.usage.provider_cost_source,
+    }
+    command_digest = hashlib.sha256(
+        json.dumps(
+            command,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    return {
+        **command,
+        "task_uuid": normalized_task_id,
+        "run_uuid": normalized_run_id,
+        "user_uuid": normalized_user_id,
+        "amount_decimal": amount,
+        "command_digest": command_digest,
+    }
+
+
+async def record_research_model_cost(
+    db_session: AsyncSession,
+    *,
+    event: MasterbrainUsageEvent,
+) -> bool:
+    """Append one same-currency provider cost and enforce the Task stop gate."""
+
+    context = research_model_cost_context(event)
+    if context is None:
+        return False
+    task = (
+        await db_session.scalars(
+            select(ResearchTask)
+            .where(ResearchTask.id == context["task_uuid"])
+            .with_for_update()
+        )
+    ).first()
+    if (
+        task is None
+        or task.budget_limit is None
+        or task.budget_currency != context["currency"]
+    ):
+        return False
+    idempotency_key = f"model-usage:{event.event_id}"
+    existing = await ResearchBudgetEntry.find_by(
+        db_session,
+        [
+            ResearchBudgetEntry.task_id == task.id,
+            ResearchBudgetEntry.idempotency_key == idempotency_key,
+        ],
+    )
+    if existing is not None:
+        return False
+
+    run = None
+    if context["run_uuid"] is not None:
+        run = (
+            await db_session.scalars(
+                select(ResearchRun)
+                .where(
+                    ResearchRun.id == context["run_uuid"],
+                    ResearchRun.task_id == task.id,
+                )
+                .with_for_update()
+            )
+        ).first()
+    entry = ResearchBudgetEntry(
+        task_id=task.id,
+        run_id=run.id if run is not None else None,
+        action_id=None,
+        kind=ResearchBudgetEntryKind.EXPENSE.value,
+        amount=context["amount_decimal"],
+        currency=context["currency"],
+        source_type="model_usage",
+        source_ref=event.event_id,
+        description=(
+            f"{event.context.feature or 'research'} model usage: "
+            f"{event.usage.provider}/{event.usage.resolved_model}"
+        ),
+        command_digest=context["command_digest"],
+        created_by_user_id=context["user_uuid"],
+        idempotency_key=idempotency_key,
+    )
+    db_session.add(entry)
+    await db_session.flush()
+    budget = await research_budget_snapshot(db_session, task=task)
+    db_session.add(
+        ResearchEvent(
+            task_id=task.id,
+            run_id=run.id if run is not None else None,
+            kind="model.usage_cost_recorded",
+            actor_user_id=context["user_uuid"],
+            payload={
+                "usage_event_id": event.event_id,
+                "feature": event.context.feature,
+                "provider": event.usage.provider,
+                "model": event.usage.resolved_model,
+                "amount": context["amount"],
+                "currency": context["currency"],
+                "cost_source": event.usage.provider_cost_source,
+            },
+            idempotency_key=f"model-usage:{event.event_id}:cost-recorded",
+        )
+    )
+
+    if (
+        run is not None
+        and run.status not in TERMINAL_RESEARCH_RUN_STATUSES
+        and budget["remaining"] is not None
+        and Decimal(budget["remaining"]) <= 0
+    ):
+        already_budget_paused = (
+            run.status == ResearchRunStatus.PAUSED.value
+            and task.status == ResearchTaskStatus.PAUSED.value
+            and task.outcome == ResearchTaskOutcome.STOPPED_BUDGET.value
+        )
+        run.status = ResearchRunStatus.PAUSED.value
+        run.last_error = "Research Task budget limit reached after model usage"
+        task.status = ResearchTaskStatus.PAUSED.value
+        task.outcome = ResearchTaskOutcome.STOPPED_BUDGET.value
+        if not already_budget_paused:
+            task.revision += 1
+            db_session.add(
+                ResearchEvent(
+                    task_id=task.id,
+                    run_id=run.id,
+                    kind="run.operational_limit_reached",
+                    actor_user_id=context["user_uuid"],
+                    payload={
+                        "limit": "budget",
+                        "snapshot": budget,
+                        "source": "model_usage",
+                        "usage_event_id": event.event_id,
+                    },
+                    idempotency_key=(
+                        f"run:{run.id}:limit:budget:model-usage:{event.event_id}"
+                    ),
+                )
+            )
+    return True
+
+
 class PlatformUsageSink:
     """Persist Masterbrain events in their own idempotent DB transaction."""
 
@@ -141,6 +346,10 @@ class PlatformUsageSink:
         async with self._session_factory() as session:
             await session.execute(statement)
             await session.commit()
+        if research_model_cost_context(event) is not None:
+            async with self._session_factory() as session:
+                await record_research_model_cost(session, event=event)
+                await session.commit()
 
 
 _platform_usage_sink = PlatformUsageSink()

@@ -1067,6 +1067,7 @@ declare namespace I18n {
         budgetLedger: string
         recordBudgetEntry: string
         budgetEntryHint: string
+        budgetModelCostHint: string
         budgetEntryKind: string
         amount: string
         budgetDescription: string

@@ -2,6 +2,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 from uuid import UUID, uuid4
 
 import httpx
@@ -22,16 +24,33 @@ from sqlalchemy.dialects import postgresql
 from app.libs import masterbrain as masterbrain_client
 from app.libs.request_context import request_id_var
 from app.models.model_usage import ModelUsageEvent as StoredModelUsageEvent
+from app.models.research import (
+    ResearchEvent,
+    ResearchRun,
+    ResearchRunStatus,
+    ResearchTask,
+    ResearchTaskOutcome,
+    ResearchTaskStatus,
+)
+from app.models.research_execution import ResearchBudgetEntry
+from app.services import model_usage
 from app.services.model_usage import (
     PlatformUsageSink,
     configure_embedded_masterbrain_app,
     create_usage_context,
     platform_usage_context_factory,
+    record_research_model_cost,
+    research_model_cost_context,
     usage_event_values,
 )
 
 
-def _usage_event(*, with_cost: bool = True) -> ModelUsageEvent:
+def _usage_event(
+    *,
+    with_cost: bool = True,
+    feature: str = "chat.qa",
+    attributes: dict[str, str] | None = None,
+) -> ModelUsageEvent:
     now = datetime.now(UTC)
     return ModelUsageEvent(
         event_id=str(uuid4()),
@@ -39,12 +58,12 @@ def _usage_event(*, with_cost: bool = True) -> ModelUsageEvent:
         context=UsageContext(
             operation_id=str(uuid4()),
             request_id="request-1",
-            feature="chat.qa",
+            feature=feature,
             tenant_id=str(uuid4()),
             user_id=str(uuid4()),
             project_id=str(uuid4()),
             chat_id=str(uuid4()),
-            attributes={"surface": "recorder"},
+            attributes=attributes or {"surface": "recorder"},
         ),
         call_type="chat.completion",
         status="succeeded",
@@ -182,6 +201,138 @@ def test_platform_usage_sink_uses_idempotent_insert():
     assert commits == 1
     compiled = statements[0].compile(dialect=postgresql.dialect())
     assert "ON CONFLICT (event_id) DO NOTHING" in str(compiled)
+
+
+def test_research_model_cost_context_requires_trusted_task_cost_and_currency():
+    task_id = uuid4()
+    run_id = uuid4()
+    attributes = {"task_id": str(task_id), "run_id": str(run_id)}
+    event = _usage_event(
+        feature="research.run.advance",
+        attributes=attributes,
+    )
+
+    context = research_model_cost_context(event)
+
+    assert context is not None
+    assert context["task_uuid"] == task_id
+    assert context["run_uuid"] == run_id
+    assert context["amount_decimal"] == Decimal("0.0025")
+    assert context["currency"] == "CNY"
+    assert len(context["command_digest"]) == 64
+
+    assert (
+        research_model_cost_context(_usage_event(attributes=attributes)) is None
+    )
+    assert (
+        research_model_cost_context(
+            _usage_event(
+                with_cost=False,
+                feature="research.run.advance",
+                attributes=attributes,
+            )
+        )
+        is None
+    )
+
+
+def test_research_model_cost_enters_budget_and_pauses_at_limit(monkeypatch):
+    task_id = uuid4()
+    run_id = uuid4()
+    event = _usage_event(
+        feature="research.run.advance",
+        attributes={"task_id": str(task_id), "run_id": str(run_id)},
+    )
+    task = ResearchTask(
+        id=task_id,
+        status=ResearchTaskStatus.ACTIVE.value,
+        outcome=None,
+        budget_limit=Decimal("1.00"),
+        budget_currency="CNY",
+        revision=3,
+    )
+    run = ResearchRun(
+        id=run_id,
+        task_id=task_id,
+        status=ResearchRunStatus.RUNNING.value,
+    )
+    db_session = AsyncMock()
+    db_session.add = Mock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(first=lambda: task),
+        SimpleNamespace(first=lambda: run),
+    ]
+    monkeypatch.setattr(ResearchBudgetEntry, "find_by", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        model_usage,
+        "research_budget_snapshot",
+        AsyncMock(
+            return_value={
+                "remaining": "0",
+                "actual": "1",
+                "committed": "1",
+            }
+        ),
+    )
+
+    recorded = asyncio.run(record_research_model_cost(db_session, event=event))
+
+    assert recorded is True
+    added = [call.args[0] for call in db_session.add.call_args_list]
+    entry = next(item for item in added if isinstance(item, ResearchBudgetEntry))
+    assert entry.kind == "expense"
+    assert entry.source_type == "model_usage"
+    assert entry.source_ref == event.event_id
+    assert entry.run_id == run_id
+    events = [item for item in added if isinstance(item, ResearchEvent)]
+    assert {item.kind for item in events} == {
+        "model.usage_cost_recorded",
+        "run.operational_limit_reached",
+    }
+    assert run.status == ResearchRunStatus.PAUSED.value
+    assert task.status == ResearchTaskStatus.PAUSED.value
+    assert task.outcome == ResearchTaskOutcome.STOPPED_BUDGET.value
+    assert task.revision == 4
+
+
+def test_research_model_cost_never_converts_currency_or_duplicates(monkeypatch):
+    task_id = uuid4()
+    event = _usage_event(
+        feature="research.run.advance",
+        attributes={"task_id": str(task_id)},
+    )
+    task = ResearchTask(
+        id=task_id,
+        budget_limit=Decimal("1.00"),
+        budget_currency="USD",
+    )
+    db_session = AsyncMock()
+    db_session.add = Mock()
+    db_session.scalars.return_value = SimpleNamespace(first=lambda: task)
+    existing_lookup = AsyncMock()
+    monkeypatch.setattr(ResearchBudgetEntry, "find_by", existing_lookup)
+
+    assert (
+        asyncio.run(record_research_model_cost(db_session, event=event)) is False
+    )
+    existing_lookup.assert_not_awaited()
+    db_session.add.assert_not_called()
+
+    task.budget_currency = "CNY"
+    existing_lookup.return_value = ResearchBudgetEntry(
+        task_id=task_id,
+        kind="expense",
+        amount=Decimal("0.0025"),
+        currency="CNY",
+        source_type="model_usage",
+        command_digest="a" * 64,
+        idempotency_key=f"model-usage:{event.event_id}",
+    )
+    assert (
+        asyncio.run(record_research_model_cost(db_session, event=event)) is False
+    )
+    existing_lookup.assert_awaited_once()
+    db_session.add.assert_not_called()
 
 
 def test_usage_model_is_append_only_without_operational_foreign_keys():

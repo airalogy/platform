@@ -1063,6 +1063,7 @@
       "budgetLedger": "Budget ledger",
       "recordBudgetEntry": "Record budget entry",
       "budgetEntryHint": "Budget entries are immutable. Preview the projected totals before confirming a reservation, release, expense, or credit.",
+      "budgetModelCostHint": "Provider-reported model charges are recorded automatically when their currency matches this Task. Missing or different-currency charges remain in usage metering and must be recorded manually; Platform never invents an exchange rate.",
       "budgetEntryKind": "Entry type",
       "amount": "Amount",
       "budgetDescription": "Reason or source",

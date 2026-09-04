@@ -134,7 +134,7 @@ Task 页面会显示已固定的截止时间，以及预算的预留、实际支
 
 已批准的截止时间或预算上限需要变化时，选择“修订运行边界”。填写完整的新边界和修订原因，预览新旧值后，基于当前 Task 修订确认；每次修订都会成为不可变的 Task 事件。已有账本记录的预算只能调整上限，不能移除或更换币种；降低后的上限必须高于已承诺总额。若旧边界已暂停 Run，修订只会让它恢复为“可继续”，不会自行重启；请先检查 Run 状态，再单独选择“恢复”，避免治理变更直接触发执行。
 
-Platform 会在 API 层创建每个新的人工或 Aira Protocol、Tool、Wait、Resource、Instrument、External Service 或 Compute Action 前检查限额，拒绝过期预览和超限写入。确认的预算记录耗尽上限时会立即暂停 Run；从其他入口发现截止时间或预算到达边界时，会在下一个运行边界安全暂停。已批准 External Service Job 会预留准确报价，已批准 Compute Job 会预留最大运行时间估算；两者完成时都会把预留转换为经校验的实际成本。模型及其他尚未集成的成本仍须显式登记。
+Platform 会在 API 层创建每个新的人工或 Aira Protocol、Tool、Wait、Resource、Instrument、External Service 或 Compute Action 前检查限额，拒绝过期预览和超限写入。确认的预算记录耗尽上限时会立即暂停 Run；从其他入口发现截止时间或预算到达边界时，会在下一个运行边界安全暂停。已批准 External Service Job 会预留准确报价，已批准 Compute Job 会预留最大运行时间估算；两者完成时都会把预留转换为经校验的实际成本。模型提供方返回的费用若与 Task 币种一致，Platform 会幂等记为实际支出；如果该支出耗尽上限，将在应用模型响应前暂停 Run。没有费用数据或币种不同时，用量事件仍会保留，但需手工登记支出；Platform 不会虚构模型价格或汇率。
 
 检索候选项只是 Action 输出。Platform 不会将其静默采纳为 Knowledge、Evidence 或 Claim。
 

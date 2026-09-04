@@ -56,6 +56,9 @@
             <span>{{ $t("page.research.budgetActual") }} · {{ budget?.actual || "0" }}</span>
             <span>{{ $t("page.research.budgetRemaining") }} · {{ budget?.remaining ?? currentBudgetLimit }}</span>
           </div>
+          <p class="aira-type-meta aira-text-muted mb-0 mt-3">
+            {{ $t("page.research.budgetModelCostHint") }}
+          </p>
         </n-spin>
       </div>
       <p v-else class="aira-type-meta aira-text-muted mb-0">

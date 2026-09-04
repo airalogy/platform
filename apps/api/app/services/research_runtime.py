@@ -3949,6 +3949,11 @@ async def process_research_run_advance(
                 if generation != current_run.advance_generation:
                     await db_session.rollback()
                     return {"status": "superseded", "generation": generation}
+                if current_run.status in TERMINAL_RUN_STATUSES or current_run.status == (
+                    ResearchRunStatus.PAUSED.value
+                ):
+                    await db_session.rollback()
+                    return {"status": current_run.status}
                 if canonical_digest(current_run.aira_state) != state_digest:
                     await db_session.rollback()
                     continue
@@ -4097,6 +4102,11 @@ async def process_research_run_advance(
         if generation != current_run.advance_generation:
             await db_session.rollback()
             return {"status": "superseded", "generation": generation}
+        if current_run.status in TERMINAL_RUN_STATUSES or current_run.status == (
+            ResearchRunStatus.PAUSED.value
+        ):
+            await db_session.rollback()
+            return {"status": current_run.status}
         if canonical_digest(current_run.aira_state) != state_digest:
             await db_session.rollback()
             continue

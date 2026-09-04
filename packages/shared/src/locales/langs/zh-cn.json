@@ -1063,6 +1063,7 @@
       "budgetLedger": "预算账本",
       "recordBudgetEntry": "记录预算变动",
       "budgetEntryHint": "预算记录不可修改。请先预览变动后的总额，再确认预留、释放、支出或冲销。",
+      "budgetModelCostHint": "提供方返回的模型费用在币种与当前 Task 一致时会自动入账。缺少费用或币种不同时，用量证据仍会保留，但需手工登记；Platform 不会虚构汇率。",
       "budgetEntryKind": "记录类型",
       "amount": "金额",
       "budgetDescription": "原因或来源",
