@@ -129,6 +129,14 @@
                   <div class="aira-type-meta mt-1 break-all">
                     {{ artifactLabel(item) }}
                   </div>
+                  <n-collapse v-if="item.artifact_snapshot" class="mt-3">
+                    <n-collapse-item :title="$t('page.research.actionOutputSnapshot')" :name="item.id">
+                      <div class="aira-type-meta break-all">
+                        SHA-256 · {{ item.artifact_snapshot.digest }}
+                      </div>
+                      <pre class="action-output-json mt-2">{{ formatActionOutput(item.artifact_snapshot.output_data) }}</pre>
+                    </n-collapse-item>
+                  </n-collapse>
                 </div>
                 <div v-if="item.quality_state === 'pending'" class="flex gap-1">
                   <n-button size="tiny" type="success" secondary @click="confirmEvidenceReview(item, 'validated')">
@@ -315,6 +323,14 @@
           <n-form-item v-if="evidenceDraft.artifact_type === 'data_asset'" :label="$t('page.research.dataAsset')" required>
             <n-select v-model:value="evidenceDraft.artifact_id" :options="dataAssetOptions" />
           </n-form-item>
+          <template v-else-if="evidenceDraft.artifact_type === 'action_output'">
+            <n-alert type="info" class="mb-4">
+              {{ $t("page.research.actionOutputEvidenceHint") }}
+            </n-alert>
+            <n-form-item :label="$t('page.research.actionOutput')" required>
+              <n-select v-model:value="evidenceDraft.artifact_id" :options="actionOutputOptions" />
+            </n-form-item>
+          </template>
           <n-form-item v-else :label="$t('page.research.externalUri')" required>
             <n-input v-model:value="evidenceDraft.artifact_id" placeholder="https://…" />
           </n-form-item>
@@ -542,7 +558,7 @@ import type {
   ResearchKnowledgeItem,
   ResearchKnowledgeKind,
 } from "@/service/api/research-assets"
-import type { ResearchProtocolRef } from "@/service/api/research-tasks"
+import type { ResearchAction, ResearchProtocolRef } from "@/service/api/research-tasks"
 import type { TagProps } from "naive-ui"
 import {
   createClaim,
@@ -573,6 +589,7 @@ const props = defineProps<{
   labUid: string
   projectUid: string
   protocols: ResearchProtocolRef[]
+  actions: ResearchAction[]
 }>()
 
 const emit = defineEmits<{
@@ -618,8 +635,19 @@ const assetKindValues: DataAssetKind[] = ["file", "table", "image", "model", "ar
 const assetKindOptions = computed(() => assetKindValues.map(value => ({ value, label: dataAssetKindLabel(value) })))
 const evidenceKindValues: EvidenceKind[] = ["observation", "measurement", "analysis", "citation", "validation"]
 const evidenceKindOptions = computed(() => evidenceKindValues.map(value => ({ value, label: evidenceKindLabel(value) })))
+const actionOutputOptions = computed(() => props.actions
+  .filter(action => action.status === "completed" && Object.keys(action.output_data || {}).length)
+  .map(action => ({
+    value: action.id,
+    label: `${action.title} · ${action.kind}`,
+  })))
 const evidenceSourceOptions = computed(() => ([
   { value: "data_asset", label: $t("page.research.dataAsset") },
+  {
+    value: "action_output",
+    label: $t("page.research.actionOutput"),
+    disabled: !actionOutputOptions.value.length,
+  },
   { value: "external", label: $t("page.research.externalSource") },
 ]))
 const dataAssetOptions = computed(() => bundle.value.data_assets.map(asset => ({
@@ -643,7 +671,7 @@ const validatedEvidenceIds = computed(() => new Set(
 const knowledgeKindValues: ResearchKnowledgeKind[] = ["note", "method", "decision", "finding"]
 const knowledgeKindOptions = computed(() => knowledgeKindValues.map(value => ({ value, label: knowledgeKindLabel(value) })))
 const knowledgeEvidenceOptions = computed(() => bundle.value.evidence
-  .filter(item => item.quality_state === "validated" && (item.artifact_type === "record" || item.artifact_type === "data_asset"))
+  .filter(item => item.quality_state === "validated" && ["record", "data_asset", "action_output"].includes(item.artifact_type))
   .map(item => ({
     value: item.id,
     label: item.summary || artifactLabel(item),
@@ -875,14 +903,21 @@ function resetEvidenceSource(value: EvidenceArtifactType) {
   evidenceDraft.artifact_type = value
   evidenceDraft.artifact_id = ""
   evidenceDraft.artifact_version = ""
+  delete evidenceDraft.run_id
+  delete evidenceDraft.action_id
 }
 
 function normalizedEvidenceDraft(): EvidenceDraft {
   const asset = evidenceDraft.artifact_type === "data_asset"
     ? bundle.value.data_assets.find(item => item.id === evidenceDraft.artifact_id)
     : undefined
+  const action = evidenceDraft.artifact_type === "action_output"
+    ? props.actions.find(item => item.id === evidenceDraft.artifact_id)
+    : undefined
   return {
     ...evidenceDraft,
+    run_id: action?.run_id,
+    action_id: action?.id,
     artifact_version: asset ? String(asset.current_version) : "",
   }
 }
@@ -1045,7 +1080,13 @@ function currentVersion(asset: DataAsset) {
 }
 
 function artifactLabel(item: ResearchEvidence) {
+  if (item.artifact_type === "action_output")
+    return `${artifactTypeLabel(item.artifact_type)} · ${item.artifact_id} · sha256:${item.artifact_version.slice(0, 12)}`
   return `${artifactTypeLabel(item.artifact_type)} · ${item.artifact_id}${item.artifact_version ? ` · v${item.artifact_version}` : ""}`
+}
+
+function formatActionOutput(value: Record<string, unknown>) {
+  return JSON.stringify(value, null, 2)
 }
 
 function evidenceLabelById(evidenceId: string) {
@@ -1179,5 +1220,18 @@ watch(() => props.taskId, () => {
 
 .research-asset-modal {
   width: min(42rem, calc(100vw - 2rem));
+}
+
+.action-output-json {
+  max-height: 20rem;
+  overflow: auto;
+  border-radius: 0.75rem;
+  background: rgb(15 23 42);
+  color: rgb(226 232 240);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 0.875rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

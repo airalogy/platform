@@ -521,6 +521,7 @@
               :lab-uid="task.lab.uid"
               :project-uid="task.project.uid"
               :protocols="task.protocols"
+              :actions="task.actions"
               @changed="() => loadTask(true)"
             />
 

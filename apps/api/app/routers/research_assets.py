@@ -50,6 +50,7 @@ from app.models.research_asset import (
     ProtocolImprovementEvidence,
     ProtocolImprovementProposal,
     ProtocolImprovementState,
+    ResearchActionOutputSnapshot,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchClaimRevision,
@@ -66,6 +67,12 @@ from app.services.knowledge import (
     snapshot_knowledge,
 )
 from app.services.model_usage import create_usage_context
+from app.services.research_action_outputs import (
+    ResearchActionOutputError,
+    action_output_digest,
+    action_output_payload,
+    verify_action_output_snapshot,
+)
 from app.services.research_assets import research_asset_bundle
 from app.services.research_claims import (
     AiraClaimGeneration,
@@ -91,7 +98,12 @@ from app.services.research_runtime import (
 router = APIRouter(prefix="/research-assets", tags=["research-assets"])
 
 ArtifactType = Literal[
-    "record", "data_asset", "knowledge", "paper_library_entry", "external"
+    "record",
+    "data_asset",
+    "knowledge",
+    "paper_library_entry",
+    "action_output",
+    "external",
 ]
 ALLOWED_EXTERNAL_SCHEMES = {"https", "s3", "gs", "oss", "minio"}
 
@@ -430,11 +442,19 @@ async def _validate_execution_refs(
     *,
     run_id: UUID | None,
     action_id: UUID | None,
+    lock_action: bool = False,
 ) -> tuple[ResearchRun | None, ResearchAction | None]:
     run = await db_session.get(ResearchRun, run_id) if run_id else None
     if run_id and (run is None or run.task_id != context.task.id):
         raise HTTPException(status_code=404, detail="Research Run not found")
-    action = await db_session.get(ResearchAction, action_id) if action_id else None
+    action = None
+    if action_id:
+        statement = select(ResearchAction).where(ResearchAction.id == action_id)
+        if lock_action:
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
+        action = (await db_session.scalars(statement)).first()
     if action_id and (
         action is None
         or run is None
@@ -517,6 +537,7 @@ async def _validate_evidence_artifact(
     artifact_type: ArtifactType,
     artifact_id: str,
     artifact_version: str,
+    action: ResearchAction | None = None,
 ) -> str:
     if artifact_type == "external":
         validate_external_uri(artifact_id)
@@ -527,6 +548,38 @@ async def _validate_evidence_artifact(
         raise HTTPException(
             status_code=422, detail="Artifact ID must be a UUID"
         ) from exc
+
+    if artifact_type == "action_output":
+        if action is None:
+            action = await db_session.get(ResearchAction, parsed_id)
+        if action is None or action.id != parsed_id:
+            raise HTTPException(
+                status_code=422,
+                detail="Action output Evidence requires its matching Research Action",
+            )
+        run = await db_session.get(ResearchRun, action.run_id)
+        if run is None or run.task_id != context.task.id:
+            raise HTTPException(status_code=404, detail="Research Action not found")
+        snapshot = await ResearchActionOutputSnapshot.find_by(
+            db_session,
+            [ResearchActionOutputSnapshot.action_id == action.id],
+        )
+        try:
+            if snapshot is not None:
+                verify_action_output_snapshot(snapshot)
+                digest = snapshot.digest
+            else:
+                digest = action_output_digest(
+                    action_output_payload(action, task_id=context.task.id)
+                )
+        except ResearchActionOutputError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if artifact_version and artifact_version != digest:
+            raise HTTPException(
+                status_code=409,
+                detail="Research Action output has changed since preview",
+            )
+        return digest
 
     if artifact_type == "record":
         if not artifact_version.isdigit():
@@ -599,15 +652,18 @@ async def _validated_evidence_command(
     db_session: DBSession,
     current_user: User,
     params: EvidenceDraft,
-) -> tuple[dict[str, Any], TaskContext]:
+    *,
+    lock_action_output: bool = False,
+) -> tuple[dict[str, Any], TaskContext, ResearchAction | None]:
     context = await _task_context(
         db_session, current_user, params.task_id, "research.run"
     )
-    await _validate_execution_refs(
+    _run, action = await _validate_execution_refs(
         db_session,
         context,
         run_id=params.run_id,
         action_id=params.action_id,
+        lock_action=(lock_action_output and params.artifact_type == "action_output"),
     )
     version = await _validate_evidence_artifact(
         db_session,
@@ -616,11 +672,64 @@ async def _validated_evidence_command(
         artifact_type=params.artifact_type,
         artifact_id=params.artifact_id,
         artifact_version=params.artifact_version,
+        action=action,
     )
-    return {
-        **params.model_dump(mode="json"),
-        "artifact_version": version,
-    }, context
+    return (
+        {
+            **params.model_dump(mode="json"),
+            "artifact_version": version,
+        },
+        context,
+        action,
+    )
+
+
+async def _materialize_action_output_snapshot(
+    db_session: DBSession,
+    *,
+    context: TaskContext,
+    action: ResearchAction,
+    expected_digest: str,
+    current_user: User,
+) -> ResearchActionOutputSnapshot:
+    existing = await ResearchActionOutputSnapshot.find_by(
+        db_session,
+        [ResearchActionOutputSnapshot.action_id == action.id],
+    )
+    if existing is not None:
+        try:
+            verify_action_output_snapshot(existing)
+        except ResearchActionOutputError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if existing.digest != expected_digest:
+            raise HTTPException(
+                status_code=409,
+                detail="Research Action output snapshot does not match the preview",
+            )
+        return existing
+    try:
+        payload = action_output_payload(action, task_id=context.task.id)
+    except ResearchActionOutputError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    digest = action_output_digest(payload)
+    if digest != expected_digest:
+        raise HTTPException(
+            status_code=409,
+            detail="Research Action output has changed since preview",
+        )
+    snapshot = ResearchActionOutputSnapshot(
+        task_id=context.task.id,
+        run_id=action.run_id,
+        action_id=action.id,
+        action_revision=action.revision,
+        action_kind=action.kind,
+        output_data=payload["output_data"],
+        digest=digest,
+        created_by_user_id=current_user.id,
+    )
+    db_session.add(snapshot)
+    await db_session.flush()
+    return snapshot
 
 
 async def _evidence_for_task(
@@ -664,7 +773,9 @@ async def _validated_claim_evidence(
     found = list((await db_session.scalars(statement)).all())
     by_id = {item.id: item for item in found}
     if set(by_id) != set(evidence_ids):
-        raise HTTPException(status_code=422, detail="Claim Evidence is not in this Task")
+        raise HTTPException(
+            status_code=422, detail="Claim Evidence is not in this Task"
+        )
     evidence = [by_id[item_id] for item_id in evidence_ids]
     for item in evidence:
         if item.quality_state != EvidenceQuality.VALIDATED.value:
@@ -734,10 +845,13 @@ async def _knowledge_suggestion_evidence(
                 status_code=409,
                 detail="Only validated Evidence can become Suggested Knowledge",
             )
-        if item.artifact_type not in {"record", "data_asset"}:
+        if item.artifact_type not in {"record", "data_asset", "action_output"}:
             raise HTTPException(
                 status_code=422,
-                detail="Suggested Knowledge requires Record or DataAsset Evidence",
+                detail=(
+                    "Suggested Knowledge requires Record, DataAsset, or immutable "
+                    "Action output Evidence"
+                ),
             )
         version = await _validate_evidence_artifact(
             db_session,
@@ -1239,7 +1353,7 @@ async def preview_evidence(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, context = await _validated_evidence_command(
+    command, context, _action = await _validated_evidence_command(
         db_session, current_user, params
     )
     return {
@@ -1260,8 +1374,11 @@ async def create_evidence(
     db_session: DBSession,
 ):
     draft = EvidenceDraft.model_validate(params.model_dump(exclude={"preview_digest"}))
-    command, context = await _validated_evidence_command(
-        db_session, current_user, draft
+    command, context, action = await _validated_evidence_command(
+        db_session,
+        current_user,
+        draft,
+        lock_action_output=True,
     )
     if canonical_digest(command) != params.preview_digest:
         raise HTTPException(status_code=409, detail="Evidence preview has changed")
@@ -1286,6 +1403,17 @@ async def create_evidence(
             status_code=409,
             detail="Evidence already exists for this artifact with different content",
         )
+    action_output_snapshot = None
+    if draft.artifact_type == "action_output":
+        if action is None:
+            raise HTTPException(status_code=404, detail="Research Action not found")
+        action_output_snapshot = await _materialize_action_output_snapshot(
+            db_session,
+            context=context,
+            action=action,
+            expected_digest=command["artifact_version"],
+            current_user=current_user,
+        )
     evidence = ResearchEvidence(
         task_id=context.task.id,
         run_id=draft.run_id,
@@ -1300,6 +1428,20 @@ async def create_evidence(
     )
     db_session.add(evidence)
     await db_session.flush()
+    if action_output_snapshot is not None:
+        await emit_research_event(
+            db_session,
+            task_id=context.task.id,
+            run_id=draft.run_id,
+            action_id=action.id,
+            kind="action_output.snapshotted",
+            actor_user_id=current_user.id,
+            payload={
+                "snapshot_id": str(action_output_snapshot.id),
+                "digest": action_output_snapshot.digest,
+            },
+            idempotency_key=(f"action-output:{action_output_snapshot.id}:snapshotted"),
+        )
     await emit_research_event(
         db_session,
         task_id=context.task.id,

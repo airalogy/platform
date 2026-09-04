@@ -36,6 +36,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增保留修订历史的 Personal、Project 和 Lab Research Log：支持结构化进展、会议记录、反思、阻塞和里程碑，按角色控制发布，通过预览后确认保存，并在不可编辑的聚合时间线中呈现真实 Record、Protocol、Knowledge 与 Research Task 活动；现有 Record 热图、日历、导出与历史链接继续保留。
 - 新增版本化 DataAsset、按 Research Task 隔离的 Evidence 质量审核和关联 Evidence 且保留修订的科学 Claim；支持预览后确认创建、来源事件留痕、从已完成 Record 待办自动登记已校验 Evidence，并在 Research Result Package 与任务工作台中统一呈现正式科研资产。
 - Aira 自动 Run 与手工 Run 现使用同一套完整 Research Result Package；每次经人工定稿的 Run 都会封存为仅追加、可用 SHA-256 校验的快照，并支持在产品内授权查看、导出可携带 JSON 或双语 Markdown；历史结果包会明确标记为未封存。
+- 新增明确的 Action 输出晋升 Evidence 流程：用户经预览确认选定准确的已完成结构化结果，Platform 封存一份仅可追加、经 SHA-256 验证的来源快照，新 Evidence 在用于 Claim、Knowledge 或 Protocol 改进前仍须经人员校验；同一快照会进入结果包，且整个流程不依赖 AI。
 - 新增白名单与版本锁定的数字 Research Action：Tool Job 在 Schema 校验后通过可重试的持久化工作器限时执行并保留来源记录；类型化 Wait Event 会暂停 Run，只有经授权、预览确认且满足锁定载荷契约的外部信号才能恢复；AI 关闭时安全回到手工控制。
 - Research Task 工作台新增数字 Action 控件，支持预览确认的工具检索、外部结果边界、根据契约生成的信号表单、结果查看、中英文完整状态和产品内使用指南。
 - 新增由 Platform 治理的 Aira Action Planner，可在固定版本 Protocol、白名单且固定版本的 Tool、类型化外部 Wait 与结束研究路径之间选择；AI 提案必须经过 Schema 校验、摘要绑定、审批与完整留痕，也能在未预选 Protocol 的纯数字科研任务中运行，不会把 Tool 伪装成 Protocol。

@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -9,16 +10,24 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 from app.main import app
+from app.models.research import ResearchAction, ResearchActionStatus
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
     KnowledgeEvidenceLink,
     ProtocolImprovementEvidence,
     ProtocolImprovementProposal,
+    ResearchActionOutputSnapshot,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchClaimRevision,
     ResearchEvidence,
+)
+from app.services.research_action_outputs import (
+    ResearchActionOutputError,
+    action_output_digest,
+    action_output_payload,
+    verify_action_output_snapshot,
 )
 from app.routers.research_assets import (
     AiraClaimDraftRequest,
@@ -71,6 +80,55 @@ def test_evidence_is_task_scoped_and_deduplicated_by_artifact():
     assert "artifact_type" in ddl
     assert "quality_state" in ddl
     assert "uq_research_evidence_artifact" in ddl
+
+
+def test_action_output_evidence_uses_an_append_only_digest_bound_snapshot():
+    ddl = compile_table(ResearchActionOutputSnapshot)
+    migration = import_module(
+        "migrations.versions.0036_research_action_output_snapshots"
+    )
+
+    assert "UNIQUE (action_id)" in ddl
+    assert "ck_research_action_output_revision" in ddl
+    assert "ck_research_action_output_digest" in ddl
+    assert migration.down_revision == "0035_research_result_package_snapshots"
+    assert migration.TABLE_NAMES == ("research_action_output_snapshots",)
+    source = Path(migration.__file__).read_text(encoding="utf-8")
+    assert "research_action_output_snapshots_append_only" in source
+    assert "BEFORE UPDATE OR DELETE" in source
+
+
+def test_action_output_snapshot_requires_a_completed_structured_result():
+    task_id = uuid4()
+    action = ResearchAction(
+        id=uuid4(),
+        run_id=uuid4(),
+        kind="tool_job",
+        status=ResearchActionStatus.COMPLETED.value,
+        revision=2,
+        output_data={"result": {"items": [{"id": "paper-1"}]}},
+    )
+    payload = action_output_payload(action, task_id=task_id)
+    digest = action_output_digest(payload)
+    snapshot = ResearchActionOutputSnapshot(
+        id=uuid4(),
+        task_id=task_id,
+        run_id=action.run_id,
+        action_id=action.id,
+        action_revision=action.revision,
+        action_kind=action.kind,
+        output_data=action.output_data,
+        digest=digest,
+    )
+
+    verify_action_output_snapshot(snapshot)
+    snapshot.output_data = {"result": {"items": []}}
+    with pytest.raises(ResearchActionOutputError, match="does not match"):
+        verify_action_output_snapshot(snapshot)
+
+    action.status = ResearchActionStatus.RUNNING.value
+    with pytest.raises(ResearchActionOutputError, match="completed"):
+        action_output_payload(action, task_id=task_id)
 
 
 def test_claims_are_revisioned_and_link_to_evidence_with_semantics():

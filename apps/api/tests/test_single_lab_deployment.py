@@ -97,6 +97,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     result_package_revision = import_module(
         "migrations.versions.0035_research_result_package_snapshots"
     )
+    action_output_revision = import_module(
+        "migrations.versions.0036_research_action_output_snapshots"
+    )
     import_models()
 
     later_tables = {
@@ -138,6 +141,10 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(result_package_revision.TABLE_NAMES)
     assert result_package_revision.down_revision == (
         "0034_research_claim_ai_provenance"
+    )
+    later_tables.update(action_output_revision.TABLE_NAMES)
+    assert action_output_revision.down_revision == (
+        "0035_research_result_package_snapshots"
     )
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 

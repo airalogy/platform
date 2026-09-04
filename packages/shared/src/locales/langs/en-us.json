@@ -1454,6 +1454,9 @@
       "evidenceKind": "Evidence kind",
       "evidenceSource": "Evidence source",
       "dataAsset": "DataAsset",
+      "actionOutput": "Action output",
+      "actionOutputEvidenceHint": "The exact structured output of the completed Action will be sealed as an immutable source snapshot. The new Evidence remains pending until a human validates it.",
+      "actionOutputSnapshot": "Immutable Action output snapshot",
       "externalSource": "External source",
       "evidenceSummary": "Evidence summary",
       "claimStatement": "Scientific statement",
@@ -1472,7 +1475,7 @@
         "contradicts": "Contradicts",
         "context": "Context"
       },
-      "validatedEvidence": "Validated Record or DataAsset Evidence",
+      "validatedEvidence": "Validated Record, DataAsset, or Action output Evidence",
       "knowledgeSuggestionBoundary": "This creates editable Suggested Knowledge, not an accepted scientific fact. A Knowledge reviewer must assess and adopt it separately.",
       "protocolImprovementBoundary": "This records a version-specific change proposal. It does not modify the published Protocol; an expert must review it before a new version draft can be created.",
       "airaImprovementDraft": "Aira drafting assistant",
@@ -1539,6 +1542,7 @@
         "data_asset": "DataAsset",
         "knowledge": "Knowledge",
         "paper_library_entry": "Paper",
+        "action_output": "Action output",
         "external": "External"
       },
       "dataAssetKind": {

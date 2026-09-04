@@ -157,6 +157,43 @@ class DataAssetVersion(Base):
     )
 
 
+class ResearchActionOutputSnapshot(Base):
+    """Append-only source artifact created when an Action output becomes Evidence."""
+
+    __tablename__ = "research_action_output_snapshots"
+    __table_args__ = (
+        UniqueConstraint("action_id", name="uq_research_action_output_snapshot_action"),
+        CheckConstraint(
+            "action_revision > 0", name="ck_research_action_output_revision"
+        ),
+        CheckConstraint("length(digest) = 64", name="ck_research_action_output_digest"),
+        Index("ix_research_action_output_task_created", "task_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_actions.id", ondelete="CASCADE"), nullable=False
+    )
+    action_revision: Mapped[int] = mapped_column(nullable=False)
+    action_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    output_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchEvidence(Base):
     __tablename__ = "research_evidence"
     __table_args__ = (

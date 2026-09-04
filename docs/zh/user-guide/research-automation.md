@@ -56,9 +56,9 @@ Platform 不接受 Runner 提交的任意文件系统路径作为资产。新增
 
 ## 将已校验结果整理为候选 Knowledge
 
-在 Research Task 中，先把 Record 或准确 DataAsset 版本登记为 Evidence，并由有权人员完成校验。在“科研结果资产”中选择“提议为 Knowledge”，写下可复用的发现、方法、决策或笔记，并选择一条或多条已校验 Evidence。检查 Project 保存位置和准确来源集合后再确认。
+在 Research Task 中，先把 Record、准确 DataAsset 版本或已完成的结构化 Action 输出登记为 Evidence，并由有权人员完成校验。对于 Action 输出，将 Evidence 来源选为“Action 输出”，选择已完成 Action，检查它的摘要绑定不可变快照后再确认。新 Evidence 初始为待审核；Platform 绝不会把执行成功等同于科学校验。在“科研结果资产”中选择“提议为 Knowledge”，写下可复用的发现、方法、决策或笔记，并选择一条或多条已校验 Evidence。检查 Project 保存位置和准确来源集合后再确认。
 
-Platform 会创建 Project 范围的可编辑 Suggested Knowledge，并保留不可变 Evidence 快照和版本关系；它不会宣布该候选已经成立或被组织采纳。进入 Project Knowledge 可继续修订，Knowledge Reviewer 评估证据后再使用独立的“审核并采纳”操作。待审核、已拒绝或非 Record/DataAsset 的 Evidence 不会出现在可选列表中。该确定性路径在 AI 关闭时仍可完整使用。
+Platform 会创建 Project 范围的可编辑 Suggested Knowledge，并保留不可变 Evidence 快照和版本关系；它不会宣布该候选已经成立或被组织采纳。进入 Project Knowledge 可继续修订，Knowledge Reviewer 评估证据后再使用独立的“审核并采纳”操作。待审核、已拒绝或非 Record、DataAsset、不可变 Action 输出来源的 Evidence 不会出现在可选列表中。该确定性路径在 AI 关闭时仍可完整使用。
 
 ## 从已校验 Evidence 生成科学 Claim 草稿
 
@@ -68,7 +68,7 @@ Aira 必须评估每一项所选 Evidence，包括与主要判断冲突的反证
 
 ## 用已校验 Evidence 改进 Protocol
 
-在“科研结果资产”中选择“提议改进 Protocol”。选择已固定到当前 Task 的 Protocol，说明科学依据和具体建议改动，并关联已校验的 Record 或 DataAsset Evidence。确认前先预览准确 Project、Protocol 基线版本和不可变 Evidence 快照。此时只创建建议，不会修改 Protocol。
+在“科研结果资产”中选择“提议改进 Protocol”。选择已固定到当前 Task 的 Protocol，说明科学依据和具体建议改动，并关联已校验的 Record、DataAsset 或不可变 Action 输出 Evidence。确认前先预览准确 Project、Protocol 基线版本和不可变 Evidence 快照。此时只创建建议，不会修改 Protocol。
 
 具备科研审批权且能更新该 Protocol 的人员必须先检查并采纳建议。审核后选择“创建新版本草稿”，在普通 Protocol Editor 中编辑复制的基线包。保存时选择高于当前 Protocol 的版本号并确认完整包。Platform 会在锁内重新检查已审核建议、Evidence 来源和基线版本。如果期间已发布另一版、建议已变化或已被应用，保存会中止，必须针对最新方法重新提议。成功保存会把建议标记为已应用，并关联到准确的 Protocol 新版本；既有版本和活动 Run 都不变。这条完整路径在 AI 关闭时也可用。
 
@@ -118,7 +118,7 @@ Platform 会在 API 层创建每个新的人工或 Aira Protocol、Tool、Wait�
 
 对于 External Service，Aira 只能选择已固定到 Research Environment 的准确服务，并生成符合固定输入 Schema 的请求草稿；这不等于已下单。Platform 会创建与手工路径相同的受治理 Service Job：需要时由服务管理员登记服务商报价，每个准确报价都会生成绑定摘要的下单审批，预算预留、样本交接、履约和结果接收仍由确定性界面控制。Action Planner 不会直接执行模型自由文本：Platform 会先校验 Action 类型、白名单、固定版本、输入参数、资源需求和结果契约，再创建正式 Action。物理 Action 和服务下单始终需要审批，其他 Aira Action 则继续按对应准确风险策略治理。
 
-已完成的 Tool、Instrument、Resource、External Service 和外部 Wait Action 会把类型明确的结果回传给后续 Aira 规划与结论。Platform 只保留有上限的近期结果窗口，并将其作为不可信证据提供；除非用户主动登记并校验对应的 Record、DataAsset、Evidence 或 Knowledge 资产，它们始终只是 Action 输出。
+已完成的 Tool、Instrument、Resource、External Service、Compute 和外部 Wait Action 会把类型明确的结果回传给后续 Aira 规划与结论。Platform 只保留有上限的近期结果窗口，并将其作为不可信证据提供。如需晋升准确结构化输出，用户必须经预览和确认将它登记为待审核 Evidence；Platform 会封存只可追加、由 SHA-256 绑定的快照，在 Task 结果包中呈现，且在它支持 Claim、Knowledge 候选或 Protocol 改进前仍需人工校验。这条路径不依赖 AI。
 
 ## 提交外部结果
 

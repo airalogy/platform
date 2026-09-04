@@ -174,9 +174,11 @@ AIRA 的阶段性和最终结论不只保存为 Markdown。结构化状态至少
 
 Knowledge 到方法的流转必须显式并固定版本。获授权用户先预览准确的 Knowledge 修订和目标 Project，再进入 Aira Protocol 生成器；Knowledge 正文通过正常权限接口读取，不进入 URL。保存生成结果时，Platform 会重新检查来源可见性、范围、目标 Project 写权限和修订新鲜度，然后原子写入不可变的 `Knowledge revision → Protocol version` 关系与来源快照。Personal Knowledge 可用于用户有权写入的 Project；Lab 与 Project Knowledge 只能留在各自 Lab 或 Project。已归档、已被取代、过期或不可访问的来源一律失败关闭。Protocol 响应只向同时有权读取两侧资产的人展示来源，避免 provenance 泄露 Restricted Knowledge。
 
-反向流转必须经过 Evidence 门禁。具有 Knowledge 写权限的 Project 成员只能选择已校验、且指向准确 Record 或 DataAsset 版本的 Evidence；在预览保存位置和来源集合后，可创建 Project 范围的可编辑 Suggested Knowledge。确认时会锁定并重新校验每条 Evidence，将预览摘要与审核状态和不可变来源版本绑定，同时保存来源快照和准确的 `Evidence → Knowledge revision` 关系。该结果仍是候选认识，只有通过独立 Knowledge 审核权限才能成为组织已采纳的 Knowledge。待审核或已拒绝 Evidence、外部链接、Paper 及既有 Knowledge 都不能从该路径进入，且整个流程不依赖 AI。
+已完成的结构化 Action 输出有独立的晋升边界。获授权用户选择已完成 Action，预览准确输出摘要后确认创建待审核 Evidence。Platform 会锁定 Action，封存一份只可追加的快照，其中包含 Task、Run、Action 修订、类型、输出和规范 SHA-256 摘要；读取及结果包导出都会验证该摘要。在人员审核待定 Evidence 前，系统不会将该输出认定为科学上有效。这使 Tool、Instrument、Resource、Wait、External Service 和 Compute 结果可成为可审计的科研来源，同时不把它们伪装成 Record，也不静默视为事实。
 
-Protocol 演进使用独立的方法改进门禁。获授权用户选择已固定到 Research Task 的 Protocol 版本，再选择已校验的 Record/DataAsset Evidence；系统会先预览准确版本、Evidence 快照、科学依据和建议改动，然后创建待审核的 `Protocol Improvement Proposal`。AI 可用时，Aira 可以基于同一固定上下文生成可编辑的标题、依据和修改建议。模型调用期间不保持数据库事务；模型返回后 Platform 会重新校验来源，并签发同时绑定用户、Task、Protocol、上下文和有效期的凭据。用户预览和确认时会再次验证签名凭据与准确生成快照，而且一个生成 ID 只能确认一次。用户仍可编辑内容，来源记录为 Aira 辅助，而不是 AI 审核。同时具备科研审批权和该 Protocol 更新权的人员采纳建议后，现有 Protocol Editor 才会进入可编辑的新版本草稿。最终保存时会重新锁定建议和 Protocol，确保已审核修订未变、未被使用，且 Protocol 没有超过所固定的基线版本。保存成功会生成普通的更高 Protocol 版本，将建议标记为已应用，并记录准确的 Evidence → 改进建议 → Protocol 新版本来源链。既有版本和正在运行的 Run 固定环境不会被改写。AI 关闭时，完整手工路径仍然可用。
+反向流转必须经过 Evidence 门禁。具有 Knowledge 写权限的 Project 成员只能选择已校验、且指向准确 Record、DataAsset 版本或不可变 Action 输出快照的 Evidence；在预览保存位置和来源集合后，可创建 Project 范围的可编辑 Suggested Knowledge。确认时会锁定并重新校验每条 Evidence，将预览摘要与审核状态和不可变来源版本绑定，同时保存来源快照和准确的 `Evidence → Knowledge revision` 关系。该结果仍是候选认识，只有通过独立 Knowledge 审核权限才能成为组织已采纳的 Knowledge。待审核或已拒绝 Evidence、外部链接、Paper 及既有 Knowledge 都不能从该路径进入，且整个流程不依赖 AI。
+
+Protocol 演进使用独立的方法改进门禁。获授权用户选择已固定到 Research Task 的 Protocol 版本，再选择已校验的 Record、DataAsset 或不可变 Action 输出 Evidence；系统会先预览准确版本、Evidence 快照、科学依据和建议改动，然后创建待审核的 `Protocol Improvement Proposal`。AI 可用时，Aira 可以基于同一固定上下文生成可编辑的标题、依据和修改建议。模型调用期间不保持数据库事务；模型返回后 Platform 会重新校验来源，并签发同时绑定用户、Task、Protocol、上下文和有效期的凭据。用户预览和确认时会再次验证签名凭据与准确生成快照，而且一个生成 ID 只能确认一次。用户仍可编辑内容，来源记录为 Aira 辅助，而不是 AI 审核。同时具备科研审批权和该 Protocol 更新权的人员采纳建议后，现有 Protocol Editor 才会进入可编辑的新版本草稿。最终保存时会重新锁定建议和 Protocol，确保已审核修订未变、未被使用，且 Protocol 没有超过所固定的基线版本。保存成功会生成普通的更高 Protocol 版本，将建议标记为已应用，并记录准确的 Evidence → 改进建议 → Protocol 新版本来源链。既有版本和正在运行的 Run 固定环境不会被改写。AI 关闭时，完整手工路径仍然可用。
 
 系统保持三个独立但互相连接的循环：
 

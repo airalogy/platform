@@ -1454,6 +1454,9 @@
       "evidenceKind": "Evidence 类型",
       "evidenceSource": "Evidence 来源",
       "dataAsset": "DataAsset",
+      "actionOutput": "Action 输出",
+      "actionOutputEvidenceHint": "已完成 Action 的准确结构化输出会被封存为不可变来源快照；新 Evidence 仍处于待审核状态，必须由人员校验。",
+      "actionOutputSnapshot": "不可变 Action 输出快照",
       "externalSource": "外部来源",
       "evidenceSummary": "Evidence 摘要",
       "claimStatement": "科学判断",
@@ -1472,7 +1475,7 @@
         "contradicts": "反驳",
         "context": "上下文"
       },
-      "validatedEvidence": "已校验的 Record 或 DataAsset Evidence",
+      "validatedEvidence": "已校验的 Record、DataAsset 或 Action 输出 Evidence",
       "knowledgeSuggestionBoundary": "这里创建的是可编辑的 Suggested Knowledge，不是已确认的科学事实；仍需 Knowledge Reviewer 另行审核采纳。",
       "protocolImprovementBoundary": "这里记录的是针对某一固定版本的改进建议，不会直接修改已发布的 Protocol；专家审核后才能创建新版本草稿。",
       "airaImprovementDraft": "Aira 草稿助手",
@@ -1539,6 +1542,7 @@
         "data_asset": "DataAsset",
         "knowledge": "Knowledge",
         "paper_library_entry": "Paper",
+        "action_output": "Action 输出",
         "external": "外部来源"
       },
       "dataAssetKind": {

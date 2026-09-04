@@ -1458,6 +1458,9 @@ declare namespace I18n {
         evidenceKind: string
         evidenceSource: string
         dataAsset: string
+        actionOutput: string
+        actionOutputEvidenceHint: string
+        actionOutputSnapshot: string
         externalSource: string
         evidenceSummary: string
         claimStatement: string
@@ -1543,6 +1546,7 @@ declare namespace I18n {
           data_asset: string
           knowledge: string
           paper_library_entry: string
+          action_output: string
           external: string
         }
         dataAssetKind: {

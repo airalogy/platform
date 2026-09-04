@@ -56,9 +56,9 @@ The Protocol does not exist until that final confirmation. At save time, Platfor
 
 ## Turn validated results into candidate Knowledge
 
-On a Research Task, register a Record or exact DataAsset version as Evidence and have an authorized reviewer validate it. In **Scientific assets**, choose **Propose Knowledge**, write the reusable finding, method, decision, or note, and select one or more validated Evidence items. Preview the Project destination and exact source set, then confirm.
+On a Research Task, register a Record, an exact DataAsset version, or a completed structured Action output as Evidence and have an authorized reviewer validate it. For an Action output, select **Action output** as the Evidence source, choose the completed Action, inspect its digest-bound immutable snapshot, then confirm. The new Evidence starts Pending; Platform never treats successful execution as scientific validation. In **Scientific assets**, choose **Propose Knowledge**, write the reusable finding, method, decision, or note, and select one or more validated Evidence items. Preview the Project destination and exact source set, then confirm.
 
-Platform creates editable Project-scoped Suggested Knowledge and preserves immutable Evidence snapshots and version links. It does not declare the candidate true or adopted. Open Project Knowledge to revise it and use the separate **Review and adopt** action when a Knowledge Reviewer has assessed the evidence. Pending, rejected, or non-Record/DataAsset Evidence is intentionally unavailable. This deterministic path works when AI is disabled.
+Platform creates editable Project-scoped Suggested Knowledge and preserves immutable Evidence snapshots and version links. It does not declare the candidate true or adopted. Open Project Knowledge to revise it and use the separate **Review and adopt** action when a Knowledge Reviewer has assessed the evidence. Pending, rejected, or Evidence not backed by a Record, DataAsset, or immutable Action output is intentionally unavailable. This deterministic path works when AI is disabled.
 
 ## Draft a scientific Claim from validated Evidence
 
@@ -68,7 +68,7 @@ Aira must assess every selected Evidence item, including contradictions, and ret
 
 ## Improve a Protocol from validated Evidence
 
-In **Scientific assets**, choose **Propose Protocol improvement**. Select a Protocol already pinned to the Task, describe the scientific rationale and concrete proposed changes, and attach validated Record or DataAsset Evidence. Preview the exact Project, base Protocol version, and immutable Evidence snapshots before confirming. This creates a proposal only; it does not edit the Protocol.
+In **Scientific assets**, choose **Propose Protocol improvement**. Select a Protocol already pinned to the Task, describe the scientific rationale and concrete proposed changes, and attach validated Record, DataAsset, or immutable Action-output Evidence. Preview the exact Project, base Protocol version, and immutable Evidence snapshots before confirming. This creates a proposal only; it does not edit the Protocol.
 
 An authorized research approver who can update the Protocol must inspect and accept the proposal. Choose **Create version draft** only after that review, then edit the copied package in the normal Protocol Editor. When saving, choose a version higher than the current Protocol and confirm the package. Platform rechecks the reviewed proposal, Evidence lineage, and base version under lock. If another version was published in the meantime, or the proposal changed or was already applied, saving stops and the proposal must be recreated against the latest method. A successful save marks the proposal Applied and links it to the exact new Protocol version. Existing versions and active Runs remain unchanged. This complete path also works with AI disabled.
 
@@ -118,7 +118,7 @@ At each next-action boundary, Aira first chooses between a pinned Protocol, an a
 
 For an External Service, Aira can choose only an exact offering already pinned to the Research Environment and draft a request that passes its pinned input Schema. This does not place an order. Platform creates the same governed Service Job used by the manual path: a service manager records a provider quote when required, every exact quote receives a digest-bound order approval, and budget reservation, sample custody, fulfilment, and result receipt remain deterministic controls. This Action Planner never executes arbitrary model output: Platform validates the chosen type, allowlist entry, pinned version, arguments, resource need, and result contract before creating an Action. Physical Actions and service orders always require approval; other Aira-proposed Actions remain governed by their exact risk policy.
 
-Completed Tool, Instrument, Resource, External Service, and external Wait Actions return their typed results to later Aira planning and conclusions. Platform keeps only a bounded recent result window and presents it as untrusted evidence; those results remain Action output until a user deliberately registers and validates the corresponding Record, DataAsset, Evidence, or Knowledge asset.
+Completed Tool, Instrument, Resource, External Service, Compute, and external Wait Actions return their typed results to later Aira planning and conclusions. Platform keeps only a bounded recent result window and presents it as untrusted evidence. To promote an exact structured output, register it as pending Evidence through preview and confirmation; Platform seals an append-only SHA-256-bound snapshot, exposes it in the Task result package, and still requires human validation before it can support a Claim, Knowledge candidate, or Protocol improvement. This path works without AI.
 
 ## Supply an external result
 

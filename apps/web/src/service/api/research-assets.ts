@@ -6,7 +6,7 @@ export type EvidenceKind = "observation" | "measurement" | "analysis" | "citatio
 export type EvidenceQuality = "pending" | "validated" | "rejected"
 export type ClaimState = "suggested" | "draft" | "reviewed" | "rejected" | "superseded" | "archived"
 export type ClaimEvidenceRelation = "supports" | "contradicts" | "context"
-export type EvidenceArtifactType = "record" | "data_asset" | "knowledge" | "paper_library_entry" | "external"
+export type EvidenceArtifactType = "record" | "data_asset" | "knowledge" | "paper_library_entry" | "action_output" | "external"
 export type ResearchKnowledgeKind = "note" | "method" | "decision" | "finding"
 export type ProtocolImprovementState = "suggested" | "reviewed" | "rejected" | "applied"
 
@@ -59,6 +59,19 @@ export interface ResearchEvidence {
   reviewed_by_user_id?: string | null
   reviewed_at?: string | null
   created_at: string
+  artifact_snapshot?: {
+    schema: "airalogy.research-action-output.v1"
+    id: string
+    task_id: string
+    run_id: string
+    action_id: string
+    action_revision: number
+    action_kind: string
+    output_data: Record<string, unknown>
+    digest: string
+    created_by_user_id?: string | null
+    created_at?: string | null
+  } | null
 }
 
 export interface ClaimEvidenceLink {

@@ -17,9 +17,14 @@ from app.models.research_asset import (
     KnowledgeEvidenceLink,
     ProtocolImprovementEvidence,
     ProtocolImprovementProposal,
+    ResearchActionOutputSnapshot,
     ResearchClaim,
     ResearchClaimEvidence,
     ResearchEvidence,
+)
+from app.services.research_action_outputs import (
+    ResearchActionOutputError,
+    action_output_snapshot_data,
 )
 
 
@@ -72,6 +77,32 @@ async def research_asset_bundle(
             )
         ).all()
     )
+    action_output_ids = [
+        UUID(item.artifact_id)
+        for item in evidence
+        if item.artifact_type == "action_output"
+    ]
+    action_output_snapshots = (
+        list(
+            (
+                await db_session.scalars(
+                    select(ResearchActionOutputSnapshot).where(
+                        ResearchActionOutputSnapshot.action_id.in_(action_output_ids)
+                    )
+                )
+            ).all()
+        )
+        if action_output_ids
+        else []
+    )
+    action_output_by_action_id = {
+        item.action_id: action_output_snapshot_data(item)
+        for item in action_output_snapshots
+    }
+    if set(action_output_ids) != set(action_output_by_action_id):
+        raise ResearchActionOutputError(
+            "Action output Evidence is missing its immutable source snapshot"
+        )
     claims = list(
         (
             await db_session.scalars(
@@ -186,7 +217,17 @@ async def research_asset_bundle(
             }
             for item in assets
         ],
-        "evidence": [item.as_dict() for item in evidence],
+        "evidence": [
+            {
+                **item.as_dict(),
+                "artifact_snapshot": (
+                    action_output_by_action_id.get(UUID(item.artifact_id))
+                    if item.artifact_type == "action_output"
+                    else None
+                ),
+            }
+            for item in evidence
+        ],
         "claims": [
             {
                 **item.as_dict(),
