@@ -88,8 +88,11 @@ from app.services.access_control import (
 )
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.model_usage import create_usage_context
+from app.services.research_action_outputs import (
+    action_output_digest,
+    action_output_payload,
+)
 from app.services.research_assets import research_asset_bundle
-from app.services.research_action_outputs import action_output_digest, action_output_payload
 from app.services.research_autonomy_evaluations import (
     current_autonomy_grant_snapshots,
     policy_snapshot_with_grants,
@@ -121,15 +124,15 @@ from app.services.research_executor_bindings import (
     enforce_environment_binding_scope,
     resolve_executor_binding,
 )
-from app.services.research_human_work import (
-    HumanWorkRequest,
-    human_work_request_from_contract,
-    validate_human_work_submission,
-)
 from app.services.research_external_services import (
     activate_service_order,
     release_service_budget,
     service_job_snapshot,
+)
+from app.services.research_human_work import (
+    HumanWorkRequest,
+    human_work_request_from_contract,
+    validate_human_work_submission,
 )
 from app.services.research_instruments import activate_aira_instrument_action
 from app.services.research_resources import (
@@ -575,24 +578,48 @@ async def _aira_task_draft_catalog(
             }
         )
 
-    services = [
-        {
-            "id": item.source_id,
-            "name": item.name,
-            "description": item.description[:600],
-            "version": item.version,
-            "risk": item.risk,
-            "input_fields": list((item.input_schema.get("properties") or {}).keys())[
-                :30
-            ],
-            "provider": (item.metadata or {}).get("provider") or {},
-            "quote_required": (item.metadata or {}).get("quote_required"),
-            "base_price": (item.metadata or {}).get("base_price"),
-            "currency": (item.metadata or {}).get("currency"),
-        }
-        for item in descriptors["services"][:20]
-        if item.available
-    ]
+    services = []
+    for item in descriptors["services"][:20]:
+        if not item.available:
+            continue
+        try:
+            binding = await resolve_executor_binding(
+                db_session,
+                lab_id=project.lab_id,
+                capability=item.payload(),
+                owner_user_id=current_user.id,
+                project_id=project.id,
+                autonomy_level=autonomy_level,
+            )
+            enforce_environment_binding_scope(
+                binding,
+                project_id=project.id,
+                autonomy_level=autonomy_level,
+            )
+        except ValueError:
+            continue
+        if binding["approval_policy"] == "deny":
+            continue
+        services.append(
+            {
+                "id": item.source_id,
+                "name": item.name,
+                "description": item.description[:600],
+                "version": item.version,
+                "risk": item.risk,
+                "input_fields": list(
+                    (item.input_schema.get("properties") or {}).keys()
+                )[:30],
+                "provider": (item.metadata or {}).get("provider") or {},
+                "quote_required": (item.metadata or {}).get("quote_required"),
+                "base_price": (item.metadata or {}).get("base_price"),
+                "currency": (item.metadata or {}).get("currency"),
+                "executor": {
+                    "type": binding["executor_type"],
+                    "approval_policy": binding["approval_policy"],
+                },
+            }
+        )
     compute = [
         {
             "id": item.source_id,
@@ -1040,6 +1067,34 @@ async def _validate_task_draft(
                     ),
                 )
         compute_environments.append((environment, revision))
+
+    for provider, offering, revision in service_offerings:
+        capability = offering_snapshot(provider, offering, revision)
+        try:
+            binding = await resolve_executor_binding(
+                db_session,
+                lab_id=lab.id,
+                capability=capability,
+                owner_user_id=owner.id,
+                project_id=project.id,
+                autonomy_level=draft.autonomy_level,
+            )
+            enforce_environment_binding_scope(
+                binding,
+                project_id=project.id,
+                autonomy_level=draft.autonomy_level,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if binding["approval_policy"] == "deny":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Capability {binding['capability_key']} is denied by the current "
+                    "Lab Executor Binding"
+                ),
+            )
+        executor_bindings.append(binding)
 
     command = research_task_command(
         project_id=project.id,

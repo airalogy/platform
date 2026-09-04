@@ -299,15 +299,18 @@ const editingProtocol = computed(() => editingId.value
 const editingHumanCapability = computed(() => editingId.value
   ? bindings.value.find(item => item.id === editingId.value)?.capability_key === "human:structured-work"
   : false)
+const editingToolCapability = computed(() => editingId.value
+  ? bindings.value.find(item => item.id === editingId.value)?.capability_key.startsWith("tool:")
+  : false)
 const skillPoolEditor = computed(() =>
   executorChoice.value === "skill_pool"
   && (selectedHumanCapability.value || editingProtocol.value || editingHumanCapability.value),
 )
 const policyOptions = computed(() => [
   { label: $t("page.research.policyAlwaysAsk"), value: "always_ask" },
-  ...(selectedHumanCapability.value || editingProtocol.value || editingHumanCapability.value
-    ? []
-    : [{ label: $t("page.research.policyAllowReadOnly"), value: "allow_read_only" }]),
+  ...(selectedCapability.value?.kind === "tool" || editingToolCapability.value
+    ? [{ label: $t("page.research.policyAllowReadOnly"), value: "allow_read_only" }]
+    : []),
   { label: $t("page.research.policyDeny"), value: "deny" },
 ])
 const canPreview = computed(() => {
@@ -315,6 +318,7 @@ const canPreview = computed(() => {
     return !skillPoolEditor.value || requiredSkillKeys.value.length > 0
   return Boolean(
     createDraft.capability_key
+    && createDraft.executor_ref_id
     && (!skillPoolEditor.value || requiredSkillKeys.value.length),
   )
 })
@@ -349,6 +353,10 @@ function capabilityKindLabel(kind: ResearchCapabilityDescriptor["kind"]) {
     return "Protocol"
   if (kind === "human")
     return $t("page.research.structuredHumanWork")
+  if (kind === "instrument")
+    return $t("page.research.instrumentAction")
+  if (kind === "service")
+    return $t("page.research.externalService")
   return "Tool"
 }
 
@@ -361,6 +369,10 @@ function executorLabel(binding: ResearchExecutorBinding) {
       : []
     return $t("page.research.executorSkillPoolWithSkills", { skills: keys.join(", ") })
   }
+  if (binding.executor_ref.type === "instrument_gateway")
+    return `${$t("page.research.instrumentGatewayExecutor")} · ${binding.executor_ref.id}`
+  if (binding.executor_ref.type === "service_provider")
+    return `${$t("page.research.serviceProviderExecutor")} · ${binding.executor_ref.id}`
   const user = eligibleExecutors.value.find(item => item.id === binding.executor_ref.id)
   return user
     ? (user.name ? `${user.name} (@${user.username})` : `@${user.username}`)
@@ -384,7 +396,13 @@ async function load() {
       fetchExecutorBindings(String(props.project.lab_id)),
       fetchEligibleResearchExecutors(String(props.project.id)),
     ])
-    capabilities.value = [...catalog.protocols, ...catalog.human_work, ...catalog.tools]
+    capabilities.value = [
+      ...catalog.protocols,
+      ...catalog.human_work,
+      ...catalog.tools,
+      ...catalog.instruments,
+      ...catalog.services,
+    ]
     bindings.value = result.items
     eligibleExecutors.value = executors.items
     canManage.value = result.can_manage
@@ -451,6 +469,20 @@ function applyCapability(key: string) {
     createDraft.mode = item.kind === "protocol" ? "protocol_record" : "structured_submission"
     if (policy.value === "allow_read_only")
       policy.value = "always_ask"
+  }
+  else if (item.kind === "instrument") {
+    createDraft.executor_type = "instrument_gateway"
+    createDraft.executor_ref_type = "instrument_gateway"
+    createDraft.executor_ref_id = String(item.metadata.gateway_id || "")
+    createDraft.mode = "leased_command"
+    policy.value = policy.value === "deny" ? "deny" : "always_ask"
+  }
+  else if (item.kind === "service") {
+    createDraft.executor_type = "external_service"
+    createDraft.executor_ref_type = "service_provider"
+    createDraft.executor_ref_id = String(item.metadata.provider?.id || "")
+    createDraft.mode = "governed_order"
+    policy.value = policy.value === "deny" ? "deny" : "always_ask"
   }
   else {
     createDraft.executor_type = "platform_tool"

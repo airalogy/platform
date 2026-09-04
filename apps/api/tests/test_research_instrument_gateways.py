@@ -19,6 +19,7 @@ from app.models.research_execution import (
     ResearchInstrumentJob,
 )
 from app.routers.research_instrument_gateways import InstrumentCommandDraft
+from app.services.research_capabilities import instrument_command_capability
 from app.services.research_instruments import (
     activate_aira_instrument_action,
     available_instrument_command_options,
@@ -159,6 +160,56 @@ def test_instrument_gateway_management_routes_are_registered():
         "/research-instrument-gateways/{gateway_id}/rotate",
         ("POST",),
     ) in routes
+
+
+def test_instrument_command_projects_an_exact_gateway_executor_capability():
+    gateway_id = uuid4()
+    resource_id = uuid4()
+    revision_id = uuid4()
+    command = SimpleNamespace(
+        id=uuid4(),
+        lab_id=uuid4(),
+        gateway_id=gateway_id,
+        resource_id=resource_id,
+        resource_revision_id=revision_id,
+        resource_revision=2,
+        command_key="microscope.capture",
+        command_version="1.2",
+        name="Capture microscope image",
+        description="Acquire one bounded image",
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
+        risk="medium",
+        device_confirmation_required=True,
+        timeout_seconds=300,
+        enabled=True,
+        revision=4,
+        archived_at=None,
+    )
+    gateway = SimpleNamespace(
+        id=gateway_id,
+        name="Microscopy Gateway",
+        enabled=True,
+        revoked_at=None,
+        revision=3,
+    )
+    resource = SimpleNamespace(
+        id=resource_id,
+        resource_type_id=uuid4(),
+        name="Microscope A",
+        code="scope-a",
+        current_revision_id=revision_id,
+        status="active",
+        archived_at=None,
+    )
+
+    capability = instrument_command_capability(command, gateway, resource).payload()
+
+    assert capability["key"] == f"instrument:{command.id}"
+    assert capability["version"] == "4"
+    assert capability["executor_types"] == ["instrument_gateway"]
+    assert capability["metadata"]["gateway_id"] == str(gateway_id)
+    assert capability["metadata"]["command_version"] == "1.2"
 
 
 def test_instrument_jobs_pin_contracts_and_hide_lease_credentials():

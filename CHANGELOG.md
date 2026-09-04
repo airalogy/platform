@@ -18,6 +18,7 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Extended governed Executor Bindings across structured Human Work, exact Instrument Gateway commands, and version-pinned external-service providers, including least-privilege discovery, Task- or Action-time capture, action limits, preview-confirm stale checks, dispatch revalidation, and approval-gated legacy compatibility.
 - Initialized the Airalogy Platform Community Edition repository layout.
 - Added local-first development defaults for PostgreSQL, Redis, and MinIO through Docker Compose.
 - Added public setup, contribution, security, backend, and frontend documentation.

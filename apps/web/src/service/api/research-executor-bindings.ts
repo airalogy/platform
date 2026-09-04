@@ -14,9 +14,9 @@ export interface ResearchExecutorBinding {
   source: "lab_policy"
   capability_key: string
   capability_version: string
-  executor_type: "human" | "platform_tool"
+  executor_type: "human" | "platform_tool" | "instrument_gateway" | "external_service"
   executor_ref: { type: string, id: string }
-  mode: "protocol_record" | "structured_submission" | "durable_job"
+  mode: "protocol_record" | "structured_submission" | "durable_job" | "leased_command" | "governed_order"
   approval_policy: ExecutorApprovalPolicy
   constraints: Record<string, unknown>
   priority: number
@@ -32,7 +32,7 @@ export interface ExecutorBindingDraft {
   capability_key: string
   capability_version: string
   executor_type: ResearchExecutorBinding["executor_type"]
-  executor_ref_type: "task_role" | "user" | "skill_pool" | "platform_worker"
+  executor_ref_type: "task_role" | "user" | "skill_pool" | "platform_worker" | "instrument_gateway" | "service_provider"
   executor_ref_id: string
   mode: ResearchExecutorBinding["mode"]
   approval_policy: ExecutorApprovalPolicy

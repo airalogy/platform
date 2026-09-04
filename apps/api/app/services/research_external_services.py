@@ -265,6 +265,48 @@ async def pinned_service_job_context(
     return pinned, provider, offering, revision
 
 
+def pinned_service_executor_binding(
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    pinned_service: dict[str, Any],
+    provider_id: UUID,
+) -> dict[str, Any]:
+    """Resolve the Task-captured provider policy, with a legacy-safe default."""
+
+    from app.services.research_executor_bindings import (
+        derived_executor_binding,
+        environment_executor_binding,
+        validate_pinned_executor_target,
+    )
+
+    try:
+        binding = environment_executor_binding(
+            run.environment_snapshot or {},
+            str(pinned_service["key"]),
+            str(pinned_service["version"]),
+            legacy_capability=pinned_service,
+            owner_user_id=task.owner_user_id,
+        )
+    except ValueError as error:
+        if "missing" not in str(error):
+            raise
+        # Environments captured before Service bindings existed keep their
+        # original always-ask behavior; new Tasks always pin the exact policy.
+        binding = derived_executor_binding(
+            capability=pinned_service,
+            owner_user_id=task.owner_user_id,
+        )
+    validate_pinned_executor_target(
+        binding,
+        executor_type="external_service",
+        executor_ref_type="service_provider",
+        executor_ref_id=provider_id,
+        mode="governed_order",
+    )
+    return binding
+
+
 async def validate_quote_budget(
     db_session: AsyncSession,
     *,
@@ -364,12 +406,23 @@ async def activate_service_order(
     now = utcnow()
     if quote.valid_until is not None and quote.valid_until <= now:
         raise ValueError("External service quote has expired")
-    await pinned_service_job_context(
+    pinned_service, provider, _offering, _revision = await pinned_service_job_context(
         db_session,
         run=run,
         service_offering_id=job.service_offering_id,
         lock=True,
     )
+    executor_binding = pinned_service_executor_binding(
+        task=task,
+        run=run,
+        pinned_service=pinned_service,
+        provider_id=provider.id,
+    )
+    captured_binding = dict((action.requirements or {}).get("executor_binding") or {})
+    if captured_binding and canonical_digest(captured_binding) != canonical_digest(
+        executor_binding
+    ):
+        raise ValueError("External Service Executor Binding changed after preview")
     validate_schema_payload(job.input_schema, job.request_payload, "service request")
     await validate_quote_budget(
         db_session,

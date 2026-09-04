@@ -175,6 +175,49 @@ def resource_type_is_pinned(run: ResearchRun, resource: Resource) -> bool:
     )
 
 
+async def resolve_instrument_executor_binding(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    command: ResearchInstrumentCommand,
+    gateway: ResearchInstrumentGateway,
+    resource: Resource,
+) -> dict[str, Any]:
+    """Resolve and validate the current Lab policy for a dynamic Instrument Action."""
+
+    from app.services.research_capabilities import instrument_command_capability
+    from app.services.research_executor_bindings import (
+        enforce_environment_binding_scope,
+        resolve_executor_binding,
+        validate_pinned_executor_target,
+    )
+
+    capability = instrument_command_capability(command, gateway, resource).payload()
+    binding = await resolve_executor_binding(
+        db_session,
+        lab_id=task.lab_id,
+        capability=capability,
+        owner_user_id=task.owner_user_id,
+        project_id=task.project_id,
+        autonomy_level=task.autonomy_level,
+    )
+    enforce_environment_binding_scope(
+        binding,
+        project_id=task.project_id,
+        autonomy_level=task.autonomy_level,
+    )
+    if binding["approval_policy"] == "deny":
+        raise ValueError("Instrument command is denied by the Lab Executor Binding")
+    validate_pinned_executor_target(
+        binding,
+        executor_type="instrument_gateway",
+        executor_ref_type="instrument_gateway",
+        executor_ref_id=gateway.id,
+        mode="leased_command",
+    )
+    return binding
+
+
 async def available_instrument_command_options(
     db_session: AsyncSession,
     *,
@@ -182,6 +225,7 @@ async def available_instrument_command_options(
     run: ResearchRun,
     user_id: UUID,
     exclude_job_id: UUID | None = None,
+    resolve_bindings: bool = False,
 ) -> list[dict[str, Any]]:
     """Resolve only commands the requester can execute with an approved booking."""
 
@@ -266,6 +310,18 @@ async def available_instrument_command_options(
             ]
         if not bookings:
             continue
+        executor_binding = None
+        if resolve_bindings:
+            try:
+                executor_binding = await resolve_instrument_executor_binding(
+                    db_session,
+                    task=task,
+                    command=command,
+                    gateway=gateway,
+                    resource=resource,
+                )
+            except ValueError:
+                continue
         items.append(
             {
                 **command_snapshot(command),
@@ -277,6 +333,11 @@ async def available_instrument_command_options(
                     "code": resource.code,
                 },
                 "bookings": [booking.as_dict() for booking in bookings],
+                **(
+                    {"executor_binding": executor_binding}
+                    if executor_binding is not None
+                    else {}
+                ),
             }
         )
     return items
@@ -322,6 +383,7 @@ async def activate_aira_instrument_action(
         run=run,
         user_id=run.requested_by_user_id,
         exclude_job_id=job.id,
+        resolve_bindings=True,
     )
     option = next(
         (item for item in options if str(item.get("id")) == str(job.command_id)),
@@ -341,6 +403,16 @@ async def activate_aira_instrument_action(
     )
     if booking is None:
         raise ValueError("The approved equipment booking is no longer available")
+    captured_binding = dict(
+        (getattr(action, "requirements", {}) or {}).get("executor_binding") or {}
+    )
+    current_binding = dict(option.get("executor_binding") or {})
+    if captured_binding and json.dumps(
+        captured_binding, sort_keys=True, separators=(",", ":"), default=str
+    ) != json.dumps(
+        current_binding, sort_keys=True, separators=(",", ":"), default=str
+    ):
+        raise ValueError("Instrument Executor Binding changed after approval")
     pinned_fields = {
         "gateway_id": job.gateway_id,
         "resource_id": job.resource_id,

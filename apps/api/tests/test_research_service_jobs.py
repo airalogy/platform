@@ -6,6 +6,10 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.main import app
 from app.models.research_execution import (
     ResearchServiceCustodyEvent,
@@ -27,13 +31,11 @@ from app.routers.research_service_jobs import (
 )
 from app.services import research_external_services, research_runtime
 from app.services.research_external_services import (
+    pinned_service_executor_binding,
     request_service_order_approval,
     service_order_command,
 )
 from app.services.research_runtime import canonical_digest
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -194,6 +196,48 @@ def test_order_and_custody_commands_bind_exact_versions_and_state():
     command = _custody_command(job, 2, custody)
     assert command["sequence"] == 2
     assert len(canonical_digest(command)) == 64
+
+
+def test_service_executor_binding_is_pinned_and_legacy_tasks_stay_approval_gated():
+    provider_id = uuid4()
+    capability = {
+        "key": f"service:{uuid4()}",
+        "version": "2026.1",
+        "kind": "service",
+        "metadata": {"provider": {"id": str(provider_id)}},
+    }
+    explicit = {
+        "id": str(uuid4()),
+        "revision": 2,
+        "source": "lab_policy",
+        "capability_key": capability["key"],
+        "capability_version": capability["version"],
+        "executor_type": "external_service",
+        "executor_ref": {"type": "service_provider", "id": str(provider_id)},
+        "mode": "governed_order",
+        "approval_policy": "always_ask",
+        "constraints": {"max_actions_per_run": 2},
+        "priority": 10,
+    }
+    task = SimpleNamespace(owner_user_id=uuid4())
+
+    resolved = pinned_service_executor_binding(
+        task=task,
+        run=SimpleNamespace(environment_snapshot={"executor_bindings": [explicit]}),
+        pinned_service=capability,
+        provider_id=provider_id,
+    )
+    legacy = pinned_service_executor_binding(
+        task=task,
+        run=SimpleNamespace(environment_snapshot={"executor_bindings": []}),
+        pinned_service=capability,
+        provider_id=provider_id,
+    )
+
+    assert resolved["id"] == explicit["id"]
+    assert resolved["constraints"]["max_actions_per_run"] == 2
+    assert legacy["source"] == "platform_default"
+    assert legacy["approval_policy"] == "always_ask"
 
 
 def test_manual_and_aira_service_orders_share_the_same_approval_gate(monkeypatch):

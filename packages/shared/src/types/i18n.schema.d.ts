@@ -1005,6 +1005,8 @@ declare namespace I18n {
         backToBindings: string
         confirmBinding: string
         executorTaskOwner: string
+        instrumentGatewayExecutor: string
+        serviceProviderExecutor: string
         humanExecutor: string
         selectHumanExecutor: string
         humanExecutorHint: string

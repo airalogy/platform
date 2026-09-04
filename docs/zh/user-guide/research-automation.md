@@ -103,6 +103,8 @@ AI 可用时，请先选择目标 Protocol 和 Evidence，可补充希望 Aira �
 
 ## 选择正确的 Action
 
+Lab Owner 和 Manager 可在 Project Research 中打开 **Executor Binding**，治理准确的 Protocol、结构化 Human Work 契约、Tool 版本、Instrument 命令修订或外部服务 Offering 版本。人工工作可绑定未来 Task 负责人、合资格的具体成员或已验证技能池；Instrument 命令始终绑定其登记 Gateway，外部服务始终绑定其登记服务商，两者都保留人工审批。Binding 可禁止后续使用，也可限制 Project、自主等级和每次 Run 的 Action 数。每次变更都经过预览与确认，只影响之后固定的环境或动态 Action 预览，不会改写已确认 Action。
+
 - **Protocol 工作**：把锁定版本的方法指派给人员。Lab 管理员可在“Executor Binding”中将对应 Protocol 版本配置为未来的 Task 负责人、当前 Project 中具备执行权的具体成员，或已验证技能池。在其中打开“人工 Executor 档案”，可记录成员可用时段、并行工作容量、技能等级、验证状态和资质到期时间。技能匹配会从满足全部必需技能和当前 Project 权限的人员中，选择归一化活跃工作量最低者，再将该人员和匹配证据固定。执行人使用正常 Record 表单完成实验，校验通过的 Record 会回传为 Evidence，而不是普通对话消息。Platform 会在派发时加锁并复核成员身份、权限、技能、可用性和容量。AI 关闭时，管理员仍可配置相同绑定，用户也可手工指派 Protocol 工作。
 - **结构化 Human Work**：承载不属于可重复科学方法本身的观察、采集、协调或审核。创建时定义类型化字段、完成标准、Evidence 类型和允许关联的准确 DataAsset 版本数量，并在确认前预览保存位置与执行人。执行人填写生成的确定性表单、预览不可变提交并确认；之后必须由 Task 负责人或获授权 Research 审批人接受或退回修改。接受才会生成已校验 Evidence 并释放依赖它的下游 Action，Aira 不能验收自己提议的工作。若活动在定义实验“如何做”，应改用 Protocol 工作。
 - **待处理通知**：集中呈现新分配的 Protocol 或结构化 Human Work、等待审核的工作和审批请求。打开后会标记提醒为已读，并进入对应的权威工作页面。部署管理员启用 SMTP 后，Platform 还会发送可重试邮件提醒；邮件等待发送、未启用或发送失败都不会移除站内事项，也不会阻塞执行。

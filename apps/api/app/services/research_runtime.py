@@ -1243,6 +1243,7 @@ async def _aira_planner_context(
         task=task,
         run=run,
         user_id=run.requested_by_user_id,
+        resolve_bindings=True,
     )
     compute_options: list[dict[str, Any]] = []
     compute_inputs: list[dict[str, Any]] = []
@@ -1701,6 +1702,7 @@ async def _materialize_aira_action(
             task=task,
             run=run,
             user_id=run.requested_by_user_id,
+            resolve_bindings=True,
         )
         instrument = next(
             (
@@ -1718,6 +1720,16 @@ async def _materialize_aira_action(
         if not bookings:
             raise ValueError("Aira Instrument command has no approved booking")
         booking = bookings[0]
+        executor_binding = dict(instrument.get("executor_binding") or {})
+        if not executor_binding:
+            raise ValueError("Aira Instrument command has no Executor Binding")
+        from app.services.research_executor_bindings import (
+            enforce_environment_binding_action_limit,
+        )
+
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
         from app.services.research_instruments import validate_schema_payload
 
         validate_schema_payload(
@@ -1731,14 +1743,15 @@ async def _materialize_aira_action(
         }
         requirements = {
             "risk": instrument["risk"],
-            "approval_policy": "always_ask",
+            "approval_policy": executor_binding["approval_policy"],
+            "executor_binding": executor_binding,
             "device_confirmation_required": instrument["device_confirmation_required"],
             "input_schema": instrument["input_schema"],
             "output_schema": instrument["output_schema"],
             "booking_window": booking_window,
             "deterministic_resolution": True,
         }
-        executor_type = "instrument_gateway"
+        executor_type = executor_binding["executor_type"]
         kind = ResearchActionKind.INSTRUMENT_JOB.value
         title = instrument["name"]
         description = proposal.thought
@@ -1763,6 +1776,7 @@ async def _materialize_aira_action(
         if proposal.service_offering_id is None:
             raise ValueError("Aira Service proposal is incomplete")
         from app.services.research_external_services import (
+            pinned_service_executor_binding,
             pinned_service_job_context,
         )
         from app.services.research_instruments import validate_schema_payload
@@ -1783,6 +1797,19 @@ async def _materialize_aira_action(
             proposal.service_request,
             "Service request",
         )
+        executor_binding = pinned_service_executor_binding(
+            task=task,
+            run=run,
+            pinned_service=pinned_service,
+            provider_id=service_provider.id,
+        )
+        from app.services.research_executor_bindings import (
+            enforce_environment_binding_action_limit,
+        )
+
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
         project = await db_session.get(Project, task.project_id)
         requester = await db_session.get(User, run.requested_by_user_id)
         if (
@@ -1798,14 +1825,15 @@ async def _materialize_aira_action(
             raise ValueError("Research service use access was revoked")
         requirements = {
             "risk": service_revision.risk,
-            "approval_policy": "always_ask",
+            "approval_policy": executor_binding["approval_policy"],
             "input_schema": service_revision.input_schema,
             "result_schema": service_revision.result_schema,
             "quote_required": service_revision.quote_required,
             "order_approval_required": True,
             "pinned_contract": pinned_service,
+            "executor_binding": executor_binding,
         }
-        executor_type = "external_service"
+        executor_type = executor_binding["executor_type"]
         kind = ResearchActionKind.EXTERNAL_SERVICE_JOB.value
         title = f"Request {pinned_service['name']}"
         description = proposal.thought

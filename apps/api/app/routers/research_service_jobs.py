@@ -41,8 +41,13 @@ from app.services.research_budget import (
     normalize_currency,
     reached_operational_limit,
 )
+from app.services.research_executor_bindings import (
+    enforce_environment_binding_action_limit,
+    executor_binding_command_ref,
+)
 from app.services.research_external_services import (
     latest_service_quote,
+    pinned_service_executor_binding,
     pinned_service_job_context,
     release_service_budget,
     request_service_order_approval,
@@ -309,6 +314,7 @@ def _service_action_command(
     task: ResearchTask,
     run: ResearchRun,
     pinned: dict[str, Any],
+    executor_binding: dict[str, Any],
     params: ServiceActionDraft,
 ) -> dict[str, Any]:
     return {
@@ -318,6 +324,7 @@ def _service_action_command(
         "service_offering_id": str(params.service_offering_id),
         "service_offering_revision_id": str(pinned["source_revision_id"]),
         "service_version": pinned["version"],
+        "executor_binding": executor_binding_command_ref(executor_binding),
         "request_payload": params.request_payload,
         "title": params.title or f"Request {pinned['name']}",
         "description": params.description,
@@ -449,11 +456,20 @@ async def preview_service_action(
         db_session, current_user, task_id
     )
     try:
-        pinned, _provider, _offering, revision = await pinned_service_job_context(
+        pinned, provider, _offering, revision = await pinned_service_job_context(
             db_session,
             run=run,
             service_offering_id=params.service_offering_id,
             lock=False,
+        )
+        executor_binding = pinned_service_executor_binding(
+            task=task,
+            run=run,
+            pinned_service=pinned,
+            provider_id=provider.id,
+        )
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
         )
         validate_schema_payload(
             revision.input_schema, params.request_payload, "service request"
@@ -461,13 +477,18 @@ async def preview_service_action(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     command = _service_action_command(
-        task=task, run=run, pinned=pinned, params=params
+        task=task,
+        run=run,
+        pinned=pinned,
+        executor_binding=executor_binding,
+        params=params,
     )
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
         "destination": _destination(task=task, project=project, lab=lab, run=run),
         "service": pinned,
+        "executor_binding": executor_binding,
         "effects": [
             "Create a version-pinned external Service Job Action",
             (
@@ -498,13 +519,26 @@ async def create_service_action(
             service_offering_id=params.service_offering_id,
             lock=True,
         )
+        executor_binding = pinned_service_executor_binding(
+            task=task,
+            run=run,
+            pinned_service=pinned,
+            provider_id=provider.id,
+        )
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
         validate_schema_payload(
             revision.input_schema, params.request_payload, "service request"
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     command = _service_action_command(
-        task=task, run=run, pinned=pinned, params=params
+        task=task,
+        run=run,
+        pinned=pinned,
+        executor_binding=executor_binding,
+        params=params,
     )
     digest = canonical_digest(command)
     if digest != params.preview_digest:
@@ -556,7 +590,7 @@ async def create_service_action(
         status=ResearchActionStatus.WAITING.value,
         title=command["title"],
         description=command["description"],
-        executor_type="external_service",
+        executor_type=executor_binding["executor_type"],
         input_data={
             "service_offering_id": str(offering.id),
             "service_offering_revision_id": str(revision.id),
@@ -569,6 +603,8 @@ async def create_service_action(
             "input_schema": revision.input_schema,
             "result_schema": revision.result_schema,
             "quote_required": revision.quote_required,
+            "approval_policy": executor_binding["approval_policy"],
+            "executor_binding": executor_binding,
         },
         policy_decision="ask",
         preview_digest=digest,

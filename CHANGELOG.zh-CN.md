@@ -18,6 +18,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 新增
 
+- 将受治理的 Executor Binding 扩展到结构化 Human Work、准确 Instrument Gateway 命令和固定版本的外部服务商，包含最小权限发现、Task/Action 阶段固定、Action 数量限制、预览确认过期校验、派发复核及保持审批的旧任务兼容。
 - 初始化 Airalogy Platform Community Edition 仓库结构。
 - 新增基于 Docker Compose 的 PostgreSQL、Redis 和 MinIO 本地开发默认配置。
 - 新增公开版安装、贡献、安全、后端和前端文档。

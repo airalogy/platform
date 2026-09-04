@@ -19,11 +19,24 @@ from app.models.protocol_version import ProtocolVersion
 from app.models.research_execution import (
     ResearchExecutorBinding,
     ResearchExecutorBindingAudit,
+    ResearchInstrumentCommand,
+    ResearchInstrumentGateway,
+    ResearchServiceOffering,
+    ResearchServiceOfferingRevision,
+    ResearchServiceProvider,
 )
+from app.models.resource import Resource, ResourceStatus
 from app.models.user import User
 from app.routers.depends import CurrentUser
-from app.services.access_control import resolve_structured_access
+from app.services.access_control import (
+    resolve_resource_access,
+    resolve_structured_access,
+)
 from app.services.research_executor_bindings import executor_binding_snapshot
+from app.services.research_human_work import (
+    HUMAN_WORK_CAPABILITY_KEY,
+    HUMAN_WORK_CAPABILITY_VERSION,
+)
 from app.services.research_runtime import (
     canonical_digest,
     has_research_capability,
@@ -82,10 +95,25 @@ class ExecutorBindingDraft(BaseModel):
     lab_id: UUID
     capability_key: str = Field(min_length=3, max_length=255)
     capability_version: str = Field(min_length=1, max_length=64)
-    executor_type: Literal["human", "platform_tool"]
-    executor_ref_type: Literal["task_role", "user", "skill_pool", "platform_worker"]
+    executor_type: Literal[
+        "human", "platform_tool", "instrument_gateway", "external_service"
+    ]
+    executor_ref_type: Literal[
+        "task_role",
+        "user",
+        "skill_pool",
+        "platform_worker",
+        "instrument_gateway",
+        "service_provider",
+    ]
     executor_ref_id: str = Field(min_length=1, max_length=255)
-    mode: Literal["protocol_record", "structured_submission", "durable_job"]
+    mode: Literal[
+        "protocol_record",
+        "structured_submission",
+        "durable_job",
+        "leased_command",
+        "governed_order",
+    ]
     approval_policy: Literal["always_ask", "allow_read_only", "deny"] = "always_ask"
     constraints: dict[str, Any] = Field(default_factory=dict)
     priority: int = Field(default=0, ge=-1000, le=1000)
@@ -125,10 +153,30 @@ class ExecutorBindingDraft(BaseModel):
                 raise ValueError(
                     "Skill requirements can only be used with a skill-pool executor"
                 )
-        elif self.executor_ref_type != "platform_worker" or self.mode != "durable_job":
+        elif self.executor_type == "platform_tool":
+            if self.executor_ref_type != "platform_worker" or self.mode != "durable_job":
+                raise ValueError(
+                    "Platform Tool execution requires a Platform worker and durable_job mode"
+                )
+        elif self.executor_type == "instrument_gateway":
+            if (
+                self.executor_ref_type != "instrument_gateway"
+                or self.mode != "leased_command"
+            ):
+                raise ValueError(
+                    "Instrument execution requires an Instrument Gateway and leased_command mode"
+                )
+            if self.approval_policy == "allow_read_only":
+                raise ValueError("Instrument execution must remain approval-gated")
+        elif (
+            self.executor_ref_type != "service_provider"
+            or self.mode != "governed_order"
+        ):
             raise ValueError(
-                "Platform Tool execution requires a Platform worker and durable_job mode"
+                "External Service execution requires a provider and governed_order mode"
             )
+        elif self.approval_policy == "allow_read_only":
+            raise ValueError("External Service execution must remain approval-gated")
         return self
 
 
@@ -199,6 +247,8 @@ async def _membership(
 async def _validate_capability_and_executor(
     db_session: DBSession,
     params: ExecutorBindingDraft,
+    *,
+    actor_user_id: UUID,
 ) -> dict[str, Any]:
     if params.capability_key.startswith("tool:"):
         tool_key = params.capability_key.removeprefix("tool:")
@@ -225,6 +275,50 @@ async def _validate_capability_and_executor(
                 detail="This Tool is not eligible for internal read-only auto-approval",
             )
         return {"kind": "tool", "name": definition.name, "risk": definition.risk}
+
+    if params.capability_key == HUMAN_WORK_CAPABILITY_KEY:
+        if params.capability_version != HUMAN_WORK_CAPABILITY_VERSION:
+            raise HTTPException(
+                status_code=422,
+                detail="Structured Human Work capability version is unavailable",
+            )
+        if params.executor_type != "human":
+            raise HTTPException(
+                status_code=422,
+                detail="Structured Human Work requires a human executor",
+            )
+        if params.executor_ref_type == "task_role":
+            if params.executor_ref_id != "task.owner":
+                raise HTTPException(
+                    status_code=422, detail="Only task.owner is a supported task role"
+                )
+        elif params.executor_ref_type == "user":
+            try:
+                executor_user_id = UUID(params.executor_ref_id)
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=422, detail="Invalid executor user reference"
+                ) from error
+            executor_membership = await LabUser.find_by(
+                db_session,
+                [
+                    LabUser.lab_id == params.lab_id,
+                    LabUser.user_id == executor_user_id,
+                ],
+            )
+            if executor_membership is None:
+                raise HTTPException(
+                    status_code=422, detail="Executor must be a current Lab member"
+                )
+        elif params.executor_ref_id != "lab.skills":
+            raise HTTPException(
+                status_code=422, detail="Invalid Lab skill-pool executor reference"
+            )
+        return {
+            "kind": "human",
+            "name": "Structured human work",
+            "risk": "human_execution",
+        }
 
     if params.capability_key.startswith("protocol:"):
         try:
@@ -306,6 +400,124 @@ async def _validate_capability_and_executor(
             "name": protocol.name,
             "risk": "physical_or_structured_execution",
         }
+
+    if params.capability_key.startswith("instrument:"):
+        try:
+            command_id = UUID(params.capability_key.removeprefix("instrument:"))
+            gateway_id = UUID(params.executor_ref_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=422, detail="Invalid Instrument executor reference"
+            ) from error
+        row = (
+            await db_session.execute(
+                select(ResearchInstrumentCommand, ResearchInstrumentGateway)
+                .join(
+                    ResearchInstrumentGateway,
+                    ResearchInstrumentGateway.id
+                    == ResearchInstrumentCommand.gateway_id,
+                )
+                .where(
+                    ResearchInstrumentCommand.id == command_id,
+                    ResearchInstrumentCommand.lab_id == params.lab_id,
+                    ResearchInstrumentCommand.enabled.is_(True),
+                    ResearchInstrumentCommand.archived_at.is_(None),
+                    ResearchInstrumentGateway.enabled.is_(True),
+                    ResearchInstrumentGateway.revoked_at.is_(None),
+                )
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=422, detail="Instrument command is unavailable"
+            )
+        command, gateway = row
+        resource = await db_session.get(Resource, command.resource_id)
+        if (
+            resource is None
+            or resource.lab_id != params.lab_id
+            or resource.archived_at is not None
+            or resource.status != ResourceStatus.ACTIVE.value
+            or resource.current_revision_id != command.resource_revision_id
+        ):
+            raise HTTPException(
+                status_code=422, detail="Instrument Resource is unavailable"
+            )
+        resource_access = await resolve_resource_access(
+            db_session,
+            actor_user_id,
+            params.lab_id,
+            resource_type_id=resource.resource_type_id,
+            resource_id=resource.id,
+        )
+        if not resource_access.allows("resource.read"):
+            raise HTTPException(
+                status_code=403, detail="Instrument Resource access denied"
+            )
+        if (
+            params.capability_version != str(command.revision)
+            or params.executor_type != "instrument_gateway"
+            or params.executor_ref_type != "instrument_gateway"
+            or gateway_id != gateway.id
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Instrument binding must match the exact command and Gateway revision",
+            )
+        return {"kind": "instrument", "name": command.name, "risk": command.risk}
+
+    if params.capability_key.startswith("service:"):
+        try:
+            offering_id = UUID(params.capability_key.removeprefix("service:"))
+            provider_id = UUID(params.executor_ref_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=422, detail="Invalid external Service executor reference"
+            ) from error
+        row = (
+            await db_session.execute(
+                select(
+                    ResearchServiceOffering,
+                    ResearchServiceOfferingRevision,
+                    ResearchServiceProvider,
+                )
+                .join(
+                    ResearchServiceOfferingRevision,
+                    ResearchServiceOfferingRevision.offering_id
+                    == ResearchServiceOffering.id,
+                )
+                .join(
+                    ResearchServiceProvider,
+                    ResearchServiceProvider.id
+                    == ResearchServiceOffering.provider_id,
+                )
+                .where(
+                    ResearchServiceOffering.id == offering_id,
+                    ResearchServiceOffering.lab_id == params.lab_id,
+                    ResearchServiceOffering.enabled.is_(True),
+                    ResearchServiceOffering.archived_at.is_(None),
+                    ResearchServiceOfferingRevision.service_version
+                    == params.capability_version,
+                    ResearchServiceProvider.enabled.is_(True),
+                    ResearchServiceProvider.archived_at.is_(None),
+                )
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=422, detail="External Service contract is unavailable"
+            )
+        offering, revision, provider = row
+        if (
+            params.executor_type != "external_service"
+            or params.executor_ref_type != "service_provider"
+            or provider_id != provider.id
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="External Service binding must match its exact provider",
+            )
+        return {"kind": "service", "name": offering.name, "risk": revision.risk}
 
     raise HTTPException(status_code=422, detail="Unsupported capability key")
 
@@ -440,7 +652,9 @@ async def preview_executor_binding(
     lab, _membership_row = await _membership(
         db_session, user=current_user, lab_id=params.lab_id, manage=True
     )
-    capability = await _validate_capability_and_executor(db_session, params)
+    capability = await _validate_capability_and_executor(
+        db_session, params, actor_user_id=current_user.id
+    )
     command = _create_command(params)
     return {
         "preview_digest": canonical_digest(command),
@@ -453,8 +667,8 @@ async def preview_executor_binding(
         "capability": capability,
         "effects": [
             "Create a revisioned Lab Executor Binding",
-            "Apply it only to future Research Environment snapshots",
-            "Keep existing Research Runs pinned to their captured binding",
+            "Apply it to future Research Environments or dynamic Action previews",
+            "Keep captured environments and already confirmed Actions unchanged",
         ],
     }
 
@@ -466,7 +680,9 @@ async def create_executor_binding(
     db_session: DBSession,
 ):
     await _membership(db_session, user=current_user, lab_id=params.lab_id, manage=True)
-    await _validate_capability_and_executor(db_session, params)
+    await _validate_capability_and_executor(
+        db_session, params, actor_user_id=current_user.id
+    )
     command = _create_command(params)
     digest = canonical_digest(command)
     if digest != params.preview_digest:
@@ -554,8 +770,8 @@ async def preview_executor_binding_update(
         "binding": _binding_data(binding),
         "effects": [
             "Create a new binding audit revision",
-            "Apply the policy only to future Research Environment snapshots",
-            "Preserve existing Research Run behavior",
+            "Apply the policy to future Research Environments or Action previews",
+            "Preserve captured environments and already confirmed Actions",
         ],
     }
 

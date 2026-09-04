@@ -41,12 +41,18 @@ from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
 from app.services.research_budget import reached_operational_limit
+from app.services.research_executor_bindings import (
+    enforce_environment_binding_action_limit,
+    executor_binding_command_ref,
+)
 from app.services.research_instruments import (
+    available_instrument_command_options,
     command_snapshot,
     gateway_token_digest,
     generate_job_lease_token,
     instrument_job_snapshot,
     job_lease_token_digest,
+    resolve_instrument_executor_binding,
     sign_job_envelope,
     validate_schema_payload,
 )
@@ -330,6 +336,7 @@ def _action_command(
     run: ResearchRun,
     command: ResearchInstrumentCommand,
     booking: EquipmentBooking,
+    executor_binding: dict[str, Any],
     params: InstrumentActionDraft,
 ) -> dict[str, Any]:
     try:
@@ -345,6 +352,7 @@ def _action_command(
         "command_key": command.command_key,
         "command_version": command.command_version,
         "command_revision": command.revision,
+        "executor_binding": executor_binding_command_ref(executor_binding),
         "resource_id": str(command.resource_id),
         "resource_revision_id": str(command.resource_revision_id),
         "resource_revision": command.resource_revision,
@@ -369,75 +377,15 @@ async def list_available_instrument_commands(
     task, _project_context, _lab, run = await _active_task_context(
         db_session, current_user, task_id, capability="research.read"
     )
-    rows = list(
-        (
-            await db_session.execute(
-                select(ResearchInstrumentCommand, ResearchInstrumentGateway)
-                .join(
-                    ResearchInstrumentGateway,
-                    ResearchInstrumentGateway.id
-                    == ResearchInstrumentCommand.gateway_id,
-                )
-                .where(
-                    ResearchInstrumentCommand.lab_id == task.lab_id,
-                    ResearchInstrumentCommand.enabled.is_(True),
-                    ResearchInstrumentCommand.archived_at.is_(None),
-                    ResearchInstrumentGateway.enabled.is_(True),
-                    ResearchInstrumentGateway.revoked_at.is_(None),
-                )
-                .order_by(
-                    ResearchInstrumentCommand.name,
-                    ResearchInstrumentCommand.command_key,
-                )
-            )
-        ).all()
-    )
-    items = []
-    now = utcnow()
-    for command, gateway in rows:
-        resource = await db_session.get(Resource, command.resource_id)
-        if (
-            resource is None
-            or resource.current_revision_id != command.resource_revision_id
-            or not _resource_type_is_pinned(run, resource)
-        ):
-            continue
-        access = await resolve_resource_access(
+    return {
+        "items": await available_instrument_command_options(
             db_session,
-            current_user.id,
-            task.lab_id,
-            resource_type_id=resource.resource_type_id,
-            resource_id=resource.id,
+            task=task,
+            run=run,
+            user_id=current_user.id,
+            resolve_bindings=True,
         )
-        if not access.allows("equipment.book"):
-            continue
-        bookings = list(
-            (
-                await db_session.scalars(
-                    select(EquipmentBooking)
-                    .where(
-                        EquipmentBooking.resource_id == resource.id,
-                        EquipmentBooking.user_id == current_user.id,
-                        EquipmentBooking.status == BookingStatus.APPROVED.value,
-                        EquipmentBooking.ends_at > now,
-                    )
-                    .order_by(EquipmentBooking.starts_at)
-                )
-            ).all()
-        )
-        items.append(
-            {
-                **command_snapshot(command),
-                "gateway": {"id": str(gateway.id), "name": gateway.name},
-                "resource": {
-                    "id": str(resource.id),
-                    "name": resource.name,
-                    "code": resource.code,
-                },
-                "bookings": [booking.as_dict() for booking in bookings],
-            }
-        )
-    return {"items": items}
+    }
 
 
 @router.post("/research-tasks/{task_id}/instrument-actions/preview")
@@ -458,8 +406,26 @@ async def preview_instrument_action(
         command_id=params.command_id,
         booking_id=params.equipment_booking_id,
     )
+    try:
+        executor_binding = await resolve_instrument_executor_binding(
+            db_session,
+            task=task,
+            command=command,
+            gateway=gateway,
+            resource=resource,
+        )
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     command_data = _action_command(
-        task=task, run=run, command=command, booking=booking, params=params
+        task=task,
+        run=run,
+        command=command,
+        booking=booking,
+        executor_binding=executor_binding,
+        params=params,
     )
     return {
         "preview_digest": canonical_digest(command_data),
@@ -475,6 +441,7 @@ async def preview_instrument_action(
             },
             "booking": booking.as_dict(),
         },
+        "executor_binding": executor_binding,
         "effects": [
             "Create an immutable, version-pinned Instrument Job",
             "Queue it for pull-only delivery to the selected Lab Gateway",
@@ -498,7 +465,7 @@ async def create_instrument_action(
     task, _project_context, _lab, run = await _active_task_context(
         db_session, current_user, task_id, enforce_limits=True
     )
-    command, gateway, _resource, _revision, booking = await _command_context(
+    command, gateway, resource, _revision, booking = await _command_context(
         db_session,
         task=task,
         run=run,
@@ -507,8 +474,26 @@ async def create_instrument_action(
         booking_id=params.equipment_booking_id,
         lock=True,
     )
+    try:
+        executor_binding = await resolve_instrument_executor_binding(
+            db_session,
+            task=task,
+            command=command,
+            gateway=gateway,
+            resource=resource,
+        )
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     command_data = _action_command(
-        task=task, run=run, command=command, booking=booking, params=params
+        task=task,
+        run=run,
+        command=command,
+        booking=booking,
+        executor_binding=executor_binding,
+        params=params,
     )
     digest = canonical_digest(command_data)
     if digest != params.preview_digest:
@@ -569,7 +554,7 @@ async def create_instrument_action(
         status=ResearchActionStatus.QUEUED.value,
         title=command_data["title"],
         description=command_data["description"],
-        executor_type="instrument_gateway",
+        executor_type=executor_binding["executor_type"],
         input_data={
             "command_id": str(command.id),
             "command_key": command.command_key,
@@ -587,6 +572,8 @@ async def create_instrument_action(
             "input_schema": command.input_schema,
             "output_schema": command.output_schema,
             "booking_window": command_data["booking_window"],
+            "approval_policy": executor_binding["approval_policy"],
+            "executor_binding": executor_binding,
         },
         policy_decision="allow",
         preview_digest=digest,

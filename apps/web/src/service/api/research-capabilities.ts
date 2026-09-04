@@ -1,6 +1,6 @@
 import { request } from "../request"
 
-export type ResearchCapabilityKind = "protocol" | "tool" | "human" | "resource" | "service" | "compute"
+export type ResearchCapabilityKind = "protocol" | "tool" | "human" | "resource" | "instrument" | "service" | "compute"
 
 export interface ResearchCapabilityDescriptor {
   key: string
@@ -27,6 +27,7 @@ export interface ResearchCapabilityCatalog {
   tools: ResearchCapabilityDescriptor[]
   human_work: ResearchCapabilityDescriptor[]
   resources: ResearchCapabilityDescriptor[]
+  instruments: ResearchCapabilityDescriptor[]
   services: ResearchCapabilityDescriptor[]
   compute: ResearchCapabilityDescriptor[]
 }

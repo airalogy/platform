@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolVersion
-from app.models.resource import ResourceType, ResourceTypeRevision
+from app.models.research_execution import (
+    ResearchInstrumentCommand,
+    ResearchInstrumentGateway,
+)
+from app.models.resource import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+    ResourceTypeRevision,
+)
 from app.services.research_compute import (
     compute_environment_snapshot,
     latest_compute_environment_rows,
@@ -33,7 +43,7 @@ from app.services.research_services import (
 from app.services.research_tools import ResearchToolDefinition, research_tool_catalog
 
 CapabilityKind = Literal[
-    "protocol", "tool", "human", "resource", "service", "compute"
+    "protocol", "tool", "human", "resource", "instrument", "service", "compute"
 ]
 
 
@@ -168,11 +178,101 @@ def resource_capability(
     )
 
 
+def instrument_command_capability(
+    command: ResearchInstrumentCommand,
+    gateway: ResearchInstrumentGateway,
+    resource: Resource,
+) -> ResearchCapabilityDescriptor:
+    """Project one allowlisted command into a versioned execution capability."""
+
+    available = bool(
+        command.enabled
+        and command.archived_at is None
+        and gateway.enabled
+        and gateway.revoked_at is None
+        and resource.archived_at is None
+        and resource.status == ResourceStatus.ACTIVE.value
+        and resource.current_revision_id == command.resource_revision_id
+    )
+    return ResearchCapabilityDescriptor(
+        key=f"instrument:{command.id}",
+        version=str(command.revision),
+        kind="instrument",
+        name=command.name,
+        description=command.description or "",
+        source_type="research_instrument_command",
+        source_id=str(command.id),
+        source_revision_id=f"{command.id}@{command.revision}",
+        executor_types=["instrument_gateway"],
+        risk=command.risk,
+        input_schema=command.input_schema,
+        output_schema=command.output_schema,
+        available=available,
+        unavailable_reason=(
+            "" if available else "Command, Gateway, or equipment revision is unavailable"
+        ),
+        metadata={
+            "lab_id": str(command.lab_id),
+            "command_key": command.command_key,
+            "command_version": command.command_version,
+            "command_revision": command.revision,
+            "gateway_id": str(gateway.id),
+            "gateway_name": gateway.name,
+            "gateway_revision": gateway.revision,
+            "resource_id": str(resource.id),
+            "resource_type_id": str(resource.resource_type_id),
+            "resource_name": resource.name,
+            "resource_code": resource.code,
+            "resource_revision_id": str(command.resource_revision_id),
+            "resource_revision": command.resource_revision,
+            "device_confirmation_required": command.device_confirmation_required,
+            "timeout_seconds": command.timeout_seconds,
+        },
+    )
+
+
+async def instrument_command_capability_rows(
+    db_session: AsyncSession,
+    *,
+    lab_id: UUID,
+) -> list[tuple[ResearchInstrumentCommand, ResearchInstrumentGateway, Resource]]:
+    return list(
+        (
+            await db_session.execute(
+                select(ResearchInstrumentCommand, ResearchInstrumentGateway, Resource)
+                .join(
+                    ResearchInstrumentGateway,
+                    ResearchInstrumentGateway.id
+                    == ResearchInstrumentCommand.gateway_id,
+                )
+                .join(Resource, Resource.id == ResearchInstrumentCommand.resource_id)
+                .where(
+                    ResearchInstrumentCommand.lab_id == lab_id,
+                    ResearchInstrumentCommand.enabled.is_(True),
+                    ResearchInstrumentCommand.archived_at.is_(None),
+                    ResearchInstrumentGateway.enabled.is_(True),
+                    ResearchInstrumentGateway.revoked_at.is_(None),
+                    Resource.archived_at.is_(None),
+                    Resource.status == ResourceStatus.ACTIVE.value,
+                    Resource.current_revision_id
+                    == ResearchInstrumentCommand.resource_revision_id,
+                )
+                .order_by(
+                    ResearchInstrumentCommand.name,
+                    ResearchInstrumentCommand.command_key,
+                    ResearchInstrumentCommand.id,
+                )
+            )
+        ).all()
+    )
+
+
 async def research_capability_catalog(
     db_session: AsyncSession,
     *,
     project: Project,
     include_resources: bool = True,
+    include_instruments: bool = False,
     include_services: bool = True,
     include_compute: bool = True,
 ) -> dict[str, list[ResearchCapabilityDescriptor]]:
@@ -212,6 +312,11 @@ async def research_capability_catalog(
                 )
             ).all()
         )
+    instrument_rows = []
+    if include_instruments:
+        instrument_rows = await instrument_command_capability_rows(
+            db_session, lab_id=project.lab_id
+        )
     service_rows = []
     if include_services:
         service_rows = await latest_service_offering_rows(
@@ -232,6 +337,10 @@ async def research_capability_catalog(
         "resources": [
             resource_capability(resource_type, revision)
             for resource_type, revision in resource_rows
+        ],
+        "instruments": [
+            instrument_command_capability(command, gateway, resource)
+            for command, gateway, resource in instrument_rows
         ],
         "services": [
             ResearchCapabilityDescriptor(

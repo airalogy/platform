@@ -52,6 +52,23 @@ def executor_binding_snapshot(binding: ResearchExecutorBinding) -> dict[str, Any
     }
 
 
+def executor_binding_command_ref(binding: dict[str, Any]) -> dict[str, Any]:
+    """Keep preview digests bound to the exact executor policy revision."""
+
+    return {
+        "id": binding.get("id"),
+        "revision": int(binding["revision"]),
+        "source": str(binding["source"]),
+        "capability_key": str(binding["capability_key"]),
+        "capability_version": str(binding["capability_version"]),
+        "executor_type": str(binding["executor_type"]),
+        "executor_ref": dict(binding.get("executor_ref") or {}),
+        "mode": str(binding["mode"]),
+        "approval_policy": str(binding["approval_policy"]),
+        "constraints": dict(binding.get("constraints") or {}),
+    }
+
+
 def derived_executor_binding(
     *,
     capability: dict[str, Any],
@@ -87,6 +104,42 @@ def derived_executor_binding(
             "executor_type": "platform_tool",
             "executor_ref": {"type": "platform_worker", "id": tool_key},
             "mode": "durable_job",
+            "approval_policy": "always_ask",
+            "constraints": {},
+            "priority": 0,
+        }
+    if capability["kind"] == "instrument":
+        gateway_id = str((capability.get("metadata") or {}).get("gateway_id") or "")
+        if not gateway_id:
+            raise ValueError("Instrument capability has no Gateway executor")
+        return {
+            "id": None,
+            "revision": 1,
+            "source": "platform_default",
+            "capability_key": capability["key"],
+            "capability_version": capability["version"],
+            "executor_type": "instrument_gateway",
+            "executor_ref": {"type": "instrument_gateway", "id": gateway_id},
+            "mode": "leased_command",
+            "approval_policy": "always_ask",
+            "constraints": {},
+            "priority": 0,
+        }
+    if capability["kind"] == "service":
+        provider_id = str(
+            (capability.get("metadata") or {}).get("provider", {}).get("id") or ""
+        )
+        if not provider_id:
+            raise ValueError("Service capability has no provider executor")
+        return {
+            "id": None,
+            "revision": 1,
+            "source": "platform_default",
+            "capability_key": capability["key"],
+            "capability_version": capability["version"],
+            "executor_type": "external_service",
+            "executor_ref": {"type": "service_provider", "id": provider_id},
+            "mode": "governed_order",
             "approval_policy": "always_ask",
             "constraints": {},
             "priority": 0,
@@ -365,6 +418,56 @@ async def validate_pinned_skill_pool_executor(
         raise ValueError("Pinned skill-pool executor has reached current work capacity")
 
 
+def validate_executor_binding_for_capability(
+    binding: dict[str, Any], capability: dict[str, Any]
+) -> None:
+    """Validate persisted or derived bindings against their source capability."""
+
+    kind = capability.get("kind")
+    metadata = dict(capability.get("metadata") or {})
+    if kind in {"protocol", "human"}:
+        expected_mode = "protocol_record" if kind == "protocol" else "structured_submission"
+        if (
+            binding.get("executor_type") != "human"
+            or binding.get("mode") != expected_mode
+            or binding.get("approval_policy") == "allow_read_only"
+        ):
+            raise ValueError("Human Executor Binding does not match its capability")
+        return
+    if kind == "tool":
+        validate_pinned_executor_target(
+            binding,
+            executor_type="platform_tool",
+            executor_ref_type="platform_worker",
+            executor_ref_id=str(metadata.get("tool_key") or ""),
+            mode="durable_job",
+        )
+        return
+    if kind == "instrument":
+        if binding.get("approval_policy") == "allow_read_only":
+            raise ValueError("Instrument execution must remain approval-gated")
+        validate_pinned_executor_target(
+            binding,
+            executor_type="instrument_gateway",
+            executor_ref_type="instrument_gateway",
+            executor_ref_id=str(metadata.get("gateway_id") or ""),
+            mode="leased_command",
+        )
+        return
+    if kind == "service":
+        if binding.get("approval_policy") == "allow_read_only":
+            raise ValueError("External Service execution must remain approval-gated")
+        validate_pinned_executor_target(
+            binding,
+            executor_type="external_service",
+            executor_ref_type="service_provider",
+            executor_ref_id=str(metadata.get("provider", {}).get("id") or ""),
+            mode="governed_order",
+        )
+        return
+    raise ValueError("This capability cannot use an Executor Binding")
+
+
 async def resolve_executor_binding(
     db_session: AsyncSession,
     *,
@@ -404,17 +507,24 @@ async def resolve_executor_binding(
         except ValueError:
             continue
         if snapshot.get("executor_ref", {}).get("type") == "skill_pool":
-            return await resolve_skill_pool_executor(
+            resolved = await resolve_skill_pool_executor(
                 db_session,
                 binding=snapshot,
                 lab_id=lab_id,
                 project_id=project_id,
             )
-        return resolve_human_executor_ref(snapshot, owner_user_id=owner_user_id)
-    return derived_executor_binding(
+        else:
+            resolved = resolve_human_executor_ref(
+                snapshot, owner_user_id=owner_user_id
+            )
+        validate_executor_binding_for_capability(resolved, capability)
+        return resolved
+    resolved = derived_executor_binding(
         capability=capability,
         owner_user_id=owner_user_id,
     )
+    validate_executor_binding_for_capability(resolved, capability)
+    return resolved
 
 
 def environment_executor_binding(
@@ -465,6 +575,26 @@ def enforce_environment_binding_scope(
     allowed_autonomy = set(constraints.get("allowed_autonomy_levels") or [])
     if allowed_autonomy and autonomy_level not in allowed_autonomy:
         raise ValueError("Executor Binding does not allow this autonomy level")
+
+
+def validate_pinned_executor_target(
+    binding: dict[str, Any],
+    *,
+    executor_type: str,
+    executor_ref_type: str,
+    executor_ref_id: UUID | str,
+    mode: str,
+) -> None:
+    """Fail closed if a captured binding points at a different executor boundary."""
+
+    executor_ref = dict(binding.get("executor_ref") or {})
+    if (
+        binding.get("executor_type") != executor_type
+        or binding.get("mode") != mode
+        or executor_ref.get("type") != executor_ref_type
+        or str(executor_ref.get("id") or "") != str(executor_ref_id)
+    ):
+        raise ValueError("Pinned Executor Binding does not match the execution target")
 
 
 async def enforce_environment_binding_action_limit(

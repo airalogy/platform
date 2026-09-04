@@ -6,6 +6,10 @@ from unittest.mock import ANY, AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.main import app
 from app.models.research import (
     ResearchActionStatus,
@@ -27,6 +31,7 @@ from app.routers import research_executor_bindings as executor_bindings_router
 from app.routers.research_actions import WaitEventDraft
 from app.routers.research_executor_bindings import (
     ExecutorBindingDraft,
+    _validate_capability_and_executor,
     list_eligible_executor_users,
 )
 from app.routers.research_human_executors import (
@@ -60,6 +65,8 @@ from app.services.research_executor_bindings import (
     profile_is_available,
     resolve_human_executor_ref,
     resolve_skill_pool_executor,
+    validate_executor_binding_for_capability,
+    validate_pinned_executor_target,
     validate_pinned_skill_pool_executor,
 )
 from app.services.research_resources import (
@@ -81,9 +88,6 @@ from app.services.research_tools import (
     validate_tool_arguments,
     validate_tool_output_path,
 )
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -180,6 +184,46 @@ def test_executor_binding_contract_rejects_cross_type_dispatch():
     )
     assert skill_pool.constraints["required_skill_keys"] == ["western_blot"]
 
+    instrument_gateway_id = uuid4()
+    instrument = ExecutorBindingDraft(
+        lab_id=uuid4(),
+        capability_key=f"instrument:{uuid4()}",
+        capability_version="3",
+        executor_type="instrument_gateway",
+        executor_ref_type="instrument_gateway",
+        executor_ref_id=str(instrument_gateway_id),
+        mode="leased_command",
+    )
+    service = ExecutorBindingDraft(
+        lab_id=uuid4(),
+        capability_key=f"service:{uuid4()}",
+        capability_version="2026.1",
+        executor_type="external_service",
+        executor_ref_type="service_provider",
+        executor_ref_id=str(uuid4()),
+        mode="governed_order",
+    )
+    human_work = ExecutorBindingDraft(
+        lab_id=uuid4(),
+        capability_key="human:structured-work",
+        capability_version="1",
+        executor_type="human",
+        executor_ref_type="task_role",
+        executor_ref_id="task.owner",
+        mode="structured_submission",
+    )
+    assert instrument.executor_ref_id == str(instrument_gateway_id)
+    assert service.approval_policy == "always_ask"
+    assert human_work.mode == "structured_submission"
+
+    with pytest.raises(ValidationError, match="approval-gated"):
+        ExecutorBindingDraft(
+            **{
+                **instrument.model_dump(),
+                "approval_policy": "allow_read_only",
+            }
+        )
+
     with pytest.raises(ValidationError, match="Platform Tool execution requires"):
         ExecutorBindingDraft(
             lab_id=uuid4(),
@@ -240,6 +284,30 @@ def test_human_executor_bindings_pin_task_roles_and_specific_users():
             },
             owner_user_id=owner_user_id,
         )
+
+
+def test_structured_human_work_binding_is_accepted_by_capability_validation():
+    draft = ExecutorBindingDraft(
+        lab_id=uuid4(),
+        capability_key="human:structured-work",
+        capability_version="1",
+        executor_type="human",
+        executor_ref_type="task_role",
+        executor_ref_id="task.owner",
+        mode="structured_submission",
+    )
+
+    result = asyncio.run(
+        _validate_capability_and_executor(
+            SimpleNamespace(), draft, actor_user_id=uuid4()
+        )
+    )
+
+    assert result == {
+        "kind": "human",
+        "name": "Structured human work",
+        "risk": "human_execution",
+    }
 
 
 def test_human_executor_profile_contract_normalizes_skills_and_preview():
@@ -936,6 +1004,60 @@ def test_capability_registry_is_derived_and_executor_bindings_are_explicit():
     )
     assert legacy["source"] == "platform_default"
     assert legacy["resolved_executor_ref"]["id"] == str(owner_user_id)
+
+
+def test_physical_and_external_executor_defaults_bind_exact_targets():
+    gateway_id = uuid4()
+    provider_id = uuid4()
+    instrument_capability = {
+        "key": f"instrument:{uuid4()}",
+        "version": "4",
+        "kind": "instrument",
+        "metadata": {"gateway_id": str(gateway_id)},
+    }
+    service_capability = {
+        "key": f"service:{uuid4()}",
+        "version": "2026.1",
+        "kind": "service",
+        "metadata": {"provider": {"id": str(provider_id)}},
+    }
+
+    instrument = derived_executor_binding(
+        capability=instrument_capability, owner_user_id=uuid4()
+    )
+    service = derived_executor_binding(
+        capability=service_capability, owner_user_id=uuid4()
+    )
+
+    assert instrument["mode"] == "leased_command"
+    assert service["mode"] == "governed_order"
+    validate_pinned_executor_target(
+        instrument,
+        executor_type="instrument_gateway",
+        executor_ref_type="instrument_gateway",
+        executor_ref_id=gateway_id,
+        mode="leased_command",
+    )
+    validate_pinned_executor_target(
+        service,
+        executor_type="external_service",
+        executor_ref_type="service_provider",
+        executor_ref_id=provider_id,
+        mode="governed_order",
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        validate_pinned_executor_target(
+            instrument,
+            executor_type="instrument_gateway",
+            executor_ref_type="instrument_gateway",
+            executor_ref_id=uuid4(),
+            mode="leased_command",
+        )
+    with pytest.raises(ValueError, match="approval-gated"):
+        validate_executor_binding_for_capability(
+            {**instrument, "approval_policy": "allow_read_only"},
+            instrument_capability,
+        )
 
 
 def test_wait_event_draft_validates_contract_and_normalizes_naive_deadline():

@@ -63,11 +63,11 @@ Human Work、Tool、Instrument、External Service、Resource 和 Wait 的类型�
 
 `Capability` 不取代 Protocol。Capability Registry 是根据 Protocol、工具、人员技能、设备、外部服务、资源、可用性和策略组合得到的当前能力视图，不是第二套方法来源。
 
-Platform 的第一版 Registry 由 Project 当前 Protocol 版本、内置且版本化的结构化 Human Work 契约、实例白名单数字工具和 Lab 当前 Resource Type 修订派生。创建 Research Task 时必须明确选择可执行能力，并在 `airalogy.research-environment.v2` 中固定来源版本及初始人员或 Platform Worker 执行绑定。Aira 和手工控件都不能执行快照之外的可执行能力，固定版本已不可用时也必须失败关闭。Resource Type 只作为可发现的执行需求，不被伪装成可执行方法；具体预约和消耗在 Action 执行时解析。
+Platform 的 Registry 由 Project 当前 Protocol 版本、内置且版本化的结构化 Human Work 契约、实例白名单数字工具、Lab Resource Type 修订、白名单设备命令、外部服务契约和 Compute Environment 派生。创建 Research Task 时必须明确选择可执行能力，并在 `airalogy.research-environment.v2` 中固定来源版本，以及初始人员、Platform Worker 或已选外部服务的执行绑定。具体设备命令和已批准预约有意延后到 Action 阶段解析；确认前的 Action 预览会固定准确 Gateway Binding 和策略修订。Aira 和手工控件都不能执行相应快照之外的能力，固定实现版本不可用时必须失败关闭。Resource Type 只作为执行需求，具体预约和消耗在 Action 执行时解析。
 
-Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Executor Binding 覆盖策略。Protocol 或结构化 Human Work Binding 可解析为未来的 Task 负责人，也可直接指定当前 Lab 中对该 Project 拥有科研执行权的成员，或使用受治理的技能池。人工 Executor 档案是保留修订的 Lab 记录，包含可用时段、最大并行工作量，以及带等级、管理验证和可选到期时间的技能声明。技能池只接受具备全部必需技能、已验证且未过期、当前可用，并拥有 `research.run` 权限的人员；再依次按归一化活跃工作量、活跃项数和稳定用户 ID 选择。选定的人员、档案修订、匹配技能证据、工作量、容量和摘要都会固定到 Research Environment。
+Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Executor Binding 覆盖策略。Protocol 或结构化 Human Work Binding 可解析为未来的 Task 负责人，也可直接指定当前 Lab 中对该 Project 拥有科研执行权的成员，或使用受治理的技能池。Instrument Binding 必须把准确命令修订绑定到该 Lab 管理的 Gateway；外部服务 Binding 必须把准确 Offering 版本绑定到登记的服务商；物理工作和外部委托都不能使用只读自动放行。人工 Executor 档案是保留修订的 Lab 记录，包含可用时段、最大并行工作量，以及带等级、管理验证和可选到期时间的技能声明。技能池只接受具备全部必需技能、已验证且未过期、当前可用，并拥有 `research.run` 权限的人员；再依次按归一化活跃工作量、活跃项数和稳定用户 ID 选择。选定的人员、档案修订、匹配技能证据、工作量、容量和摘要都会固定到 Research Environment。
 
-每次 Binding 和档案变更都需先预览再确认，并追加不可变审计快照。Binding 可要求审批、禁止使用，或仅放行 Platform 内部只读 Tool；也可限制 Project、自主等级、每次 Run 的 Action 数和人员最低技能等级。之后的策略或档案修改不会改写正在运行的 Run。正式派发人工工作前，Platform 会加锁并复核固定人员的当前 Lab 成员身份、`research.run` 权限、可用性、已验证资质和剩余容量；权限撤销、资质过期或容量耗尽时均失败关闭。不使用 AI 时，仍可手工选择 Task 负责人或具体成员。
+每次 Binding 和档案变更都需先预览再确认，并追加不可变审计快照。Binding 可要求审批、禁止使用，或仅放行 Platform 内部只读 Tool；也可限制 Project、自主等级、每次 Run 的 Action 数和人员最低技能等级。之后的策略或档案修改不会改写已固定的 Research Environment 或已确认 Action。派发前，Platform 会加锁并复核成员身份、资质、服务商、Gateway、命令、契约、预约和能力限额；权限撤销、资质过期、容量耗尽或执行目标漂移时均失败关闭。外部服务 Binding 上线前创建的 Task 保留原有“必须审批”的安全默认值。不使用 AI 时，仍可通过同一预览确认路径手工派发人员、设备和外部服务工作。
 
 需要处理的交接会由仅追加的 `work_item.assigned` 与 `approval.requested` 事件在同一数据库事务中投影到私有 Research 待处理通知。开始或完成工作、作出审批决定、取消任务或重新指派时，会在同一事务中关闭对应的过期待办。站内通知是权威提醒路径，读取时仍会按当前 Research 权限过滤，已经离开的成员不能通过旧通知查看任务上下文。可选 SMTP 通道使用独立的持久投递记录和可重试后台任务；真正发送前会再次检查待办仍未解决、当前 Research 权限和用户现用邮箱，工作已处理、权限或身份已变化时均跳过旧投递。API 对收件地址脱敏，确定性 Message-ID 可降低重复邮件的展示概率，最终投递失败会明确显示，但不会改变或阻塞原工作项。邮件默认关闭，也不承载任何权限或执行授权。
 
@@ -273,11 +273,10 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 ### P2：现实资源与治理
 
 - 派生的 Capability Registry 与任务级版本固定（已交付）；
-- Lab 可配置的 Protocol/Tool Executor Binding、合资格成员直接指派或已验证技能池匹配，以及派发时复核（已交付）；
+- Lab 可配置的 Protocol、结构化 Human Work、Tool、Instrument Gateway 与外部服务 Executor Binding，合资格成员直接指派或已验证技能池匹配，Task/Action 阶段固定，以及派发时复核（已交付）；
 - 固定修订的资源需求，以及库存/设备预约与释放 Action（已交付）；
 - Aira 资源请求、确定性候选解析、审批与过期状态拒绝（已交付）；
 - Task 截止时间、预算上限、不可变预算账本、执行停止门禁和可审计的显式限额修订（已交付）；
-- 人员、设备和外部服务 Executor Binding 适配器；
 - 保留修订的人员可用性、容量与已验证技能、受治理的 Sample 资源语义与无环不可变谱系，以及同币种的提供方模型费用自动采集（已交付）；
 - 不可变 Compute Environment 目录、范围权限、“预览→确认”修订、Research Environment 准确版本固定、受治理的 Runner 身份/就绪报告/环境绑定、人工与 Aira 规划共用的审批/预算/租约/结果 Compute Job、声明输出摄取、草稿 DataAsset 登记，以及可独立监管的参考 Runner（已交付）；
 - Record 关联的库存消耗完成与不可变追溯、版本化风险策略与受限自动执行阈值，以及包含类型化可用性 Wait 的资源感知重规划（已交付）。
