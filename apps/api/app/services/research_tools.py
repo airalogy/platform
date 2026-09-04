@@ -71,7 +71,23 @@ def research_tool_catalog() -> dict[str, ResearchToolDefinition]:
             output_schema={
                 "type": "object",
                 "required": ["items"],
-                "properties": {"items": {"type": "array"}},
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "revision": {"type": "integer"},
+                                "kind": {"type": "string"},
+                                "title": {"type": "string"},
+                                "body": {"type": "string"},
+                                "tags": {"type": "array"},
+                                "scope_type": {"type": "string"},
+                            },
+                        },
+                    }
+                },
             },
             risk="read_only",
             executor_type="platform_tool",
@@ -99,7 +115,54 @@ def research_tool_catalog() -> dict[str, ResearchToolDefinition]:
                 "required": ["provider", "items"],
                 "properties": {
                     "provider": {"type": "string"},
-                    "items": {"type": "array"},
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "doi": {"type": ["string", "null"]},
+                                "title": {"type": "string"},
+                                "abstract": {"type": ["string", "null"]},
+                                "publish_year": {"type": ["integer", "null"]},
+                                "authors": {"type": "array"},
+                                "journal_name": {"type": ["string", "null"]},
+                            },
+                        },
+                    },
+                },
+            },
+            risk="external_read_only",
+            executor_type="platform_tool",
+            available=literature_available,
+            unavailable_reason=(
+                "No LiteratureProvider is configured"
+                if not literature_available
+                else ""
+            ),
+        ),
+        "literature.resolve_doi": ResearchToolDefinition(
+            key="literature.resolve_doi",
+            version="1",
+            name="Resolve literature DOI",
+            description=(
+                "Resolve one DOI through the configured read-only LiteratureProvider. "
+                "The candidate is not imported as a formal asset automatically."
+            ),
+            input_schema={
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["doi"],
+                "properties": {
+                    "doi": {"type": "string", "minLength": 1, "maxLength": 255}
+                },
+            },
+            output_schema={
+                "type": "object",
+                "required": ["provider", "found", "item"],
+                "properties": {
+                    "provider": {"type": "string"},
+                    "found": {"type": "boolean"},
+                    "item": {"type": ["object", "null"]},
                 },
             },
             risk="external_read_only",
@@ -139,6 +202,82 @@ def validate_tool_arguments(
         raise ValueError(
             f"Invalid Tool arguments{f' at {path}' if path else ''}: {issue.message}"
         )
+
+
+def validate_tool_argument_template(
+    definition: ResearchToolDefinition,
+    arguments: dict[str, Any],
+    *,
+    bound_argument_names: set[str],
+) -> None:
+    """Validate static arguments while reserving declared properties for bindings."""
+
+    properties = dict(definition.input_schema.get("properties") or {})
+    unknown_targets = bound_argument_names - set(properties)
+    if unknown_targets:
+        raise ValueError("Tool result binding targets an undeclared input property")
+    if set(arguments) & bound_argument_names:
+        raise ValueError("A bound Tool argument cannot also have a static value")
+    schema = {
+        **definition.input_schema,
+        "required": [
+            name
+            for name in list(definition.input_schema.get("required") or [])
+            if name not in bound_argument_names
+        ],
+    }
+    issues = sorted(
+        Draft202012Validator(schema).iter_errors(arguments),
+        key=lambda item: list(item.absolute_path),
+    )
+    if issues:
+        issue = issues[0]
+        path = ".".join(str(item) for item in issue.absolute_path)
+        raise ValueError(
+            "Invalid Tool argument template"
+            f"{f' at {path}' if path else ''}: {issue.message}"
+        )
+
+
+def validate_tool_output_path(
+    definition: ResearchToolDefinition,
+    path: list[str],
+) -> None:
+    """Reject binding paths that are impossible under a Tool's output contract."""
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "tool_key": {"type": "string"},
+            "tool_version": {"type": "string"},
+            "result": definition.output_schema,
+        },
+    }
+    for segment in path:
+        schema_type = schema.get("type")
+        schema_types = set(
+            schema_type if isinstance(schema_type, list) else [schema_type]
+        )
+        properties = dict(schema.get("properties") or {})
+        if "object" in schema_types or properties:
+            next_schema = properties.get(segment)
+            if not isinstance(next_schema, dict):
+                raise ValueError(
+                    "Tool result binding source path is outside the output Schema"
+                )
+            schema = next_schema
+            continue
+        if "array" in schema_types:
+            if not segment.isdigit():
+                raise ValueError("Tool result binding array path must use an index")
+            next_schema = schema.get("items")
+            if not isinstance(next_schema, dict):
+                raise ValueError(
+                    "Tool result binding array has no declared item Schema"
+                )
+            schema = next_schema
+            continue
+        raise ValueError("Tool result binding source path crosses a scalar Schema")
 
 
 async def _search_knowledge(
@@ -199,6 +338,18 @@ async def _search_literature(arguments: dict[str, Any]) -> dict[str, Any]:
     return {"provider": config.LITERATURE_PROVIDER, "items": items}
 
 
+async def _resolve_literature_doi(arguments: dict[str, Any]) -> dict[str, Any]:
+    provider = get_literature_provider()
+    if provider is None:
+        raise ValueError("No LiteratureProvider is configured")
+    item = await provider.resolve_doi(str(arguments["doi"]).strip())
+    return {
+        "provider": config.LITERATURE_PROVIDER,
+        "found": item is not None,
+        "item": item,
+    }
+
+
 async def execute_research_tool(
     db_session: AsyncSession,
     *,
@@ -211,6 +362,8 @@ async def execute_research_tool(
         result = await _search_knowledge(db_session, task=task, arguments=arguments)
     elif definition.key == "literature.search":
         result = await _search_literature(arguments)
+    elif definition.key == "literature.resolve_doi":
+        result = await _resolve_literature_doi(arguments)
     else:  # pragma: no cover - registry and dispatch change together
         raise ValueError("Research Tool has no executor")
     output_issues = list(
@@ -358,13 +511,13 @@ async def process_research_tool_job(
             if task.status == ResearchTaskStatus.PAUSED.value
             else ResearchRunStatus.RUNNING.value
         )
+        run.last_error = None
         frontier_settled = await hold_or_release_aira_action_group(
             db_session,
             task=task,
             run=run,
             action=action,
         )
-        run.last_error = None
         if (
             frontier_settled
             and run.status == ResearchRunStatus.RUNNING.value

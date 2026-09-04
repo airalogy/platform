@@ -1627,6 +1627,7 @@ declare namespace I18n {
         }
         dependencyNode: string
         dependsOn: string
+        dataBindings: string
         actionKind: {
           protocol_run: string
           tool_job: string

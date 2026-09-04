@@ -1351,6 +1351,7 @@ async def _materialize_aira_action(
     if proposal.decision == "tool":
         from app.services.research_capabilities import pinned_tool_definition
         from app.services.research_tools import (
+            validate_tool_argument_template,
             validate_tool_arguments,
         )
 
@@ -1380,7 +1381,18 @@ async def _materialize_aira_action(
         await enforce_environment_binding_action_limit(
             db_session, run=run, binding=executor_binding
         )
-        validate_tool_arguments(definition, proposal.arguments)
+        result_bindings = list((action_graph or {}).get("result_bindings") or [])
+        bound_argument_names = {
+            str(item.get("target_argument") or "") for item in result_bindings
+        }
+        if bound_argument_names:
+            validate_tool_argument_template(
+                definition,
+                proposal.arguments,
+                bound_argument_names=bound_argument_names,
+            )
+        else:
+            validate_tool_arguments(definition, proposal.arguments)
         requirements = {
             "risk": definition.risk,
             "read_only": True,
@@ -2141,6 +2153,131 @@ def _aira_action_graph(action: ResearchAction) -> dict[str, Any] | None:
     return value
 
 
+def _action_graph_output_value(output_data: dict[str, Any], path: list[str]) -> Any:
+    value: Any = output_data
+    for segment in path:
+        if isinstance(value, dict):
+            if segment not in value:
+                raise ValueError("Result binding source path does not exist")
+            value = value[segment]
+            continue
+        if isinstance(value, list):
+            if not segment.isdigit():
+                raise ValueError("Result binding list path must use a numeric index")
+            index = int(segment)
+            if index >= len(value):
+                raise ValueError("Result binding list index is out of range")
+            value = value[index]
+            continue
+        raise ValueError("Result binding source path crosses a scalar value")
+    return jsonable_encoder(value)
+
+
+async def _resolve_aira_tool_result_bindings(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    parents_by_node_id: dict[str, ResearchAction],
+) -> list[dict[str, Any]]:
+    graph = _aira_action_graph(action) or {}
+    bindings = list(graph.get("result_bindings") or [])
+    if not bindings:
+        return []
+    tool_job = await ResearchToolJob.find_by(
+        db_session, [ResearchToolJob.action_id == action.id]
+    )
+    if tool_job is None:
+        raise ValueError("Blocked Aira Tool Action has no typed Tool Job")
+    arguments = dict(tool_job.arguments or {})
+    receipts: list[dict[str, Any]] = []
+    seen_targets: set[str] = set()
+    for binding in bindings:
+        source_node_id = str(binding.get("source_node_id") or "")
+        target_argument = str(binding.get("target_argument") or "")
+        source_path = list(binding.get("source_path") or [])
+        parent = parents_by_node_id.get(source_node_id)
+        if parent is None:
+            raise ValueError("Result binding source is not a direct dependency")
+        if parent.status != ResearchActionStatus.COMPLETED.value:
+            raise ValueError("Result binding source Action is not complete")
+        if not target_argument or target_argument in seen_targets:
+            raise ValueError("Result binding target is invalid or duplicated")
+        if target_argument in arguments:
+            raise ValueError("Result binding target already has a static value")
+        if not source_path or any(
+            not isinstance(item, str) or not item for item in source_path
+        ):
+            raise ValueError("Result binding source path is invalid")
+        bound_value = _action_graph_output_value(
+            dict(parent.output_data or {}), source_path
+        )
+        arguments[target_argument] = bound_value
+        seen_targets.add(target_argument)
+        receipts.append(
+            {
+                "source_node_id": source_node_id,
+                "source_action_id": str(parent.id),
+                "source_action_revision": parent.revision,
+                "source_output_digest": canonical_digest(parent.output_data or {}),
+                "bound_value_digest": canonical_digest(bound_value),
+                "source_path": source_path,
+                "target_argument": target_argument,
+            }
+        )
+
+    from app.services.research_capabilities import pinned_tool_definition
+    from app.services.research_tools import validate_tool_arguments
+
+    definition = pinned_tool_definition(
+        run.environment_snapshot or {}, tool_job.tool_key
+    )
+    if definition.version != tool_job.tool_version:
+        raise ValueError("Pinned Research Tool version is unavailable")
+    validate_tool_arguments(definition, arguments)
+    resolved_arguments_digest = canonical_digest(arguments)
+    receipts = [
+        {**receipt, "resolved_arguments_digest": resolved_arguments_digest}
+        for receipt in receipts
+    ]
+    tool_job.arguments = arguments
+    updated_graph = {**graph, "result_binding_receipts": receipts}
+    action.input_data = {
+        **(action.input_data or {}),
+        "arguments": arguments,
+        "action_graph": updated_graph,
+    }
+    action.preview_digest = canonical_digest(
+        {
+            "run_id": str(run.id),
+            "plan_version": action.plan_version,
+            "kind": action.kind,
+            "title": action.title,
+            "description": action.description,
+            "executor_type": action.executor_type,
+            "input_data": action.input_data,
+            "requirements": action.requirements,
+        }
+    )
+    action.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="action.arguments_resolved",
+        actor_user_id=None,
+        payload={
+            "graph_id": graph.get("id"),
+            "binding_receipts": receipts,
+            "preview_digest": action.preview_digest,
+        },
+        idempotency_key=f"action:{action.id}:arguments-resolved:{action.revision}",
+    )
+    return receipts
+
+
 async def hold_or_release_aira_action_group(
     db_session: AsyncSession,
     *,
@@ -2207,6 +2344,12 @@ async def hold_or_release_aira_action_group(
     if len(dependency_rows) != expected_dependency_count:
         raise ValueError("Aira Tool dependency graph edge set is incomplete")
     action_by_id = {item.id: item for item in actions}
+    action_by_node_id: dict[str, ResearchAction] = {}
+    for item in actions:
+        node_id = str((_aira_action_graph(item) or {}).get("node_id") or "")
+        if not node_id or node_id in action_by_node_id:
+            raise ValueError("Aira Tool dependency graph node IDs are invalid")
+        action_by_node_id[node_id] = item
     dependencies: dict[UUID, list[ResearchAction]] = {item.id: [] for item in actions}
     for dependency in dependency_rows:
         if dependency.action_id not in action_by_id:
@@ -2221,6 +2364,17 @@ async def hold_or_release_aira_action_group(
         item_graph = _aira_action_graph(item) or {}
         if len(dependencies[item.id]) != int(item_graph.get("depends_on_count") or 0):
             raise ValueError("Aira Tool dependency graph node is incomplete")
+        parent_node_ids = {
+            str((_aira_action_graph(parent) or {}).get("node_id") or "")
+            for parent in dependencies[item.id]
+        }
+        if any(
+            str(binding.get("source_node_id") or "") not in parent_node_ids
+            for binding in list(item_graph.get("result_bindings") or [])
+        ):
+            raise ValueError(
+                "Aira Tool result binding points outside direct dependencies"
+            )
 
     terminal_failure_statuses = {
         ResearchActionStatus.FAILED.value,
@@ -2276,6 +2430,48 @@ async def hold_or_release_aira_action_group(
                 parent.status == ResearchActionStatus.COMPLETED.value
                 for parent in parents
             ):
+                parents_by_node_id = {
+                    str((_aira_action_graph(parent) or {}).get("node_id") or ""): parent
+                    for parent in parents
+                }
+                try:
+                    await _resolve_aira_tool_result_bindings(
+                        db_session,
+                        task=task,
+                        run=run,
+                        action=candidate,
+                        parents_by_node_id=parents_by_node_id,
+                    )
+                except ValueError as error:
+                    candidate.status = ResearchActionStatus.FAILED.value
+                    candidate.error = f"Dependency result binding failed: {error}"
+                    candidate.completed_at = now
+                    candidate.revision += 1
+                    tool_job = await ResearchToolJob.find_by(
+                        db_session, [ResearchToolJob.action_id == candidate.id]
+                    )
+                    if tool_job is None:
+                        raise ValueError(
+                            "Blocked Aira Tool Action has no typed Tool Job"
+                        ) from error
+                    tool_job.status = ResearchToolJobStatus.FAILED.value
+                    tool_job.error = candidate.error
+                    tool_job.completed_at = now
+                    run.last_error = candidate.error
+                    await emit_research_event(
+                        db_session,
+                        task_id=task.id,
+                        run_id=run.id,
+                        action_id=candidate.id,
+                        kind="action.argument_resolution_failed",
+                        actor_user_id=None,
+                        payload={"graph_id": graph_id, "error": str(error)[:2000]},
+                        idempotency_key=(
+                            f"action:{candidate.id}:argument-resolution-failed"
+                        ),
+                    )
+                    changed = True
+                    continue
                 candidate.status = ResearchActionStatus.PROPOSED.value
                 candidate.revision += 1
                 if candidate.policy_decision == "ask":
@@ -2411,6 +2607,9 @@ async def _materialize_aira_tool_graph(
                 "size": size,
                 "depends_on_count": len(node.depends_on),
                 "dependency_count": dependency_count,
+                "result_bindings": [
+                    item.model_dump(mode="json") for item in node.result_bindings
+                ],
             },
             defer_activation=True,
         )
@@ -2559,6 +2758,13 @@ async def build_research_result_package(
                 "title": item.title,
                 "error": item.error,
                 "depends_on_action_ids": dependency_ids_by_action[item.id],
+                "result_bindings": list(
+                    (_aira_action_graph(item) or {}).get("result_bindings") or []
+                ),
+                "result_binding_receipts": list(
+                    (_aira_action_graph(item) or {}).get("result_binding_receipts")
+                    or []
+                ),
             }
             for item in actions
         ],

@@ -326,6 +326,14 @@
                     <p v-if="action.dependencies.length" class="aira-type-meta mb-0 mt-1">
                       {{ $t("page.research.dependsOn", { actions: actionDependencyLabel(action) }) }}
                     </p>
+                    <p
+                      v-if="action.input_data.action_graph?.result_bindings?.length"
+                      class="aira-type-meta mb-0 mt-1"
+                    >
+                      {{ $t("page.research.dataBindings", {
+                        count: action.input_data.action_graph.result_bindings.length,
+                      }) }}
+                    </p>
                     <n-button
                       v-if="action.protocol_run?.record_id && action.protocol"
                       text

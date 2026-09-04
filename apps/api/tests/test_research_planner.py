@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from app.libs import masterbrain
 from app.libs.masterbrain import _extract_json_object
-from app.services import research_planner
+from app.services import research_planner, research_tools
 from app.services.research_planner import (
     AIRA_WAIT_TEMPLATES,
     AiraActionProposal,
@@ -269,6 +269,89 @@ def test_action_proposal_is_strict_and_decision_specific():
         }
     )
     assert graph.tool_graph[1].depends_on == ["broad_search"]
+    bound_graph = AiraActionProposal.model_validate(
+        {
+            "decision": "tool_graph",
+            "tool_graph": [
+                {
+                    "node_id": "discover",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "RNA"},
+                    "purpose": "Discover a candidate",
+                },
+                {
+                    "node_id": "follow_up",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"limit": 5},
+                    "purpose": "Use the discovered title",
+                    "depends_on": ["discover"],
+                    "result_bindings": [
+                        {
+                            "source_node_id": "discover",
+                            "source_path": ["result", "items", "0", "title"],
+                            "target_argument": "query",
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    assert bound_graph.tool_graph[1].result_bindings[0].target_argument == "query"
+    with pytest.raises(ValidationError, match="direct dependency"):
+        AiraActionProposal.model_validate(
+            {
+                "decision": "tool_graph",
+                "tool_graph": [
+                    {
+                        "node_id": "discover",
+                        "tool_key": "knowledge.search",
+                        "arguments": {"query": "RNA"},
+                        "purpose": "Discover a candidate",
+                    },
+                    {
+                        "node_id": "follow_up",
+                        "tool_key": "knowledge.search",
+                        "purpose": "Use an undeclared source",
+                        "depends_on": ["discover"],
+                        "result_bindings": [
+                            {
+                                "source_node_id": "missing",
+                                "source_path": ["result", "items", "0", "title"],
+                                "target_argument": "query",
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
+    with pytest.raises(ValidationError, match="static argument"):
+        AiraActionProposal.model_validate(
+            {
+                "decision": "tool_graph",
+                "tool_graph": [
+                    {
+                        "node_id": "discover",
+                        "tool_key": "knowledge.search",
+                        "arguments": {"query": "RNA"},
+                        "purpose": "Discover a candidate",
+                    },
+                    {
+                        "node_id": "follow_up",
+                        "tool_key": "knowledge.search",
+                        "arguments": {"query": "already set"},
+                        "purpose": "Conflict with a bound argument",
+                        "depends_on": ["discover"],
+                        "result_bindings": [
+                            {
+                                "source_node_id": "discover",
+                                "source_path": ["result", "items", "0", "title"],
+                                "target_argument": "query",
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
     with pytest.raises(ValidationError, match="at least one dependency"):
         AiraActionProposal.model_validate(
             {
@@ -563,6 +646,62 @@ def test_planner_validates_tool_graph_against_environment(monkeypatch):
     assert result.decision == "tool_graph"
     assert result.tool_graph[1].depends_on == ["broad"]
 
+    proposal.return_value["tool_graph"][1] = {
+        "node_id": "focused",
+        "tool_key": "knowledge.search",
+        "arguments": {"limit": 5},
+        "purpose": "Search using a bound query",
+        "depends_on": ["broad"],
+        "result_bindings": [
+            {
+                "source_node_id": "broad",
+                "source_path": ["result", "items", "0", "title"],
+                "target_argument": "query",
+            }
+        ],
+    }
+    result = asyncio.run(
+        plan_next_research_action(
+            {"goal": "Study RNA", "protocols": [], "tools": PINNED_TOOLS},
+            "qwen3.5-flash",
+        )
+    )
+    assert result.tool_graph[1].arguments == {"limit": 5}
+
+    proposal.return_value["tool_graph"][1]["result_bindings"][0]["target_argument"] = (
+        "undeclared"
+    )
+    with pytest.raises(ValueError, match="undeclared input property"):
+        asyncio.run(
+            plan_next_research_action(
+                {"goal": "Study RNA", "protocols": [], "tools": PINNED_TOOLS},
+                "qwen3.5-flash",
+            )
+        )
+
+    proposal.return_value["tool_graph"][1]["result_bindings"][0]["target_argument"] = (
+        "query"
+    )
+    proposal.return_value["tool_graph"][1]["result_bindings"][0]["source_path"] = [
+        "result",
+        "items",
+        "0",
+        "invented",
+    ]
+    with pytest.raises(ValueError, match="outside the output Schema"):
+        asyncio.run(
+            plan_next_research_action(
+                {"goal": "Study RNA", "protocols": [], "tools": PINNED_TOOLS},
+                "qwen3.5-flash",
+            )
+        )
+
+    proposal.return_value["tool_graph"][1]["result_bindings"][0]["source_path"] = [
+        "result",
+        "items",
+        "0",
+        "title",
+    ]
     proposal.return_value["tool_graph"][1]["tool_key"] = "shell.run"
     with pytest.raises(ValueError, match="outside the environment"):
         asyncio.run(
@@ -571,6 +710,60 @@ def test_planner_validates_tool_graph_against_environment(monkeypatch):
                 "qwen3.5-flash",
             )
         )
+
+
+def test_planner_accepts_literature_search_to_doi_resolution_graph(monkeypatch):
+    class Provider:
+        pass
+
+    monkeypatch.setattr(research_tools, "get_literature_provider", lambda: Provider())
+    catalog = research_tools.research_tool_catalog()
+    proposal = AsyncMock(
+        return_value={
+            "decision": "tool_graph",
+            "thought": "Find a candidate and resolve its DOI metadata",
+            "tool_graph": [
+                {
+                    "node_id": "search",
+                    "tool_key": "literature.search",
+                    "arguments": {"query": "RNA binding", "limit": 5},
+                    "purpose": "Find candidate papers",
+                },
+                {
+                    "node_id": "resolve",
+                    "tool_key": "literature.resolve_doi",
+                    "arguments": {},
+                    "purpose": "Resolve the first candidate DOI",
+                    "depends_on": ["search"],
+                    "result_bindings": [
+                        {
+                            "source_node_id": "search",
+                            "source_path": ["result", "items", "0", "doi"],
+                            "target_argument": "doi",
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(research_planner, "aira_action_proposal", proposal)
+
+    result = asyncio.run(
+        plan_next_research_action(
+            {
+                "goal": "Study RNA binding",
+                "protocols": [],
+                "tools": [
+                    catalog["literature.search"].payload(),
+                    catalog["literature.resolve_doi"].payload(),
+                ],
+            },
+            "qwen3.5-flash",
+        )
+    )
+
+    assert result.tool_graph[1].tool_key == "literature.resolve_doi"
+    assert result.tool_graph[1].result_bindings[0].target_argument == "doi"
 
 
 def test_planner_rejects_protocol_without_a_pinned_method(monkeypatch):

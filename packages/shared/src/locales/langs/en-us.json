@@ -1623,6 +1623,7 @@
       },
       "dependencyNode": "Dependency node {position}/{size}",
       "dependsOn": "Depends on {actions}",
+      "dataBindings": "Receives {count} parameter(s) from dependency results",
       "actionKind": {
         "protocol_run": "Protocol execution",
         "tool_job": "Digital tool",

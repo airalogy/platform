@@ -22,6 +22,7 @@ from app.services.research_frontiers import (
     parallel_group,
 )
 from app.services.research_planner import AiraActionProposal
+from app.services.research_tools import research_tool_catalog
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
@@ -344,6 +345,164 @@ def test_tool_graph_releases_only_ready_nodes(monkeypatch):
     )
     assert settled is False
     assert child.status == ResearchActionStatus.QUEUED.value
+
+
+def test_tool_graph_resolves_parent_output_into_child_arguments(monkeypatch):
+    run_id = uuid4()
+    root = _graph_action(
+        run_id=run_id,
+        node_id="root",
+        position=1,
+        size=2,
+        status=ResearchActionStatus.COMPLETED.value,
+    )
+    root.output_data = {
+        "tool_key": "knowledge.search",
+        "tool_version": "1",
+        "result": {"items": [{"title": "RNA binding proteins"}]},
+    }
+    root.revision = 3
+    child = _graph_action(
+        run_id=run_id,
+        node_id="child",
+        position=2,
+        size=2,
+        depends_on_count=1,
+    )
+    child.input_data["action_graph"]["result_bindings"] = [
+        {
+            "source_node_id": "root",
+            "source_path": ["result", "items", "0", "title"],
+            "target_argument": "query",
+        }
+    ]
+    dependency = ResearchActionDependency(
+        action_id=child.id,
+        depends_on_action_id=root.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    child_job = ResearchToolJob(
+        action_id=child.id,
+        tool_key="knowledge.search",
+        tool_version="1",
+        arguments={"limit": 5},
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(
+        id=run_id,
+        status=ResearchRunStatus.WAITING_FOR_TOOL.value,
+        environment_snapshot={
+            "tools": [research_tool_catalog()["knowledge.search"].payload()]
+        },
+    )
+    db_session = AsyncMock()
+    db_session.add = Mock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [root, child]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+
+    async def find_job(_session, _filters):
+        return child_job
+
+    activated_arguments = {}
+
+    async def activate(*_args, action, **_kwargs):
+        action.status = ResearchActionStatus.QUEUED.value
+        activated_arguments.update(child_job.arguments)
+
+    monkeypatch.setattr(ResearchToolJob, "find_by", find_job)
+    monkeypatch.setattr(research_runtime, "activate_tool_action", activate)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session, task=task, run=run, action=root
+        )
+    )
+
+    assert settled is False
+    assert activated_arguments == {"limit": 5, "query": "RNA binding proteins"}
+    receipt = child.input_data["action_graph"]["result_binding_receipts"][0]
+    assert receipt["source_action_id"] == str(root.id)
+    assert receipt["source_action_revision"] == 3
+    assert len(receipt["source_output_digest"]) == 64
+    assert len(receipt["bound_value_digest"]) == 64
+    assert len(receipt["resolved_arguments_digest"]) == 64
+    assert child.preview_digest != "a" * 64
+
+
+def test_tool_graph_fails_closed_when_bound_output_is_missing(monkeypatch):
+    run_id = uuid4()
+    root = _graph_action(
+        run_id=run_id,
+        node_id="root",
+        position=1,
+        size=2,
+        status=ResearchActionStatus.COMPLETED.value,
+    )
+    root.output_data = {
+        "tool_key": "knowledge.search",
+        "tool_version": "1",
+        "result": {"items": []},
+    }
+    child = _graph_action(
+        run_id=run_id,
+        node_id="child",
+        position=2,
+        size=2,
+        depends_on_count=1,
+    )
+    child.input_data["action_graph"]["result_bindings"] = [
+        {
+            "source_node_id": "root",
+            "source_path": ["result", "items", "0", "title"],
+            "target_argument": "query",
+        }
+    ]
+    dependency = ResearchActionDependency(
+        action_id=child.id,
+        depends_on_action_id=root.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    child_job = ResearchToolJob(
+        action_id=child.id,
+        tool_key="knowledge.search",
+        tool_version="1",
+        arguments={"limit": 5},
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(
+        id=run_id,
+        status=ResearchRunStatus.WAITING_FOR_TOOL.value,
+        environment_snapshot={
+            "tools": [research_tool_catalog()["knowledge.search"].payload()]
+        },
+    )
+    db_session = AsyncMock()
+    db_session.add = Mock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [root, child]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+
+    async def find_job(_session, _filters):
+        return child_job
+
+    monkeypatch.setattr(ResearchToolJob, "find_by", find_job)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session, task=task, run=run, action=root
+        )
+    )
+
+    assert settled is True
+    assert child.status == ResearchActionStatus.FAILED.value
+    assert child_job.status == ResearchToolJobStatus.FAILED.value
+    assert "out of range" in child.error
+    assert run.last_error == child.error
 
 
 def test_tool_graph_skips_descendants_after_dependency_failure(monkeypatch):

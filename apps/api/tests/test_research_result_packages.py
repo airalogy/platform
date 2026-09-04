@@ -7,12 +7,14 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
-
 from app.main import app
-from app.models.research import ResearchResultPackageSnapshot
+from app.models.research import (
+    ResearchAction,
+    ResearchActionDependency,
+    ResearchResultPackageSnapshot,
+)
 from app.routers import research_result_packages as result_package_router
+from app.services import research_runtime
 from app.services.research_result_packages import (
     RESULT_PACKAGE_SCHEMA,
     ResearchResultPackageError,
@@ -22,6 +24,8 @@ from app.services.research_result_packages import (
     verify_result_package_digest,
 )
 from app.services.research_runtime import build_research_result_package
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -130,6 +134,114 @@ def test_manual_run_can_build_the_same_complete_result_package_base_as_aira():
     assert package["actions"] == []
     assert package["claims"] == []
     assert package["budget"]["enabled"] is False
+
+
+def test_result_package_retains_dependency_binding_provenance(monkeypatch):
+    task_id = uuid4()
+    run_id = uuid4()
+    root = ResearchAction(
+        id=uuid4(),
+        run_id=run_id,
+        sequence=1,
+        plan_version=2,
+        kind="tool_job",
+        status="completed",
+        title="Find paper",
+        description="",
+        executor_type="platform_tool",
+        input_data={"action_graph": {"id": "graph", "node_id": "root"}},
+        requirements={},
+        policy_decision="allow",
+        preview_digest="a" * 64,
+        idempotency_key="root",
+    )
+    receipt = {
+        "source_node_id": "root",
+        "source_action_id": str(root.id),
+        "source_action_revision": 2,
+        "source_output_digest": "b" * 64,
+        "bound_value_digest": "d" * 64,
+        "resolved_arguments_digest": "e" * 64,
+        "source_path": ["result", "items", "0", "doi"],
+        "target_argument": "doi",
+    }
+    child = ResearchAction(
+        id=uuid4(),
+        run_id=run_id,
+        sequence=2,
+        plan_version=2,
+        kind="tool_job",
+        status="completed",
+        title="Resolve DOI",
+        description="",
+        executor_type="platform_tool",
+        input_data={
+            "action_graph": {
+                "id": "graph",
+                "node_id": "child",
+                "result_bindings": [
+                    {
+                        "source_node_id": "root",
+                        "source_path": ["result", "items", "0", "doi"],
+                        "target_argument": "doi",
+                    }
+                ],
+                "result_binding_receipts": [receipt],
+            }
+        },
+        requirements={},
+        policy_decision="allow",
+        preview_digest="c" * 64,
+        idempotency_key="child",
+    )
+    dependency = ResearchActionDependency(
+        action_id=child.id,
+        depends_on_action_id=root.id,
+        condition={"required_status": "completed"},
+    )
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: [root, child]),
+                SimpleNamespace(all=lambda: [dependency]),
+                SimpleNamespace(all=list),
+            ]
+        )
+    )
+    task = SimpleNamespace(
+        id=task_id,
+        goal="Resolve a discovered paper",
+        success_criteria=["Metadata resolved"],
+    )
+    run = SimpleNamespace(
+        id=run_id,
+        aira_state={},
+        environment_snapshot={"schema": "airalogy.research-environment.v2"},
+        plan_version=2,
+    )
+    monkeypatch.setattr(
+        research_runtime,
+        "research_asset_bundle",
+        AsyncMock(
+            return_value={
+                "claims": [],
+                "evidence": [],
+                "data_assets": [],
+                "knowledge_items": [],
+                "protocol_improvements": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        research_runtime,
+        "research_budget_snapshot",
+        AsyncMock(return_value={"enabled": False}),
+    )
+
+    package = asyncio.run(build_research_result_package(db_session, task=task, run=run))
+
+    assert package["actions"][1]["depends_on_action_ids"] == [str(root.id)]
+    assert package["actions"][1]["result_binding_receipts"] == [receipt]
 
 
 def test_markdown_result_package_is_human_readable_and_retains_raw_snapshot():

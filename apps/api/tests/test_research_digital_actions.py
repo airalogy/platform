@@ -6,10 +6,6 @@ from unittest.mock import ANY, AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
-
 from app.main import app
 from app.models.research import (
     ResearchActionStatus,
@@ -45,7 +41,12 @@ from app.routers.research_resources import (
     _pinned_requirement,
     _resource_command,
 )
-from app.services import research_resources, research_runtime, resource_job_worker
+from app.services import (
+    research_resources,
+    research_runtime,
+    research_tools,
+    resource_job_worker,
+)
 from app.services.research_capabilities import (
     pinned_tool_definition,
     protocol_capability,
@@ -73,10 +74,16 @@ from app.services.research_runtime import (
     canonical_digest,
 )
 from app.services.research_tools import (
+    execute_research_tool,
     get_research_tool,
     research_tool_catalog,
+    validate_tool_argument_template,
     validate_tool_arguments,
+    validate_tool_output_path,
 )
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -463,9 +470,7 @@ def test_resource_reservations_are_typed_and_follow_executor_bindings():
     assert "resource_revision_id" in ddl
     assert "quantity" in ddl
 
-    migration = import_module(
-        "migrations.versions.0017_research_resource_reservations"
-    )
+    migration = import_module("migrations.versions.0017_research_resource_reservations")
     assert migration.down_revision == "0016_research_executor_bindings"
     assert migration.TABLE_NAMES == (
         "research_task_resource_requirements",
@@ -482,9 +487,7 @@ def test_resource_consumptions_link_immutable_inventory_events_to_exact_records(
     assert "REFERENCES records (id, version)" in ddl
     assert "remaining_quantity" in ddl
 
-    migration = import_module(
-        "migrations.versions.0038_research_resource_consumptions"
-    )
+    migration = import_module("migrations.versions.0038_research_resource_consumptions")
     assert migration.down_revision == "0037_knowledge_ai_provenance"
     assert migration.TABLE_NAMES == ("research_resource_consumptions",)
     assert any(
@@ -564,9 +567,7 @@ def test_resource_action_preview_is_bound_to_inventory_and_environment_revisions
         "balance": SimpleNamespace(version=5, available=10, unit="mg"),
         "requested_in_balance_unit": params.quantity,
     }
-    command = _resource_command(
-        task=task, run=run, params=params, context=context
-    )
+    command = _resource_command(task=task, run=run, params=params, context=context)
     digest = canonical_digest(command)
     context["balance"] = SimpleNamespace(version=6, available=7.5, unit="mg")
 
@@ -605,7 +606,9 @@ def test_aira_resource_resolution_selects_a_permissioned_available_container(
         execute=AsyncMock(return_value=rows),
         get=AsyncMock(return_value=revision),
     )
-    access = SimpleNamespace(allows=lambda capability: capability == "inventory.operate")
+    access = SimpleNamespace(
+        allows=lambda capability: capability == "inventory.operate"
+    )
     access.sources = []
     monkeypatch.setattr(
         research_resources, "resolve_resource_access", AsyncMock(return_value=access)
@@ -712,7 +715,9 @@ def test_approved_aira_resource_action_rechecks_inventory_version(monkeypatch):
             return_value=SimpleNamespace(scalar_one_or_none=lambda: balance)
         ),
     )
-    access = SimpleNamespace(allows=lambda capability: capability == "inventory.operate")
+    access = SimpleNamespace(
+        allows=lambda capability: capability == "inventory.operate"
+    )
     access.sources = []
     monkeypatch.setattr(
         ResearchResourceReservation, "find_by", AsyncMock(return_value=reservation)
@@ -772,6 +777,8 @@ def test_approved_aira_resource_action_rechecks_inventory_version(monkeypatch):
     assert action.status == ResearchActionStatus.COMPLETED.value
     assert run.status == ResearchRunStatus.RUNNING.value
     reserve.assert_awaited_once()
+
+
 def test_executor_binding_scope_constraints_fail_closed():
     allowed_project = uuid4()
     binding = {
@@ -799,7 +806,11 @@ def test_executor_binding_scope_constraints_fail_closed():
 def test_tool_catalog_is_allowlisted_versioned_and_schema_validated():
     catalog = research_tool_catalog()
 
-    assert set(catalog) == {"knowledge.search", "literature.search"}
+    assert set(catalog) == {
+        "knowledge.search",
+        "literature.search",
+        "literature.resolve_doi",
+    }
     assert catalog["knowledge.search"].version == "1"
     assert catalog["knowledge.search"].available is True
     validate_tool_arguments(catalog["knowledge.search"], {"query": "RNA", "limit": 5})
@@ -811,6 +822,62 @@ def test_tool_catalog_is_allowlisted_versioned_and_schema_validated():
         )
     with pytest.raises(ValueError, match="Unknown Research Tool"):
         get_research_tool("shell.run")
+
+
+def test_tool_argument_templates_reserve_only_declared_bound_properties():
+    definition = research_tool_catalog()["knowledge.search"]
+
+    validate_tool_argument_template(
+        definition,
+        {"limit": 5},
+        bound_argument_names={"query"},
+    )
+    with pytest.raises(ValueError, match="undeclared input property"):
+        validate_tool_argument_template(
+            definition,
+            {},
+            bound_argument_names={"command"},
+        )
+    with pytest.raises(ValueError, match="static value"):
+        validate_tool_argument_template(
+            definition,
+            {"query": "RNA"},
+            bound_argument_names={"query"},
+        )
+
+
+def test_tool_output_binding_paths_must_follow_the_declared_schema():
+    definition = research_tool_catalog()["literature.search"]
+
+    validate_tool_output_path(definition, ["result", "items", "0", "doi"])
+    with pytest.raises(ValueError, match="outside the output Schema"):
+        validate_tool_output_path(
+            definition, ["result", "items", "0", "invented_field"]
+        )
+    with pytest.raises(ValueError, match="must use an index"):
+        validate_tool_output_path(definition, ["result", "items", "first", "doi"])
+
+
+def test_resolve_doi_tool_returns_a_candidate_without_importing_it(monkeypatch):
+    class Provider:
+        async def resolve_doi(self, doi: str):
+            assert doi == "10.1000/test"
+            return {"doi": doi, "title": "Test paper"}
+
+    monkeypatch.setattr(research_tools, "get_literature_provider", lambda: Provider())
+    definition = research_tool_catalog()["literature.resolve_doi"]
+
+    result = asyncio.run(
+        execute_research_tool(
+            AsyncMock(),
+            task=SimpleNamespace(),
+            definition=definition,
+            arguments={"doi": "10.1000/test"},
+        )
+    )
+
+    assert result["found"] is True
+    assert result["item"]["title"] == "Test paper"
 
 
 def test_tool_execution_is_limited_to_the_pinned_environment():
@@ -949,9 +1016,7 @@ def test_openapi_exposes_digital_action_preview_confirm_contracts():
     assert "/research-tasks/{task_id}/resource-actions/preview" in paths
     assert "/research-tasks/{task_id}/resource-actions" in paths
     assert "/research-resource-reservations/{reservation_id}/sync" in paths
-    assert (
-        "/research-resource-reservations/{reservation_id}/release/preview" in paths
-    )
+    assert "/research-resource-reservations/{reservation_id}/release/preview" in paths
     assert "/research-resource-reservations/{reservation_id}/release" in paths
 
 
@@ -967,9 +1032,7 @@ def test_protocol_action_activation_rechecks_pinned_executor_access(monkeypatch)
         return None
 
     db_session = SimpleNamespace(get=AsyncMock(side_effect=get_model), add=Mock())
-    monkeypatch.setattr(
-        ResearchHumanWorkItem, "find_by", AsyncMock(return_value=None)
-    )
+    monkeypatch.setattr(ResearchHumanWorkItem, "find_by", AsyncMock(return_value=None))
     access = AsyncMock(return_value=False)
     monkeypatch.setattr(research_runtime, "has_research_capability", access)
 

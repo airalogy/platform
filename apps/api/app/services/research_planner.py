@@ -111,11 +111,33 @@ class AiraToolRequest(BaseModel):
         return self
 
 
+class AiraToolResultBinding(BaseModel):
+    """A bounded value flow from one direct dependency into a Tool argument."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_node_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    source_path: list[str] = Field(min_length=1, max_length=8)
+    target_argument: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.source_path = [item.strip() for item in self.source_path]
+        if any(not item or len(item) > 128 for item in self.source_path):
+            raise ValueError(
+                "Tool result binding path segments must be 1-128 characters"
+            )
+        return self
+
+
 class AiraToolGraphNode(AiraToolRequest):
     """One read-only Tool node in a bounded dependency graph."""
 
     node_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     depends_on: list[str] = Field(default_factory=list, max_length=7)
+    result_bindings: list[AiraToolResultBinding] = Field(
+        default_factory=list, max_length=8
+    )
 
     @model_validator(mode="after")
     def normalize_graph_node(self):
@@ -126,6 +148,17 @@ class AiraToolGraphNode(AiraToolRequest):
             raise ValueError("Tool graph dependencies must be unique")
         if self.node_id in self.depends_on:
             raise ValueError("A Tool graph node cannot depend on itself")
+        targets = [item.target_argument for item in self.result_bindings]
+        if len(targets) != len(set(targets)):
+            raise ValueError("Tool result binding targets must be unique")
+        if any(item.target_argument in self.arguments for item in self.result_bindings):
+            raise ValueError(
+                "A bound Tool argument cannot also have a static argument value"
+            )
+        if any(
+            item.source_node_id not in self.depends_on for item in self.result_bindings
+        ):
+            raise ValueError("Tool result bindings must read from a direct dependency")
         return self
 
 
@@ -230,7 +263,14 @@ class AiraActionProposal(BaseModel):
                 visit(node_id)
             calls = [
                 json.dumps(
-                    {"tool_key": item.tool_key, "arguments": item.arguments},
+                    {
+                        "tool_key": item.tool_key,
+                        "arguments": item.arguments,
+                        "result_bindings": [
+                            binding.model_dump(mode="json")
+                            for binding in item.result_bindings
+                        ],
+                    },
                     sort_keys=True,
                     separators=(",", ":"),
                 )
@@ -337,6 +377,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "version": item.get("version"),
             "description": item.get("description"),
             "input_schema": item.get("input_schema") or {},
+            "output_schema": item.get("output_schema") or {},
             "risk": item.get("risk"),
         }
         for item in list(context.get("tools") or [])
@@ -459,6 +500,16 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
                 "arguments": "must match that Tool's input_schema",
                 "purpose": "why this call is needed",
                 "depends_on": "local node IDs that must complete first",
+                "result_bindings": [
+                    {
+                        "source_node_id": "one direct dependency node ID",
+                        "source_path": (
+                            "path segments within that Action's output_data, for "
+                            "example ['result', 'items', '0', 'doi']"
+                        ),
+                        "target_argument": "one declared input property of this Tool",
+                    }
+                ],
             }
         ],
         "instrument_command_id": "required only for instrument; choose one listed ID",
@@ -517,7 +568,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
-            "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. Platform will release a node only after every dependency completes; a failed dependency skips its descendants before replanning.",
+            "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. When a downstream argument comes from a direct parent's output, omit that static argument and declare one result_binding using the parent's output_schema. Platform resolves and Schema-validates bindings before approval or execution. Platform will release a node only after every dependency completes; a failed dependency or invalid binding skips its descendants before replanning.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
@@ -548,7 +599,9 @@ async def plan_next_research_action(
 ) -> AiraActionProposal:
     from app.services.research_tools import (
         research_tool_catalog,
+        validate_tool_argument_template,
         validate_tool_arguments,
+        validate_tool_output_path,
     )
 
     raw = await aira_action_proposal(
@@ -565,6 +618,7 @@ async def plan_next_research_action(
         arguments: dict[str, Any],
         *,
         require_read_only: bool = False,
+        bound_argument_names: set[str] | None = None,
     ) -> None:
         pinned = next(
             (
@@ -586,7 +640,14 @@ async def plan_next_research_action(
             "external_read_only",
         }:
             raise ValueError("Parallel planning only supports read-only Research Tools")
-        validate_tool_arguments(definition, arguments)
+        if bound_argument_names:
+            validate_tool_argument_template(
+                definition,
+                arguments,
+                bound_argument_names=bound_argument_names,
+            )
+        else:
+            validate_tool_arguments(definition, arguments)
 
     if proposal.decision == "tool":
         validate_tool_call(proposal.tool_key or "", proposal.arguments)
@@ -598,12 +659,23 @@ async def plan_next_research_action(
                 require_read_only=True,
             )
     if proposal.decision == "tool_graph":
+        graph_nodes = {node.node_id: node for node in proposal.tool_graph}
+        tool_catalog = research_tool_catalog()
         for node in proposal.tool_graph:
             validate_tool_call(
                 node.tool_key,
                 node.arguments,
                 require_read_only=True,
+                bound_argument_names={
+                    binding.target_argument for binding in node.result_bindings
+                },
             )
+        for node in proposal.tool_graph:
+            for binding in node.result_bindings:
+                source = graph_nodes[binding.source_node_id]
+                validate_tool_output_path(
+                    tool_catalog[source.tool_key], binding.source_path
+                )
     if proposal.decision == "resource":
         request = proposal.resource_request
         if request is None:

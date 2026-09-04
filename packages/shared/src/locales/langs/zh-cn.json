@@ -1623,6 +1623,7 @@
       },
       "dependencyNode": "依赖节点 {position}/{size}",
       "dependsOn": "依赖 {actions}",
+      "dataBindings": "从前置结果接收 {count} 个参数",
       "actionKind": {
         "protocol_run": "Protocol 执行",
         "tool_job": "数字工具",
