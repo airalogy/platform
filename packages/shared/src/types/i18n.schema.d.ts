@@ -999,6 +999,18 @@ declare namespace I18n {
         budgetEntryRecorded: string
         budgetLoadError: string
         deadlineFuture: string
+        amendOperationalLimits: string
+        operationalLimitAmendmentHint: string
+        budgetCurrencyLocked: string
+        budgetAmendmentInvalid: string
+        amendmentReason: string
+        amendmentReasonPlaceholder: string
+        currentLimits: string
+        previewOperationalLimits: string
+        confirmOperationalLimits: string
+        operationalLimitsAmended: string
+        resumeAfterAmendment: string
+        operationalLimitHistory: string
         budgetEntryKinds: {
           reserve: string
           release: string

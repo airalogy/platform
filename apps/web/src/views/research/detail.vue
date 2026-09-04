@@ -553,6 +553,7 @@
               :budget-limit="task.budget_limit"
               :budget-currency="task.budget_currency"
               :can-manage="canManageBudget"
+              :can-amend="canAmendLimits"
               @changed="() => loadTask(true)"
             />
             <section class="research-panel">
@@ -998,6 +999,11 @@ const canCreateRun = computed(() => Boolean(
 ))
 const canManageBudget = computed(() => Boolean(
   task.value?.permissions.can_approve,
+))
+const canAmendLimits = computed(() => Boolean(
+  canManageBudget.value
+  && task.value
+  && !["completed", "cancelled", "archived"].includes(task.value.status),
 ))
 const openActions = computed(() => (task.value?.actions || []).filter(action =>
   action.work_item && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),

@@ -14,10 +14,12 @@ from sqlalchemy.schema import CreateTable
 from app.main import app
 from app.models.research import ResearchTask
 from app.models.research_execution import ResearchBudgetEntry
+from app.routers.research_budget import OperationalLimitsDraft, _limit_preview
 from app.routers.research_tasks import ResearchTaskDraft
 from app.services.research_budget import (
     ResearchBudgetError,
     project_budget_change,
+    project_operational_limit_amendment,
     reached_operational_limit,
     research_budget_snapshot,
 )
@@ -97,20 +99,18 @@ def test_operational_limit_migration_handles_fresh_and_upgraded_databases(
         def get_check_constraints(self, _table: str):
             return [{"name": name} for name in self.constraints]
 
-    monkeypatch.setattr(
-        migration.sa, "inspect", lambda _bind: Inspector(set(), set())
-    )
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: Inspector(set(), set()))
     migration.upgrade()
-    assert {value for kind, value in calls if kind == "column"} == migration.ADDED_COLUMNS
+    assert {
+        value for kind, value in calls if kind == "column"
+    } == migration.ADDED_COLUMNS
     assert ("constraint", migration.BUDGET_CONSTRAINT) in calls
 
     calls.clear()
     monkeypatch.setattr(
         migration.sa,
         "inspect",
-        lambda _bind: Inspector(
-            migration.ADDED_COLUMNS, {migration.BUDGET_CONSTRAINT}
-        ),
+        lambda _bind: Inspector(migration.ADDED_COLUMNS, {migration.BUDGET_CONSTRAINT}),
     )
     migration.upgrade()
     assert not [item for item in calls if item[0] in {"column", "constraint"}]
@@ -191,13 +191,9 @@ def test_budget_snapshot_separates_reserved_and_actual_cost():
         SimpleNamespace(kind="expense", amount=Decimal(15), as_dict=dict),
     ]
     db_session = SimpleNamespace(
-        scalars=AsyncMock(
-            return_value=SimpleNamespace(all=lambda: entries)
-        )
+        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: entries))
     )
-    task = SimpleNamespace(
-        id=uuid4(), budget_limit=Decimal(100), budget_currency="USD"
-    )
+    task = SimpleNamespace(id=uuid4(), budget_limit=Decimal(100), budget_currency="USD")
 
     snapshot = asyncio.run(research_budget_snapshot(db_session, task=task))
 
@@ -212,12 +208,143 @@ def test_deadline_is_a_runtime_stop_boundary():
         deadline_at=datetime.now(UTC) - timedelta(seconds=1),
         budget_limit=None,
     )
-    result = asyncio.run(
-        reached_operational_limit(SimpleNamespace(), task=task)
-    )
+    result = asyncio.run(reached_operational_limit(SimpleNamespace(), task=task))
 
     assert result[0] == "time"
     assert "deadline_at" in result[1]
+
+
+def test_operational_limit_amendment_preserves_single_currency_ledger():
+    now = datetime.now(UTC)
+    task = SimpleNamespace(
+        deadline_at=now + timedelta(hours=1),
+        budget_limit=Decimal(100),
+        budget_currency="USD",
+    )
+    snapshot = {
+        "committed": "75",
+        "entries": [{"id": str(uuid4())}],
+    }
+
+    projected = project_operational_limit_amendment(
+        task=task,
+        snapshot=snapshot,
+        deadline_at=now + timedelta(days=2),
+        budget_limit=Decimal(150),
+        budget_currency="usd",
+        now=now,
+    )
+
+    assert projected["budget_limit"] == "150"
+    assert projected["budget_currency"] == "USD"
+    assert projected["budget_remaining"] == "75"
+    assert projected["resume_eligible"] is True
+
+    with pytest.raises(ResearchBudgetError, match="cannot be removed"):
+        project_operational_limit_amendment(
+            task=task,
+            snapshot=snapshot,
+            deadline_at=now + timedelta(days=2),
+            budget_limit=None,
+            budget_currency=None,
+            now=now,
+        )
+    with pytest.raises(ResearchBudgetError, match="change currency"):
+        project_operational_limit_amendment(
+            task=task,
+            snapshot=snapshot,
+            deadline_at=now + timedelta(days=2),
+            budget_limit=Decimal(150),
+            budget_currency="EUR",
+            now=now,
+        )
+
+
+def test_operational_limit_amendment_rejects_stale_boundaries_and_noops():
+    now = datetime.now(UTC)
+    deadline = now + timedelta(days=1)
+    task = SimpleNamespace(
+        deadline_at=deadline,
+        budget_limit=Decimal(100),
+        budget_currency="USD",
+    )
+    snapshot = {"committed": "80", "entries": []}
+
+    with pytest.raises(ResearchBudgetError, match="must exceed"):
+        project_operational_limit_amendment(
+            task=task,
+            snapshot=snapshot,
+            deadline_at=deadline,
+            budget_limit=Decimal(80),
+            budget_currency="USD",
+            now=now,
+        )
+    with pytest.raises(ResearchBudgetError, match="future"):
+        project_operational_limit_amendment(
+            task=task,
+            snapshot=snapshot,
+            deadline_at=now - timedelta(seconds=1),
+            budget_limit=Decimal(100),
+            budget_currency="USD",
+            now=now,
+        )
+    with pytest.raises(ResearchBudgetError, match="have not changed"):
+        project_operational_limit_amendment(
+            task=task,
+            snapshot=snapshot,
+            deadline_at=deadline,
+            budget_limit=Decimal(100),
+            budget_currency="USD",
+            now=now,
+        )
+
+
+def test_operational_limit_preview_digest_excludes_volatile_check_time():
+    task = SimpleNamespace(
+        id=uuid4(),
+        title="Bounded study",
+        revision=3,
+        status="paused",
+        outcome="stopped_time",
+        deadline_at=None,
+        budget_limit=None,
+        budget_currency=None,
+    )
+    project = SimpleNamespace(id=uuid4(), uid="project", name="Project")
+    lab = SimpleNamespace(id=uuid4(), uid="lab", name="Lab")
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(return_value=SimpleNamespace(all=list))
+    )
+    params = OperationalLimitsDraft(
+        expected_task_revision=3,
+        deadline_at=datetime.now(UTC) + timedelta(days=2),
+        budget_limit=None,
+        budget_currency=None,
+        reason="Continue the approved study window",
+        idempotency_key="limits-test-001",
+    )
+
+    first = asyncio.run(
+        _limit_preview(
+            db_session,
+            task=task,
+            project=project,
+            lab=lab,
+            params=params,
+        )
+    )
+    second = asyncio.run(
+        _limit_preview(
+            db_session,
+            task=task,
+            project=project,
+            lab=lab,
+            params=params,
+        )
+    )
+
+    assert first["preview_digest"] == second["preview_digest"]
+    assert first["resume_required"] is True
 
 
 def test_openapi_exposes_budget_preview_confirm_contract():
@@ -226,3 +353,5 @@ def test_openapi_exposes_budget_preview_confirm_contract():
     assert "/research-tasks/{task_id}/budget" in paths
     assert "/research-tasks/{task_id}/budget/entries/preview" in paths
     assert "/research-tasks/{task_id}/budget/entries" in paths
+    assert "/research-tasks/{task_id}/operational-limits" in paths
+    assert "/research-tasks/{task_id}/operational-limits/preview" in paths

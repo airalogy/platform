@@ -116,6 +116,81 @@ def project_budget_change(
     }
 
 
+def project_operational_limit_amendment(
+    *,
+    task: ResearchTask,
+    snapshot: dict[str, Any],
+    deadline_at: datetime | None,
+    budget_limit: Decimal | None,
+    budget_currency: str | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate and project a whole operational-limit replacement.
+
+    Budget entries are a single-currency ledger. Once that ledger has entries,
+    the ceiling may move but its currency and enabled state must remain stable.
+    """
+
+    checked_at = now or datetime.now(UTC)
+    if deadline_at is not None:
+        if deadline_at.tzinfo is None:
+            deadline_at = deadline_at.replace(tzinfo=UTC)
+        if deadline_at <= checked_at:
+            raise ResearchBudgetError("Research Task deadline must be in the future")
+    if (budget_limit is None) != (budget_currency is None):
+        raise ResearchBudgetError("Budget limit and currency must be provided together")
+    normalized_currency = (
+        normalize_currency(budget_currency) if budget_currency is not None else None
+    )
+    if budget_limit is not None and budget_limit <= 0:
+        raise ResearchBudgetError("Budget limit must be greater than zero")
+
+    current_limit = (
+        Decimal(task.budget_limit) if task.budget_limit is not None else None
+    )
+    current_currency = task.budget_currency
+    has_entries = bool(snapshot.get("entries"))
+    if has_entries and (
+        budget_limit is None or normalized_currency != current_currency
+    ):
+        raise ResearchBudgetError(
+            "A budget with ledger entries cannot be removed or change currency"
+        )
+
+    committed = Decimal(snapshot["committed"])
+    budget_changed = (
+        budget_limit != current_limit or normalized_currency != current_currency
+    )
+    if budget_changed and budget_limit is not None and budget_limit <= committed:
+        raise ResearchBudgetError(
+            "The amended budget limit must exceed the committed amount"
+        )
+
+    current_deadline = task.deadline_at
+    if current_deadline is not None and current_deadline.tzinfo is None:
+        current_deadline = current_deadline.replace(tzinfo=UTC)
+    if (
+        deadline_at == current_deadline
+        and budget_limit == current_limit
+        and normalized_currency == current_currency
+    ):
+        raise ResearchBudgetError("The operational limits have not changed")
+
+    remaining = budget_limit - committed if budget_limit is not None else None
+    resume_eligible = (deadline_at is None or deadline_at > checked_at) and (
+        remaining is None or remaining > 0
+    )
+    return {
+        "deadline_at": deadline_at.isoformat() if deadline_at is not None else None,
+        "budget_limit": _money(budget_limit) if budget_limit is not None else None,
+        "budget_currency": normalized_currency,
+        "budget_committed": _money(committed),
+        "budget_remaining": _money(remaining) if remaining is not None else None,
+        "resume_eligible": resume_eligible,
+        "checked_at": checked_at.isoformat(),
+    }
+
+
 async def reached_operational_limit(
     db_session: AsyncSession,
     *,
