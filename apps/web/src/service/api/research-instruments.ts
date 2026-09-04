@@ -1,5 +1,11 @@
 import { request } from "../request"
 
+export interface InstrumentSafetyContract {
+  required_interlocks: string[]
+  operator_presence_required: boolean
+  emergency_stop_required: boolean
+}
+
 export interface InstrumentGateway {
   id: string
   lab_id: string
@@ -27,6 +33,7 @@ export interface InstrumentCommand {
   output_schema: Record<string, unknown>
   risk: "read_only" | "low" | "medium" | "high"
   device_confirmation_required: boolean
+  safety_contract: InstrumentSafetyContract
   timeout_seconds: number
   enabled: boolean
   revision: number
@@ -166,6 +173,7 @@ export interface InstrumentCommandPayload {
   output_schema: Record<string, unknown>
   risk: "read_only" | "low" | "medium" | "high"
   device_confirmation_required: boolean
+  safety_contract: InstrumentSafetyContract
   timeout_seconds: number
   enabled: boolean
   reason: string
@@ -197,6 +205,7 @@ export interface InstrumentCommandUpdatePayload {
   output_schema: Record<string, unknown>
   risk: "read_only" | "low" | "medium" | "high"
   device_confirmation_required: boolean
+  safety_contract: InstrumentSafetyContract
   timeout_seconds: number
   enabled: boolean
   reason: string

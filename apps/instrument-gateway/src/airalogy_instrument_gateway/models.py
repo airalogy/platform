@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+INTERLOCK_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:
@@ -36,6 +39,95 @@ def _instant(value: Any, name: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def _safety_contract(value: Any) -> dict[str, Any]:
+    if value is None:
+        value = {}
+    contract = _mapping(value, "command.safety_contract")
+    allowed = {
+        "required_interlocks",
+        "operator_presence_required",
+        "emergency_stop_required",
+    }
+    if set(contract) - allowed:
+        raise ValueError("Instrument Job safety contract contains unsupported fields")
+    raw_interlocks = contract.get("required_interlocks") or []
+    if not isinstance(raw_interlocks, list) or len(raw_interlocks) > 32:
+        raise ValueError("Instrument Job safety contract interlocks are invalid")
+    interlocks: list[str] = []
+    for value in raw_interlocks:
+        if (
+            not isinstance(value, str)
+            or not INTERLOCK_KEY_RE.fullmatch(value)
+            or value in interlocks
+        ):
+            raise ValueError("Instrument Job safety contract interlock is invalid")
+        interlocks.append(value)
+    for key in ("operator_presence_required", "emergency_stop_required"):
+        if key in contract and not isinstance(contract[key], bool):
+            raise TypeError(f"Instrument Job safety contract {key} must be boolean")
+    return {
+        "required_interlocks": interlocks,
+        "operator_presence_required": bool(contract.get("operator_presence_required")),
+        "emergency_stop_required": bool(contract.get("emergency_stop_required")),
+    }
+
+
+def validate_safety_attestation(contract: dict[str, Any], value: Any) -> dict[str, Any]:
+    attestation = _mapping(value or {}, "safety attestation")
+    allowed = {
+        "interlocks",
+        "operator_present",
+        "emergency_stop_available",
+        "reference",
+    }
+    if set(attestation) - allowed:
+        raise ValueError("Instrument safety attestation contains unsupported fields")
+    interlocks = _mapping(attestation.get("interlocks") or {}, "safety interlocks")
+    if len(interlocks) > 64:
+        raise ValueError("Instrument safety attestation contains too many interlocks")
+    normalized_interlocks: dict[str, bool] = {}
+    for key, passed in interlocks.items():
+        if not isinstance(key, str) or not INTERLOCK_KEY_RE.fullmatch(key):
+            raise ValueError("Instrument safety attestation key is invalid")
+        if not isinstance(passed, bool):
+            raise TypeError("Instrument safety attestation value must be boolean")
+        normalized_interlocks[key] = passed
+    missing = [
+        key
+        for key in contract["required_interlocks"]
+        if normalized_interlocks.get(key) is not True
+    ]
+    if missing:
+        raise ValueError(
+            f"Required safety interlocks did not pass: {', '.join(missing)}"
+        )
+    operator_present = attestation.get("operator_present", False)
+    emergency_stop_available = attestation.get("emergency_stop_available", False)
+    if not isinstance(operator_present, bool) or not isinstance(
+        emergency_stop_available, bool
+    ):
+        raise TypeError("Instrument safety attestation flags must be boolean")
+    if contract["operator_presence_required"] and not operator_present:
+        raise ValueError("Instrument safety contract requires operator presence")
+    if contract["emergency_stop_required"] and not emergency_stop_available:
+        raise ValueError("Instrument safety contract requires an emergency stop")
+    reference = attestation.get("reference") or ""
+    if not isinstance(reference, str) or len(reference.strip()) > 255:
+        raise ValueError("Instrument safety attestation reference is invalid")
+    if (
+        contract["required_interlocks"]
+        or contract["operator_presence_required"]
+        or contract["emergency_stop_required"]
+    ) and not reference.strip():
+        raise ValueError("Instrument safety attestation reference is required")
+    return {
+        "interlocks": normalized_interlocks,
+        "operator_present": operator_present,
+        "emergency_stop_available": emergency_stop_available,
+        "reference": reference.strip(),
+    }
+
+
 @dataclass(frozen=True)
 class InstrumentJobEnvelope:
     raw: dict[str, Any]
@@ -56,6 +148,7 @@ class InstrumentJobEnvelope:
     arguments: dict[str, Any]
     risk: str
     device_confirmation_required: bool
+    safety_contract: dict[str, Any]
     timeout_seconds: int
 
     @classmethod
@@ -109,6 +202,7 @@ class InstrumentJobEnvelope:
             arguments=arguments,
             risk=risk,
             device_confirmation_required=confirmation_required,
+            safety_contract=_safety_contract(command.get("safety_contract")),
             timeout_seconds=_integer(
                 command.get("timeout_seconds"),
                 "command.timeout_seconds",

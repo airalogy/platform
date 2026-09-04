@@ -56,6 +56,10 @@
         {{ $t("page.research.deviceConfirmation") }} ·
         {{ action.instrument_job.device_confirmation_required ? $t("page.research.deviceConfirmationRequired") : $t("page.research.deviceConfirmationNotRequired") }}
       </div>
+      <div v-if="action.instrument_job.safety_contract" class="aira-type-meta">
+        {{ $t("page.resourceLibrary.safetyContract") }} ·
+        {{ formatted(action.instrument_job.safety_contract) }}
+      </div>
       <div>
         <div class="aira-type-meta">
           {{ $t("page.research.instrumentArguments") }}

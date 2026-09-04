@@ -12,7 +12,7 @@ from typing import Any
 from .adapters import InstrumentAdapter
 from .client import GatewayAPIError, PlatformClient
 from .config import GatewayConfig
-from .models import InstrumentJobEnvelope
+from .models import InstrumentJobEnvelope, validate_safety_attestation
 from .security import verify_job_signature
 from .state import GatewayState, StateStore
 
@@ -186,11 +186,20 @@ class GatewayRuntime:
                 "Required device-local confirmation was not provided",
             )
             return True
+        try:
+            safety_attestation = validate_safety_attestation(
+                job.safety_contract,
+                self.adapter.preflight(job),
+            )
+        except Exception as error:  # noqa: BLE001 - adapter is an isolation boundary
+            self._report_failure(job, state, f"Local safety preflight failed: {error}")
+            return True
         start_response = self.client.start(
             job.job_id,
             lease_token,
             device_confirmed=bool(confirmation_reference),
             confirmation_reference=confirmation_reference,
+            safety_attestation=safety_attestation,
         )
         self._save_pending(
             state,

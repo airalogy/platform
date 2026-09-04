@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from types import SimpleNamespace
@@ -29,9 +30,11 @@ from app.services.research_instruments import (
     generate_job_lease_token,
     instrument_job_snapshot,
     job_lease_token_digest,
+    normalized_safety_contract,
     reconcile_expired_instrument_leases,
     sign_job_envelope,
     validate_bounded_schema,
+    validate_safety_attestation,
     validate_schema_payload,
 )
 
@@ -58,6 +61,7 @@ def test_instrument_gateway_tables_keep_credentials_out_of_public_models():
     assert "UNIQUE (token_digest)" in gateway_ddl
     assert "uq_research_instrument_command_identity" in command_ddl
     assert "device_confirmation_required" in command_ddl
+    assert "safety_contract JSON" in command_ddl
     assert "resource_revision_id" in command_ddl
     assert "snapshot JSON" in audit_ddl
 
@@ -115,8 +119,17 @@ def test_instrument_command_contract_is_schema_bounded_and_fail_closed():
         },
         risk="high",
         device_confirmation_required=True,
+        safety_contract={
+            "required_interlocks": ["door.closed", "temperature.safe"],
+            "operator_presence_required": True,
+            "emergency_stop_required": True,
+        },
     )
     assert command.command_key == "incubator.set-temperature"
+    assert command.safety_contract["required_interlocks"] == [
+        "door.closed",
+        "temperature.safe",
+    ]
 
     with pytest.raises(ValidationError, match="device-side confirmation"):
         InstrumentCommandDraft(
@@ -129,6 +142,19 @@ def test_instrument_command_contract_is_schema_bounded_and_fail_closed():
             output_schema=object_schema(),
             risk="high",
             device_confirmation_required=False,
+        )
+
+    with pytest.raises(ValidationError, match="operator presence"):
+        InstrumentCommandDraft(
+            gateway_id=uuid4(),
+            resource_id=uuid4(),
+            command_key="incubator.set-temperature",
+            command_version="1",
+            name="Set incubator temperature",
+            input_schema=object_schema(),
+            output_schema=object_schema(),
+            risk="high",
+            device_confirmation_required=True,
         )
 
     with pytest.raises(ValueError, match="remote references"):
@@ -220,6 +246,8 @@ def test_instrument_jobs_pin_contracts_and_hide_lease_credentials():
     assert "equipment_booking_id" in ddl
     assert "command_revision" in ddl
     assert "output_schema JSON" in ddl
+    assert "safety_contract JSON" in ddl
+    assert "safety_attestation JSON" in ddl
     assert "ck_research_instrument_job_status" in ddl
 
     job = ResearchInstrumentJob(
@@ -247,6 +275,48 @@ def test_instrument_jobs_pin_contracts_and_hide_lease_credentials():
     )
     assert "lease_token_digest" not in job.as_dict()
     assert "lease_token_digest" not in instrument_job_snapshot(job)
+
+
+def test_instrument_safety_attestation_requires_every_pinned_interlock():
+    contract = normalized_safety_contract(
+        {
+            "required_interlocks": ["lid.closed", "temperature.safe"],
+            "operator_presence_required": True,
+            "emergency_stop_required": True,
+        }
+    )
+    attestation = validate_safety_attestation(
+        contract,
+        {
+            "interlocks": {"lid.closed": True, "temperature.safe": True},
+            "operator_present": True,
+            "emergency_stop_available": True,
+            "reference": "device-panel:preflight-42",
+        },
+    )
+
+    assert attestation["reference"] == "device-panel:preflight-42"
+    with pytest.raises(ValueError, match="temperature.safe"):
+        validate_safety_attestation(
+            contract,
+            {
+                "interlocks": {"lid.closed": True, "temperature.safe": False},
+                "operator_present": True,
+                "emergency_stop_available": True,
+                "reference": "device-panel:preflight-43",
+            },
+        )
+
+
+def test_instrument_safety_migration_follows_sample_lineage():
+    migration = import_module("migrations.versions.0045_instrument_safety_interlocks")
+
+    assert migration.down_revision == "0044_sample_lineage_semantics"
+    source = inspect.getsource(migration.upgrade)
+    assert "WHERE risk = 'high'" in source
+    assert "status IN ('queued', 'leased')" in source
+    assert "operator_presence_required" in source
+    assert "emergency_stop_required" in source
 
 
 def test_instrument_job_migration_follows_gateway_configuration():

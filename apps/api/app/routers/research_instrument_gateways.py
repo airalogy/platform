@@ -34,6 +34,7 @@ from app.services.research_instruments import (
     gateway_token_digest,
     gateway_token_hint,
     generate_gateway_token,
+    normalized_safety_contract,
     validate_bounded_schema,
 )
 from app.services.research_runtime import canonical_digest, utcnow
@@ -110,6 +111,7 @@ class InstrumentCommandDraft(BaseModel):
     output_schema: dict[str, Any]
     risk: Literal["read_only", "low", "medium", "high"] = "medium"
     device_confirmation_required: bool = True
+    safety_contract: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: int = Field(default=3600, ge=1, le=86400)
     enabled: bool = True
     reason: str = Field(default="", max_length=4000)
@@ -125,9 +127,17 @@ class InstrumentCommandDraft(BaseModel):
             raise ValueError("Invalid Instrument command key")
         self.input_schema = validate_bounded_schema(self.input_schema, "input")
         self.output_schema = validate_bounded_schema(self.output_schema, "output")
+        self.safety_contract = normalized_safety_contract(self.safety_contract)
         if self.risk in {"medium", "high"} and not self.device_confirmation_required:
             raise ValueError(
                 "Medium- and high-risk commands require device-side confirmation"
+            )
+        if self.risk == "high" and not (
+            self.safety_contract["operator_presence_required"]
+            and self.safety_contract["emergency_stop_required"]
+        ):
+            raise ValueError(
+                "High-risk commands require operator presence and an emergency stop"
             )
         return self
 
@@ -146,6 +156,7 @@ class InstrumentCommandUpdateDraft(BaseModel):
     output_schema: dict[str, Any]
     risk: Literal["read_only", "low", "medium", "high"]
     device_confirmation_required: bool
+    safety_contract: dict[str, Any] = Field(default_factory=dict)
     timeout_seconds: int = Field(ge=1, le=86400)
     enabled: bool
     reason: str = Field(default="", max_length=4000)
@@ -157,9 +168,17 @@ class InstrumentCommandUpdateDraft(BaseModel):
         self.reason = self.reason.strip()
         self.input_schema = validate_bounded_schema(self.input_schema, "input")
         self.output_schema = validate_bounded_schema(self.output_schema, "output")
+        self.safety_contract = normalized_safety_contract(self.safety_contract)
         if self.risk in {"medium", "high"} and not self.device_confirmation_required:
             raise ValueError(
                 "Medium- and high-risk commands require device-side confirmation"
+            )
+        if self.risk == "high" and not (
+            self.safety_contract["operator_presence_required"]
+            and self.safety_contract["emergency_stop_required"]
+        ):
+            raise ValueError(
+                "High-risk commands require operator presence and an emergency stop"
             )
         return self
 
@@ -242,6 +261,7 @@ def _instrument_command(
         "output_schema": params.output_schema,
         "risk": params.risk,
         "device_confirmation_required": params.device_confirmation_required,
+        "safety_contract": params.safety_contract,
         "timeout_seconds": params.timeout_seconds,
         "enabled": params.enabled,
     }
@@ -261,6 +281,7 @@ def _instrument_update_command(
         "output_schema": params.output_schema,
         "risk": params.risk,
         "device_confirmation_required": params.device_confirmation_required,
+        "safety_contract": params.safety_contract,
         "timeout_seconds": params.timeout_seconds,
         "enabled": params.enabled,
     }
@@ -698,6 +719,7 @@ async def create_instrument_command(
         output_schema=params.output_schema,
         risk=params.risk,
         device_confirmation_required=params.device_confirmation_required,
+        safety_contract=params.safety_contract,
         timeout_seconds=params.timeout_seconds,
         enabled=params.enabled,
         created_by_user_id=current_user.id,
@@ -791,6 +813,7 @@ async def update_instrument_command(
     command.output_schema = params.output_schema
     command.risk = params.risk
     command.device_confirmation_required = params.device_confirmation_required
+    command.safety_contract = params.safety_contract
     command.timeout_seconds = params.timeout_seconds
     command.enabled = params.enabled
     command.revision += 1

@@ -433,6 +433,12 @@ export interface ResearchInstrumentJob {
   output_schema: Record<string, unknown>
   risk: "read_only" | "low" | "medium" | "high"
   device_confirmation_required: boolean
+  safety_contract: {
+    required_interlocks: string[]
+    operator_presence_required: boolean
+    emergency_stop_required: boolean
+  }
+  safety_attestation: Record<string, unknown>
   timeout_seconds: number
   status:
     | "queued"

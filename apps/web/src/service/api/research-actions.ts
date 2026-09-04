@@ -60,6 +60,11 @@ export interface ResearchInstrumentCommandOption {
   output_schema: Record<string, any>
   risk: "read_only" | "low" | "medium" | "high"
   device_confirmation_required: boolean
+  safety_contract: {
+    required_interlocks: string[]
+    operator_presence_required: boolean
+    emergency_stop_required: boolean
+  }
   timeout_seconds: number
   revision: number
   gateway: { id: string, name: string }

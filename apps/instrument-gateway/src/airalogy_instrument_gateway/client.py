@@ -101,6 +101,7 @@ class PlatformClient:
         *,
         device_confirmed: bool,
         confirmation_reference: str,
+        safety_attestation: dict[str, Any],
     ) -> dict[str, Any]:
         return self._request(
             "POST",
@@ -109,6 +110,7 @@ class PlatformClient:
             payload={
                 "device_confirmed": device_confirmed,
                 "confirmation_reference": confirmation_reference,
+                "safety_attestation": safety_attestation,
             },
         )
 

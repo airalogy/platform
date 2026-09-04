@@ -1347,6 +1347,7 @@ declare namespace I18n {
         deviceConfirmationNotRequired: string
         instrumentNoAutomaticRetry: string
         instrumentAttempt: string
+        safetyAttestation: string
         lastGatewayHeartbeat: string
         requestInstrumentStop: string
         instrumentStopHint: string
@@ -3095,6 +3096,13 @@ declare namespace I18n {
         riskLevel: string
         commandTimeout: string
         deviceConfirmationRequired: string
+        safetyContract: string
+        safetyContractHint: string
+        requiredInterlocks: string
+        requiredInterlocksPlaceholder: string
+        operatorPresenceRequired: string
+        emergencyStopRequired: string
+        highRiskSafetyRequired: string
         inputSchema: string
         outputSchema: string
         commandChangeImpact: string

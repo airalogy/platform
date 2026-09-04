@@ -25,6 +25,16 @@ class InstrumentAdapter(ABC):
     def confirm(self, job: InstrumentJobEnvelope) -> str | None:
         """Return a device-local confirmation reference, or None when unavailable."""
 
+    def preflight(self, job: InstrumentJobEnvelope) -> dict[str, Any]:
+        """Read local interlocks immediately before start.
+
+        Existing adapters remain compatible for commands without a safety contract.
+        Hardware adapters should return current interlock booleans, operator presence,
+        emergency-stop availability, and a local audit reference.
+        """
+
+        return {}
+
     @abstractmethod
     def execute(self, job: InstrumentJobEnvelope, stop_event: Event) -> dict[str, Any]:
         """Execute one command and return a JSON object result."""
@@ -50,6 +60,9 @@ class MockAdapter(InstrumentAdapter):
                 raise ValueError("Mock command version is required")
             if not isinstance(result, dict):
                 raise TypeError("Mock command result must be an object")
+            safety_attestation = item.get("safety_attestation") or {}
+            if not isinstance(safety_attestation, dict):
+                raise TypeError("Mock command safety_attestation must be an object")
             delay = item.get("delay_seconds", 0)
             if (
                 isinstance(delay, bool)
@@ -66,6 +79,7 @@ class MockAdapter(InstrumentAdapter):
                 "confirmation_reference": str(
                     item.get("confirmation_reference") or ""
                 ).strip(),
+                "safety_attestation": safety_attestation,
             }
 
     @classmethod
@@ -86,6 +100,12 @@ class MockAdapter(InstrumentAdapter):
         if command is None:
             return None
         return command["confirmation_reference"] or None
+
+    def preflight(self, job: InstrumentJobEnvelope) -> dict[str, Any]:
+        command = self._command(job)
+        if command is None:
+            return {}
+        return dict(command["safety_attestation"])
 
     def execute(self, job: InstrumentJobEnvelope, stop_event: Event) -> dict[str, Any]:
         command = self._command(job)

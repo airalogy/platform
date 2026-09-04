@@ -62,7 +62,10 @@ from app.services.research_budget import (
     reached_operational_limit,
     research_budget_snapshot,
 )
-from app.services.research_instruments import available_instrument_command_options
+from app.services.research_instruments import (
+    available_instrument_command_options,
+    normalized_safety_contract,
+)
 from app.services.research_planner import (
     AIRA_WAIT_TEMPLATES,
     AiraActionProposal,
@@ -1328,6 +1331,9 @@ async def _aira_planner_context(
                 "input_schema": item["input_schema"],
                 "risk": item["risk"],
                 "device_confirmation_required": item["device_confirmation_required"],
+                "safety_contract": normalized_safety_contract(
+                    item.get("safety_contract")
+                ),
                 "resource": item["resource"],
                 "approved_booking_windows": [
                     {
@@ -1746,6 +1752,9 @@ async def _materialize_aira_action(
             "approval_policy": executor_binding["approval_policy"],
             "executor_binding": executor_binding,
             "device_confirmation_required": instrument["device_confirmation_required"],
+            "safety_contract": normalized_safety_contract(
+                instrument.get("safety_contract")
+            ),
             "input_schema": instrument["input_schema"],
             "output_schema": instrument["output_schema"],
             "booking_window": booking_window,
@@ -2154,6 +2163,9 @@ async def _materialize_aira_action(
             output_schema=instrument["output_schema"],
             risk=instrument["risk"],
             device_confirmation_required=instrument["device_confirmation_required"],
+            safety_contract=normalized_safety_contract(
+                instrument.get("safety_contract")
+            ),
             timeout_seconds=int(instrument["timeout_seconds"]),
             status=ResearchInstrumentJobStatus.QUEUED.value,
         )
@@ -3977,8 +3989,9 @@ async def process_research_run_advance(
                 if generation != current_run.advance_generation:
                     await db_session.rollback()
                     return {"status": "superseded", "generation": generation}
-                if current_run.status in TERMINAL_RUN_STATUSES or current_run.status == (
-                    ResearchRunStatus.PAUSED.value
+                if (
+                    current_run.status in TERMINAL_RUN_STATUSES
+                    or current_run.status == (ResearchRunStatus.PAUSED.value)
                 ):
                     await db_session.rollback()
                     return {"status": current_run.status}

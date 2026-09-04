@@ -198,6 +198,10 @@
                 {{ preview.instrument?.device_confirmation_required ? $t("page.research.deviceConfirmationRequired") : $t("page.research.deviceConfirmationNotRequired") }}
               </dd>
             </div>
+            <div>
+              <dt>{{ $t("page.resourceLibrary.safetyContract") }}</dt>
+              <dd>{{ safetyContractSummary(preview.instrument?.safety_contract) }}</dd>
+            </div>
           </dl>
           <pre class="mt-3">{{ JSON.stringify(preview.command.arguments, null, 2) }}</pre>
           <n-alert type="warning" class="mt-3">
@@ -443,6 +447,17 @@ function formatBooking(booking?: EquipmentBooking) {
   if (!booking)
     return "—"
   return `${new Date(booking.starts_at).toLocaleString()} – ${new Date(booking.ends_at).toLocaleString()}`
+}
+
+function safetyContractSummary(contract?: ResearchInstrumentCommandOption["safety_contract"]) {
+  if (!contract)
+    return "—"
+  const parts = [...contract.required_interlocks]
+  if (contract.operator_presence_required)
+    parts.push($t("page.resourceLibrary.operatorPresenceRequired"))
+  if (contract.emergency_stop_required)
+    parts.push($t("page.resourceLibrary.emergencyStopRequired"))
+  return parts.join(" · ") || "—"
 }
 
 function instrumentRiskType(risk?: ResearchInstrumentCommandOption["risk"]) {

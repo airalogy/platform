@@ -396,6 +396,18 @@
                           <div v-if="action.instrument_job.heartbeat_at" class="aira-type-meta mt-1">
                             {{ $t("page.research.lastGatewayHeartbeat") }} · {{ formatDateTime(action.instrument_job.heartbeat_at) }}
                           </div>
+                          <details class="mt-2">
+                            <summary class="aira-type-meta cursor-pointer">
+                              {{ $t("page.resourceLibrary.safetyContract") }}
+                            </summary>
+                            <pre class="mt-2">{{ formatPayload(action.instrument_job.safety_contract || {}) }}</pre>
+                          </details>
+                          <details v-if="Object.keys(action.instrument_job.safety_attestation || {}).length" class="mt-2">
+                            <summary class="aira-type-meta cursor-pointer">
+                              {{ $t("page.research.safetyAttestation") }}
+                            </summary>
+                            <pre class="mt-2">{{ formatPayload(action.instrument_job.safety_attestation) }}</pre>
+                          </details>
                         </div>
                         <research-instrument-stop
                           :job="action.instrument_job"

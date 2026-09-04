@@ -228,9 +228,9 @@ Platform 永远不会在 API 进程中运行科研代码，也不会把容器运
 
 设备集成从数据导入、引导执行、需设备端确认的辅助控制，再到策略内闭环自动化逐级升级。Aira 不直接向设备发送任意指令。在下一 Action 边界，它只能从 Platform 根据当前 Research Environment 与请求人本人已批准设备预约提供的列表中选择准确指令 ID，并提供符合输入 Schema 的参数。Platform 确定性选择最早可用预约，固定完整指令与资源状态，并始终请求人员批准。批准时会在锁定下重新解析指令、Gateway、设备、权限、预约、Schema 和竞争作业状态，仅当全部一致时 Action 才可入队。本地 Instrument Gateway 只接收签名、结构化且列入允许清单的作业，并提供状态校验、审计和受治理的停止请求。
 
-首个 Gateway 安全边界和执行闭环已实现。Lab Owner 或 Manager 需先预览再确认注册 Gateway，高熵密钥只显示一次，Platform 仅保存摘要；密钥轮换会使旧值立即失效，且 Gateway 持有活动租约时禁止轮换。每条允许指令都绑定某个设备 Resource 的准确修订和带版本指令标识，并固定仅本地引用的输入/结果 JSON Schema、超时、风险级别；中高风险操作必须在物理设备端确认。所有配置变更均产生不可变审计快照，停用 Gateway 或指令会阻止之后的作业领取。
+首个 Gateway 安全边界和执行闭环已实现。Lab Owner 或 Manager 需先预览再确认注册 Gateway，高熵密钥只显示一次，Platform 仅保存摘要；密钥轮换会使旧值立即失效，且 Gateway 持有活动租约时禁止轮换。每条允许指令都绑定某个设备 Resource 的准确修订和带版本指令标识，并固定仅本地引用的输入/结果 JSON Schema、超时、风险级别、设备端确认与安全契约。安全契约可指定必须通过的硬件联锁、现场人员以及紧急停止；新的高风险修订必须同时要求现场人员和紧急停止。所有配置变更均产生不可变审计快照，停用 Gateway 或指令会阻止之后的作业领取。
 
-Instrument Job 必须同时引用 Research Environment 中已固定的资源类型、白名单指令的准确修订和一条已批准且未过期的设备预约。Gateway 独立鉴权，在单任务短租约下主动领取规范化签名信封；必须在预约时段内启动，上报必要的设备本地确认引用，持续心跳续租，并回传符合已固定输出 Schema 的结果。Platform 绝不自动重试物理操作。执行中租约过期、超时、预约结束、显式停止、Task 暂停、失败或取消都会暂停 Run，并要求 Gateway 确认和人工检查设备。这是受治理的远程停止协议，不等同于软件可保证物理急停；硬件联锁仍是最终安全边界。
+Instrument Job 必须同时引用 Research Environment 中已固定的资源类型、白名单指令的准确修订和一条已批准且未过期的设备预约。Gateway 独立鉴权，在单任务短租约下主动领取规范化签名信封。启动前，本地独立安装的适配器会即时读取安全条件并返回有上限的证明；Gateway 和 Platform 都会拒绝缺失或未通过的必要联锁，Platform 将通过的证明与 Job 一同留痕。之后作业必须在预约时段内启动，上报必要的设备本地确认引用，持续心跳续租，并回传符合已固定输出 Schema 的结果。Platform 绝不自动重试物理操作。执行中租约过期、超时、预约结束、显式停止、Task 暂停、失败或取消都会暂停 Run，并要求 Gateway 确认和人工检查设备。这是受治理的远程停止协议，不等同于软件可保证物理急停；硬件联锁仍是最终安全边界。
 
 运行时契约仅允许 Gateway 在 TLS 下主动领取。Gateway 使用 `X-Airalogy-Gateway-Token` 鉴权并调用 `POST /instrument-gateway/v1/jobs/lease`；成功响应包含规范化 `airalogy.instrument-job.v1` 信封、作业专用租约密钥和 HMAC-SHA256 签名。Gateway 以 `SHA256(Gateway 密钥)` 作为 HMAC 密钥验签，之后只通过 `X-Airalogy-Instrument-Lease` 传递租约密钥，调用 `start`、`heartbeat`、`complete`、`fail` 或 `stopped`。密钥不允许出现在查询参数或设备指令载荷中。心跳返回 `stop_requested: true` 时，适配器必须调用设备特定的安全停止程序，然后确认 `stopped`。
 
@@ -283,7 +283,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 
 ### P3：设备、RaaS 与自我改进
 
-- Instrument Gateway 注册、受治理指令允许清单、签名作业领取、心跳、结果校验回传和需确认的远程停止（已交付）；硬件特定联锁和分级闭环控制待后续实现；
+- Instrument Gateway 注册、受治理指令允许清单、签名作业领取、硬件特定的启动前联锁证明、心跳、结果校验回传和需确认的远程停止（已交付）；分级闭环控制待后续实现；
 - 受治理服务商目录、不可变服务契约、范围权限和 Research Environment 准确版本固定（已交付）；
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；

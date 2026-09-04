@@ -9,7 +9,16 @@
         "unit": "1"
       },
       "delay_seconds": 2,
-      "confirmation_reference": "mock-device-panel:confirmed"
+      "confirmation_reference": "mock-device-panel:confirmed",
+      "safety_attestation": {
+        "interlocks": {
+          "lid.closed": true,
+          "temperature.safe": true
+        },
+        "operator_present": true,
+        "emergency_stop_available": true,
+        "reference": "mock-device-panel:preflight-42"
+      }
     }
   ]
 }

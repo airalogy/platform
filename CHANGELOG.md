@@ -18,6 +18,7 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Added pinned Instrument safety contracts for named hardware interlocks, local operator presence, and emergency-stop availability; the independently installed adapter now performs and attests a fresh preflight before every start, Platform revalidates and audits it, and high-risk command revisions fail closed unless both operator presence and emergency stop are required.
 - Extended governed Executor Bindings across structured Human Work, exact Instrument Gateway commands, and version-pinned external-service providers, including least-privilege discovery, Task- or Action-time capture, action limits, preview-confirm stale checks, dispatch revalidation, and approval-gated legacy compatibility.
 - Initialized the Airalogy Platform Community Edition repository layout.
 - Added local-first development defaults for PostgreSQL, Redis, and MinIO through Docker Compose.

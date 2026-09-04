@@ -54,6 +54,7 @@ from app.services.research_instruments import (
     job_lease_token_digest,
     resolve_instrument_executor_binding,
     sign_job_envelope,
+    validate_safety_attestation,
     validate_schema_payload,
 )
 from app.services.research_runtime import (
@@ -134,6 +135,7 @@ class GatewayStart(BaseModel):
 
     device_confirmed: bool = False
     confirmation_reference: str = Field(default="", max_length=255)
+    safety_attestation: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def normalize(self):
@@ -352,6 +354,7 @@ def _action_command(
         "command_key": command.command_key,
         "command_version": command.command_version,
         "command_revision": command.revision,
+        "safety_contract": command.safety_contract,
         "executor_binding": executor_binding_command_ref(executor_binding),
         "resource_id": str(command.resource_id),
         "resource_revision_id": str(command.resource_revision_id),
@@ -569,6 +572,7 @@ async def create_instrument_action(
         requirements={
             "risk": command.risk,
             "device_confirmation_required": command.device_confirmation_required,
+            "safety_contract": command.safety_contract,
             "input_schema": command.input_schema,
             "output_schema": command.output_schema,
             "booking_window": command_data["booking_window"],
@@ -597,6 +601,7 @@ async def create_instrument_action(
         output_schema=command.output_schema,
         risk=command.risk,
         device_confirmation_required=command.device_confirmation_required,
+        safety_contract=command.safety_contract,
         timeout_seconds=command.timeout_seconds,
     )
     db_session.add(job)
@@ -986,6 +991,7 @@ async def lease_instrument_job(
             "output_schema": job.output_schema,
             "risk": job.risk,
             "device_confirmation_required": job.device_confirmation_required,
+            "safety_contract": job.safety_contract,
             "timeout_seconds": job.timeout_seconds,
         },
     }
@@ -1079,11 +1085,21 @@ async def start_instrument_job(
             status_code=409,
             detail="Device-side confirmation and reference are required",
         )
+    try:
+        safety_attestation = validate_safety_attestation(
+            job.safety_contract, params.safety_attestation
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     job.status = ResearchInstrumentJobStatus.RUNNING.value
     job.device_confirmation = {
         "confirmed": params.device_confirmed,
         "reference": params.confirmation_reference,
         "confirmed_at": now.isoformat() if params.device_confirmed else None,
+    }
+    job.safety_attestation = {
+        **safety_attestation,
+        "attested_at": now.isoformat(),
     }
     job.started_at = now
     job.heartbeat_at = now
@@ -1103,6 +1119,7 @@ async def start_instrument_job(
             "instrument_job_id": str(job.id),
             "device_confirmed": params.device_confirmed,
             "confirmation_reference": params.confirmation_reference,
+            "safety_attestation": job.safety_attestation,
         },
         idempotency_key=f"instrument-job:{job.id}:started",
     )

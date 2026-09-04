@@ -268,6 +268,38 @@
         >
           {{ $t("page.resourceLibrary.deviceConfirmationRequired") }}
         </n-checkbox>
+        <section class="safety-contract mt-4">
+          <div class="aira-type-label">
+            {{ $t("page.resourceLibrary.safetyContract") }}
+          </div>
+          <p class="aira-type-meta mb-3 mt-1">
+            {{ $t("page.resourceLibrary.safetyContractHint") }}
+          </p>
+          <n-form-item :label="$t('page.resourceLibrary.requiredInterlocks')">
+            <n-input
+              v-model:value="commandDraft.required_interlocks"
+              :placeholder="$t('page.resourceLibrary.requiredInterlocksPlaceholder')"
+              :disabled="!!commandPreview"
+            />
+          </n-form-item>
+          <div class="flex flex-wrap gap-x-6 gap-y-2">
+            <n-checkbox
+              v-model:checked="commandDraft.operator_presence_required"
+              :disabled="!!commandPreview"
+            >
+              {{ $t("page.resourceLibrary.operatorPresenceRequired") }}
+            </n-checkbox>
+            <n-checkbox
+              v-model:checked="commandDraft.emergency_stop_required"
+              :disabled="!!commandPreview"
+            >
+              {{ $t("page.resourceLibrary.emergencyStopRequired") }}
+            </n-checkbox>
+          </div>
+          <n-alert v-if="commandDraft.risk === 'high'" type="warning" :bordered="false" class="mt-3">
+            {{ $t("page.resourceLibrary.highRiskSafetyRequired") }}
+          </n-alert>
+        </section>
         <div class="form-grid mt-4">
           <n-form-item
             :label="$t('page.resourceLibrary.inputSchema')"
@@ -389,6 +421,9 @@ const commandDraft = reactive({
   output_schema: objectSchema,
   risk: "medium" as InstrumentCommand["risk"],
   device_confirmation_required: true,
+  required_interlocks: "",
+  operator_presence_required: false,
+  emergency_stop_required: false,
   timeout_seconds: 3600,
   enabled: true,
   reason: "",
@@ -672,6 +707,11 @@ function resetCommandDraft(command?: InstrumentCommand) {
   )
   commandDraft.risk = command?.risk || "medium"
   commandDraft.device_confirmation_required = command?.device_confirmation_required ?? true
+  commandDraft.required_interlocks = (command?.safety_contract?.required_interlocks || []).join(", ")
+  commandDraft.operator_presence_required
+    = command?.safety_contract?.operator_presence_required ?? false
+  commandDraft.emergency_stop_required
+    = command?.safety_contract?.emergency_stop_required ?? false
   commandDraft.timeout_seconds = command?.timeout_seconds || 3600
   commandDraft.enabled = command?.enabled ?? true
   commandDraft.reason = ""
@@ -698,6 +738,14 @@ function parsedCommandPayload(): InstrumentCommandPayload | InstrumentCommandUpd
       output_schema: JSON.parse(commandDraft.output_schema),
       risk: commandDraft.risk,
       device_confirmation_required: commandDraft.device_confirmation_required,
+      safety_contract: {
+        required_interlocks: commandDraft.required_interlocks
+          .split(",")
+          .map(item => item.trim())
+          .filter(Boolean),
+        operator_presence_required: commandDraft.operator_presence_required,
+        emergency_stop_required: commandDraft.emergency_stop_required,
+      },
       timeout_seconds: commandDraft.timeout_seconds,
       enabled: commandDraft.enabled,
       reason: commandDraft.reason,
@@ -778,6 +826,11 @@ async function toggleCommand(command: InstrumentCommand) {
     output_schema: command.output_schema,
     risk: command.risk,
     device_confirmation_required: command.device_confirmation_required,
+    safety_contract: command.safety_contract || {
+      required_interlocks: [],
+      operator_presence_required: false,
+      emergency_stop_required: false,
+    },
     timeout_seconds: command.timeout_seconds,
     enabled: !command.enabled,
     reason: command.enabled
@@ -881,6 +934,13 @@ watch(() => props.labId, loadGateways, { immediate: true })
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.safety-contract {
+  padding: 14px;
+  border: 1px solid #e7ebf2;
+  border-radius: 10px;
+  background: #f8fafc;
 }
 
 @media (max-width: 720px) {

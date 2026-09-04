@@ -209,7 +209,9 @@ def instrument_command_capability(
         output_schema=command.output_schema,
         available=available,
         unavailable_reason=(
-            "" if available else "Command, Gateway, or equipment revision is unavailable"
+            ""
+            if available
+            else "Command, Gateway, or equipment revision is unavailable"
         ),
         metadata={
             "lab_id": str(command.lab_id),
@@ -226,6 +228,7 @@ def instrument_command_capability(
             "resource_revision_id": str(command.resource_revision_id),
             "resource_revision": command.resource_revision,
             "device_confirmation_required": command.device_confirmation_required,
+            "safety_contract": getattr(command, "safety_contract", {}),
             "timeout_seconds": command.timeout_seconds,
         },
     )

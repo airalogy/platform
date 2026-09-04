@@ -1674,6 +1674,7 @@ class ResearchInstrumentCommand(Base):
     device_confirmation_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
+    safety_contract: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     timeout_seconds: Mapped[int] = mapped_column(nullable=False, default=3600)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     revision: Mapped[int] = mapped_column(nullable=False, default=1)
@@ -1779,6 +1780,7 @@ class ResearchInstrumentJob(Base):
     device_confirmation_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
+    safety_contract: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     timeout_seconds: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=ResearchInstrumentJobStatus.QUEUED.value
@@ -1789,6 +1791,7 @@ class ResearchInstrumentJob(Base):
     device_confirmation: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
     )
+    safety_attestation: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error: Mapped[str | None] = mapped_column(Text)
     stop_reason: Mapped[str | None] = mapped_column(Text)

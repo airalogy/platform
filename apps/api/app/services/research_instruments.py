@@ -39,6 +39,7 @@ from app.models.resource import (
 from app.services.access_control import resolve_resource_access
 
 COMMAND_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,127}$")
+INTERLOCK_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 TOKEN_PREFIX = "aigw_"
 LEASE_TOKEN_PREFIX = "aijl_"
 ACTIVE_INSTRUMENT_JOB_STATUSES = {
@@ -113,6 +114,9 @@ def command_snapshot(command: ResearchInstrumentCommand) -> dict[str, Any]:
         "output_schema": command.output_schema,
         "risk": command.risk,
         "device_confirmation_required": command.device_confirmation_required,
+        "safety_contract": normalized_safety_contract(
+            getattr(command, "safety_contract", {})
+        ),
         "timeout_seconds": command.timeout_seconds,
         "enabled": command.enabled,
         "revision": command.revision,
@@ -122,6 +126,114 @@ def command_snapshot(command: ResearchInstrumentCommand) -> dict[str, Any]:
 
 def instrument_job_snapshot(job: ResearchInstrumentJob) -> dict[str, Any]:
     return job.as_dict()
+
+
+def normalized_safety_contract(value: dict[str, Any] | None) -> dict[str, Any]:
+    """Return one bounded, hardware-neutral safety contract."""
+
+    if value is not None and not isinstance(value, dict):
+        raise ValueError("Instrument safety contract must be an object")
+    value = dict(value or {})
+    allowed = {
+        "required_interlocks",
+        "operator_presence_required",
+        "emergency_stop_required",
+    }
+    unknown = set(value) - allowed
+    if unknown:
+        raise ValueError(
+            f"Unsupported Instrument safety contract fields: {', '.join(sorted(unknown))}"
+        )
+    raw_interlocks = value.get("required_interlocks") or []
+    if not isinstance(raw_interlocks, list) or len(raw_interlocks) > 32:
+        raise ValueError("Instrument safety contract supports at most 32 interlocks")
+    interlocks: list[str] = []
+    for raw in raw_interlocks:
+        if not isinstance(raw, str):
+            raise TypeError("Instrument interlock keys must be strings")
+        key = raw.strip().lower()
+        if not key or not INTERLOCK_KEY_RE.fullmatch(key):
+            raise ValueError("Invalid Instrument interlock key")
+        if key in interlocks:
+            raise ValueError("Instrument safety contract contains duplicate interlocks")
+        interlocks.append(key)
+    for key in ("operator_presence_required", "emergency_stop_required"):
+        if key in value and not isinstance(value[key], bool):
+            raise ValueError(f"Instrument safety contract {key} must be boolean")
+    return {
+        "required_interlocks": interlocks,
+        "operator_presence_required": bool(value.get("operator_presence_required")),
+        "emergency_stop_required": bool(value.get("emergency_stop_required")),
+    }
+
+
+def validate_safety_attestation(
+    contract: dict[str, Any] | None,
+    attestation: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Fail closed unless a Gateway attests every pinned safety requirement."""
+
+    normalized_contract = normalized_safety_contract(contract)
+    if attestation is not None and not isinstance(attestation, dict):
+        raise ValueError("Instrument safety attestation must be an object")
+    attestation = dict(attestation or {})
+    allowed = {
+        "interlocks",
+        "operator_present",
+        "emergency_stop_available",
+        "reference",
+    }
+    unknown = set(attestation) - allowed
+    if unknown:
+        raise ValueError(
+            "Unsupported Instrument safety attestation fields: "
+            f"{', '.join(sorted(unknown))}"
+        )
+    interlocks = attestation.get("interlocks") or {}
+    if not isinstance(interlocks, dict) or len(interlocks) > 64:
+        raise ValueError("Instrument safety attestation interlocks are invalid")
+    normalized_interlocks: dict[str, bool] = {}
+    for raw_key, passed in interlocks.items():
+        if not isinstance(raw_key, str) or not INTERLOCK_KEY_RE.fullmatch(raw_key):
+            raise ValueError("Instrument safety attestation contains an invalid key")
+        if not isinstance(passed, bool):
+            raise TypeError("Instrument safety attestation values must be boolean")
+        normalized_interlocks[raw_key] = passed
+    missing = [
+        key
+        for key in normalized_contract["required_interlocks"]
+        if normalized_interlocks.get(key) is not True
+    ]
+    if missing:
+        raise ValueError(
+            f"Required Instrument safety interlocks did not pass: {', '.join(missing)}"
+        )
+    operator_present = attestation.get("operator_present", False)
+    emergency_stop_available = attestation.get("emergency_stop_available", False)
+    if not isinstance(operator_present, bool) or not isinstance(
+        emergency_stop_available, bool
+    ):
+        raise TypeError("Instrument safety attestation flags must be boolean")
+    if normalized_contract["operator_presence_required"] and not operator_present:
+        raise ValueError("Instrument safety contract requires operator presence")
+    if normalized_contract["emergency_stop_required"] and not emergency_stop_available:
+        raise ValueError("Instrument safety contract requires an emergency stop")
+    reference = attestation.get("reference") or ""
+    if not isinstance(reference, str) or len(reference.strip()) > 255:
+        raise ValueError("Instrument safety attestation reference is invalid")
+    required = bool(
+        normalized_contract["required_interlocks"]
+        or normalized_contract["operator_presence_required"]
+        or normalized_contract["emergency_stop_required"]
+    )
+    if required and not reference.strip():
+        raise ValueError("Instrument safety attestation reference is required")
+    return {
+        "interlocks": normalized_interlocks,
+        "operator_present": operator_present,
+        "emergency_stop_available": emergency_stop_available,
+        "reference": reference.strip(),
+    }
 
 
 def _has_remote_reference(value: Any) -> bool:

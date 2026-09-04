@@ -22,7 +22,11 @@ from airalogy_instrument_gateway.state import GatewayState, StateStore
 TOKEN = f"aigw_{'a' * 48}"
 
 
-def envelope(*, confirmation_required: bool = False) -> dict[str, Any]:
+def envelope(
+    *,
+    confirmation_required: bool = False,
+    safety_contract: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     now = datetime.now(UTC)
     return {
         "schema": "airalogy.instrument-job.v1",
@@ -51,6 +55,7 @@ def envelope(*, confirmation_required: bool = False) -> dict[str, Any]:
             "output_schema": {"type": "object"},
             "risk": "medium" if confirmation_required else "low",
             "device_confirmation_required": confirmation_required,
+            "safety_contract": safety_contract or {},
             "timeout_seconds": 300,
         },
     }
@@ -233,6 +238,84 @@ class GatewayTests(unittest.TestCase):
             )
             self.assertEqual(client.calls[-1][1], {"value": 42})
             self.assertFalse(state_file.exists())
+
+    def test_runtime_attests_required_hardware_interlocks_before_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "state.json"
+            contract = {
+                "required_interlocks": ["lid.closed", "temperature.safe"],
+                "operator_presence_required": True,
+                "emergency_stop_required": True,
+            }
+            client = FakeClient(envelope(safety_contract=contract))
+            adapter = MockAdapter(
+                [
+                    {
+                        "key": "mock.measure",
+                        "version": "1",
+                        "result": {"value": 42},
+                        "safety_attestation": {
+                            "interlocks": {
+                                "lid.closed": True,
+                                "temperature.safe": True,
+                            },
+                            "operator_present": True,
+                            "emergency_stop_available": True,
+                            "reference": "mock-panel:preflight-42",
+                        },
+                    }
+                ]
+            )
+
+            self.assertTrue(
+                GatewayRuntime(
+                    config(state_file), client, adapter, StateStore(state_file)
+                ).run_once()
+            )
+
+            start_payload = next(
+                value for name, value in client.calls if name == "start"
+            )
+            self.assertEqual(
+                start_payload["safety_attestation"]["reference"],
+                "mock-panel:preflight-42",
+            )
+            self.assertEqual(client.calls[-1][0], "complete")
+
+    def test_runtime_fails_closed_when_one_hardware_interlock_is_open(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "state.json"
+            client = FakeClient(
+                envelope(
+                    safety_contract={
+                        "required_interlocks": ["lid.closed"],
+                        "operator_presence_required": False,
+                        "emergency_stop_required": False,
+                    }
+                )
+            )
+            adapter = MockAdapter(
+                [
+                    {
+                        "key": "mock.measure",
+                        "version": "1",
+                        "result": {"value": 42},
+                        "safety_attestation": {
+                            "interlocks": {"lid.closed": False},
+                            "reference": "mock-panel:preflight-43",
+                        },
+                    }
+                ]
+            )
+
+            self.assertTrue(
+                GatewayRuntime(
+                    config(state_file), client, adapter, StateStore(state_file)
+                ).run_once()
+            )
+
+            self.assertEqual([name for name, _value in client.calls], ["lease", "fail"])
+            self.assertIn("lid.closed", client.calls[-1][1])
 
     def test_runtime_honors_stop_before_acknowledging(self):
         with tempfile.TemporaryDirectory() as directory:
