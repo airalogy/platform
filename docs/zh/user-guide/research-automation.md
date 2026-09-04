@@ -12,7 +12,20 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 
 AI 可用时，也可先在 **Aira 意图入口**中说明科学问题和可选约束。Aira 只能从你当前有权使用的 Protocol、Tool、已审核 Knowledge、资源、服务和 Compute Environment 中生成可编辑的 Task 简报。这一步不会创建 Task、预留资源、支出资金、下单、运行代码或启动仪器。请检查假设和风险提示，按需编辑所有字段，再走同一套确定性预览和确认流程。AI 关闭时，意图入口自动隐藏，完整手工表单仍然可用。
 
-之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。只有新建计划或 Run 后，新版本才应进入执行。
+之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。需要使用新版本时应创建新 Research Task；后续 Run 会按设计继承来源环境。
+
+## 安全开启经评估的自主执行
+
+仅选择自主等级不会开启自动执行。符合类型的 Action 只有在三道控制同时同意时才可不经再次审批执行：Lab Research 策略开启该类别；精确 Executor Binding 以及技术、风险、费用和时间限制允许；未过期的已评估授权严格匹配 Capability 版本和 Executor 摘要。当前可准入类型包括内部只读 Tool、被动类型化 Wait Event，以及低风险且禁止网络的 Compute。人员、Protocol 工作、结构化 Human Work、仪器、资源承诺和外部服务下单仍需审批。
+
+Lab Owner 和 Manager 可从 Project Research 打开“Research 策略”管理这些控制：
+
+1. 先保持受监督执行。手工运行该精确能力，或审批该精确 Aira 提议，至少完成 5 次。
+2. 打开评估候选，检查 Capability 版本、Executor 摘要、近期 Action ID、执行结果和输出回执。Platform 最多取该目标最近 10 个已终止的受监督 Action，样本需至少 5 次完成且没有失败或取消。
+3. 选择授权允许的自主等级，设置不超过一年的到期时间，填写治理理由，检查预览后再确认。
+4. 需要使用新授权时，创建新 Research Task。已有 Task 和后续 Run 保留当时捕获的策略与授权快照；Action 评估时仍会检查授权是否到期。
+
+Capability 版本、Executor 引用或摘要变化后会成为新目标，必须重新积累受监督历史。当前样本含失败或取消时，候选会继续保持不合格，直到之后的合格样本满足规则。续期也会重新评估并经过“预览 → 确认”。撤销授权会将它从未来 Research Environment 中移除，但不会改写已有 Run；如需立即干预，请暂停或取消受影响的 Run。没有显示候选时，请先在人工审批下完成符合类型的 Action。AI 关闭时，相同手工 Action、策略管理和审计历史仍然可用。
 
 ## 登记 Compute Environment
 

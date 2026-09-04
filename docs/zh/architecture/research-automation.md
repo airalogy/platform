@@ -127,9 +127,13 @@ Research Task
 - `ask`：生成影响预览，用户确认后执行；
 - `deny`：在当前环境中不允许，任何“全自动”开关都不能覆盖。
 
-面向用户的自主等级为 Assisted、Bounded Autopilot 和 Autonomous within Policy。自主权按 Lab + Capability + Executor 分别授予，必须经过回放、影子运行和评估，不存在一次打开的全局无限权限。
+面向用户的自主等级为 Assisted、Bounded Autopilot 和 Autonomous within Policy。不存在 Lab 级的全局无限开关：自动执行只能针对一个精确的 Lab + Capability 版本 + Executor 合同分别准入，任何全局自动模式都不能覆盖 `deny`。
 
-Lab Research 自治策略是版本化治理资产。辅助模式对每个 Aira 提议的 Action 都要求确认。“有边界的自动执行”和“策略范围内自主执行”可分别允许：仅在精确 Executor Binding 也允许时执行内部只读 Tool，创建被动的类型化 Wait Event，以及仅在固定环境禁止网络且不超过明确费用与时间上限时运行低风险 Compute。人员、仪器、资源和外部服务承诺仍必须审批。策略变更使用“预览 → 确认”并追加不可变修订审计，只影响未来 Research Environment；每个 Run 固定精确策略快照，每个 Action 记录判定原因。
+Lab Research 自治策略是版本化治理资产。辅助模式对每个 Aira 提议的 Action 都要求确认。“有边界的自动执行”和“策略范围内自主执行”只能自动执行内部只读 Tool、被动类型化 Wait Event，或固定环境禁止网络且费用与时间不超过明确上限的低风险 Compute。人员、仪器、资源、Protocol 工作、结构化 Human Work 和外部服务承诺仍必须审批。
+
+符合类型的数字 Action 必须同时通过三道独立门禁：Lab 策略已开启对应类别；精确 Executor Binding 以及技术、风险、费用和时间限制允许该 Action；存在未过期的已评估自治授权，且严格匹配 Capability key、Capability 版本、Executor 类型和 Executor 引用摘要。Platform 使用该精确目标最近最多 10 个已终止的受监督 Action 生成当前评估；手工 Action 以及经人工审批的 Aira Action 计为受监督执行。当前准入规则要求样本中至少 5 次完成，且没有失败或取消。版本、Executor 或摘要变化都会形成新目标，不能继承旧授权。
+
+只有 Lab Owner 或 Manager 可以创建、续期或撤销授权。操作使用“预览 → 确认”，保存评估快照和不可变审计，选择允许的自主等级，要求填写理由，且最长一年后到期。策略和授权变更只影响之后捕获的 Research Environment；每个 Run 会固定精确策略与授权快照，同时在 Action 执行时仍检查授权是否到期。撤销会阻止该授权进入未来环境，但不会改写已捕获的 Run；如需立即干预，应使用常规运行控制暂停或取消该 Run。每个 Action 都会记录最终策略决定和原因。
 
 重要写入使用统一契约：
 

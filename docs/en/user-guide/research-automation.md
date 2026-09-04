@@ -12,7 +12,20 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 
 When AI is available, you can instead begin by describing the scientific question and optional constraints in the **Aira intent entry**. Aira prepares an editable Task brief and may select only the Protocols, tools, reviewed Knowledge, resources, services, and Compute Environments that you can currently use. It cannot create the Task, reserve resources, spend funds, place an order, run code, or start an instrument from this step. Check the assumptions and warnings, edit every field as needed, then use the same deterministic preview and confirmation above. When AI is disabled, the intent entry disappears and the complete manual form remains available.
 
-Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new plan or Run when the new version should apply.
+Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new Research Task when the new version should apply; a descendant Run intentionally inherits its source environment.
+
+## Enable evaluated autonomy safely
+
+Automatic execution is never enabled by selecting an autonomy level alone. An eligible Action proceeds without another approval only when all three controls agree: the Lab Research policy enables its category; the exact Executor Binding and technical, risk, cost, and runtime limits permit it; and an unexpired evaluated grant matches the exact Capability version and Executor digest. Internal read-only Tools, passive typed Wait Events, and low-risk network-disabled Compute are currently eligible. People, Protocol work, structured Human Work, instruments, resource commitments, and external-service orders continue to require approval.
+
+Lab Owners and Managers can open **Research policy** from Project Research to manage these controls:
+
+1. Keep the Action supervised first. Run the exact capability manually or approve the exact Aira proposal at least five times.
+2. Open the evaluation candidate and inspect its capability version, Executor digest, recent Action IDs, outcomes, and output receipts. Platform considers at most the ten most recent terminal supervised Actions and requires at least five completed Actions with no failure or cancellation in that sample.
+3. Choose the autonomy levels the grant may serve, set an expiry no more than one year away, give the governance reason, and inspect the preview before confirming.
+4. Create a new Research Task when the new authorization should apply. Existing Tasks and descendant Runs keep their captured policy and grant snapshot; grant expiry is still enforced when an Action is evaluated.
+
+A changed Capability version, Executor reference, or digest is a different target and must build its own supervised history. If the current sample contains a failure or cancellation, the candidate remains ineligible until a later qualifying sample satisfies the rule. Renewals repeat evaluation and preview-confirm. Revoking a grant removes it from future Research Environments but does not rewrite an existing Run; pause or cancel the affected Run for immediate intervention. When no candidate is shown, complete eligible Actions under manual approval first. With AI disabled, the same manual Actions, policy administration, and audit history remain available.
 
 ## Register a Compute Environment
 
