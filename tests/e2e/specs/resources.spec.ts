@@ -4,6 +4,7 @@ import { loadFixtures, selectVisibleOption } from "./fixtures"
 test("resource library renders on first client-side navigation", async ({ page }) => {
   const fixtures = await loadFixtures()
   await page.goto(`/labs/${fixtures.lab.uid}/projects`)
+  await expect(page.getByRole("heading", { name: "Dev Demo Lab" })).toBeVisible()
 
   await page.getByText("Lab resource library", { exact: true }).click()
 
