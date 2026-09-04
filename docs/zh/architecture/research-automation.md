@@ -270,7 +270,7 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - Research Result Package；
 - 旧 Protocol Workflow 兼容。
 
-验收基准是 CNT 类迭代实验：任务创建后 Aira 选择下一个 Protocol，人员提交真实 Record，Run 恢复、形成阶段结论并继续，直到结束。
+验收基准是 CNT 类迭代实验：任务创建后 Aira 选择下一个 Protocol，人员提交真实 Record，Run 恢复、形成阶段结论并继续，直到结束。它的平台状态与治理契约现已纳入可执行验收套件。
 
 ### P1：Knowledge 与数字自动化
 
@@ -278,7 +278,7 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - Scholar 作为可选 Literature Provider；
 - 文献调研、Python/R 计算和外部工具 Action；
 - 受治理的 Paper → Suggested Knowledge → Protocol Draft，以及 Record/DataAsset → Suggested Knowledge（已交付）；
-- 发酵类多源数据集成验收。
+- 发酵类多源数据集成验收（已纳入可执行验收套件）。
 
 ### P2：现实资源与治理
 
@@ -298,7 +298,13 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
 - 独立建议型 Reviewer Agent、有来源依据的 2–4 角色 Specialist Agent Panel、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；有界 Instrument 反馈循环只存在于其明确控制会话契约内，任意 Action 图循环、相互依赖的 Agent 对话和无限制多 Agent 执行仍待后续实现；
-- 蛋白纯化方法演进与 OT-2 设备治理验收。
+- 蛋白纯化方法演进与 OT-2 设备治理验收（已纳入可执行验收套件）。
+
+### 可执行验收套件
+
+在仓库根目录运行 `pnpm research:benchmarks`，即可执行 `benchmarks/research-automation/scenarios.json` 中固定的四条跨模块场景：CNT 人机迭代、发酵多源数据整合、蛋白纯化方法演进、OT-2 受治理设备控制。套件会检查类型化状态流转、真实 Record 边界、不可变 Action 输出 Evidence、人工定稿 Result Package、准确的 Protocol 改进来源链、有上限的设备程序、安全联锁，以及后续高风险物理步骤前的新一轮人工复核。场景还明确记录被禁止的捷径，防止未来重构静默地把模型输出当作 Record、自动应用 AI 建议、绕过安全检查或重试物理操作。
+
+这些是软件验收基准，不是模拟出来的科研成功结论。它们证明的是 Platform 编排和治理契约；真实部署仍必须在目标实验室内对 Protocol、操作人员、设备适配器、联锁、数据质量与科学结论分别完成合格验证。
 
 ## 交付完整性
 

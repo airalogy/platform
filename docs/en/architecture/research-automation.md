@@ -238,7 +238,7 @@ The repository includes a standalone, standard-library-only Gateway runtime and 
 - Research Result Package
 - compatibility with legacy Protocol Workflow
 
-The acceptance benchmark is a CNT-style iterative experiment: Aira selects the next Protocol, a person submits a real Record, the Run resumes and forms a phased conclusion, and execution continues until a terminal result.
+The acceptance benchmark is a CNT-style iterative experiment: Aira selects the next Protocol, a person submits a real Record, the Run resumes and forms a phased conclusion, and execution continues until a terminal result. Its platform-state and governance contract is now part of the executable acceptance suite.
 
 ### P1: Knowledge and digital automation
 
@@ -246,7 +246,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - optional Scholar Literature Provider
 - literature research, Python/R compute, and external tool Actions
 - governed Paper → Suggested Knowledge → Protocol Draft and Record/DataAsset → Suggested Knowledge (delivered)
-- fermentation-style multi-source data integration benchmark
+- fermentation-style multi-source data integration benchmark (delivered in the executable acceptance suite)
 
 ### P2: operational resources and governance
 
@@ -266,7 +266,13 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - Aira-planned and manual external-service requests sharing quote, order approval, budget reservation, logistics, chain of custody, fulfilment, and result receipt governance (delivered)
 - evidence-backed, reviewed Protocol improvement proposals and exact new-version lineage (delivered without AI dependency)
 - independent advisory Reviewer Agent, a source-grounded two-to-four-role Specialist Agent panel, formal human-finalized reproduction evaluation, bounded parallel and dependent read-only Tool graphs, and bounded mixed Protocol/structured Human Work/Tool/Resource/Instrument/External Service/Compute/Wait graphs (delivered); bounded Instrument feedback cycles are isolated inside their explicit control-session contract, while arbitrary Action-graph cycles, dependent agent conversations, and unrestricted multi-agent execution remain future work
-- protein-purification method evolution and OT-2 governance benchmarks
+- protein-purification method evolution and OT-2 governance benchmarks (delivered in the executable acceptance suite)
+
+### Executable acceptance suite
+
+Run `pnpm research:benchmarks` from the repository root to exercise the four stable cross-cutting scenarios defined in `benchmarks/research-automation/scenarios.json`: CNT human-in-the-loop iteration, fermentation multi-source integration, protein-purification method evolution, and OT-2 governed instrument control. The suite checks typed state transitions, real Record boundaries, immutable Action-output Evidence, human-finalized Result Packages, exact Protocol-improvement lineage, bounded device programs, safety interlocks, and fresh review before later high-risk physical steps. It also carries explicit prohibited shortcuts so a future refactor cannot silently turn model output into a Record, auto-apply an AI proposal, bypass a safety check, or retry physical work.
+
+These are software acceptance benchmarks, not synthetic scientific success claims. They prove Platform orchestration and governance contracts. A real deployment must still qualify its Protocols, operators, device adapters, interlocks, data quality, and scientific conclusions in the target laboratory.
 
 ## Definition of complete
 
