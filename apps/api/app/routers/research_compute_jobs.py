@@ -64,6 +64,7 @@ from app.routers.research_compute_runners import (
     authenticate_compute_runner,
 )
 from app.services.knowledge import assert_research_file_upload_quota
+from app.services.research_autonomy_evaluations import compute_autonomy_target
 from app.services.research_budget import (
     ResearchBudgetError,
     project_budget_change,
@@ -587,6 +588,7 @@ async def create_compute_action(
             "resume_run": True,
         },
         requirements={
+            "risk": revision.risk,
             "image_ref": revision.image_ref,
             "resource_limits": revision.resource_limits,
             "network_policy": revision.network_policy,
@@ -595,6 +597,7 @@ async def create_compute_action(
             "result_schema": revision.result_schema,
             "estimated_cost": command["estimated_cost"],
             "currency": revision.currency,
+            "autonomy_target": compute_autonomy_target(revision.id, revision.revision),
         },
         policy_decision="ask",
         preview_digest=digest,

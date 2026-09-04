@@ -109,6 +109,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     autonomy_policy_revision = import_module(
         "migrations.versions.0040_research_autonomy_policy"
     )
+    autonomy_grant_revision = import_module(
+        "migrations.versions.0043_research_autonomy_grants"
+    )
     import_models()
 
     later_tables = {
@@ -165,6 +168,10 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(autonomy_policy_revision.TABLE_NAMES)
     assert autonomy_policy_revision.down_revision == (
         "0039_research_action_dependency_guard"
+    )
+    later_tables.update(autonomy_grant_revision.TABLE_NAMES)
+    assert autonomy_grant_revision.down_revision == (
+        "0042_human_work_review_notifications"
     )
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 

@@ -491,6 +491,24 @@ def test_research_approval_migration_handles_fresh_and_upgraded_databases(monkey
 
 
 def test_research_action_policy_fails_closed_for_aira_execution():
+    from app.services.research_autonomy_evaluations import (
+        policy_snapshot_with_grants,
+        tool_autonomy_target,
+    )
+    from app.services.research_autonomy_policy import autonomy_policy_snapshot
+
+    target = tool_autonomy_target("project.summary", "1")
+    evaluated_policy = policy_snapshot_with_grants(
+        autonomy_policy_snapshot(None),
+        [
+            {
+                "enabled": True,
+                "target": target,
+                "allowed_levels": ["bounded_autopilot"],
+                "valid_until": "2099-01-01T00:00:00+00:00",
+            }
+        ],
+    )
     assert (
         evaluate_research_action_policy(
             autonomy_level="autonomous_within_policy",
@@ -508,7 +526,9 @@ def test_research_action_policy_fails_closed_for_aira_execution():
             requirements={
                 "risk": "read_only",
                 "approval_policy": "allow_read_only",
+                "autonomy_target": target,
             },
+            policy_snapshot=evaluated_policy,
         )[0]
         == "ask"
     )
@@ -556,7 +576,9 @@ def test_research_action_policy_fails_closed_for_aira_execution():
             requirements={
                 "risk": "read_only",
                 "approval_policy": "allow_read_only",
+                "autonomy_target": target,
             },
+            policy_snapshot=evaluated_policy,
         )[0]
         == "allow"
     )
@@ -568,7 +590,9 @@ def test_research_action_policy_fails_closed_for_aira_execution():
             requirements={
                 "risk": "external_read_only",
                 "approval_policy": "allow_read_only",
+                "autonomy_target": target,
             },
+            policy_snapshot=evaluated_policy,
         )[0]
         == "ask"
     )

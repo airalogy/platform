@@ -167,6 +167,19 @@ def evaluate_automatic_action(
     if rule is None:
         return "ask", "Assisted Research requires confirmation for every Aira Action."
 
+    from app.services.research_autonomy_evaluations import matching_grant
+
+    autonomy_target = dict(requirements.get("autonomy_target") or {})
+    if autonomy_target.get("executor_type") != executor_type:
+        return "ask", "The autonomy target does not match the Action executor type."
+    _grant, grant_reason = matching_grant(
+        policy_snapshot=policy_snapshot,
+        target=autonomy_target,
+        autonomy_level=autonomy_level,
+    )
+    if _grant is None:
+        return "ask", grant_reason
+
     if executor_type == "platform_tool":
         if (
             requirements.get("risk") == "read_only"
@@ -175,7 +188,7 @@ def evaluate_automatic_action(
         ):
             return (
                 "allow",
-                "The pinned Lab policy and Executor Binding allow this internal read-only Tool.",
+                "The pinned Lab policy, Executor Binding, and evaluated grant allow this internal read-only Tool.",
             )
         return "ask", "This Tool is outside the pinned automatic-execution policy."
 
@@ -183,7 +196,7 @@ def evaluate_automatic_action(
         if rule.auto_create_wait_events:
             return (
                 "allow",
-                "The pinned Lab policy allows opening a passive external-event wait.",
+                "The pinned Lab policy and evaluated grant allow opening a passive external-event wait.",
             )
         return "ask", "The pinned Lab policy requires confirmation before waiting."
 
@@ -216,7 +229,7 @@ def evaluate_automatic_action(
             )
         return (
             "allow",
-            "The pinned Lab policy allows this isolated low-risk Compute within its cost and time ceilings.",
+            "The pinned Lab policy and evaluated grant allow this isolated low-risk Compute within its cost and time ceilings.",
         )
 
     if executor_type == "human":

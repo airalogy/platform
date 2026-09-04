@@ -1639,11 +1639,21 @@ async def _materialize_aira_action(
             )
         else:
             validate_tool_arguments(definition, proposal.arguments)
+        from app.services.research_autonomy_evaluations import tool_autonomy_target
+
+        executor_ref = executor_binding.get(
+            "resolved_executor_ref"
+        ) or executor_binding.get("executor_ref")
         requirements = {
             "risk": definition.risk,
             "read_only": True,
             "approval_policy": executor_binding["approval_policy"],
             "executor_binding": executor_binding,
+            "autonomy_target": tool_autonomy_target(
+                definition.key,
+                definition.version,
+                executor_ref=executor_ref,
+            ),
         }
         executor_type = executor_binding["executor_type"]
         kind = ResearchActionKind.TOOL_JOB.value
@@ -1928,6 +1938,8 @@ async def _materialize_aira_action(
             description=proposal.thought,
             idempotency_key=idempotency_key,
         )
+        from app.services.research_autonomy_evaluations import compute_autonomy_target
+
         requirements = {
             "risk": compute_revision.risk,
             "approval_policy": "always_ask",
@@ -1940,6 +1952,9 @@ async def _materialize_aira_action(
             "estimated_cost": compute_command["estimated_cost"],
             "currency": compute_revision.currency,
             "deterministic_resolution": True,
+            "autonomy_target": compute_autonomy_target(
+                compute_revision.id, compute_revision.revision
+            ),
         }
         executor_type = "compute_runner"
         kind = ResearchActionKind.COMPUTE_JOB.value
@@ -1956,7 +1971,12 @@ async def _materialize_aira_action(
         }
     else:
         template = AIRA_WAIT_TEMPLATES[proposal.wait_template_key]
-        requirements = {"payload_schema": template["payload_schema"]}
+        from app.services.research_autonomy_evaluations import wait_autonomy_target
+
+        requirements = {
+            "payload_schema": template["payload_schema"],
+            "autonomy_target": wait_autonomy_target(proposal.wait_template_key),
+        }
         executor_type = "external_event"
         kind = ResearchActionKind.WAIT_EVENT.value
         title = proposal.wait_title or template["title"]

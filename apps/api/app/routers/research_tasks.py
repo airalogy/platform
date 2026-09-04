@@ -90,6 +90,10 @@ from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
 from app.services.research_action_outputs import action_output_digest, action_output_payload
+from app.services.research_autonomy_evaluations import (
+    current_autonomy_grant_snapshots,
+    policy_snapshot_with_grants,
+)
 from app.services.research_autonomy_policy import current_autonomy_policy_snapshot
 from app.services.research_budget import (
     ResearchBudgetError,
@@ -751,6 +755,10 @@ async def _validate_task_draft(
         raise HTTPException(status_code=404, detail="Lab not found")
     _current_policy, autonomy_policy = await current_autonomy_policy_snapshot(
         db_session, lab_id=lab.id
+    )
+    autonomy_policy = policy_snapshot_with_grants(
+        autonomy_policy,
+        await current_autonomy_grant_snapshots(db_session, lab_id=lab.id),
     )
 
     owner_id = draft.owner_user_id or current_user.id

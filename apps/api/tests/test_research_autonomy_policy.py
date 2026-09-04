@@ -6,8 +6,16 @@ from uuid import uuid4
 import pytest
 from app.main import app
 from app.models.research_execution import (
+    ResearchAutonomyGrant,
+    ResearchAutonomyGrantAudit,
     ResearchAutonomyPolicy,
     ResearchAutonomyPolicyAudit,
+)
+from app.services.research_autonomy_evaluations import (
+    compute_autonomy_target,
+    evaluate_action_sample,
+    policy_snapshot_with_grants,
+    tool_autonomy_target,
 )
 from app.services.research_autonomy_policy import (
     ResearchAutonomyPolicyConfig,
@@ -31,6 +39,12 @@ def test_policy_models_are_lab_scoped_revisioned_and_audited():
     assert "ck_research_autonomy_policies_revision" in policy_ddl
     assert "uq_research_autonomy_policy_audits_revision" in audit_ddl
 
+    grant_ddl = compile_table(ResearchAutonomyGrant)
+    grant_audit_ddl = compile_table(ResearchAutonomyGrantAudit)
+    assert "uq_research_autonomy_grant_target" in grant_ddl
+    assert "ck_research_autonomy_grants_target_digest" in grant_ddl
+    assert "uq_research_autonomy_grant_audits_revision" in grant_audit_ddl
+
 
 def test_policy_migration_follows_dependency_guard():
     migration = import_module("migrations.versions.0040_research_autonomy_policy")
@@ -39,6 +53,28 @@ def test_policy_migration_follows_dependency_guard():
     assert migration.TABLE_NAMES == (
         "research_autonomy_policies",
         "research_autonomy_policy_audits",
+    )
+    grant_migration = import_module("migrations.versions.0043_research_autonomy_grants")
+    assert grant_migration.down_revision == "0042_human_work_review_notifications"
+    assert grant_migration.TABLE_NAMES == (
+        "research_autonomy_grants",
+        "research_autonomy_grant_audits",
+    )
+
+
+def _snapshot_with_grant(snapshot, target, level):
+    return policy_snapshot_with_grants(
+        snapshot,
+        [
+            {
+                "schema": "airalogy.research-autonomy-grant.v1",
+                "id": str(uuid4()),
+                "enabled": True,
+                "target": target,
+                "allowed_levels": [level],
+                "valid_until": "2099-01-01T00:00:00+00:00",
+            }
+        ],
     )
 
 
@@ -94,13 +130,19 @@ def test_assisted_never_auto_executes_and_physical_work_remains_gated():
 
 def test_read_only_tool_needs_both_policy_and_executor_binding():
     snapshot = autonomy_policy_snapshot(None)
+    target = tool_autonomy_target("project.summary", "1")
+    snapshot = _snapshot_with_grant(snapshot, target, "bounded_autopilot")
 
     assert (
         evaluate_automatic_action(
             policy_snapshot=snapshot,
             autonomy_level="bounded_autopilot",
             executor_type="platform_tool",
-            requirements={"risk": "read_only", "approval_policy": "allow_read_only"},
+            requirements={
+                "risk": "read_only",
+                "approval_policy": "allow_read_only",
+                "autonomy_target": target,
+            },
         )[0]
         == "allow"
     )
@@ -109,7 +151,11 @@ def test_read_only_tool_needs_both_policy_and_executor_binding():
             policy_snapshot=snapshot,
             autonomy_level="bounded_autopilot",
             executor_type="platform_tool",
-            requirements={"risk": "read_only", "approval_policy": "always_ask"},
+            requirements={
+                "risk": "read_only",
+                "approval_policy": "always_ask",
+                "autonomy_target": target,
+            },
         )[0]
         == "ask"
     )
@@ -132,13 +178,17 @@ def test_isolated_compute_enforces_risk_network_cost_currency_and_timeout():
         policy=config.model_dump(mode="json", exclude_none=True, by_alias=True),
         updated_at=SimpleNamespace(isoformat=lambda: "2026-09-04T00:00:00+00:00"),
     )
-    snapshot = autonomy_policy_snapshot(row)
+    target = compute_autonomy_target(uuid4(), 4)
+    snapshot = _snapshot_with_grant(
+        autonomy_policy_snapshot(row), target, "autonomous_within_policy"
+    )
     requirements = {
         "risk": "low",
         "network_policy": "none",
         "resource_limits": {"timeout_seconds": 300},
         "estimated_cost": "2.00",
         "currency": "USD",
+        "autonomy_target": target,
     }
 
     assert (
@@ -188,3 +238,83 @@ def test_policy_routes_are_publicly_declared():
     assert "/research-autonomy-policies" in paths
     assert "/research-autonomy-policies/preview" in paths
     assert "/research-autonomy-policies/audits" in paths
+    assert "/research-autonomy-policies/evaluations" in paths
+    assert "/research-autonomy-policies/grants" in paths
+    assert "/research-autonomy-policies/grants/preview" in paths
+    assert "/research-autonomy-policies/grants/{grant_id}/revoke/preview" in paths
+    assert "/research-autonomy-policies/grants/{grant_id}/revoke" in paths
+
+
+def test_missing_wrong_level_and_expired_grants_fail_closed():
+    target = tool_autonomy_target("project.summary", "1")
+    requirements = {
+        "risk": "read_only",
+        "approval_policy": "allow_read_only",
+        "autonomy_target": target,
+    }
+    default = autonomy_policy_snapshot(None)
+    assert (
+        evaluate_automatic_action(
+            policy_snapshot=default,
+            autonomy_level="bounded_autopilot",
+            executor_type="platform_tool",
+            requirements=requirements,
+        )[0]
+        == "ask"
+    )
+
+    wrong_level = _snapshot_with_grant(default, target, "autonomous_within_policy")
+    assert (
+        evaluate_automatic_action(
+            policy_snapshot=wrong_level,
+            autonomy_level="bounded_autopilot",
+            executor_type="platform_tool",
+            requirements=requirements,
+        )[0]
+        == "ask"
+    )
+
+    expired = policy_snapshot_with_grants(
+        default,
+        [
+            {
+                "enabled": True,
+                "target": target,
+                "allowed_levels": ["bounded_autopilot"],
+                "valid_until": "2020-01-01T00:00:00+00:00",
+            }
+        ],
+    )
+    assert (
+        evaluate_automatic_action(
+            policy_snapshot=expired,
+            autonomy_level="bounded_autopilot",
+            executor_type="platform_tool",
+            requirements=requirements,
+        )[0]
+        == "ask"
+    )
+
+
+def test_supervised_evaluation_requires_five_successes_and_no_failures():
+    target = tool_autonomy_target("project.summary", "1")
+    successes = [
+        {
+            "action_id": str(uuid4()),
+            "status": "completed",
+            "completed_at": f"2026-09-0{index + 1}T00:00:00+00:00",
+        }
+        for index in range(5)
+    ]
+    passed = evaluate_action_sample(target, successes)
+    assert passed["passed"]
+    assert passed["completed_count"] == 5
+    assert len(passed["evaluation_digest"]) == 64
+    assert evaluate_action_sample(target, successes[:4])["passed"] is False
+    assert (
+        evaluate_action_sample(
+            target,
+            [*successes, {"status": "failed", "completed_at": None}],
+        )["passed"]
+        is False
+    )

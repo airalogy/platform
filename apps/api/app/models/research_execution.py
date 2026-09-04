@@ -123,6 +123,110 @@ class ResearchAutonomyPolicyAudit(Base):
     )
 
 
+class ResearchAutonomyGrant(Base):
+    """Current evaluated permission for one capability and executor boundary."""
+
+    __tablename__ = "research_autonomy_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "lab_id",
+            "capability_key",
+            "capability_version",
+            "executor_digest",
+            name="uq_research_autonomy_grant_target",
+        ),
+        CheckConstraint("revision >= 1", name="ck_research_autonomy_grants_revision"),
+        CheckConstraint(
+            "length(target_digest) = 64",
+            name="ck_research_autonomy_grants_target_digest",
+        ),
+        CheckConstraint(
+            "length(executor_digest) = 64",
+            name="ck_research_autonomy_grants_executor_digest",
+        ),
+        Index(
+            "ix_research_autonomy_grants_lab_enabled_expiry",
+            "lab_id",
+            "enabled",
+            "valid_until",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    capability_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    capability_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    executor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    executor_ref: Mapped[dict] = mapped_column(JSON, nullable=False)
+    executor_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_digest: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allowed_levels: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    evaluation_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    valid_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ResearchAutonomyGrantAudit(Base):
+    """Immutable revision ledger for evaluated autonomy grants."""
+
+    __tablename__ = "research_autonomy_grant_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "grant_id", "revision", name="uq_research_autonomy_grant_audits_revision"
+        ),
+        Index(
+            "ix_research_autonomy_grant_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    grant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_autonomy_grants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchResourceReservationStatus(StrEnum):
     PROPOSED = "proposed"
     ACTIVE = "active"

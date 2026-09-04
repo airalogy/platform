@@ -32,6 +32,10 @@ from app.models.research_execution import (
 )
 from app.models.user import User
 from app.routers.depends import CurrentUser
+from app.services.research_autonomy_evaluations import (
+    tool_autonomy_target,
+    wait_autonomy_target,
+)
 from app.services.research_budget import reached_operational_limit
 from app.services.research_capabilities import pinned_tool_definition
 from app.services.research_runtime import (
@@ -388,7 +392,11 @@ async def create_tool_action(
             "source": "manual",
             "resume_run": True,
         },
-        requirements={"risk": definition.risk, "read_only": True},
+        requirements={
+            "risk": definition.risk,
+            "read_only": True,
+            "autonomy_target": tool_autonomy_target(definition.key, definition.version),
+        },
         policy_decision="allow",
         preview_digest=digest,
         idempotency_key=params.idempotency_key,
@@ -519,7 +527,10 @@ async def create_wait_action(
             "expected_event_type": params.expected_event_type,
             "source": "manual",
         },
-        requirements={"payload_schema": params.payload_schema},
+        requirements={
+            "payload_schema": params.payload_schema,
+            "autonomy_target": wait_autonomy_target(params.expected_event_type),
+        },
         policy_decision="allow",
         preview_digest=digest,
         idempotency_key=params.idempotency_key,
