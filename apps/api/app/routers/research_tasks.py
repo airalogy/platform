@@ -135,6 +135,12 @@ from app.services.research_human_work import (
     validate_human_work_submission,
 )
 from app.services.research_instruments import activate_aira_instrument_action
+from app.services.research_reproduction import (
+    ReproductionAssessment,
+    ReproductionEvaluationError,
+    build_reproduction_context,
+    finalized_reproduction_evaluation,
+)
 from app.services.research_resources import (
     ResearchResourceError,
     activate_aira_resource_action,
@@ -144,6 +150,7 @@ from app.services.research_result_packages import (
     ResearchResultPackageError,
     normalize_final_result_package,
     result_package_digest,
+    verify_result_package_digest,
 )
 from app.services.research_review import generate_research_review
 from app.services.research_runtime import (
@@ -303,6 +310,7 @@ class TaskCompleteParams(TaskTransitionParams):
     scientific_outcome: ScientificOutcome
     conclusion: str = Field(min_length=1, max_length=100_000)
     review_recommendation_id: UUID | None = None
+    reproduction_assessment: ReproductionAssessment | None = None
 
 
 class ResearchReviewRequest(BaseModel):
@@ -1512,6 +1520,85 @@ async def _approval_summary(
     }
 
 
+async def _reproduction_context(
+    db_session: DBSession,
+    task: ResearchTask,
+    *,
+    run: ResearchRun | None = None,
+    scientific_assets: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    current_run = run or await _latest_run(db_session, task.id)
+    if current_run is None:
+        return None
+    origin = (current_run.environment_snapshot or {}).get("run_origin")
+    if not isinstance(origin, dict) or origin.get("kind") != "replication":
+        return None
+    try:
+        source_run_id = UUID(str(origin.get("source_run_id") or ""))
+    except ValueError as error:
+        raise HTTPException(
+            status_code=409,
+            detail="Replication Run has an invalid source Run lineage",
+        ) from error
+    source_run = await db_session.get(ResearchRun, source_run_id)
+    if source_run is None or source_run.task_id != task.id:
+        raise HTTPException(
+            status_code=409,
+            detail="Replication source Run is unavailable in this Research Task",
+        )
+    source_snapshot = await ResearchResultPackageSnapshot.find_by(
+        db_session,
+        [ResearchResultPackageSnapshot.run_id == source_run.id],
+    )
+    if source_snapshot is not None:
+        try:
+            verify_result_package_digest(
+                source_snapshot.package,
+                source_snapshot.digest,
+            )
+        except ResearchResultPackageError as error:
+            raise HTTPException(
+                status_code=409,
+                detail="Replication source result snapshot failed integrity checks",
+            ) from error
+        source_result_package = source_snapshot.package
+        source_result_digest = source_snapshot.digest
+    else:
+        source_result_package = source_run.result_package or {}
+        source_result_digest = canonical_digest(source_result_package)
+
+    if scientific_assets is None:
+        evidence = list(
+            (
+                await db_session.scalars(
+                    select(ResearchEvidence)
+                    .where(ResearchEvidence.task_id == task.id)
+                    .order_by(ResearchEvidence.created_at, ResearchEvidence.id)
+                )
+            ).all()
+        )
+        task_evidence = [item.as_dict() for item in evidence]
+    else:
+        task_evidence = list(scientific_assets.get("evidence") or [])
+    try:
+        return build_reproduction_context(
+            task_id=str(task.id),
+            success_criteria=list(task.success_criteria or []),
+            source_run_id=str(source_run.id),
+            source_run_number=source_run.run_number,
+            source_environment=source_run.environment_snapshot or {},
+            source_result_package=source_result_package,
+            source_result_digest=source_result_digest,
+            source_snapshot_sealed=source_snapshot is not None,
+            replication_run_id=str(current_run.id),
+            replication_run_number=current_run.run_number,
+            replication_environment=current_run.environment_snapshot or {},
+            task_evidence=task_evidence,
+        )
+    except ReproductionEvaluationError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 async def _research_review_context(
     db_session: DBSession,
     task: ResearchTask,
@@ -1534,6 +1621,12 @@ async def _research_review_context(
     )
     assets = scientific_assets or await research_asset_bundle(
         db_session, task_id=task.id
+    )
+    reproduction_context = await _reproduction_context(
+        db_session,
+        task,
+        run=run,
+        scientific_assets=assets,
     )
     return (
         {
@@ -1580,6 +1673,7 @@ async def _research_review_context(
             "data_assets": assets["data_assets"],
             "knowledge_items": assets["knowledge_items"],
             "protocol_improvements": assets["protocol_improvements"],
+            "reproduction_context": reproduction_context,
         },
         run,
     )
@@ -1756,6 +1850,11 @@ async def _task_detail(
             dependents_by_action[dependency.depends_on_action_id].append(
                 dependency.action_id
             )
+    reproduction_context = await _reproduction_context(
+        db_session,
+        task,
+        run=runs[0] if runs else None,
+    )
     return {
         **summary,
         "runs": [run.as_dict() for run in runs],
@@ -1778,6 +1877,7 @@ async def _task_detail(
         "services": services,
         "compute": compute,
         "review_recommendations": [item.as_dict() for item in review_recommendations],
+        "reproduction_context": reproduction_context,
         "permissions": {
             "can_run": await has_research_capability(
                 db_session,
@@ -3104,6 +3204,11 @@ async def generate_review_recommendation(
         uncertainties=output.uncertainties,
         missing_checks=output.missing_checks,
         risk_flags=output.risk_flags,
+        reproduction_assessment=(
+            output.reproduction_assessment.model_dump(mode="json")
+            if output.reproduction_assessment is not None
+            else None
+        ),
         requested_by_user_id=current_user.id,
     )
     db_session.add(recommendation)
@@ -3288,6 +3393,38 @@ async def complete_research_task(
             detail="Research Task has no Research Run to finalize",
         )
     now = utcnow()
+    reproduction_context = await _reproduction_context(
+        db_session,
+        task,
+        run=run,
+        scientific_assets=scientific_assets,
+    )
+    if reproduction_context is None and params.reproduction_assessment is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Reproduction assessment is only valid for a replication Run",
+        )
+    if reproduction_context is not None and params.reproduction_assessment is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Replication Run requires a criterion-level reproduction assessment",
+        )
+    reproduction_evaluation = None
+    if reproduction_context is not None and params.reproduction_assessment is not None:
+        try:
+            reproduction_evaluation = finalized_reproduction_evaluation(
+                context=reproduction_context,
+                assessment=params.reproduction_assessment,
+                reviewed_by_user_id=str(current_user.id),
+                reviewed_at=now.isoformat(),
+                review_recommendation_id=(
+                    str(review_recommendation.id)
+                    if review_recommendation is not None
+                    else None
+                ),
+            )
+        except ReproductionEvaluationError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
     released_resource_ids = await release_research_run_reservations(
         db_session,
         run_id=run.id,
@@ -3324,6 +3461,14 @@ async def complete_research_task(
             if review_recommendation is not None
             else None
         ),
+        "reproducibility": {
+            **dict(base_package.get("reproducibility") or {}),
+            **(
+                {"replication_evaluation": reproduction_evaluation}
+                if reproduction_evaluation is not None
+                else {}
+            ),
+        },
     }
     task.revision += 1
     try:
@@ -3357,6 +3502,11 @@ async def complete_research_task(
             "reason": params.reason,
             "result_package_snapshot_id": str(snapshot.id),
             "result_package_digest": package_digest,
+            "reproduction_outcome": (
+                reproduction_evaluation["assessment"]["outcome"]
+                if reproduction_evaluation is not None
+                else None
+            ),
             "released_resource_reservation_ids": [
                 str(item) for item in released_resource_ids
             ],

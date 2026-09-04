@@ -40,6 +40,8 @@ Aira 意图入口是从目标到 Task 的转换器，不是特权写入通道。
 
 一次 Run 进入终态后，获授权用户可先预览，再以它为来源创建新 Run。Platform 会精确复制来源 Run 的 Research Environment，在 `run_origin` 中记录来源 Run、环境摘要和结果摘要，开启新的计划来源链，同时不改写任何既有 Action 或科研资产。因此重试和复现不会静默采用更新的 Protocol、Knowledge、Tool、执行策略或资源定义版本。当前运行时一个 Task 同时只允许一条非终态 Run，Task 级截止时间和预算账本会继续约束每次 Run。
 
+标记为“复现”的 Run 还会建立确定性比较边界。Platform 解析准确来源 Run，校验其已固定环境和结果摘要，优先使用经人工定稿的不可变 Result Package 快照，并在只排除来源元数据后比较有效 Research Environment。来源 Evidence 只能来自该来源结果包；复现 Evidence 必须已校验且属于当前 Run。完成前必须提交结构化复现结果，按原顺序评估每一项成功标准并给出理由，明确偏差和局限；任何确定性判断都必须同时引用两侧 Evidence。最终人工评估会与来源、目标、上下文摘要、审核人、时间及可选建议引用一起封存到复现 Result Package。
+
 ### Research Action
 
 `Research Action` 是编排层的统一包装，但不是一个吞掉全部业务语义的 JSON 表。共享状态、依赖、幂等键、预览摘要、执行人和时间轴，具体语义由类型化实现承担：
@@ -156,7 +158,7 @@ Lab Research 自治策略是版本化治理资产。辅助模式对每个 Aira �
 
 Aira 不能自行宣布成功。验证层必须记录 Schema/QC、Protocol 符合性、校准、对照、样本量、统计阈值、重复、偏差和失败尝试。
 
-人员确认完成 Task 前，可选的独立 Reviewer Agent 会通过与执行 Agent 分离的深度模型提示，审查当前 Task、最新 Run、Action 账本、Result Package 和科研资产组成的准确上下文。模型调用期间不保持数据库事务；返回后 Platform 会重新检查 Task 修订和完整上下文摘要。引用上下文外 Evidence 的输出会被拒绝，不可变建议会分别保存支持证据、反证、不确定性、缺失检查和风险。Reviewer 只提供建议，不能审批、改写或完成 Task；Task Owner 或科研审批人必须主动把建议复制为可编辑审核草稿，可修改任何字段，并作为最终科学判断的记录责任人。AI 关闭时，普通人工审核路径不受影响。
+人员确认完成 Task 前，可选的独立 Reviewer Agent 会通过与执行 Agent 分离的深度模型提示，审查当前 Task、最新 Run、Action 账本、Result Package 和科研资产组成的准确上下文；如果是复现 Run，同一输出还必须严格根据两组限定 Evidence 逐项比较成功标准。模型调用期间不保持数据库事务；返回后 Platform 会重新检查 Task 修订和完整上下文摘要。引用上下文外 Evidence，或在复现中引用了错误一侧 Evidence 的输出都会被拒绝；不可变建议会分别保存支持证据、反证、不确定性、缺失检查、风险和可选复现草稿。Reviewer 只提供建议，不能审批、改写或完成 Task；Task Owner 或科研审批人必须主动把建议复制为可编辑审核草稿，可修改任何字段，并作为最终科学判断的记录责任人。AI 关闭时，同样的确定性人工审核和复现表单仍完整可用。
 
 Aira 也可以根据用户明确选择的 Task 已校验 Evidence，综合生成一条可编辑 Suggested Claim。严格输出必须把每一项 Evidence 恰好评估一次，标明为支持、反驳或上下文，解释关系，把判断边界限定在来源可支持的范围内，并保留重要不确定性。模型调用不持有数据库事务；返回后 Platform 锁定并重新校验 Evidence 及其引用的资产版本，上下文变化就拒绝结果，再签发同时绑定用户、Task、准确生成内容和来源摘要的一小时凭据。预览和确认会再次校验同一上下文，生成 ID 唯一约束防止重放。用户可在确认前编辑判断、置信度、不确定性和 Evidence 关系，原始生成内容仍保留在不可变来源中。最终仍是普通 Suggested Claim，只能由另行授权的人员审核。AI 关闭时，手工创建和审核 Claim 仍可完整使用。
 
@@ -287,7 +289,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - 受治理服务商目录、不可变服务契约、范围权限和 Research Environment 准确版本固定（已交付）；
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
-- 独立建议型 Reviewer Agent、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；循环、任意多 Agent 执行和复现评估；
+- 独立建议型 Reviewer Agent、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；循环和任意多 Agent 执行仍待后续实现；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性

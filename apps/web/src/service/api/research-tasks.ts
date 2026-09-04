@@ -315,6 +315,77 @@ export interface ResearchRunOrigin {
   created_at: string
 }
 
+export type ReproductionCriterionStatus
+  = "reproduced" | "not_reproduced" | "inconclusive"
+
+export type ReproductionOutcome
+  = "reproduced" | "partially_reproduced" | "not_reproduced" | "inconclusive"
+
+export interface ReproductionCriterionResult {
+  criterion: string
+  status: ReproductionCriterionStatus
+  rationale: string
+}
+
+export interface ResearchReproductionAssessment {
+  outcome: ReproductionOutcome
+  summary: string
+  criteria_results: ReproductionCriterionResult[]
+  source_evidence_ids: string[]
+  replication_evidence_ids: string[]
+  deviations: string[]
+  limitations: string[]
+}
+
+export interface ResearchReproductionEvidence {
+  id: string
+  run_id: string
+  kind: string
+  summary: string
+  artifact_type: string
+  artifact_id: string
+  artifact_version: string
+  quality_state: "validated"
+}
+
+export interface ResearchReproductionContext {
+  schema: "airalogy.reproduction-context.v1"
+  task_id: string
+  kind: "replication"
+  success_criteria: string[]
+  source_run: {
+    id: string
+    run_number: number
+    environment_digest: string
+    effective_environment_digest: string
+    result_digest: string
+    snapshot_sealed: boolean
+  }
+  replication_run: {
+    id: string
+    run_number: number
+    environment_digest: string
+    effective_environment_digest: string
+  }
+  lineage_intact: boolean
+  environment_equivalent: boolean
+  source_evidence: ResearchReproductionEvidence[]
+  replication_evidence: ResearchReproductionEvidence[]
+}
+
+export interface ResearchReplicationEvaluation {
+  schema: "airalogy.replication-evaluation.v1"
+  context_digest: string
+  source_run: ResearchReproductionContext["source_run"]
+  replication_run: ResearchReproductionContext["replication_run"]
+  lineage_intact: boolean
+  environment_equivalent: boolean
+  assessment: ResearchReproductionAssessment
+  reviewed_by_user_id: string
+  reviewed_at: string
+  review_recommendation_id?: string | null
+}
+
 export interface ResearchResultPackage {
   schema?: string
   goal?: string
@@ -331,7 +402,9 @@ export interface ResearchResultPackage {
   actions?: Array<Record<string, unknown>>
   failed_attempts?: string[]
   unresolved_questions?: string[]
-  reproducibility?: Record<string, unknown>
+  reproducibility?: Record<string, unknown> & {
+    replication_evaluation?: ResearchReplicationEvaluation
+  }
   budget?: Record<string, unknown>
   reviewed_by_user_id?: string
   reviewed_at?: string
@@ -682,6 +755,7 @@ export interface ResearchReviewRecommendation {
   uncertainties: string[]
   missing_checks: string[]
   risk_flags: string[]
+  reproduction_assessment?: ResearchReproductionAssessment | null
   requested_by_user_id: string
   created_at: string
 }
@@ -697,6 +771,7 @@ export interface ResearchTaskDetail extends ResearchTaskSummary {
   services: ResearchServiceRequirement[]
   compute: ResearchComputeRequirement[]
   review_recommendations: ResearchReviewRecommendation[]
+  reproduction_context?: ResearchReproductionContext | null
   permissions: {
     can_run: boolean
     can_approve: boolean
@@ -1041,6 +1116,7 @@ export function completeResearchTask(taskId: string, payload: {
   scientific_outcome: string
   conclusion: string
   review_recommendation_id?: string
+  reproduction_assessment?: ResearchReproductionAssessment
   reason?: string
 }) {
   return getData<ResearchTaskDetail>({

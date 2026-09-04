@@ -15,6 +15,7 @@ from app.services.research_review import (
     research_review_prompt,
     validate_review_evidence,
 )
+from app.services.research_runtime import canonical_digest
 
 
 def test_review_recommendations_are_immutable_context_specific_assets():
@@ -114,6 +115,62 @@ def test_reviewer_agent_uses_strict_structured_transport(monkeypatch):
 
     assert output.recommendation == "accept"
     assert output.recommended_task_outcome.value == "goal_met"
+
+
+def test_reviewer_agent_must_return_a_valid_replication_assessment():
+    source_run_id = str(uuid4())
+    replication_run_id = str(uuid4())
+    source_evidence_id = str(uuid4())
+    replication_evidence_id = str(uuid4())
+    context = {
+        "schema": "airalogy.reproduction-context.v1",
+        "success_criteria": ["The result direction matches"],
+        "lineage_intact": True,
+        "environment_equivalent": True,
+        "source_evidence": [{"id": source_evidence_id}],
+        "replication_evidence": [{"id": replication_evidence_id}],
+        "source_run": {"id": source_run_id},
+        "replication_run": {"id": replication_run_id},
+    }
+    output = ResearchReviewOutput(
+        recommendation="accept",
+        recommended_task_outcome="goal_met",
+        recommended_scientific_outcome="supports_hypothesis",
+        summary="The independent result reproduced.",
+        reproduction_assessment={
+            "outcome": "reproduced",
+            "summary": "The predefined criterion reproduced.",
+            "criteria_results": [
+                {
+                    "criterion": "The result direction matches",
+                    "status": "reproduced",
+                    "rationale": "Both validated measurements agree.",
+                }
+            ],
+            "source_evidence_ids": [source_evidence_id],
+            "replication_evidence_ids": [replication_evidence_id],
+            "deviations": [],
+            "limitations": [],
+        },
+    )
+
+    validate_review_evidence(
+        output,
+        available_evidence_ids={source_evidence_id, replication_evidence_id},
+        context={"reproduction_context": context},
+    )
+    with pytest.raises(ValueError, match="omitted"):
+        validate_review_evidence(
+            output.model_copy(update={"reproduction_assessment": None}),
+            available_evidence_ids={source_evidence_id, replication_evidence_id},
+            context={"reproduction_context": context},
+        )
+    with pytest.raises(ValueError, match="outside a replication Run"):
+        validate_review_evidence(
+            output,
+            available_evidence_ids={source_evidence_id, replication_evidence_id},
+            context={"context_digest": canonical_digest(context)},
+        )
 
 
 def test_review_recommendation_endpoint_is_publicly_typed():

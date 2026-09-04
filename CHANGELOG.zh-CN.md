@@ -18,6 +18,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 新增
 
+- 新增正式科研复现评估：复现 Run 只能将来源 Run 中摘要锁定的已定稿结果，与当前 Run 的已校验 Evidence 进行比较；系统保留原始成功标准并核验有效 Research Environment，完成前必须由人逐项判断；可选 Reviewer Agent 只能生成可编辑草稿，最终比较会封存到不可变 Result Package，关闭 AI 仍可完整使用。
 - 新增固定版本的 Instrument 安全契约，可要求指定硬件联锁、现场人员和紧急停止；本地独立安装的适配器必须在每次启动前即时检查并出具证明，Platform 会再次校验和审计；高风险指令若未要求现场人员与紧急停止将失败关闭。
 - 将受治理的 Executor Binding 扩展到结构化 Human Work、准确 Instrument Gateway 命令和固定版本的外部服务商，包含最小权限发现、Task/Action 阶段固定、Action 数量限制、预览确认过期校验、派发复核及保持审批的旧任务兼容。
 - 初始化 Airalogy Platform Community Edition 仓库结构。

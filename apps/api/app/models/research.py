@@ -528,6 +528,7 @@ class ResearchReviewRecommendation(Base):
     uncertainties: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     missing_checks: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     risk_flags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    reproduction_assessment: Mapped[dict | None] = mapped_column(JSON)
     requested_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )

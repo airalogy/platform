@@ -1582,6 +1582,34 @@ declare namespace I18n {
         reviewerMissingChecks: string
         reviewerRiskFlags: string
         useReviewerDraft: string
+        reproductionAssessment: string
+        reproductionAssessmentHint: string
+        reproductionOutcome: string
+        reproductionSummary: string
+        criterionComparison: string
+        criterionRationalePlaceholder: string
+        sourceEvidence: string
+        replicationEvidence: string
+        selectValidatedEvidence: string
+        replicationDeviations: string
+        replicationLimitations: string
+        oneItemPerLine: string
+        lineageVerified: string
+        lineageInvalid: string
+        environmentMatched: string
+        environmentChanged: string
+        legacyReplicationSource: string
+        reproductionOutcomes: {
+          reproduced: string
+          partially_reproduced: string
+          not_reproduced: string
+          inconclusive: string
+        }
+        reproductionCriterionStatus: {
+          reproduced: string
+          not_reproduced: string
+          inconclusive: string
+        }
         reviewerRecommendation: {
           accept: string
           revise: string

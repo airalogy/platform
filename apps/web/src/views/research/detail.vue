@@ -187,7 +187,17 @@
                         <n-tag v-if="run.result_package.scientific_outcome" size="small" type="success">
                           {{ scientificOutcomeLabel(run.result_package.scientific_outcome) }}
                         </n-tag>
+                        <n-tag
+                          v-if="replicationEvaluation(run)"
+                          size="small"
+                          :type="reproductionOutcomeType(replicationEvaluation(run)!.assessment.outcome)"
+                        >
+                          {{ reproductionOutcomeLabel(replicationEvaluation(run)!.assessment.outcome) }}
+                        </n-tag>
                       </div>
+                      <p v-if="replicationEvaluation(run)" class="aira-type-meta mb-0 mt-2 whitespace-pre-wrap">
+                        {{ replicationEvaluation(run)!.assessment.summary }}
+                      </p>
                     </div>
                     <time class="aira-type-meta shrink-0" :datetime="run.created_at">
                       {{ formatDateTime(run.created_at) }}
@@ -869,7 +879,14 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="reviewModalVisible" preset="card" class="research-modal" :title="$t('page.research.reviewResult')" :mask-closable="false">
+    <n-modal
+      v-model:show="reviewModalVisible"
+      preset="card"
+      class="research-modal research-review-modal"
+      content-style="max-height: calc(100vh - 12rem); overflow-y: auto"
+      :title="$t('page.research.reviewResult')"
+      :mask-closable="false"
+    >
       <n-alert type="warning" class="mb-4">
         {{ $t("page.research.reviewResponsibility") }}
       </n-alert>
@@ -939,6 +956,11 @@
           </div>
         </div>
       </section>
+      <research-reproduction-review
+        v-if="task?.reproduction_context && review.reproduction_assessment"
+        v-model="review.reproduction_assessment"
+        :context="task.reproduction_context"
+      />
       <n-form label-placement="top">
         <n-form-item :label="$t('page.research.goalAssessment')" required>
           <n-select v-model:value="review.outcome" :options="outcomeOptions" />
@@ -955,7 +977,7 @@
           <n-button @click="reviewModalVisible = false">
             {{ $t("common.cancel") }}
           </n-button>
-          <n-button type="primary" :disabled="!review.conclusion.trim() || reviewGenerating" :loading="mutating" @click="completeTask">
+          <n-button type="primary" :disabled="!reviewReady || reviewGenerating" :loading="mutating" @click="completeTask">
             {{ $t("page.research.confirmReview") }}
           </n-button>
         </div>
@@ -975,6 +997,8 @@ import type {
   ResearchActionStatus,
   ResearchEnvironmentExecutorBinding,
   ResearchProtocolRef,
+  ResearchReplicationEvaluation,
+  ResearchReproductionAssessment,
   ResearchResourceConsumption,
   ResearchReviewRecommendation,
   ResearchRun,
@@ -1014,6 +1038,7 @@ import ResearchComputeJobActions from "./components/research-compute-job-actions
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
 import ResearchHumanWorkActionModal from "./components/research-human-work-action-modal.vue"
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
+import ResearchReproductionReview from "./components/research-reproduction-review.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
 import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
 import ResearchResultPackagePanel from "./components/research-result-package-panel.vue"
@@ -1046,10 +1071,16 @@ const actionDraft = reactive<ManualProtocolActionDraft>({
   initial_values: {},
   idempotency_key: "",
 })
-const review = reactive({
+const review = reactive<{
+  outcome: string
+  scientific_outcome: string
+  conclusion: string
+  reproduction_assessment: ResearchReproductionAssessment | null
+}>({
   outcome: "goal_met",
   scientific_outcome: "inconclusive",
   conclusion: "",
+  reproduction_assessment: null,
 })
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
@@ -1100,6 +1131,36 @@ const canReview = computed(() => Boolean(
   && task.value.pending_approvals === 0
   && ["review_required", "active", "paused", "failed"].includes(task.value.status),
 ))
+const reviewReady = computed(() => {
+  if (!review.conclusion.trim())
+    return false
+  const context = task.value?.reproduction_context
+  if (!context)
+    return review.reproduction_assessment === null
+  const assessment = review.reproduction_assessment
+  if (!assessment || !context.lineage_intact || !context.environment_equivalent)
+    return false
+  if (!assessment.summary.trim() || assessment.criteria_results.length !== context.success_criteria.length)
+    return false
+  if (assessment.criteria_results.some((item, index) => (
+    item.criterion !== context.success_criteria[index] || !item.rationale.trim()
+  ))) {
+    return false
+  }
+  const criterionStatuses = assessment.criteria_results.map(item => item.status)
+  if (assessment.outcome === "reproduced" && criterionStatuses.some(status => status !== "reproduced"))
+    return false
+  if (assessment.outcome === "not_reproduced" && !criterionStatuses.includes("not_reproduced"))
+    return false
+  if (assessment.outcome === "partially_reproduced" && !(
+    criterionStatuses.includes("reproduced")
+    && criterionStatuses.some(status => status !== "reproduced")
+  )) {
+    return false
+  }
+  return assessment.outcome === "inconclusive"
+    || Boolean(assessment.source_evidence_ids.length && assessment.replication_evidence_ids.length)
+})
 const canCreateRun = computed(() => Boolean(
   task.value?.permissions.can_run
   && latestRun.value
@@ -1396,6 +1457,9 @@ function openReviewModal() {
   review.outcome = task.value.outcome || "goal_met"
   review.scientific_outcome = task.value.scientific_outcome || "inconclusive"
   review.conclusion = resultConclusion.value
+  review.reproduction_assessment = task.value.reproduction_context
+    ? emptyReproductionAssessment(task.value.reproduction_context.success_criteria)
+    : null
   reviewRecommendation.value = (task.value.review_recommendations || [])[0] || null
   selectedReviewRecommendationId.value = ""
   reviewModalVisible.value = true
@@ -1424,11 +1488,16 @@ function useReviewRecommendation() {
   review.outcome = reviewRecommendation.value.recommended_task_outcome
   review.scientific_outcome = reviewRecommendation.value.recommended_scientific_outcome
   review.conclusion = reviewRecommendation.value.summary
+  if (reviewRecommendation.value.reproduction_assessment) {
+    review.reproduction_assessment = cloneReproductionAssessment(
+      reviewRecommendation.value.reproduction_assessment,
+    )
+  }
   selectedReviewRecommendationId.value = reviewRecommendation.value.id
 }
 
 async function completeTask() {
-  if (!task.value || !review.conclusion.trim())
+  if (!task.value || !reviewReady.value)
     return
   mutating.value = true
   try {
@@ -1438,6 +1507,7 @@ async function completeTask() {
       scientific_outcome: review.scientific_outcome,
       conclusion: review.conclusion.trim(),
       review_recommendation_id: selectedReviewRecommendationId.value || undefined,
+      reproduction_assessment: review.reproduction_assessment || undefined,
     })
     reviewModalVisible.value = false
     window.$message?.success($t("page.research.reviewCompleted"))
@@ -1449,6 +1519,54 @@ async function completeTask() {
 
 function reviewerRecommendationLabel(value: ResearchReviewRecommendation["recommendation"]) {
   return $t(`page.research.reviewerRecommendation.${value}` as I18n.I18nKey)
+}
+
+function emptyReproductionAssessment(successCriteria: string[]): ResearchReproductionAssessment {
+  return {
+    outcome: "inconclusive",
+    summary: "",
+    criteria_results: successCriteria.map(criterion => ({
+      criterion,
+      status: "inconclusive",
+      rationale: "",
+    })),
+    source_evidence_ids: [],
+    replication_evidence_ids: [],
+    deviations: [],
+    limitations: [],
+  }
+}
+
+function cloneReproductionAssessment(
+  assessment: ResearchReproductionAssessment,
+): ResearchReproductionAssessment {
+  return {
+    ...assessment,
+    criteria_results: assessment.criteria_results.map(item => ({ ...item })),
+    source_evidence_ids: [...assessment.source_evidence_ids],
+    replication_evidence_ids: [...assessment.replication_evidence_ids],
+    deviations: [...assessment.deviations],
+    limitations: [...assessment.limitations],
+  }
+}
+
+function replicationEvaluation(run: ResearchRun): ResearchReplicationEvaluation | null {
+  const evaluation = run.result_package.reproducibility?.replication_evaluation
+  return evaluation || null
+}
+
+function reproductionOutcomeLabel(value: ResearchReproductionAssessment["outcome"]) {
+  return $t(`page.research.reproductionOutcomes.${value}` as I18n.I18nKey)
+}
+
+function reproductionOutcomeType(value: ResearchReproductionAssessment["outcome"]): TagProps["type"] {
+  if (value === "reproduced")
+    return "success"
+  if (value === "not_reproduced")
+    return "error"
+  if (value === "partially_reproduced")
+    return "warning"
+  return "default"
 }
 
 function goBack() {
@@ -1821,6 +1939,10 @@ onUnmounted(() => {
 
 .research-modal {
   width: min(44rem, calc(100vw - 2rem));
+}
+
+.research-review-modal {
+  width: min(64rem, calc(100vw - 2rem));
 }
 
 .reviewer-panel {
