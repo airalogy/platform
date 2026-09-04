@@ -31,6 +31,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增 Community Edition 公开发行中的商标与客户数据边界说明。
 - 新增统一、使用 Airalogy 品牌标识的双语 VitePress 文档体系，同时用于公开站与单实验室镜像内的版本匹配文档；产品内新增按部署方式和角色展示使用手册、实验室管理、自托管运维与托管支持入口的帮助中心。
 - 新增可持久化的 Research Task 与 Run，并在产品内提供任务、指派工作与审批工作台：固定版本化 Research Environment，使用类型明确的 Protocol Action、绑定预览摘要的 `allow / ask / deny` 策略门禁、经过校验的 Record 表单交付与回传和仅追加的来源事件；Aira 可在服务重启后安全续跑，AI 不可用时仍可手工执行，科研结论必须由人明确审核。
+- 新增受治理的 Aira 意图入口，可将自然语言科研问题转换为可编辑的 Research Task 草稿；模型只能从当前用户有权且可执行的 Capability 目录中选择，Platform 在返回前重新校验每项选择，不在此步写入或执行任何操作，并在 AI 关闭时保留完整手工“预览→确认”路径。
 - 新增 Knowledge Core 和按范围私有化的 Paper Library：支持 DOI 规范化、无 DOI 候选冲突显式确认、DOI/PDF/URL/BibTeX/RIS 的“解析预览→确认导入”、内容哈希去重但不继承权限的文件存储、真实 PDF 与配额校验、全文检索、集合和 Project 关联、BibTeX/RIS 导出、Knowledge 修订与审核，以及保留来源关系且不扩大原文件权限的 Personal→Project、Project→Lab 发布；文件预览使用短时令牌、读取时再鉴权和仅追加审计，Restricted 内容使用对象级显式授权；可选 Scholar 只作为只读文献候选服务。
 - Research Environment 现可固定 Project/Lab 中已审核 Knowledge 的具体修订，并将其作为受边界约束的 Aira 规划上下文；Restricted Knowledge 不进入共享 Task 快照，避免绕过对象级权限。
 - 新增保留修订历史的 Personal、Project 和 Lab Research Log：支持结构化进展、会议记录、反思、阻塞和里程碑，按角色控制发布，通过预览后确认保存，并在不可编辑的聚合时间线中呈现真实 Record、Protocol、Knowledge 与 Research Task 活动；现有 Record 热图、日历、导出与历史链接继续保留。

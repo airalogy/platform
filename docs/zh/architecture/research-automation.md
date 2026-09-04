@@ -32,6 +32,8 @@ AI 是智能编排层，不是系统记录或权限系统。Platform 仍是所�
 - 一个或多个 `Research Run`；
 - 最终科学结果，而不只是运行成败。
 
+Aira 意图入口是从目标到 Task 的转换器，不是特权写入通道。Platform 会先根据所选 Project、当前用户和自主级别解析最小权限目录。模型只能看到当前可读的已审核 Knowledge，以及具有可执行且非禁止 Binding 的 Capability；返回值只能包含目录中的准确标识符、有边界的 Task 字段、假设和风险提示。模型调用期间不保持数据库事务。生成后 Platform 会重新解析每个已选对象和 Binding；权限、版本、可用性或策略的任何变化都会失败关闭。结果仍是可编辑的 `ResearchTaskDraft`，必须进入常规“预览→确认”流程；它不会创建 Task、审批、预留、订单、Compute Job 或仪器指令。关闭 AI 时，完整手工 Task 路径不受影响。
+
 ### Research Run
 
 `Research Run` 是一次可恢复的执行，对应一个计划分支、复现、重试或延续研究。它固定当次 `Research Environment` 快照、Protocol 版本和每次计划修订，通过持久事件恢复，不依赖浏览器会话或一次性 AI 请求。

@@ -36,12 +36,96 @@
           </n-form-item>
         </div>
 
+        <section
+          v-if="instanceStore.aiEnabled"
+          class="aira-task-brief mb-5"
+          data-testid="research-task-aira"
+        >
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.airaIntentEntry") }}
+              </div>
+              <h3 class="aira-type-card-title mb-0 mt-1">
+                {{ $t("page.research.airaTaskBrief") }}
+              </h3>
+              <p class="aira-type-meta aira-text-secondary mb-0 mt-1">
+                {{ $t("page.research.airaTaskBriefHint") }}
+              </p>
+            </div>
+            <n-tag type="info" round>
+              {{ $t("page.research.editableDraft") }}
+            </n-tag>
+          </div>
+          <n-input
+            v-model:value="airaQuestion"
+            class="mt-4"
+            data-testid="research-task-aira-question"
+            type="textarea"
+            :autosize="{ minRows: 3, maxRows: 8 }"
+            :placeholder="$t('page.research.airaQuestionPlaceholder')"
+          />
+          <n-input
+            v-model:value="airaConstraints"
+            class="mt-3"
+            data-testid="research-task-aira-constraints"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            :placeholder="$t('page.research.airaConstraintsPlaceholder')"
+          />
+          <div class="mt-3 flex justify-end">
+            <n-button
+              type="primary"
+              secondary
+              :disabled="!form.project_id || !airaQuestion.trim()"
+              :loading="airaDrafting"
+              data-testid="research-task-aira-generate"
+              @click="handleAiraDraft"
+            >
+              <template #icon>
+                <n-icon><icon-tabler-sparkles /></n-icon>
+              </template>
+              {{ $t("page.research.generateTaskBrief") }}
+            </n-button>
+          </div>
+          <n-alert
+            v-if="airaGuidance"
+            type="info"
+            class="mt-4"
+            data-testid="research-task-aira-guidance"
+          >
+            <div class="aira-type-label">
+              {{ $t("page.research.airaDraftReadyWithModel", { model: airaGuidance.model }) }}
+            </div>
+            <p class="aira-type-body mb-0 mt-2 whitespace-pre-wrap">
+              {{ airaGuidance.rationale }}
+            </p>
+            <div v-if="airaGuidance.assumptions.length" class="mt-3">
+              <div class="aira-type-label">{{ $t("page.research.assumptionsToVerify") }}</div>
+              <ul class="aira-type-meta mb-0 mt-1 pl-5">
+                <li v-for="item in airaGuidance.assumptions" :key="item">{{ item }}</li>
+              </ul>
+            </div>
+            <div v-if="airaGuidance.warnings.length" class="mt-3">
+              <div class="aira-type-label">{{ $t("page.research.draftWarnings") }}</div>
+              <ul class="aira-type-meta mb-0 mt-1 pl-5">
+                <li v-for="item in airaGuidance.warnings" :key="item">{{ item }}</li>
+              </ul>
+            </div>
+          </n-alert>
+        </section>
+
         <n-form-item :label="$t('page.research.taskName')" required>
-          <n-input v-model:value="form.title" :placeholder="$t('page.research.taskNamePlaceholder')" />
+          <n-input
+            v-model:value="form.title"
+            data-testid="research-task-title"
+            :placeholder="$t('page.research.taskNamePlaceholder')"
+          />
         </n-form-item>
         <n-form-item :label="$t('page.research.goal')" required>
           <n-input
             v-model:value="form.goal"
+            data-testid="research-task-goal"
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 8 }"
             :placeholder="$t('page.research.goalPlaceholder')"
@@ -50,6 +134,7 @@
         <n-form-item :label="$t('page.research.successCriteria')" required>
           <n-input
             v-model:value="criteriaText"
+            data-testid="research-task-success-criteria"
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 7 }"
             :placeholder="$t('page.research.criteriaPlaceholder')"
@@ -58,6 +143,7 @@
         <n-form-item :label="$t('page.research.stopConditions')">
           <n-input
             v-model:value="stopText"
+            data-testid="research-task-stop-conditions"
             type="textarea"
             :autosize="{ minRows: 2, maxRows: 6 }"
             :placeholder="$t('page.research.stopPlaceholder')"
@@ -367,6 +453,7 @@ import type {
 } from "@/service/api/knowledge"
 import type { ResearchCapabilityDescriptor } from "@/service/api/research-capabilities"
 import type {
+  AiraResearchTaskDraftResponse,
   ResearchEnvironmentExecutorBinding,
   ResearchTaskDetail,
   ResearchTaskDraft,
@@ -376,7 +463,11 @@ import type { ProtocolModels } from "@airalogy/shared/types"
 import { fetchKnowledgeItems } from "@/service/api/knowledge"
 import { fetchProtocols } from "@/service/api/project-protocols"
 import { fetchResearchCapabilities } from "@/service/api/research-capabilities"
-import { createResearchTask, previewResearchTask } from "@/service/api/research-tasks"
+import {
+  createResearchTask,
+  draftResearchTaskWithAira,
+  previewResearchTask,
+} from "@/service/api/research-tasks"
 import { fetchUserProjects } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
@@ -402,6 +493,7 @@ const protocolsLoading = ref(false)
 const knowledgeLoading = ref(false)
 const capabilitiesLoading = ref(false)
 const submitting = ref(false)
+const airaDrafting = ref(false)
 const projects = ref<Api.Project.MyProjectInfo[]>([])
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
 const knowledgeItems = ref<KnowledgeItem[]>([])
@@ -413,6 +505,12 @@ const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
 const deadlineAt = ref<number | null>(null)
+const airaQuestion = ref("")
+const airaConstraints = ref("")
+const airaGuidance = ref<Pick<
+  AiraResearchTaskDraftResponse,
+  "rationale" | "assumptions" | "warnings" | "model"
+> | null>(null)
 const RESEARCH_CREATOR_PROJECT_ROLES = new Set([1, 20, 30, 35])
 
 function emptyForm(): ResearchTaskDraft {
@@ -659,7 +757,40 @@ async function loadKnowledge(projectId: string) {
 
 async function handleProjectChange(value: string) {
   resetPreview()
+  airaGuidance.value = null
   await Promise.all([loadProtocols(value), loadCapabilities(value), loadKnowledge(value)])
+}
+
+async function handleAiraDraft() {
+  if (!form.project_id || !airaQuestion.value.trim())
+    return
+  airaDrafting.value = true
+  try {
+    const result = await draftResearchTaskWithAira({
+      project_id: form.project_id,
+      research_question: airaQuestion.value.trim(),
+      additional_constraints: airaConstraints.value.trim(),
+      autonomy_level: form.autonomy_level,
+    })
+    Object.assign(form, {
+      ...result.draft,
+      project_id: form.project_id,
+      autonomy_level: form.autonomy_level,
+    })
+    criteriaText.value = result.draft.success_criteria.join("\n")
+    stopText.value = result.draft.stop_conditions.join("\n")
+    airaGuidance.value = {
+      rationale: result.rationale,
+      assumptions: result.assumptions,
+      warnings: result.warnings,
+      model: result.model,
+    }
+    resetPreview()
+    window.$message?.success($t("page.research.airaTaskDraftReady"))
+  }
+  finally {
+    airaDrafting.value = false
+  }
 }
 
 async function openModal() {
@@ -727,6 +858,13 @@ async function handleCreate() {
   border: 1px solid rgb(229 231 235);
   border-radius: 0.75rem;
   background: rgb(249 250 251);
+  padding: 1rem;
+}
+
+.aira-task-brief {
+  border: 1px solid rgb(191 219 254);
+  border-radius: 0.875rem;
+  background: linear-gradient(145deg, rgb(239 246 255), rgb(248 250 252));
   padding: 1rem;
 }
 </style>

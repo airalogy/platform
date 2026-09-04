@@ -10,6 +10,8 @@ Research automation in Airalogy starts from a bounded `Research Task`, not from 
 4. Preview the destination and captured environment, then confirm creation.
 5. Start the Task. If Aira is available, it can advance the plan until it reaches a human, approval, tool, external-result, or final-review boundary. If AI is unavailable, the same Task remains usable through explicit Actions.
 
+When AI is available, you can instead begin by describing the scientific question and optional constraints in the **Aira intent entry**. Aira prepares an editable Task brief and may select only the Protocols, tools, reviewed Knowledge, resources, services, and Compute Environments that you can currently use. It cannot create the Task, reserve resources, spend funds, place an order, run code, or start an instrument from this step. Check the assumptions and warnings, edit every field as needed, then use the same deterministic preview and confirmation above. When AI is disabled, the intent entry disappears and the complete manual form remains available.
+
 Changing a Protocol or Knowledge item later does not silently change the captured Research Environment. Create a new plan or Run when the new version should apply.
 
 ## Register a Compute Environment

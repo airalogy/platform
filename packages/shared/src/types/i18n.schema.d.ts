@@ -880,6 +880,17 @@ declare namespace I18n {
         }
         createTask: string
         createTitle: string
+        airaIntentEntry: string
+        airaTaskBrief: string
+        airaTaskBriefHint: string
+        editableDraft: string
+        airaQuestionPlaceholder: string
+        airaConstraintsPlaceholder: string
+        generateTaskBrief: string
+        airaTaskDraftReady: string
+        airaDraftReadyWithModel: string
+        assumptionsToVerify: string
+        draftWarnings: string
         taskName: string
         taskNamePlaceholder: string
         goal: string

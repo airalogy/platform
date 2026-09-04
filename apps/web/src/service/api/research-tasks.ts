@@ -687,6 +687,22 @@ export interface ResearchTaskDraft {
   ai_model?: string
 }
 
+export interface AiraResearchTaskDraftRequest {
+  project_id: string
+  research_question: string
+  additional_constraints?: string
+  autonomy_level: ResearchTaskSummary["autonomy_level"]
+}
+
+export interface AiraResearchTaskDraftResponse {
+  draft: ResearchTaskDraft
+  rationale: string
+  assumptions: string[]
+  warnings: string[]
+  model: string
+  boundary: string
+}
+
 export interface ResearchTaskPreview {
   preview_digest: string
   command: Record<string, unknown>
@@ -779,6 +795,14 @@ async function getData<T>(options: Parameters<typeof request<T>>[0]): Promise<T>
 export function previewResearchTask(payload: ResearchTaskDraft) {
   return getData<ResearchTaskPreview>({
     url: "/research-tasks/preview",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function draftResearchTaskWithAira(payload: AiraResearchTaskDraftRequest) {
+  return getData<AiraResearchTaskDraftResponse>({
+    url: "/research-tasks/draft-with-aira",
     method: "POST",
     data: payload,
   })

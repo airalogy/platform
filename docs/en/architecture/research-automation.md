@@ -26,6 +26,8 @@ AI is the intelligent orchestration layer, not the system of record or the autho
 
 A `Research Task` is the top-level user-facing object for a bounded research objective. It includes the goal, success and stop criteria, Lab/Project scope, owner and participants, autonomy level, budget/time limits, applicable policies, one or more Research Runs, and a scientific terminal outcome distinct from execution success.
 
+The Aira intent entry is a goal-to-Task adapter, not a privileged write path. Platform first resolves a least-privilege catalog for the selected Project, user, and autonomy level. The model sees only currently readable reviewed Knowledge and capabilities with an executable, non-denied binding, and it may return only exact catalog identifiers plus bounded Task fields, assumptions, and warnings. No database transaction stays open during the provider call. After generation, Platform resolves every selected object and binding again; any permission, version, availability, or policy change fails closed. The result remains an editable `ResearchTaskDraft` and enters the ordinary preview-confirm contract. It creates no Task, approval, reservation, order, Compute Job, or instrument command, and disabling AI leaves the manual Task path unchanged.
+
 ### Research Run
 
 A `Research Run` is one recoverable execution, branch, replication, retry, or continuation. It pins a Research Environment snapshot, Protocol versions, and every plan revision. It resumes from durable events and never depends on one browser session or a single AI request.

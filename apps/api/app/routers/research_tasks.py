@@ -10,12 +10,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.config import config
 from app.database import DBSession
-from app.models.knowledge import KnowledgeItem, KnowledgeState, Visibility
+from app.models.knowledge import KnowledgeItem, KnowledgeState, OwnerScope, Visibility
 from app.models.lab import Lab
 from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
@@ -90,6 +90,7 @@ from app.services.research_budget import (
 )
 from app.services.research_capabilities import (
     protocol_capability,
+    research_capability_catalog,
     resource_capability,
     tool_capability,
 )
@@ -149,6 +150,7 @@ from app.services.research_services import (
     latest_service_offering_revision,
     offering_snapshot,
 )
+from app.services.research_task_drafts import generate_research_task_draft
 
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
 work_items_router = APIRouter(
@@ -221,6 +223,25 @@ class ResearchTaskDraft(BaseModel):
 
 class ResearchTaskCreate(ResearchTaskDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class AiraResearchTaskDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: UUID
+    research_question: str = Field(min_length=1, max_length=20_000)
+    additional_constraints: str = Field(default="", max_length=20_000)
+    autonomy_level: Literal[
+        "assisted", "bounded_autopilot", "autonomous_within_policy"
+    ] = "assisted"
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.research_question = self.research_question.strip()
+        self.additional_constraints = self.additional_constraints.strip()
+        if not self.research_question:
+            raise ValueError("Research question cannot be blank")
+        return self
 
 
 class TaskTransitionParams(BaseModel):
@@ -340,6 +361,190 @@ async def _task_context(
     if lab is None:
         raise HTTPException(status_code=404, detail="Lab not found")
     return task, project, lab
+
+
+async def _aira_task_draft_catalog(
+    db_session: DBSession,
+    *,
+    current_user: User,
+    project: Project,
+    autonomy_level: str,
+) -> dict[str, list[dict[str, Any]]]:
+    """Build a least-privilege catalog that Aira may recommend from."""
+
+    access = await resolve_structured_access(
+        db_session,
+        current_user.id,
+        project.lab_id,
+        project,
+        include_legacy=True,
+    )
+    descriptors = await research_capability_catalog(
+        db_session,
+        project=project,
+        include_resources=access.allows("resource.read"),
+        include_services=access.allows("research.service.use"),
+        include_compute=access.allows("research.compute.use"),
+    )
+
+    executable_protocols = []
+    executable_tools = []
+    for descriptor in [*descriptors["protocols"], *descriptors["tools"]]:
+        if not descriptor.available:
+            continue
+        target = (
+            executable_protocols if descriptor.kind == "protocol" else executable_tools
+        )
+        if len(target) >= 20:
+            continue
+        capability = descriptor.payload()
+        try:
+            binding = await resolve_executor_binding(
+                db_session,
+                lab_id=project.lab_id,
+                capability=capability,
+                owner_user_id=current_user.id,
+                project_id=project.id,
+                autonomy_level=autonomy_level,
+            )
+            enforce_environment_binding_scope(
+                binding,
+                project_id=project.id,
+                autonomy_level=autonomy_level,
+            )
+        except ValueError:
+            continue
+        if binding["approval_policy"] == "deny":
+            continue
+        target.append(
+            {
+                "id": descriptor.source_id,
+                "key": descriptor.source_id,
+                "name": descriptor.name,
+                "description": descriptor.description[:600],
+                "version": descriptor.version,
+                "risk": descriptor.risk,
+                "input_fields": list(
+                    (descriptor.input_schema.get("properties") or {}).keys()
+                )[:30],
+                "executor": {
+                    "type": binding["executor_type"],
+                    "approval_policy": binding["approval_policy"],
+                },
+            }
+        )
+
+    resources = []
+    for descriptor in descriptors["resources"][:20]:
+        resource_access = await resolve_resource_access(
+            db_session,
+            current_user.id,
+            project.lab_id,
+            resource_type_id=UUID(descriptor.source_id),
+        )
+        if descriptor.available and resource_access.allows("resource.read"):
+            resources.append(
+                {
+                    "id": descriptor.source_id,
+                    "name": descriptor.name,
+                    "description": descriptor.description[:600],
+                    "revision": descriptor.version,
+                    "capabilities": (descriptor.metadata or {}).get("capabilities")
+                    or {},
+                    "booking_policy": (descriptor.metadata or {}).get("booking_policy"),
+                }
+            )
+
+    knowledge_candidates = list(
+        (
+            await db_session.scalars(
+                select(KnowledgeItem)
+                .where(
+                    KnowledgeItem.lab_id == project.lab_id,
+                    KnowledgeItem.state == KnowledgeState.REVIEWED.value,
+                    KnowledgeItem.visibility != Visibility.RESTRICTED.value,
+                    KnowledgeItem.archived_at.is_(None),
+                    or_(
+                        and_(
+                            KnowledgeItem.scope_type == OwnerScope.PROJECT.value,
+                            KnowledgeItem.project_id == project.id,
+                        ),
+                        and_(
+                            KnowledgeItem.scope_type == OwnerScope.LAB.value,
+                            KnowledgeItem.project_id.is_(None),
+                        ),
+                    ),
+                )
+                .order_by(KnowledgeItem.updated_at.desc(), KnowledgeItem.id)
+                .limit(20)
+            )
+        ).all()
+    )
+    knowledge = []
+    for item in knowledge_candidates:
+        try:
+            await authorize_knowledge_item(db_session, current_user, item)
+        except HTTPException as error:
+            if error.status_code in {403, 404}:
+                continue
+            raise
+        knowledge.append(
+            {
+                "id": str(item.id),
+                "title": item.title,
+                "kind": item.kind,
+                "revision": item.revision,
+                "tags": item.tags,
+                "body": item.body[:800],
+            }
+        )
+
+    services = [
+        {
+            "id": item.source_id,
+            "name": item.name,
+            "description": item.description[:600],
+            "version": item.version,
+            "risk": item.risk,
+            "input_fields": list((item.input_schema.get("properties") or {}).keys())[
+                :30
+            ],
+            "provider": (item.metadata or {}).get("provider") or {},
+            "quote_required": (item.metadata or {}).get("quote_required"),
+            "base_price": (item.metadata or {}).get("base_price"),
+            "currency": (item.metadata or {}).get("currency"),
+        }
+        for item in descriptors["services"][:20]
+        if item.available
+    ]
+    compute = [
+        {
+            "id": item.source_id,
+            "name": item.name,
+            "description": item.description[:600],
+            "revision": item.version,
+            "risk": item.risk,
+            "input_fields": list((item.input_schema.get("properties") or {}).keys())[
+                :30
+            ],
+            "output_fields": list((item.output_schema.get("properties") or {}).keys())[
+                :30
+            ],
+            "allowed_languages": (item.metadata or {}).get("allowed_languages") or [],
+            "resource_limits": (item.metadata or {}).get("resource_limits") or {},
+            "network_policy": (item.metadata or {}).get("network_policy"),
+        }
+        for item in descriptors["compute"][:20]
+        if item.available
+    ]
+    return {
+        "protocols": executable_protocols,
+        "tools": executable_tools,
+        "knowledge": knowledge,
+        "resources": resources,
+        "services": services,
+        "compute": compute,
+    }
 
 
 async def _latest_run(db_session: DBSession, task_id: UUID) -> ResearchRun | None:
@@ -1367,6 +1572,83 @@ async def _task_detail(
             ),
             "can_manage_compute": resource_access.allows("research.compute.manage"),
         },
+    }
+
+
+@router.post("/draft-with-aira")
+async def draft_research_task_with_aira(
+    params: AiraResearchTaskDraftRequest,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    if not config.effective_ai_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Aira is unavailable. Create the same Research Task manually "
+                "with the deterministic form."
+            ),
+        )
+    project = await _project(db_session, params.project_id)
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.create",
+    )
+    catalog = await _aira_task_draft_catalog(
+        db_session,
+        current_user=current_user,
+        project=project,
+        autonomy_level=params.autonomy_level,
+    )
+    model_name = config.CHAT_MODEL_FAST
+    usage_context = create_usage_context(
+        feature="research.task.draft",
+        user_id=current_user.id,
+        lab_id=project.lab_id,
+        project_id=project.id,
+        attributes={"autonomy_level": params.autonomy_level},
+    )
+    # Do not keep a database transaction open across the model provider call.
+    await db_session.commit()
+    output = await generate_research_task_draft(
+        research_question=params.research_question,
+        additional_constraints=params.additional_constraints,
+        autonomy_level=params.autonomy_level,
+        catalog=catalog,
+        model_name=model_name,
+        usage_context=usage_context,
+    )
+    draft = ResearchTaskDraft(
+        project_id=project.id,
+        title=output.title,
+        goal=output.goal,
+        success_criteria=output.success_criteria,
+        stop_conditions=output.stop_conditions,
+        autonomy_level=params.autonomy_level,
+        protocol_ids=output.protocol_ids,
+        tool_keys=output.tool_keys,
+        knowledge_ids=output.knowledge_ids,
+        resource_type_ids=output.resource_type_ids,
+        service_offering_ids=output.service_offering_ids,
+        compute_environment_ids=output.compute_environment_ids,
+        owner_user_id=current_user.id,
+        ai_model=model_name,
+    )
+    # Re-resolve every selected object and executor after generation. Catalog or
+    # permission changes fail closed before the draft is returned to the user.
+    await _validate_task_draft(db_session, current_user, draft)
+    return {
+        "draft": draft.model_dump(mode="json", exclude_none=True),
+        "rationale": output.rationale,
+        "assumptions": output.assumptions,
+        "warnings": output.warnings,
+        "model": model_name,
+        "boundary": (
+            "Editable draft only. No Task, approval, reservation, order, job, or "
+            "instrument command was created."
+        ),
     }
 
 

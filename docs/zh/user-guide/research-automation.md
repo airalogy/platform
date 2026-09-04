@@ -10,6 +10,8 @@ Airalogy 的科研自动化从有边界的 `Research Task` 开始，而不是从
 4. 预览保存位置与将被捕获的环境，然后确认创建。
 5. 开始 Task。Aira 可用时，它会持续推进，直到遇到人工、审批、工具、外部结果或最终审核边界；AI 不可用时，同一 Task 仍可通过明确的 Actions 执行。
 
+AI 可用时，也可先在 **Aira 意图入口**中说明科学问题和可选约束。Aira 只能从你当前有权使用的 Protocol、Tool、已审核 Knowledge、资源、服务和 Compute Environment 中生成可编辑的 Task 简报。这一步不会创建 Task、预留资源、支出资金、下单、运行代码或启动仪器。请检查假设和风险提示，按需编辑所有字段，再走同一套确定性预览和确认流程。AI 关闭时，意图入口自动隐藏，完整手工表单仍然可用。
+
 之后修改 Protocol 或 Knowledge 不会静默改变已捕获的 Research Environment。只有新建计划或 Run 后，新版本才应进入执行。
 
 ## 登记 Compute Environment
