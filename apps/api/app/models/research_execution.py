@@ -270,6 +270,22 @@ class ResearchInstrumentJobStatus(StrEnum):
     STOPPED = "stopped"
 
 
+class ResearchInstrumentControlMode(StrEnum):
+    BOUNDED_SEQUENCE = "bounded_sequence"
+    FEEDBACK_LOOP = "feedback_loop"
+
+
+class ResearchInstrumentControlStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    PAUSED_FOR_REVIEW = "paused_for_review"
+    STOP_REQUESTED = "stop_requested"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    STOPPED = "stopped"
+
+
 class ResearchComputeJobStatus(StrEnum):
     AWAITING_APPROVAL = "awaiting_approval"
     QUEUED = "queued"
@@ -1735,6 +1751,18 @@ class ResearchInstrumentJob(Base):
             "status",
             "lease_expires_at",
         ),
+        UniqueConstraint(
+            "control_session_id",
+            "control_execution_index",
+            name="uq_research_instrument_job_control_execution",
+        ),
+        CheckConstraint(
+            "(control_session_id IS NULL AND control_step_key IS NULL AND "
+            "control_execution_index IS NULL) OR "
+            "(control_session_id IS NOT NULL AND control_step_key IS NOT NULL AND "
+            "control_execution_index IS NOT NULL)",
+            name="ck_research_instrument_job_control_context",
+        ),
     )
 
     json_exclude_fields: ClassVar[list[str]] = ["lease_token_digest"]
@@ -1770,6 +1798,12 @@ class ResearchInstrumentJob(Base):
         nullable=False,
         index=True,
     )
+    control_session_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("research_instrument_control_sessions.id", ondelete="CASCADE"),
+        index=True,
+    )
+    control_step_key: Mapped[str | None] = mapped_column(String(64))
+    control_execution_index: Mapped[int | None]
     command_key: Mapped[str] = mapped_column(String(128), nullable=False)
     command_version: Mapped[str] = mapped_column(String(64), nullable=False)
     command_revision: Mapped[int] = mapped_column(nullable=False)
@@ -1803,6 +1837,104 @@ class ResearchInstrumentJob(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     stop_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchInstrumentControlSession(Base):
+    """A human-confirmed, bounded state machine over ordinary Instrument Jobs."""
+
+    __tablename__ = "research_instrument_control_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "idempotency_key", name="uq_research_instrument_control_key"
+        ),
+        CheckConstraint(
+            "mode IN ('bounded_sequence', 'feedback_loop')",
+            name="ck_research_instrument_control_mode",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'paused_for_review', "
+            "'stop_requested', 'completed', 'failed', 'cancelled', 'stopped')",
+            name="ck_research_instrument_control_status",
+        ),
+        CheckConstraint(
+            "max_steps BETWEEN 1 AND 50",
+            name="ck_research_instrument_control_max_steps",
+        ),
+        CheckConstraint(
+            "max_duration_seconds BETWEEN 1 AND 86400",
+            name="ck_research_instrument_control_max_duration",
+        ),
+        CheckConstraint(
+            "executed_steps >= 0 AND executed_steps <= max_steps",
+            name="ck_research_instrument_control_executed_steps",
+        ),
+        CheckConstraint(
+            "issued_steps >= executed_steps",
+            name="ck_research_instrument_control_issued_steps",
+        ),
+        CheckConstraint(
+            "length(program_digest) = 64",
+            name="ck_research_instrument_control_digest",
+        ),
+        CheckConstraint(
+            "length(creation_digest) = 64",
+            name="ck_research_instrument_control_creation_digest",
+        ),
+        Index("ix_research_instrument_control_run_status", "run_id", "status"),
+        Index("ix_research_instrument_control_gateway_status", "gateway_id", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    gateway_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_instrument_gateways.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    resource_id: Mapped[UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="RESTRICT"), nullable=False
+    )
+    equipment_booking_id: Mapped[UUID] = mapped_column(
+        ForeignKey("equipment_bookings.id", ondelete="RESTRICT"), nullable=False
+    )
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ResearchInstrumentControlStatus.QUEUED.value
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    program: Mapped[dict] = mapped_column(JSON, nullable=False)
+    program_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    creation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    entry_step_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    current_step_key: Mapped[str | None] = mapped_column(String(64))
+    pending_step_key: Mapped[str | None] = mapped_column(String(64))
+    issued_steps: Mapped[int] = mapped_column(nullable=False, default=0)
+    executed_steps: Mapped[int] = mapped_column(nullable=False, default=0)
+    max_steps: Mapped[int] = mapped_column(nullable=False)
+    max_duration_seconds: Mapped[int] = mapped_column(nullable=False)
+    pause_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    error: Mapped[str | None] = mapped_column(Text)
+    stop_reason: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

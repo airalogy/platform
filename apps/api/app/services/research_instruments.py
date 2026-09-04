@@ -665,4 +665,17 @@ async def reconcile_expired_instrument_leases(
             payload={"instrument_job_id": str(job.id), "reason": reason},
             idempotency_key=f"instrument-job:{job.id}:lease-lost:{job.attempt_count}",
         )
+        if getattr(job, "control_session_id", None) is not None:
+            from app.services.research_instrument_control import (
+                mark_control_session_stopping,
+            )
+
+            await mark_control_session_stopping(
+                db_session,
+                job=job,
+                task=task,
+                run=run,
+                reason=reason,
+                stopped=False,
+            )
     return {"recovered": recovered, "stop_requested": stopped}

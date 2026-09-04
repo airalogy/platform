@@ -403,6 +403,28 @@
                             {{ $t("page.research.instrumentAttempt", { count: action.instrument_job.attempt_count }) }}
                             · {{ $t("page.research.resourceRevision", { revision: action.instrument_job.resource_revision }) }}
                           </div>
+                          <div v-if="action.instrument_control" class="mt-2 flex flex-wrap items-center gap-2">
+                            <n-tag type="warning" size="small" round>
+                              {{ action.instrument_control.mode === "feedback_loop" ? $t("page.research.feedbackLoop") : $t("page.research.boundedSequence") }}
+                            </n-tag>
+                            <span class="aira-type-meta">
+                              {{ $t("page.research.controlStepProgress", {
+                                step: action.instrument_job.control_execution_index,
+                                executed: action.instrument_control.executed_steps,
+                                maximum: action.instrument_control.max_steps,
+                              }) }}
+                            </span>
+                            <n-tag size="small" round>
+                              {{ instrumentControlStatusLabel(action.instrument_control.status) }}
+                            </n-tag>
+                          </div>
+                          <n-alert
+                            v-if="action.instrument_control?.pause_reason && isCurrentControlAction(action)"
+                            type="warning"
+                            class="mt-2"
+                          >
+                            {{ action.instrument_control.pause_reason }}
+                          </n-alert>
                           <div v-if="action.instrument_job.heartbeat_at" class="aira-type-meta mt-1">
                             {{ $t("page.research.lastGatewayHeartbeat") }} · {{ formatDateTime(action.instrument_job.heartbeat_at) }}
                           </div>
@@ -419,7 +441,14 @@
                             <pre class="mt-2">{{ formatPayload(action.instrument_job.safety_attestation) }}</pre>
                           </details>
                         </div>
+                        <research-instrument-control-actions
+                          v-if="action.instrument_control"
+                          :session="action.instrument_control"
+                          :job="action.instrument_job"
+                          @changed="() => loadTask(true)"
+                        />
                         <research-instrument-stop
+                          v-else
                           :job="action.instrument_job"
                           @stopped="() => loadTask(true)"
                         />
@@ -1037,6 +1066,7 @@ import ResearchComputeActionModal from "./components/research-compute-action-mod
 import ResearchComputeJobActions from "./components/research-compute-job-actions.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
 import ResearchHumanWorkActionModal from "./components/research-human-work-action-modal.vue"
+import ResearchInstrumentControlActions from "./components/research-instrument-control-actions.vue"
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchReproductionReview from "./components/research-reproduction-review.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
@@ -1430,6 +1460,17 @@ function instrumentJobStatusLabel(status: string) {
   return $t(`page.research.instrumentJobStatus.${status}` as I18n.I18nKey)
 }
 
+function instrumentControlStatusLabel(status: string) {
+  return $t(`page.research.instrumentControlStatus.${status}` as I18n.I18nKey)
+}
+
+function isCurrentControlAction(action: ResearchAction) {
+  if (!action.instrument_job || !action.instrument_control)
+    return false
+  const index = action.instrument_job.control_execution_index || 0
+  return index === action.instrument_control.issued_steps
+}
+
 function computeJobStatusLabel(status: string) {
   return $t(`page.research.computeJobStatus.${status}` as I18n.I18nKey)
 }
@@ -1757,6 +1798,15 @@ function eventLabel(kind: string) {
     "instrument_job.completed",
     "instrument_job.failed",
     "instrument_job.stopped",
+    "instrument_control.created",
+    "instrument_control.step_queued",
+    "instrument_control.transition_evaluated",
+    "instrument_control.paused_for_review",
+    "instrument_control.resumed",
+    "instrument_control.stop_requested",
+    "instrument_control.stopped",
+    "instrument_control.completed",
+    "instrument_control.failed",
     "compute_job.requested",
     "compute_job.queued",
     "compute_job.leased",

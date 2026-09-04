@@ -115,6 +115,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     sample_lineage_revision = import_module(
         "migrations.versions.0044_sample_lineage_semantics"
     )
+    instrument_control_revision = import_module(
+        "migrations.versions.0047_instrument_control_sessions"
+    )
     import_models()
 
     later_tables = {
@@ -176,9 +179,11 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     assert autonomy_grant_revision.down_revision == (
         "0042_human_work_review_notifications"
     )
-    assert sample_lineage_revision.down_revision == (
-        "0043_research_autonomy_grants"
+    assert sample_lineage_revision.down_revision == ("0043_research_autonomy_grants")
+    assert instrument_control_revision.down_revision == (
+        "0046_research_reproduction_assessments"
     )
+    later_tables.update(instrument_control_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

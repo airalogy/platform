@@ -104,6 +104,158 @@
           </n-form>
         </n-tab-pane>
 
+        <n-tab-pane name="control" :tab="$t('page.research.instrumentControl')">
+          <n-alert type="warning" class="mb-4">
+            {{ $t("page.research.instrumentControlHint") }}
+          </n-alert>
+          <n-form label-placement="top">
+            <div class="control-grid">
+              <n-form-item :label="$t('page.research.controlMode')" required>
+                <n-radio-group v-model:value="controlMode">
+                  <n-space>
+                    <n-radio value="bounded_sequence">
+                      {{ $t("page.research.boundedSequence") }}
+                    </n-radio>
+                    <n-radio value="feedback_loop">
+                      {{ $t("page.research.feedbackLoop") }}
+                    </n-radio>
+                  </n-space>
+                </n-radio-group>
+              </n-form-item>
+              <n-form-item :label="$t('page.research.approvedBooking')" required>
+                <n-select
+                  v-model:value="controlBookingId"
+                  :options="controlBookingOptions"
+                  :loading="instrumentsLoading"
+                  :placeholder="$t('page.research.selectApprovedBooking')"
+                />
+              </n-form-item>
+            </div>
+            <n-form-item :label="$t('page.research.actionTitle')" required>
+              <n-input
+                v-model:value="controlTitle"
+                :placeholder="$t('page.research.instrumentControlTitlePlaceholder')"
+              />
+            </n-form-item>
+            <n-form-item :label="$t('page.research.actionDescription')">
+              <n-input
+                v-model:value="controlDescription"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 5 }"
+              />
+            </n-form-item>
+            <div class="control-grid control-grid--limits">
+              <n-form-item :label="$t('page.research.entryStep')" required>
+                <n-select v-model:value="controlEntryStepKey" :options="controlEntryOptions" />
+              </n-form-item>
+              <n-form-item
+                v-if="controlMode === 'feedback_loop'"
+                :label="$t('page.research.maximumControlSteps')"
+                required
+              >
+                <n-input-number v-model:value="controlMaxSteps" :min="controlSteps.length" :max="50" />
+              </n-form-item>
+              <n-form-item :label="$t('page.research.maximumDurationMinutes')" required>
+                <n-input-number v-model:value="controlDurationMinutes" :min="1" :max="1440" />
+              </n-form-item>
+            </div>
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <div class="aira-type-card-title">
+                  {{ $t("page.research.controlSteps") }}
+                </div>
+                <div class="aira-type-meta mt-1">
+                  {{ $t("page.research.controlStepsHint") }}
+                </div>
+              </div>
+              <n-button size="small" secondary @click="addControlStep">
+                {{ $t("page.research.addControlStep") }}
+              </n-button>
+            </div>
+            <div class="space-y-3">
+              <section
+                v-for="(step, index) in controlSteps"
+                :key="index"
+                class="control-step"
+              >
+                <div class="mb-3 flex items-center justify-between gap-3">
+                  <strong>{{ $t("page.research.controlStepNumber", { number: index + 1 }) }}</strong>
+                  <n-button
+                    quaternary
+                    size="small"
+                    :disabled="controlSteps.length === 1"
+                    @click="removeControlStep(index)"
+                  >
+                    {{ $t("common.delete") }}
+                  </n-button>
+                </div>
+                <div class="control-grid">
+                  <n-form-item :label="$t('page.research.stepKey')" required>
+                    <n-input
+                      :value="step.key"
+                      placeholder="observe"
+                      @update:value="value => updateControlStepKey(index, value)"
+                    />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.instrumentCommand')" required>
+                    <n-select
+                      v-model:value="step.commandId"
+                      :options="controlCommandOptions"
+                      :placeholder="$t('page.research.selectInstrumentCommand')"
+                    />
+                  </n-form-item>
+                </div>
+                <n-form-item
+                  :label="$t('page.research.instrumentArguments')"
+                  required
+                  :validation-status="parseJsonObject(step.argumentsText) ? undefined : 'error'"
+                >
+                  <n-input
+                    v-model:value="step.argumentsText"
+                    type="textarea"
+                    :autosize="{ minRows: 2, maxRows: 8 }"
+                    class="font-mono"
+                  />
+                </n-form-item>
+                <div class="control-grid">
+                  <n-form-item :label="$t('page.research.onSuccess')" required>
+                    <n-select v-model:value="step.onTrue" :options="controlTargetOptions" />
+                  </n-form-item>
+                  <n-form-item v-if="controlMode === 'feedback_loop'" :label="$t('page.research.branchOnResult')">
+                    <n-switch v-model:value="step.conditionEnabled" />
+                  </n-form-item>
+                </div>
+                <div v-if="controlMode === 'feedback_loop' && step.conditionEnabled" class="control-condition">
+                  <n-form-item :label="$t('page.research.resultPath')" required>
+                    <n-input v-model:value="step.conditionPath" placeholder="reading.temperature" />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.comparison')" required>
+                    <n-select
+                      v-model:value="step.conditionOperator"
+                      :options="[
+                        { label: '=', value: 'eq' },
+                        { label: '≠', value: 'ne' },
+                        { label: '<', value: 'lt' },
+                        { label: '≤', value: 'lte' },
+                        { label: '>', value: 'gt' },
+                        { label: '≥', value: 'gte' },
+                        { label: $t('page.research.inList'), value: 'in' },
+                        { label: $t('page.research.exists'), value: 'exists' },
+                      ]"
+                    />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.comparisonValue')" required>
+                    <n-input v-model:value="step.conditionValueText" class="font-mono" />
+                  </n-form-item>
+                  <n-form-item :label="$t('page.research.otherwise')" required>
+                    <n-select v-model:value="step.onFalse" :options="controlTargetOptions" />
+                  </n-form-item>
+                </div>
+              </section>
+            </div>
+          </n-form>
+        </n-tab-pane>
+
         <n-tab-pane name="wait" :tab="$t('page.research.waitEventAction')">
           <n-alert type="warning" class="mb-4">
             {{ $t("page.research.waitEventHint") }}
@@ -208,6 +360,59 @@
             {{ $t("page.research.instrumentNoAutomaticRetry") }}
           </n-alert>
         </template>
+        <template v-else-if="previewKind === 'control'">
+          <div class="mt-4 flex flex-wrap items-center gap-2">
+            <n-tag type="warning" round>
+              {{ $t("page.research.instrumentControl") }}
+            </n-tag>
+            <n-tag size="small" round>
+              {{ preview.instrument_control?.mode === "feedback_loop" ? $t("page.research.feedbackLoop") : $t("page.research.boundedSequence") }}
+            </n-tag>
+            <n-tag :type="instrumentRiskType(preview.instrument_control?.highest_risk)" size="small" round>
+              {{ instrumentRiskLabel(preview.instrument_control?.highest_risk) }}
+            </n-tag>
+          </div>
+          <dl class="digital-preview__facts mt-3">
+            <div>
+              <dt>{{ $t("page.research.equipment") }}</dt>
+              <dd>{{ preview.instrument_control?.resource?.name }} · {{ preview.instrument_control?.resource?.code }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t("page.research.gateway") }}</dt>
+              <dd>{{ preview.instrument_control?.gateway?.name }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t("page.research.controlSteps") }}</dt>
+              <dd>{{ preview.instrument_control?.step_count }} / {{ preview.instrument_control?.max_steps }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t("page.research.maximumDurationMinutes") }}</dt>
+              <dd>{{ Math.round(Number(preview.instrument_control?.max_duration_seconds || 0) / 60) }}</dd>
+            </div>
+          </dl>
+          <ol class="control-preview-steps mt-3">
+            <li
+              v-for="step in (preview.command.program?.steps || [])"
+              :key="String(step.key)"
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <strong>{{ String(step.key) }}</strong>
+                <span>{{ String(step.command?.name || step.command?.command_key) }}</span>
+                <n-tag :type="instrumentRiskType(step.command?.risk)" size="small" round>
+                  {{ instrumentRiskLabel(step.command?.risk) }}
+                </n-tag>
+              </div>
+              <div class="aira-type-meta mt-1">
+                → {{ String(step.transition?.on_true) }}<template v-if="step.transition?.condition">
+                  / {{ String(step.transition?.on_false) }}
+                </template>
+              </div>
+            </li>
+          </ol>
+          <n-alert type="warning" class="mt-3">
+            {{ $t("page.research.instrumentControlPreviewWarning") }}
+          </n-alert>
+        </template>
         <template v-else>
           <div class="mt-4 flex flex-wrap items-center gap-2">
             <n-tag type="warning" round>
@@ -258,6 +463,8 @@
 import type {
   DigitalActionPreview,
   InstrumentActionDraft,
+  InstrumentControlDraft,
+  InstrumentControlStepDraft,
   ResearchInstrumentCommandOption,
   ResearchToolDefinition,
   ToolActionDraft,
@@ -266,11 +473,13 @@ import type {
 import type { EquipmentBooking } from "@/service/api/resources"
 import {
   createInstrumentAction,
+  createInstrumentControlSession,
   createToolAction,
   createWaitAction,
   fetchResearchInstrumentCommands,
   fetchResearchTools,
   previewInstrumentAction,
+  previewInstrumentControlSession,
   previewToolAction,
   previewWaitAction,
 } from "@/service/api/research-actions"
@@ -280,8 +489,19 @@ import { nanoid } from "nanoid"
 const props = defineProps<{ taskId: string }>()
 const emit = defineEmits<{ created: [] }>()
 
-type Mode = "tool" | "instrument" | "wait"
+type Mode = "tool" | "instrument" | "control" | "wait"
 type WaitPreset = "data_asset" | "research_file" | "external_service"
+interface ControlStepEditor {
+  key: string
+  commandId: string
+  argumentsText: string
+  onTrue: string
+  conditionEnabled: boolean
+  conditionPath: string
+  conditionOperator: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | "in" | "exists"
+  conditionValueText: string
+  onFalse: string
+}
 
 const visible = ref(false)
 const mode = ref<Mode>("tool")
@@ -297,6 +517,15 @@ const toolLimit = ref(20)
 const waitPreset = ref<WaitPreset>("data_asset")
 const waitDueAt = ref<number | null>(null)
 const instrumentArgumentsText = ref("{}")
+const controlMode = ref<InstrumentControlDraft["mode"]>("bounded_sequence")
+const controlTitle = ref("")
+const controlDescription = ref("")
+const controlBookingId = ref("")
+const controlEntryStepKey = ref("")
+const controlMaxSteps = ref(1)
+const controlDurationMinutes = ref(60)
+const controlIdempotencyKey = ref("")
+const controlSteps = ref<ControlStepEditor[]>([])
 
 const toolDraft = reactive<ToolActionDraft>({
   tool_key: "",
@@ -387,6 +616,37 @@ const bookingOptions = computed(() =>
     value: item.id,
   })),
 )
+const controlBookingOptions = computed(() => {
+  const bookings = new Map<string, EquipmentBooking>()
+  for (const instrument of instruments.value) {
+    for (const booking of instrument.bookings)
+      bookings.set(booking.id, booking)
+  }
+  return [...bookings.values()].map(item => ({
+    label: formatBooking(item),
+    value: item.id,
+  }))
+})
+const controlCommandOptions = computed(() =>
+  instruments.value
+    .filter(item => item.bookings.some(booking => booking.id === controlBookingId.value))
+    .map(item => ({
+      label: `${item.name} · ${item.resource.name} · v${item.command_version}`,
+      value: item.id,
+    })),
+)
+const controlTargetOptions = computed(() => [
+  ...controlSteps.value
+    .filter(item => item.key.trim())
+    .map(item => ({ label: item.key.trim(), value: item.key.trim() })),
+  { label: $t("page.research.controlComplete"), value: "complete" },
+  { label: $t("page.research.controlPause"), value: "pause" },
+])
+const controlEntryOptions = computed(() =>
+  controlSteps.value
+    .filter(item => item.key.trim())
+    .map(item => ({ label: item.key.trim(), value: item.key.trim() })),
+)
 const instrumentArguments = computed<Record<string, unknown> | null>(() => {
   try {
     const value = JSON.parse(instrumentArgumentsText.value)
@@ -397,6 +657,65 @@ const instrumentArguments = computed<Record<string, unknown> | null>(() => {
   }
 })
 const instrumentArgumentsValid = computed(() => instrumentArguments.value !== null)
+const controlPayload = computed<InstrumentControlDraft | null>(() => {
+  const keys = controlSteps.value.map(item => item.key.trim().toLowerCase())
+  if (
+    !controlTitle.value.trim()
+    || !controlBookingId.value
+    || !controlEntryStepKey.value
+    || !controlSteps.value.length
+    || new Set(keys).size !== keys.length
+    || keys.some(key => !/^[a-z][a-z0-9_-]{0,63}$/.test(key))
+  ) {
+    return null
+  }
+  const steps: InstrumentControlStepDraft[] = []
+  for (const item of controlSteps.value) {
+    const argumentsValue = parseJsonObject(item.argumentsText)
+    const allowedTargets = new Set([...keys, "complete", "pause"])
+    if (!item.commandId || !argumentsValue || !allowedTargets.has(item.onTrue)) {
+      return null
+    }
+    let condition = null
+    if (item.conditionEnabled) {
+      const value = parseJsonValue(item.conditionValueText)
+      if (
+        controlMode.value !== "feedback_loop"
+        || !/^[a-z][\w-]*(?:\.[a-z][\w-]*){0,7}$/i.test(item.conditionPath)
+        || value === undefined
+        || !allowedTargets.has(item.onFalse)
+      ) {
+        return null
+      }
+      condition = {
+        path: item.conditionPath,
+        operator: item.conditionOperator,
+        value,
+      }
+    }
+    steps.push({
+      key: item.key.trim().toLowerCase(),
+      command_id: item.commandId,
+      arguments: argumentsValue,
+      transition: {
+        condition,
+        on_true: item.onTrue,
+        on_false: condition ? item.onFalse : null,
+      },
+    })
+  }
+  return {
+    mode: controlMode.value,
+    title: controlTitle.value.trim(),
+    description: controlDescription.value.trim(),
+    equipment_booking_id: controlBookingId.value,
+    entry_step_key: controlEntryStepKey.value,
+    steps,
+    max_steps: controlMode.value === "bounded_sequence" ? steps.length : controlMaxSteps.value,
+    max_duration_seconds: controlDurationMinutes.value * 60,
+    idempotency_key: controlIdempotencyKey.value,
+  }
+})
 const waitPresetOptions = computed(() => [
   { label: $t("page.research.waitDataAsset"), value: "data_asset" },
   { label: $t("page.research.waitResearchFile"), value: "research_file" },
@@ -411,7 +730,9 @@ const canPreview = computed(() =>
         && instrumentDraft.equipment_booking_id
         && instrumentArgumentsValid.value,
       )
-      : Boolean(waitDraft.title.trim() && (!waitDueAt.value || waitDueAt.value > Date.now())),
+      : mode.value === "control"
+        ? Boolean(controlPayload.value)
+        : Boolean(waitDraft.title.trim() && (!waitDueAt.value || waitDueAt.value > Date.now())),
 )
 
 async function loadTools() {
@@ -431,9 +752,80 @@ async function loadInstruments() {
     instruments.value = (await fetchResearchInstrumentCommands(props.taskId)).items
     instrumentDraft.command_id ||= instruments.value.find(item => item.bookings.length)?.id || ""
     selectDefaultBooking()
+    controlBookingId.value ||= controlBookingOptions.value[0]?.value || ""
+    if (!controlSteps.value.length)
+      addControlStep()
   }
   finally {
     instrumentsLoading.value = false
+  }
+}
+
+function parseJsonValue(text: string): unknown | undefined {
+  try {
+    return JSON.parse(text)
+  }
+  catch {
+    return undefined
+  }
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  const value = parseJsonValue(text)
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function addControlStep() {
+  const number = controlSteps.value.length + 1
+  const key = `step_${number}`
+  const previous = controlSteps.value.at(-1)
+  if (previous && previous.onTrue === "complete")
+    previous.onTrue = key
+  controlSteps.value.push({
+    key,
+    commandId: controlCommandOptions.value[0]?.value || "",
+    argumentsText: "{}",
+    onTrue: "complete",
+    conditionEnabled: false,
+    conditionPath: "value",
+    conditionOperator: "gte",
+    conditionValueText: "0",
+    onFalse: "pause",
+  })
+  controlEntryStepKey.value ||= key
+  controlMaxSteps.value = Math.max(controlMaxSteps.value, controlSteps.value.length)
+}
+
+function removeControlStep(index: number) {
+  const removed = controlSteps.value[index]
+  controlSteps.value.splice(index, 1)
+  if (controlEntryStepKey.value === removed?.key)
+    controlEntryStepKey.value = controlSteps.value[0]?.key || ""
+  for (const step of controlSteps.value) {
+    if (step.onTrue === removed?.key)
+      step.onTrue = "complete"
+    if (step.onFalse === removed?.key)
+      step.onFalse = "pause"
+  }
+  controlMaxSteps.value = Math.max(controlSteps.value.length, controlMaxSteps.value)
+}
+
+function updateControlStepKey(index: number, value: string) {
+  const step = controlSteps.value[index]
+  if (!step)
+    return
+  const previous = step.key
+  const normalized = value.trim().toLowerCase()
+  step.key = normalized
+  if (controlEntryStepKey.value === previous)
+    controlEntryStepKey.value = normalized
+  for (const item of controlSteps.value) {
+    if (item.onTrue === previous)
+      item.onTrue = normalized
+    if (item.onFalse === previous)
+      item.onFalse = normalized
   }
 }
 
@@ -511,6 +903,15 @@ function reset() {
   instrumentDraft.description = ""
   instrumentDraft.idempotency_key = ""
   instrumentArgumentsText.value = "{}"
+  controlMode.value = "bounded_sequence"
+  controlTitle.value = ""
+  controlDescription.value = ""
+  controlBookingId.value = ""
+  controlEntryStepKey.value = ""
+  controlMaxSteps.value = 1
+  controlDurationMinutes.value = 60
+  controlIdempotencyKey.value = ""
+  controlSteps.value = []
   applyWaitPreset()
 }
 
@@ -533,6 +934,13 @@ async function previewAction() {
       instrumentDraft.arguments = instrumentArguments.value || {}
       instrumentDraft.idempotency_key ||= `instrument-${nanoid(16)}`
       preview.value = await previewInstrumentAction(props.taskId, { ...instrumentDraft })
+    }
+    else if (mode.value === "control") {
+      controlIdempotencyKey.value ||= `instrument-control-${nanoid(16)}`
+      const payload = controlPayload.value
+      if (!payload)
+        return
+      preview.value = await previewInstrumentControlSession(props.taskId, payload)
     }
     else {
       applyWaitPreset()
@@ -564,6 +972,15 @@ async function confirmAction() {
         preview_digest: preview.value.preview_digest,
       })
     }
+    else if (previewKind.value === "control") {
+      const payload = controlPayload.value
+      if (!payload)
+        return
+      await createInstrumentControlSession(props.taskId, {
+        ...payload,
+        preview_digest: preview.value.preview_digest,
+      })
+    }
     else {
       await createWaitAction(props.taskId, {
         ...waitDraft,
@@ -581,6 +998,19 @@ async function confirmAction() {
 
 watch(waitPreset, applyWaitPreset, { immediate: true })
 watch(() => instrumentDraft.command_id, selectDefaultBooking)
+watch(controlBookingId, () => {
+  const allowed = new Set(controlCommandOptions.value.map(item => item.value))
+  for (const step of controlSteps.value) {
+    if (!allowed.has(step.commandId))
+      step.commandId = controlCommandOptions.value[0]?.value || ""
+  }
+})
+watch(controlMode, (value) => {
+  if (value === "bounded_sequence") {
+    for (const step of controlSteps.value)
+      step.conditionEnabled = false
+  }
+})
 </script>
 
 <style scoped>
@@ -613,7 +1043,53 @@ watch(() => instrumentDraft.command_id, selectDefaultBooking)
   font-size: 0.8125rem;
 }
 
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+}
+
+.control-grid--limits {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.control-step {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.75rem;
+  background: rgb(248 250 252);
+  padding: 0.875rem;
+}
+
+.control-condition {
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr 1fr 1fr;
+  gap: 0 0.75rem;
+  border-top: 1px dashed rgb(203 213 225);
+  padding-top: 0.75rem;
+}
+
+.control-preview-steps {
+  display: grid;
+  gap: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.control-preview-steps li {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.625rem;
+  background: white;
+  padding: 0.625rem 0.75rem;
+}
+
+@media (max-width: 42rem) {
+  .control-grid,
+  .control-grid--limits,
+  .control-condition {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 :global(.research-digital-modal) {
-  width: min(42rem, calc(100vw - 2rem));
+  width: min(54rem, calc(100vw - 2rem));
 }
 </style>

@@ -1331,6 +1331,52 @@ declare namespace I18n {
         toolActionHint: string
         instrumentAction: string
         instrumentActionHint: string
+        instrumentControl: string
+        instrumentControlHint: string
+        instrumentControlTitlePlaceholder: string
+        controlMode: string
+        boundedSequence: string
+        feedbackLoop: string
+        entryStep: string
+        maximumControlSteps: string
+        maximumDurationMinutes: string
+        controlSteps: string
+        controlStepsHint: string
+        addControlStep: string
+        controlStepNumber: string
+        stepKey: string
+        onSuccess: string
+        branchOnResult: string
+        resultPath: string
+        comparison: string
+        comparisonValue: string
+        otherwise: string
+        inList: string
+        exists: string
+        controlComplete: string
+        controlPause: string
+        instrumentControlPreviewWarning: string
+        controlStepProgress: string
+        instrumentControlStatus: {
+          queued: string
+          running: string
+          paused_for_review: string
+          stop_requested: string
+          completed: string
+          failed: string
+          cancelled: string
+          stopped: string
+        }
+        reviewAndResumeControl: string
+        stopControlSession: string
+        pendingStep: string
+        controlProgress: string
+        instrumentControlStopHint: string
+        instrumentControlResumeConfirm: string
+        instrumentControlStopConfirm: string
+        confirmResumeControl: string
+        confirmStopControl: string
+        instrumentControlResumed: string
         instrumentCommand: string
         selectInstrumentCommand: string
         noInstrumentCommands: string
@@ -1859,6 +1905,22 @@ declare namespace I18n {
           tool_job_started: string
           tool_job_completed: string
           tool_job_failed: string
+          instrument_job_queued: string
+          instrument_job_leased: string
+          instrument_job_started: string
+          instrument_job_stop_requested: string
+          instrument_job_completed: string
+          instrument_job_failed: string
+          instrument_job_stopped: string
+          instrument_control_created: string
+          instrument_control_step_queued: string
+          instrument_control_transition_evaluated: string
+          instrument_control_paused_for_review: string
+          instrument_control_resumed: string
+          instrument_control_stop_requested: string
+          instrument_control_stopped: string
+          instrument_control_completed: string
+          instrument_control_failed: string
           compute_job_requested: string
           compute_job_queued: string
           compute_job_leased: string

@@ -15,12 +15,19 @@ from sqlalchemy.schema import CreateTable
 from app.main import app
 from app.models.research_execution import (
     ResearchInstrumentCommand,
+    ResearchInstrumentControlSession,
     ResearchInstrumentGateway,
     ResearchInstrumentGatewayAudit,
     ResearchInstrumentJob,
 )
 from app.routers.research_instrument_gateways import InstrumentCommandDraft
+from app.routers.research_instrument_jobs import InstrumentControlDraft
 from app.services.research_capabilities import instrument_command_capability
+from app.services.research_instrument_control import (
+    advance_control_session_after_job,
+    evaluate_control_transition,
+    validate_control_structure,
+)
 from app.services.research_instruments import (
     activate_aira_instrument_action,
     available_instrument_command_options,
@@ -249,6 +256,8 @@ def test_instrument_jobs_pin_contracts_and_hide_lease_credentials():
     assert "safety_contract JSON" in ddl
     assert "safety_attestation JSON" in ddl
     assert "ck_research_instrument_job_status" in ddl
+    assert "control_session_id" in ddl
+    assert "uq_research_instrument_job_control_execution" in ddl
 
     job = ResearchInstrumentJob(
         id=uuid4(),
@@ -275,6 +284,257 @@ def test_instrument_jobs_pin_contracts_and_hide_lease_credentials():
     )
     assert "lease_token_digest" not in job.as_dict()
     assert "lease_token_digest" not in instrument_job_snapshot(job)
+
+
+def test_instrument_control_sessions_are_bounded_and_version_pinned():
+    ddl = compile_table(ResearchInstrumentControlSession)
+
+    assert "program_digest VARCHAR(64) NOT NULL" in ddl
+    assert "creation_digest VARCHAR(64) NOT NULL" in ddl
+    assert "max_steps INTEGER NOT NULL" in ddl
+    assert "issued_steps INTEGER NOT NULL" in ddl
+    assert "max_duration_seconds INTEGER NOT NULL" in ddl
+    assert "ck_research_instrument_control_mode" in ddl
+    assert "ck_research_instrument_control_status" in ddl
+    assert "uq_research_instrument_control_key" in ddl
+
+    migration = import_module("migrations.versions.0047_instrument_control_sessions")
+    assert migration.down_revision == "0046_research_reproduction_assessments"
+
+
+def test_instrument_control_program_rejects_unbounded_or_ambiguous_graphs():
+    command_id = uuid4()
+    sequence = InstrumentControlDraft(
+        mode="bounded_sequence",
+        title="Prime then read",
+        equipment_booking_id=uuid4(),
+        entry_step_key="prime",
+        max_steps=2,
+        max_duration_seconds=600,
+        idempotency_key="control-prime-read",
+        steps=[
+            {
+                "key": "prime",
+                "command_id": command_id,
+                "arguments": {"temperature": 37},
+                "transition": {"on_true": "read"},
+            },
+            {
+                "key": "read",
+                "command_id": command_id,
+                "arguments": {"temperature": 37},
+                "transition": {"on_true": "complete"},
+            },
+        ],
+    )
+    assert sequence.entry_step_key == "prime"
+
+    with pytest.raises(ValidationError, match="cannot contain a cycle"):
+        InstrumentControlDraft(
+            mode="bounded_sequence",
+            title="Unsafe cycle",
+            equipment_booking_id=uuid4(),
+            entry_step_key="again",
+            max_steps=2,
+            max_duration_seconds=600,
+            idempotency_key="control-unsafe-cycle",
+            steps=[
+                {
+                    "key": "again",
+                    "command_id": command_id,
+                    "arguments": {},
+                    "transition": {"on_true": "again"},
+                }
+            ],
+        )
+
+    with pytest.raises(ValueError, match="between 1 and 50"):
+        validate_control_structure(
+            {
+                "schema": "airalogy.instrument-control.v1",
+                "mode": "feedback_loop",
+                "entry_step_key": "observe",
+                "max_steps": 0,
+                "max_duration_seconds": 600,
+                "steps": [],
+            }
+        )
+
+
+def test_instrument_feedback_transitions_are_deterministic_and_fail_closed():
+    step = {
+        "transition": {
+            "condition": {
+                "path": "reading.temperature",
+                "operator": "gte",
+                "value": 37,
+            },
+            "on_true": "complete",
+            "on_false": "adjust",
+        }
+    }
+
+    assert (
+        evaluate_control_transition(step, {"reading": {"temperature": 37.2}})
+        == "complete"
+    )
+    assert (
+        evaluate_control_transition(step, {"reading": {"temperature": 36.8}})
+        == "adjust"
+    )
+    assert evaluate_control_transition(step, {}) == "adjust"
+
+    invalid = {
+        "transition": {
+            "condition": {"path": "reading.state", "operator": "gt", "value": 1},
+            "on_true": "complete",
+            "on_false": "pause",
+        }
+    }
+    with pytest.raises(ValueError, match="require numbers"):
+        evaluate_control_transition(invalid, {"reading": {"state": "ready"}})
+
+
+def test_feedback_loop_pauses_before_each_later_high_risk_step(monkeypatch):
+    from app.services import research_instrument_control
+
+    session_id = uuid4()
+    run_id = uuid4()
+    task_id = uuid4()
+    now = datetime.now(UTC)
+    session = SimpleNamespace(
+        id=session_id,
+        status="running",
+        issued_steps=1,
+        executed_steps=0,
+        max_steps=5,
+        max_duration_seconds=600,
+        current_step_key="observe",
+        pending_step_key=None,
+        pause_reason="",
+        revision=2,
+        started_at=now,
+        created_at=now,
+        completed_at=None,
+        program_digest="a" * 64,
+        program={
+            "steps": [
+                {
+                    "key": "observe",
+                    "command": {"risk": "read_only"},
+                    "arguments": {},
+                    "transition": {
+                        "condition": {
+                            "path": "temperature",
+                            "operator": "lt",
+                            "value": 37,
+                        },
+                        "on_true": "adjust",
+                        "on_false": "complete",
+                    },
+                },
+                {
+                    "key": "adjust",
+                    "command": {"risk": "high"},
+                    "arguments": {"temperature": 37},
+                    "transition": {"condition": None, "on_true": "observe"},
+                },
+            ]
+        },
+    )
+    job = SimpleNamespace(
+        control_session_id=session_id,
+        control_execution_index=1,
+        control_step_key="observe",
+        result={"temperature": 36.5},
+        action_id=uuid4(),
+    )
+    run = SimpleNamespace(id=run_id, status="waiting_for_instrument", last_error=None)
+    task = SimpleNamespace(id=task_id)
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(return_value=SimpleNamespace(first=lambda: session))
+    )
+    emit = AsyncMock()
+    monkeypatch.setattr(research_instrument_control, "emit_research_event", emit)
+
+    result = asyncio.run(
+        advance_control_session_after_job(
+            db_session,
+            job=job,
+            task=task,
+            run=run,
+        )
+    )
+
+    assert result == {
+        "handled": True,
+        "terminal": False,
+        "status": "paused_for_review",
+    }
+    assert session.executed_steps == 1
+    assert session.pending_step_key == "adjust"
+    assert "high-risk" in session.pause_reason
+    assert run.status == "waiting_for_instrument"
+    assert emit.await_count == 2
+
+
+def test_control_session_completes_only_on_explicit_terminal_transition(monkeypatch):
+    from app.services import research_instrument_control
+
+    now = datetime.now(UTC)
+    session = SimpleNamespace(
+        id=uuid4(),
+        status="running",
+        issued_steps=1,
+        executed_steps=0,
+        max_steps=1,
+        max_duration_seconds=600,
+        current_step_key="read",
+        pending_step_key=None,
+        pause_reason="",
+        revision=1,
+        started_at=now,
+        created_at=now,
+        completed_at=None,
+        program_digest="b" * 64,
+        program={
+            "steps": [
+                {
+                    "key": "read",
+                    "command": {"risk": "read_only"},
+                    "arguments": {},
+                    "transition": {"condition": None, "on_true": "complete"},
+                }
+            ]
+        },
+    )
+    job = SimpleNamespace(
+        control_session_id=session.id,
+        control_execution_index=1,
+        control_step_key="read",
+        result={"value": 42},
+        action_id=uuid4(),
+    )
+    run = SimpleNamespace(id=uuid4(), status="waiting_for_instrument", last_error=None)
+    task = SimpleNamespace(id=uuid4())
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(return_value=SimpleNamespace(first=lambda: session))
+    )
+    monkeypatch.setattr(research_instrument_control, "emit_research_event", AsyncMock())
+
+    result = asyncio.run(
+        advance_control_session_after_job(
+            db_session,
+            job=job,
+            task=task,
+            run=run,
+        )
+    )
+
+    assert result == {"handled": True, "terminal": True, "status": "completed"}
+    assert session.executed_steps == 1
+    assert session.completed_at is not None
+    assert run.status == "running"
 
 
 def test_instrument_safety_attestation_requires_every_pinned_interlock():
@@ -324,6 +584,9 @@ def test_instrument_job_migration_follows_gateway_configuration():
 
     assert migration.down_revision == "0026_research_instrument_gateways"
     assert migration.TABLE_NAMES == ("research_instrument_jobs",)
+    source = inspect.getsource(migration.upgrade)
+    assert "Base.metadata" not in source
+    assert "control_session_id" not in source
 
 
 def test_instrument_job_lease_and_payload_contracts_fail_closed():
@@ -358,6 +621,13 @@ def test_instrument_job_runtime_routes_are_registered():
     assert "/research-instrument-commands" in paths
     assert "/research-tasks/{task_id}/instrument-actions/preview" in paths
     assert "/research-tasks/{task_id}/instrument-actions" in paths
+    assert "/research-tasks/{task_id}/instrument-control-sessions/preview" in paths
+    assert "/research-tasks/{task_id}/instrument-control-sessions" in paths
+    assert "/research-instrument-control-sessions/{session_id}" in paths
+    assert "/research-instrument-control-sessions/{session_id}/resume/preview" in paths
+    assert "/research-instrument-control-sessions/{session_id}/resume" in paths
+    assert "/research-instrument-control-sessions/{session_id}/stop/preview" in paths
+    assert "/research-instrument-control-sessions/{session_id}/stop" in paths
     assert "/research-instrument-jobs/{job_id}/stop/preview" in paths
     assert "/instrument-gateway/v1/jobs/lease" in paths
     assert "/instrument-gateway/v1/jobs/{job_id}/start" in paths

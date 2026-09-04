@@ -234,6 +234,10 @@ Platform 永远不会在 API 进程中运行科研代码，也不会把容器运
 
 Instrument Job 必须同时引用 Research Environment 中已固定的资源类型、白名单指令的准确修订和一条已批准且未过期的设备预约。Gateway 独立鉴权，在单任务短租约下主动领取规范化签名信封。启动前，本地独立安装的适配器会即时读取安全条件并返回有上限的证明；Gateway 和 Platform 都会拒绝缺失或未通过的必要联锁，Platform 将通过的证明与 Job 一同留痕。之后作业必须在预约时段内启动，上报必要的设备本地确认引用，持续心跳续租，并回传符合已固定输出 Schema 的结果。Platform 绝不自动重试物理操作。执行中租约过期、超时、预约结束、显式停止、Task 暂停、失败或取消都会暂停 Run，并要求 Gateway 确认和人工检查设备。这是受治理的远程停止协议，不等同于软件可保证物理急停；硬件联锁仍是最终安全边界。
 
+`Instrument Control Session`（设备控制会话）是下一级受限控制，不是远程脚本，也不是模型特权通道。获授权用户必须先预览再确认：选择无环的 `bounded_sequence`（有界序列）或确定性 `feedback_loop`（反馈循环），固定一条已批准预约、一个 Gateway 与设备 Resource、1–20 个步骤模板、起始步骤、最多 50 次执行和最长 24 小时。每个模板锁定准确指令修订、输入/输出 Schema、Executor Binding、安全契约、字面参数和一个明确转移。反馈条件只能读取本步骤经 Schema 校验结果中有界的对象路径，并使用相等、不等、数值顺序、列表成员或存在判定；不能执行代码、把不可信结果插入指令参数，也不能即兴生成参数。
+
+控制会话从不直接到达设备。它先创建一个普通 Instrument Job，等待经校验的终态结果，记录所选转移，再复查权限、预约、Resource 修订、指令修订、Executor Binding 和竞争占用，全部一致后才创建下一个普通 Job。路径缺失时走明确的 false 分支；顺序比较无效、固定项过期、预约不可用、达到次数/时间上限或遇到明确 `pause` 目标时，都会失败关闭到人工复核。初次确认可释放起始步骤，但之后每一条高风险指令都必须停下来重新“预览→确认”。停止、Task 暂停/取消、Job 失败、超时、心跳丢失和 Gateway 安全停止确认都会传递到会话。物理指令仍无自动重试。因此实现了确定性、有界的反馈，但仍保留每条指令原有的租约、设备端确认、联锁证明、审计与急停边界。AI 关闭时也能完整使用；在单独受治理的程序草案契约出现前，Aira 仍只能提议单个白名单 Instrument Action。
+
 运行时契约仅允许 Gateway 在 TLS 下主动领取。Gateway 使用 `X-Airalogy-Gateway-Token` 鉴权并调用 `POST /instrument-gateway/v1/jobs/lease`；成功响应包含规范化 `airalogy.instrument-job.v1` 信封、作业专用租约密钥和 HMAC-SHA256 签名。Gateway 以 `SHA256(Gateway 密钥)` 作为 HMAC 密钥验签，之后只通过 `X-Airalogy-Instrument-Lease` 传递租约密钥，调用 `start`、`heartbeat`、`complete`、`fail` 或 `stopped`。密钥不允许出现在查询参数或设备指令载荷中。心跳返回 `stop_requested: true` 时，适配器必须调用设备特定的安全停止程序，然后确认 `stopped`。
 
 仓库在 `apps/instrument-gateway` 提供独立、仅依赖 Python 标准库的 Gateway 运行时和适配器 SDK。它拒绝跨源重定向、无效签名、过期信封，以及未被本地独立安装适配器按准确版本允许的指令。设备启动前，唯一活动租约会以仅属主可读权限原子记录；完成、失败和停止确认可在网络结果不确定时幂等重放。进程若在物理执行可能仍在进行时重启，必须先调用适配器的幂等安全停止，再与 Platform 对账。关机、控制链路中断、安全停止失败或执行线程无法停止时，进程都不得领取下一项作业。Platform 下发代码和任意 shell 执行不属于此边界。
@@ -285,11 +289,11 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 
 ### P3：设备、RaaS 与自我改进
 
-- Instrument Gateway 注册、受治理指令允许清单、签名作业领取、硬件特定的启动前联锁证明、心跳、结果校验回传和需确认的远程停止（已交付）；分级闭环控制待后续实现；
+- Instrument Gateway 注册、受治理指令允许清单、签名作业领取、硬件特定的启动前联锁证明、心跳、结果校验回传和需确认的远程停止（已交付）；人工确认的有界序列与确定性结果条件反馈循环，复用普通 Instrument Job 并在后续高风险指令前暂停（已交付）；
 - 受治理服务商目录、不可变服务契约、范围权限和 Research Environment 准确版本固定（已交付）；
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
-- 独立建议型 Reviewer Agent、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；循环和任意多 Agent 执行仍待后续实现；
+- 独立建议型 Reviewer Agent、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；有界 Instrument 反馈循环只存在于其明确控制会话契约内，任意 Action 图循环和任意多 Agent 执行仍待后续实现；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性

@@ -498,6 +498,9 @@ export interface ResearchInstrumentJob {
   resource_revision_id: string
   resource_revision: number
   equipment_booking_id: string
+  control_session_id?: string | null
+  control_step_key?: string | null
+  control_execution_index?: number | null
   command_key: string
   command_version: string
   command_revision: number
@@ -534,6 +537,48 @@ export interface ResearchInstrumentJob {
   heartbeat_at?: string | null
   stop_requested_at?: string | null
   completed_at?: string | null
+}
+
+export type ResearchInstrumentControlStatus
+  = "queued"
+  | "running"
+  | "paused_for_review"
+  | "stop_requested"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "stopped"
+
+export interface ResearchInstrumentControlSession {
+  id: string
+  run_id: string
+  gateway_id: string
+  resource_id: string
+  equipment_booking_id: string
+  mode: "bounded_sequence" | "feedback_loop"
+  status: ResearchInstrumentControlStatus
+  title: string
+  description: string
+  program: Record<string, any>
+  program_digest: string
+  creation_digest: string
+  idempotency_key: string
+  entry_step_key: string
+  current_step_key?: string | null
+  pending_step_key?: string | null
+  issued_steps: number
+  executed_steps: number
+  max_steps: number
+  max_duration_seconds: number
+  pause_reason: string
+  error?: string | null
+  stop_reason?: string | null
+  revision: number
+  created_at: string
+  updated_at: string
+  started_at?: string | null
+  completed_at?: string | null
+  jobs?: ResearchInstrumentJob[]
 }
 
 export type ResearchServiceJobStatus
@@ -659,6 +704,7 @@ export interface ResearchAction {
   work_item?: ResearchHumanWorkItem | null
   tool_job?: ResearchToolJob | null
   instrument_job?: ResearchInstrumentJob | null
+  instrument_control?: ResearchInstrumentControlSession | null
   compute_job?: ResearchComputeJob | null
   service_job?: ResearchServiceJob | null
   wait_event?: ResearchWaitEvent | null

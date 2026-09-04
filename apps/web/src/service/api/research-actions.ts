@@ -1,4 +1,4 @@
-import type { ResearchAction } from "./research-tasks"
+import type { ResearchAction, ResearchInstrumentControlSession } from "./research-tasks"
 import type { EquipmentBooking } from "./resources"
 import { request } from "../request"
 
@@ -86,6 +86,40 @@ export interface InstrumentStopDraft {
   reason: string
 }
 
+export interface InstrumentControlCondition {
+  path: string
+  operator: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | "in" | "exists"
+  value: unknown
+}
+
+export interface InstrumentControlStepDraft {
+  key: string
+  command_id: string
+  arguments: Record<string, unknown>
+  transition: {
+    condition: InstrumentControlCondition | null
+    on_true: string
+    on_false?: string | null
+  }
+}
+
+export interface InstrumentControlDraft {
+  mode: "bounded_sequence" | "feedback_loop"
+  title: string
+  description: string
+  equipment_booking_id: string
+  entry_step_key: string
+  steps: InstrumentControlStepDraft[]
+  max_steps: number
+  max_duration_seconds: number
+  idempotency_key: string
+}
+
+export interface InstrumentControlDecisionDraft {
+  expected_revision: number
+  reason: string
+}
+
 export interface DigitalActionPreview<T> {
   preview_digest: string
   command: T
@@ -94,6 +128,14 @@ export interface DigitalActionPreview<T> {
   effect?: string
   tool?: ResearchToolDefinition
   instrument?: ResearchInstrumentCommandOption & { booking: EquipmentBooking }
+  instrument_control?: ResearchInstrumentControlSession & {
+    gateway?: { id: string, name: string }
+    resource?: { id: string, name: string, code: string }
+    booking?: EquipmentBooking
+    step_count?: number
+    highest_risk?: ResearchInstrumentCommandOption["risk"]
+  }
+  pending_step?: Record<string, any>
   action?: { id: string, title: string }
 }
 
@@ -193,6 +235,78 @@ export function createInstrumentAction(
 ) {
   return getData<ResearchAction>({
     url: `/research-tasks/${taskId}/instrument-actions`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function previewInstrumentControlSession(
+  taskId: string,
+  payload: InstrumentControlDraft,
+) {
+  return getData<DigitalActionPreview<InstrumentControlDraft>>({
+    url: `/research-tasks/${taskId}/instrument-control-sessions/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createInstrumentControlSession(
+  taskId: string,
+  payload: InstrumentControlDraft & { preview_digest: string },
+) {
+  return getData<ResearchInstrumentControlSession>({
+    url: `/research-tasks/${taskId}/instrument-control-sessions`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function fetchInstrumentControlSession(sessionId: string) {
+  return getData<ResearchInstrumentControlSession>({
+    url: `/research-instrument-control-sessions/${sessionId}`,
+  })
+}
+
+export function previewInstrumentControlResume(
+  sessionId: string,
+  payload: InstrumentControlDecisionDraft,
+) {
+  return getData<DigitalActionPreview<InstrumentControlDecisionDraft>>({
+    url: `/research-instrument-control-sessions/${sessionId}/resume/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function resumeInstrumentControlSession(
+  sessionId: string,
+  payload: InstrumentControlDecisionDraft & { preview_digest: string },
+) {
+  return getData<ResearchInstrumentControlSession>({
+    url: `/research-instrument-control-sessions/${sessionId}/resume`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function previewInstrumentControlStop(
+  sessionId: string,
+  payload: InstrumentControlDecisionDraft,
+) {
+  return getData<DigitalActionPreview<InstrumentControlDecisionDraft>>({
+    url: `/research-instrument-control-sessions/${sessionId}/stop/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function stopInstrumentControlSession(
+  sessionId: string,
+  payload: InstrumentControlDecisionDraft & { preview_digest: string },
+) {
+  return getData<ResearchInstrumentControlSession>({
+    url: `/research-instrument-control-sessions/${sessionId}/stop`,
     method: "POST",
     data: payload,
   })

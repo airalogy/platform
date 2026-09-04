@@ -64,6 +64,8 @@ from app.models.research_execution import (
     ResearchComputeEnvironmentRevision,
     ResearchComputeJob,
     ResearchComputeJobStatus,
+    ResearchInstrumentControlSession,
+    ResearchInstrumentControlStatus,
     ResearchInstrumentJob,
     ResearchInstrumentJobStatus,
     ResearchResourceConsumption,
@@ -1380,6 +1382,13 @@ async def _action_data(
     instrument_job = await ResearchInstrumentJob.find_by(
         db_session, [ResearchInstrumentJob.action_id == action.id]
     )
+    instrument_control = (
+        await db_session.get(
+            ResearchInstrumentControlSession, instrument_job.control_session_id
+        )
+        if instrument_job is not None and instrument_job.control_session_id is not None
+        else None
+    )
     compute_job = await ResearchComputeJob.find_by(
         db_session, [ResearchComputeJob.action_id == action.id]
     )
@@ -1473,6 +1482,9 @@ async def _action_data(
         "work_item": work_item.as_dict() if work_item else None,
         "tool_job": tool_job.as_dict() if tool_job else None,
         "instrument_job": instrument_job.as_dict() if instrument_job else None,
+        "instrument_control": instrument_control.as_dict()
+        if instrument_control
+        else None,
         "compute_job": (
             compute_job_snapshot(compute_job, include_source=True)
             if compute_job
@@ -2620,6 +2632,17 @@ async def pause_research_task(
                 f"{active_instrument_job.revision}"
             ),
         )
+        if active_instrument_job.control_session_id is not None:
+            control_session = await db_session.get(
+                ResearchInstrumentControlSession,
+                active_instrument_job.control_session_id,
+            )
+            if control_session is not None:
+                control_session.status = (
+                    ResearchInstrumentControlStatus.STOP_REQUESTED.value
+                )
+                control_session.stop_reason = active_instrument_job.stop_reason
+                control_session.revision += 1
     active_compute_job = (
         await db_session.scalars(
             select(ResearchComputeJob)
@@ -2938,6 +2961,40 @@ async def cancel_research_task(
                     instrument_job.status = (
                         ResearchInstrumentJobStatus.STOP_REQUESTED.value
                     )
+            control_sessions = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchInstrumentControlSession).where(
+                            ResearchInstrumentControlSession.run_id == run.id,
+                            ResearchInstrumentControlSession.status.not_in(
+                                [
+                                    ResearchInstrumentControlStatus.COMPLETED.value,
+                                    ResearchInstrumentControlStatus.FAILED.value,
+                                    ResearchInstrumentControlStatus.CANCELLED.value,
+                                    ResearchInstrumentControlStatus.STOPPED.value,
+                                ]
+                            ),
+                        )
+                    )
+                ).all()
+            )
+            active_control_ids = {
+                job.control_session_id
+                for job in instrument_jobs
+                if job.control_session_id is not None
+                and job.status == ResearchInstrumentJobStatus.STOP_REQUESTED.value
+            }
+            for control_session in control_sessions:
+                control_session.status = (
+                    ResearchInstrumentControlStatus.STOP_REQUESTED.value
+                    if control_session.id in active_control_ids
+                    else ResearchInstrumentControlStatus.CANCELLED.value
+                )
+                control_session.stop_reason = params.reason or "Task cancelled"
+                control_session.completed_at = (
+                    None if control_session.id in active_control_ids else now
+                )
+                control_session.revision += 1
             compute_jobs = list(
                 (
                     await db_session.scalars(
