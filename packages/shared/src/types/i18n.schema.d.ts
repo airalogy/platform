@@ -940,6 +940,34 @@ declare namespace I18n {
         confirmPolicy: string
         backToPolicy: string
         policySaved: string
+        evaluatedAutonomyGrants: string
+        evaluatedAutonomyGrantsHint: string
+        autonomyThreeGates: string
+        autonomyGrantBoundary: string
+        activeAutonomyGrants: string
+        autonomyEvaluationCandidates: string
+        noAutonomyEvaluationHistory: string
+        autonomyGrantActive: string
+        autonomyGrantExpired: string
+        autonomyGrantExpires: string
+        supervisedSuccessCount: string
+        autonomyEvaluationPassed: string
+        autonomyEvaluationPending: string
+        autonomyEvaluationProgress: string
+        autonomyEvaluationFailures: string
+        createAutonomyGrant: string
+        renewAutonomyGrant: string
+        revokeAutonomyGrant: string
+        configureAutonomyGrant: string
+        configureAutonomyGrantHint: string
+        revokeAutonomyGrantHint: string
+        autonomyGrantReasonPlaceholder: string
+        autonomyEvaluation: string
+        autonomyGrantFutureRunsOnly: string
+        confirmAutonomyGrant: string
+        confirmRevokeAutonomyGrant: string
+        autonomyGrantSaved: string
+        autonomyGrantRevoked: string
         policyDecision: string
         methods: string
         method: string
@@ -957,6 +985,7 @@ declare namespace I18n {
         bindingDisabled: string
         bindingRevision: string
         capability: string
+        executor: string
         selectCapability: string
         approvalPolicy: string
         policyAlwaysAsk: string
