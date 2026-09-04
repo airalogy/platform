@@ -1333,6 +1333,14 @@ declare namespace I18n {
         instrumentActionHint: string
         instrumentControl: string
         instrumentControlHint: string
+        airaInstrumentControlDraft: string
+        airaInstrumentControlDraftHint: string
+        controlGoal: string
+        controlGoalPlaceholder: string
+        maximumStepTemplates: string
+        generateControlDraft: string
+        airaRationale: string
+        controlDraftReady: string
         instrumentControlTitlePlaceholder: string
         controlMode: string
         boundedSequence: string

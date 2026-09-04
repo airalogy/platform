@@ -236,7 +236,9 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 
 `Instrument Control Session`（设备控制会话）是下一级受限控制，不是远程脚本，也不是模型特权通道。获授权用户必须先预览再确认：选择无环的 `bounded_sequence`（有界序列）或确定性 `feedback_loop`（反馈循环），固定一条已批准预约、一个 Gateway 与设备 Resource、1–20 个步骤模板、起始步骤、最多 50 次执行和最长 24 小时。每个模板锁定准确指令修订、输入/输出 Schema、Executor Binding、安全契约、字面参数和一个明确转移。反馈条件只能读取本步骤经 Schema 校验结果中有界的对象路径，并使用相等、不等、数值顺序、列表成员或存在判定；不能执行代码、把不可信结果插入指令参数，也不能即兴生成参数。
 
-控制会话从不直接到达设备。它先创建一个普通 Instrument Job，等待经校验的终态结果，记录所选转移，再复查权限、预约、Resource 修订、指令修订、Executor Binding 和竞争占用，全部一致后才创建下一个普通 Job。路径缺失时走明确的 false 分支；顺序比较无效、固定项过期、预约不可用、达到次数/时间上限或遇到明确 `pause` 目标时，都会失败关闭到人工复核。初次确认可释放起始步骤，但之后每一条高风险指令都必须停下来重新“预览→确认”。停止、Task 暂停/取消、Job 失败、超时、心跳丢失和 Gateway 安全停止确认都会传递到会话。物理指令仍无自动重试。因此实现了确定性、有界的反馈，但仍保留每条指令原有的租约、设备端确认、联锁证明、审计与急停边界。AI 关闭时也能完整使用；在单独受治理的程序草案契约出现前，Aira 仍只能提议单个白名单 Instrument Action。
+控制会话从不直接到达设备。它先创建一个普通 Instrument Job，等待经校验的终态结果，记录所选转移，再复查权限、预约、Resource 修订、指令修订、Executor Binding 和竞争占用，全部一致后才创建下一个普通 Job。路径缺失时走明确的 false 分支；顺序比较无效、固定项过期、预约不可用、达到次数/时间上限或遇到明确 `pause` 目标时，都会失败关闭到人工复核。初次确认可释放起始步骤，但之后每一条高风险指令都必须停下来重新“预览→确认”。停止、Task 暂停/取消、Job 失败、超时、心跳丢失和 Gateway 安全停止确认都会传递到会话。物理指令仍无自动重试。因此实现了确定性、有界的反馈，但仍保留每条指令原有的租约、设备端确认、联锁证明、审计与急停边界。AI 关闭时也能完整使用。
+
+AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约、模式、步骤模板上限、执行次数上限和时间上限，再描述希望设备过程完成什么。Aira 只能看到该预约上当前有权使用的指令，可返回字面参数和明确转移。响应必须经过严格 Schema 解析；如果引用目录外对象、不符合指令输入 Schema 或超出图边界，系统会拒绝。模型等待结束后，Platform 还会重新校验当前 Task、Run、预约、权限、指令修订、安全契约和 Executor Binding。该入口不创建 Session、Action、Job、审批或预留；用户可修改所有字段，只有普通的确定性“预览→确认”接口才会锁定最终程序并释放第一个 Job。Planner 的自动下一 Action 循环仍只能提议单个 Instrument Action，不能把这个草稿入口当成设备权限。
 
 运行时契约仅允许 Gateway 在 TLS 下主动领取。Gateway 使用 `X-Airalogy-Gateway-Token` 鉴权并调用 `POST /instrument-gateway/v1/jobs/lease`；成功响应包含规范化 `airalogy.instrument-job.v1` 信封、作业专用租约密钥和 HMAC-SHA256 签名。Gateway 以 `SHA256(Gateway 密钥)` 作为 HMAC 密钥验签，之后只通过 `X-Airalogy-Instrument-Lease` 传递租约密钥，调用 `start`、`heartbeat`、`complete`、`fail` 或 `stopped`。密钥不允许出现在查询参数或设备指令载荷中。心跳返回 `stop_requested: true` 时，适配器必须调用设备特定的安全停止程序，然后确认 `stopped`。
 

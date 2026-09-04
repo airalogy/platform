@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hmac
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -42,6 +42,7 @@ from app.models.resource import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
+from app.services.model_usage import create_usage_context
 from app.services.research_budget import reached_operational_limit
 from app.services.research_executor_bindings import (
     enforce_environment_binding_action_limit,
@@ -59,6 +60,10 @@ from app.services.research_instrument_control import (
     pause_control_session_before_start,
     queue_control_step,
     validate_control_structure,
+)
+from app.services.research_instrument_control_drafts import (
+    generate_instrument_control_draft,
+    validate_instrument_control_output,
 )
 from app.services.research_instruments import (
     available_instrument_command_options,
@@ -207,6 +212,26 @@ class InstrumentControlDraft(BaseModel):
 
 class InstrumentControlCreate(InstrumentControlDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
+
+
+class AiraInstrumentControlDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str = Field(min_length=1, max_length=4_000)
+    mode: Literal["bounded_sequence", "feedback_loop"]
+    equipment_booking_id: UUID
+    max_step_templates: int = Field(ge=1, le=20)
+    max_steps: int = Field(ge=1, le=50)
+    max_duration_seconds: int = Field(ge=1, le=86_400)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.instruction = self.instruction.strip()
+        if not self.instruction:
+            raise ValueError("Aira Instrument Control instruction is required")
+        if self.max_step_templates > self.max_steps:
+            raise ValueError("Step template limit cannot exceed maximum executions")
+        return self
 
 
 class InstrumentControlDecisionDraft(BaseModel):
@@ -508,6 +533,258 @@ async def list_available_instrument_commands(
             user_id=current_user.id,
             resolve_bindings=True,
         )
+    }
+
+
+async def _aira_instrument_control_catalog(
+    db_session: DBSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    current_user: User,
+    params: AiraInstrumentControlDraftRequest,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    options = await available_instrument_command_options(
+        db_session,
+        task=task,
+        run=run,
+        user_id=current_user.id,
+        resolve_bindings=True,
+    )
+    booking: dict[str, Any] | None = None
+    commands: list[dict[str, Any]] = []
+    for item in options:
+        selected_booking = next(
+            (
+                candidate
+                for candidate in item.get("bookings") or []
+                if str(candidate.get("id") or "") == str(params.equipment_booking_id)
+            ),
+            None,
+        )
+        if selected_booking is None:
+            continue
+        starts_at = selected_booking.get("starts_at")
+        ends_at = selected_booking.get("ends_at")
+        booking_snapshot = {
+            "id": str(selected_booking.get("id") or ""),
+            "status": selected_booking.get("status"),
+            "starts_at": (
+                starts_at.isoformat()
+                if isinstance(starts_at, datetime)
+                else str(starts_at or "")
+            ),
+            "ends_at": (
+                ends_at.isoformat()
+                if isinstance(ends_at, datetime)
+                else str(ends_at or "")
+            ),
+            "purpose": str(selected_booking.get("purpose") or "")[:1_000],
+            "resource": item["resource"],
+        }
+        if booking is None:
+            booking = booking_snapshot
+        elif canonical_digest(booking) != canonical_digest(booking_snapshot):
+            raise HTTPException(
+                status_code=409,
+                detail="The approved equipment booking changed while resolving commands",
+            )
+        commands.append(
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "description": str(item.get("description") or "")[:1_000],
+                "command_key": item["command_key"],
+                "command_version": item["command_version"],
+                "revision": item["revision"],
+                "risk": item["risk"],
+                "input_schema": item["input_schema"],
+                "output_schema": item["output_schema"],
+                "device_confirmation_required": item["device_confirmation_required"],
+                "safety_contract": item["safety_contract"],
+                "gateway": item["gateway"],
+                "resource": item["resource"],
+                "executor_binding": executor_binding_command_ref(
+                    item["executor_binding"]
+                ),
+            }
+        )
+    if booking is None or not commands:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "The selected booking has no currently authorized Instrument commands"
+            ),
+        )
+    if len(commands) > 50:
+        raise HTTPException(
+            status_code=422,
+            detail="The selected booking exposes too many commands for safe Aira drafting",
+        )
+    booking_start = booking.get("starts_at")
+    booking_end = booking.get("ends_at")
+    if not isinstance(booking_start, str) or not isinstance(booking_end, str):
+        raise HTTPException(status_code=409, detail="Equipment booking is incomplete")
+    try:
+        available_seconds = int(
+            (
+                datetime.fromisoformat(booking_end)
+                - max(datetime.fromisoformat(booking_start), utcnow())
+            ).total_seconds()
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=409, detail="Equipment booking window is invalid"
+        ) from error
+    if params.max_duration_seconds > available_seconds:
+        raise HTTPException(
+            status_code=422,
+            detail="Instrument Control duration exceeds the approved booking window",
+        )
+    return booking, commands
+
+
+@router.post("/research-tasks/{task_id}/instrument-control-sessions/draft-with-aira")
+async def draft_instrument_control_session_with_aira(
+    task_id: UUID,
+    params: AiraInstrumentControlDraftRequest,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    if not config.effective_ai_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Aira is unavailable. Build the same Instrument Control draft "
+                "manually with the deterministic editor."
+            ),
+        )
+    task, _project_context, _lab, run = await _active_task_context(
+        db_session, current_user, task_id, enforce_limits=True
+    )
+    booking, commands = await _aira_instrument_control_catalog(
+        db_session,
+        task=task,
+        run=run,
+        current_user=current_user,
+        params=params,
+    )
+    source_snapshot = {
+        "task_id": str(task.id),
+        "task_revision": task.revision,
+        "run_id": str(run.id),
+        "run_plan_version": run.plan_version,
+        "mode": params.mode,
+        "max_step_templates": params.max_step_templates,
+        "max_steps": params.max_steps,
+        "max_duration_seconds": params.max_duration_seconds,
+        "booking": booking,
+        "commands": commands,
+    }
+    source_digest = canonical_digest(source_snapshot)
+    model_name = config.CHAT_MODEL_FAST
+    usage_context = create_usage_context(
+        feature="research.instrument_control.draft",
+        user_id=current_user.id,
+        lab_id=task.lab_id,
+        project_id=task.project_id,
+        attributes={
+            "mode": params.mode,
+            "command_count": str(len(commands)),
+            "max_steps": str(params.max_steps),
+        },
+    )
+    # Never hold database locks or a transaction open across model latency.
+    await db_session.commit()
+    try:
+        output, _program = await generate_instrument_control_draft(
+            instruction=params.instruction,
+            mode=params.mode,
+            max_step_templates=params.max_step_templates,
+            max_steps=params.max_steps,
+            max_duration_seconds=params.max_duration_seconds,
+            booking=booking,
+            commands=commands,
+            model_name=model_name,
+            usage_context=usage_context,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Aira could not produce a valid Instrument Control draft",
+        ) from error
+    db_session.expire_all()
+    current_task, _project_context, _lab, current_run = await _active_task_context(
+        db_session, current_user, task_id, enforce_limits=True
+    )
+    current_booking, current_commands = await _aira_instrument_control_catalog(
+        db_session,
+        task=current_task,
+        run=current_run,
+        current_user=current_user,
+        params=params,
+    )
+    current_snapshot = {
+        **source_snapshot,
+        "task_revision": current_task.revision,
+        "run_id": str(current_run.id),
+        "run_plan_version": current_run.plan_version,
+        "booking": current_booking,
+        "commands": current_commands,
+    }
+    if canonical_digest(current_snapshot) != source_digest:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Instrument commands, booking, permissions, or Research Run changed "
+                "while Aira prepared the draft"
+            ),
+        )
+    try:
+        program = validate_instrument_control_output(
+            output,
+            mode=params.mode,
+            max_step_templates=params.max_step_templates,
+            max_steps=params.max_steps,
+            max_duration_seconds=params.max_duration_seconds,
+            commands=current_commands,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Instrument Control constraints changed while Aira prepared the draft"
+            ),
+        ) from error
+    return {
+        "draft": {
+            "mode": params.mode,
+            "title": output.title,
+            "description": output.description,
+            "equipment_booking_id": str(params.equipment_booking_id),
+            "entry_step_key": output.entry_step_key,
+            "steps": [
+                {
+                    "key": step.key,
+                    "command_id": str(step.command_id),
+                    "arguments": step.arguments,
+                    "transition": step.transition.model_dump(mode="json"),
+                }
+                for step in output.steps
+            ],
+            "max_steps": program["max_steps"],
+            "max_duration_seconds": params.max_duration_seconds,
+            "idempotency_key": f"aira-instrument-control-{uuid4()}",
+        },
+        "rationale": output.rationale,
+        "assumptions": output.assumptions,
+        "warnings": output.warnings,
+        "model": model_name,
+        "source_digest": source_digest,
+        "boundary": (
+            "Editable draft only. No Control Session, Instrument Job, approval, "
+            "reservation, or device command was created."
+        ),
     }
 
 

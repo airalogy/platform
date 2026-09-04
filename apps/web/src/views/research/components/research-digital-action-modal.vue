@@ -131,6 +131,78 @@
                 />
               </n-form-item>
             </div>
+            <div class="control-grid">
+              <n-form-item
+                v-if="controlMode === 'feedback_loop'"
+                :label="$t('page.research.maximumControlSteps')"
+                required
+              >
+                <n-input-number v-model:value="controlMaxSteps" :min="controlSteps.length" :max="50" />
+              </n-form-item>
+              <n-form-item :label="$t('page.research.maximumDurationMinutes')" required>
+                <n-input-number v-model:value="controlDurationMinutes" :min="1" :max="1440" />
+              </n-form-item>
+            </div>
+            <section v-if="aiAvailable" class="aira-control-draft mb-4">
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.airaIntentEntry") }}
+              </div>
+              <h3 class="aira-type-card-title mb-0 mt-1">
+                {{ $t("page.research.airaInstrumentControlDraft") }}
+              </h3>
+              <p class="aira-type-body aira-text-secondary mb-3 mt-2">
+                {{ $t("page.research.airaInstrumentControlDraftHint") }}
+              </p>
+              <n-form-item :label="$t('page.research.controlGoal')" required>
+                <n-input
+                  v-model:value="airaControlInstruction"
+                  type="textarea"
+                  :autosize="{ minRows: 3, maxRows: 8 }"
+                  :placeholder="$t('page.research.controlGoalPlaceholder')"
+                />
+              </n-form-item>
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <n-form-item
+                  :label="$t('page.research.maximumStepTemplates')"
+                  class="mb-0"
+                >
+                  <n-input-number
+                    v-model:value="airaStepTemplateLimit"
+                    :min="1"
+                    :max="controlMode === 'feedback_loop' ? Math.min(20, controlMaxSteps) : 20"
+                  />
+                </n-form-item>
+                <n-button
+                  type="primary"
+                  secondary
+                  :disabled="!airaControlInstruction.trim() || !controlBookingId"
+                  :loading="airaControlDrafting"
+                  @click="handleAiraControlDraft"
+                >
+                  {{ $t("page.research.generateControlDraft") }}
+                </n-button>
+              </div>
+              <n-alert v-if="airaControlDraftResult" type="info" class="mt-4">
+                <strong>{{ $t("page.research.airaRationale") }}</strong>
+                <div class="mt-1">
+                  {{ airaControlDraftResult.rationale }}
+                </div>
+                <ul
+                  v-if="airaControlDraftResult.assumptions.length || airaControlDraftResult.warnings.length"
+                  class="mb-0 mt-2 pl-5"
+                >
+                  <li v-for="item in airaControlDraftResult.assumptions" :key="`assumption-${item}`">
+                    {{ item }}
+                  </li>
+                  <li v-for="item in airaControlDraftResult.warnings" :key="`warning-${item}`">
+                    {{ item }}
+                  </li>
+                </ul>
+                <div class="aira-type-meta mt-2">
+                  {{ airaControlDraftResult.boundary }}
+                </div>
+              </n-alert>
+            </section>
             <n-form-item :label="$t('page.research.actionTitle')" required>
               <n-input
                 v-model:value="controlTitle"
@@ -144,21 +216,9 @@
                 :autosize="{ minRows: 2, maxRows: 5 }"
               />
             </n-form-item>
-            <div class="control-grid control-grid--limits">
-              <n-form-item :label="$t('page.research.entryStep')" required>
-                <n-select v-model:value="controlEntryStepKey" :options="controlEntryOptions" />
-              </n-form-item>
-              <n-form-item
-                v-if="controlMode === 'feedback_loop'"
-                :label="$t('page.research.maximumControlSteps')"
-                required
-              >
-                <n-input-number v-model:value="controlMaxSteps" :min="controlSteps.length" :max="50" />
-              </n-form-item>
-              <n-form-item :label="$t('page.research.maximumDurationMinutes')" required>
-                <n-input-number v-model:value="controlDurationMinutes" :min="1" :max="1440" />
-              </n-form-item>
-            </div>
+            <n-form-item :label="$t('page.research.entryStep')" required>
+              <n-select v-model:value="controlEntryStepKey" :options="controlEntryOptions" />
+            </n-form-item>
             <div class="mb-2 flex items-center justify-between gap-3">
               <div>
                 <div class="aira-type-card-title">
@@ -461,6 +521,7 @@
 
 <script setup lang="ts">
 import type {
+  AiraInstrumentControlDraftResponse,
   DigitalActionPreview,
   InstrumentActionDraft,
   InstrumentControlDraft,
@@ -476,6 +537,7 @@ import {
   createInstrumentControlSession,
   createToolAction,
   createWaitAction,
+  draftInstrumentControlWithAira,
   fetchResearchInstrumentCommands,
   fetchResearchTools,
   previewInstrumentAction,
@@ -486,7 +548,7 @@ import {
 import { $t } from "@airalogy/shared/locales"
 import { nanoid } from "nanoid"
 
-const props = defineProps<{ taskId: string }>()
+const props = defineProps<{ taskId: string, aiAvailable?: boolean }>()
 const emit = defineEmits<{ created: [] }>()
 
 type Mode = "tool" | "instrument" | "control" | "wait"
@@ -522,10 +584,14 @@ const controlTitle = ref("")
 const controlDescription = ref("")
 const controlBookingId = ref("")
 const controlEntryStepKey = ref("")
-const controlMaxSteps = ref(1)
+const controlMaxSteps = ref(8)
 const controlDurationMinutes = ref(60)
 const controlIdempotencyKey = ref("")
 const controlSteps = ref<ControlStepEditor[]>([])
+const airaControlInstruction = ref("")
+const airaStepTemplateLimit = ref(6)
+const airaControlDrafting = ref(false)
+const airaControlDraftResult = ref<AiraInstrumentControlDraftResponse | null>(null)
 
 const toolDraft = reactive<ToolActionDraft>({
   tool_key: "",
@@ -829,6 +895,51 @@ function updateControlStepKey(index: number, value: string) {
   }
 }
 
+async function handleAiraControlDraft() {
+  if (!props.aiAvailable || !controlBookingId.value || !airaControlInstruction.value.trim())
+    return
+  const maxStepTemplates = controlMode.value === "feedback_loop"
+    ? Math.min(airaStepTemplateLimit.value, controlMaxSteps.value)
+    : airaStepTemplateLimit.value
+  airaControlDrafting.value = true
+  try {
+    const result = await draftInstrumentControlWithAira(props.taskId, {
+      instruction: airaControlInstruction.value.trim(),
+      mode: controlMode.value,
+      equipment_booking_id: controlBookingId.value,
+      max_step_templates: maxStepTemplates,
+      max_steps: controlMode.value === "feedback_loop"
+        ? controlMaxSteps.value
+        : maxStepTemplates,
+      max_duration_seconds: controlDurationMinutes.value * 60,
+    })
+    controlMode.value = result.draft.mode
+    controlTitle.value = result.draft.title
+    controlDescription.value = result.draft.description
+    controlBookingId.value = result.draft.equipment_booking_id
+    controlEntryStepKey.value = result.draft.entry_step_key
+    controlMaxSteps.value = result.draft.max_steps
+    controlDurationMinutes.value = Math.ceil(result.draft.max_duration_seconds / 60)
+    controlIdempotencyKey.value = result.draft.idempotency_key
+    controlSteps.value = result.draft.steps.map(step => ({
+      key: step.key,
+      commandId: step.command_id,
+      argumentsText: JSON.stringify(step.arguments, null, 2),
+      onTrue: step.transition.on_true,
+      conditionEnabled: Boolean(step.transition.condition),
+      conditionPath: step.transition.condition?.path || "value",
+      conditionOperator: step.transition.condition?.operator || "gte",
+      conditionValueText: JSON.stringify(step.transition.condition?.value ?? 0),
+      onFalse: step.transition.on_false || "pause",
+    }))
+    airaControlDraftResult.value = result
+    window.$message?.success($t("page.research.controlDraftReady"))
+  }
+  finally {
+    airaControlDrafting.value = false
+  }
+}
+
 function selectDefaultBooking() {
   const bookings = selectedInstrument.value?.bookings || []
   if (!bookings.some(item => item.id === instrumentDraft.equipment_booking_id))
@@ -908,10 +1019,14 @@ function reset() {
   controlDescription.value = ""
   controlBookingId.value = ""
   controlEntryStepKey.value = ""
-  controlMaxSteps.value = 1
+  controlMaxSteps.value = 8
   controlDurationMinutes.value = 60
   controlIdempotencyKey.value = ""
   controlSteps.value = []
+  airaControlInstruction.value = ""
+  airaStepTemplateLimit.value = 6
+  airaControlDrafting.value = false
+  airaControlDraftResult.value = null
   applyWaitPreset()
 }
 
@@ -1049,8 +1164,11 @@ watch(controlMode, (value) => {
   gap: 0 1rem;
 }
 
-.control-grid--limits {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.aira-control-draft {
+  border: 1px solid rgb(191 219 254);
+  border-radius: 0.875rem;
+  background: linear-gradient(145deg, rgb(239 246 255), rgb(248 250 252));
+  padding: 1rem;
 }
 
 .control-step {

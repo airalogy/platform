@@ -115,6 +115,25 @@ export interface InstrumentControlDraft {
   idempotency_key: string
 }
 
+export interface AiraInstrumentControlDraftRequest {
+  instruction: string
+  mode: InstrumentControlDraft["mode"]
+  equipment_booking_id: string
+  max_step_templates: number
+  max_steps: number
+  max_duration_seconds: number
+}
+
+export interface AiraInstrumentControlDraftResponse {
+  draft: InstrumentControlDraft
+  rationale: string
+  assumptions: string[]
+  warnings: string[]
+  model: string
+  source_digest: string
+  boundary: string
+}
+
 export interface InstrumentControlDecisionDraft {
   expected_revision: number
   reason: string
@@ -246,6 +265,17 @@ export function previewInstrumentControlSession(
 ) {
   return getData<DigitalActionPreview<InstrumentControlDraft>>({
     url: `/research-tasks/${taskId}/instrument-control-sessions/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function draftInstrumentControlWithAira(
+  taskId: string,
+  payload: AiraInstrumentControlDraftRequest,
+) {
+  return getData<AiraInstrumentControlDraftResponse>({
+    url: `/research-tasks/${taskId}/instrument-control-sessions/draft-with-aira`,
     method: "POST",
     data: payload,
   })

@@ -18,6 +18,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 新增
 
+- 新增 Aira 起草有界 Instrument Control 的“仅草稿”入口：用户先确定预约和上限；Aira 只能把当前有权使用的指令编排为字面参数与明确转移；Platform 会严格解析，并在模型等待后重新校验所有边界。结果只会填入普通可编辑构建器；用户完成原有确定性“预览→确认”之前，不会创建 Session、Job、审批、预留或设备操作。AI 关闭的部署仍保留完整手工构建器。
 - 新增受限的 Instrument Control Session，用于经复核的多步设备过程：用户可在一条已批准预约上预览并确认无环序列或确定性结果条件反馈循环；Platform 会锁定每条指令、Schema、Executor Binding、安全契约、字面输入和转移，每次只释放一个普通 Instrument Job，步骤之间重新校验所有执行边界，并在之后每一条高风险指令、固定项过期或达到上限时暂停。停止、失败、租约与 Task 生命周期会向会话传递，不会自动重试任何物理操作。
 - 新增正式科研复现评估：复现 Run 只能将来源 Run 中摘要锁定的已定稿结果，与当前 Run 的已校验 Evidence 进行比较；系统保留原始成功标准并核验有效 Research Environment，完成前必须由人逐项判断；可选 Reviewer Agent 只能生成可编辑草稿，最终比较会封存到不可变 Result Package，关闭 AI 仍可完整使用。
 - 新增固定版本的 Instrument 安全契约，可要求指定硬件联锁、现场人员和紧急停止；本地独立安装的适配器必须在每次启动前即时检查并出具证明，Platform 会再次校验和审计；高风险指令若未要求现场人员与紧急停止将失败关闭。

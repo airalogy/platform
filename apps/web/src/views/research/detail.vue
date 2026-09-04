@@ -58,6 +58,7 @@
             <research-digital-action-modal
               v-if="canAddDigitalAction"
               :task-id="task.id"
+              :ai-available="task.ai_available"
               @created="() => loadTask(true)"
             />
             <research-resource-action-modal
