@@ -55,7 +55,7 @@ Aira 意图入口是从目标到 Task 的转换器，不是特权写入通道。
 
 Protocol Run、Human Work Item、Tool Job、Instrument Job、External Service Job、Resource Reservation 和 Wait Event 已使用这套生命周期。未来的独立审批请求类型会在对应 Executor 接入时沿用同一边界。
 
-Tool、Instrument、External Service、Resource 和 Wait 的类型化结果会追加到 Run 持久 AIRA 状态中有上限的结果通道。下一 Action 规划器和旧 AIRA Method 都会将这些通道作为不可信的科研证据读取。这既保留执行输出、Record 与 Protocol 的语义边界，也避免后续规划和结论丢失真实运行结果。
+Human Work、Tool、Instrument、External Service、Resource 和 Wait 的类型化结果会追加到 Run 持久 AIRA 状态中有上限的结果通道。下一 Action 规划器和旧 AIRA Method 都会将这些通道作为不可信的科研证据读取。这既保留执行输出、Record 与 Protocol 的语义边界，也避免后续规划和结论丢失真实运行结果。
 
 ### Protocol 与 Capability
 
@@ -63,9 +63,9 @@ Tool、Instrument、External Service、Resource 和 Wait 的类型化结果会�
 
 `Capability` 不取代 Protocol。Capability Registry 是根据 Protocol、工具、人员技能、设备、外部服务、资源、可用性和策略组合得到的当前能力视图，不是第二套方法来源。
 
-Platform 的第一版 Registry 由 Project 当前 Protocol 版本、实例白名单数字工具和 Lab 当前 Resource Type 修订派生。创建 Research Task 时必须明确选择 Protocol 和 Tool 能力，并在 `airalogy.research-environment.v2` 中固定来源版本及初始人员或 Platform Worker 执行绑定。Aira 和手工控件都不能执行快照之外的 Tool，版本已不可用时也必须失败关闭。Resource Type 只作为可发现的执行需求，不被伪装成可执行方法；具体预约和消耗在 Action 执行时解析。
+Platform 的第一版 Registry 由 Project 当前 Protocol 版本、内置且版本化的结构化 Human Work 契约、实例白名单数字工具和 Lab 当前 Resource Type 修订派生。创建 Research Task 时必须明确选择可执行能力，并在 `airalogy.research-environment.v2` 中固定来源版本及初始人员或 Platform Worker 执行绑定。Aira 和手工控件都不能执行快照之外的可执行能力，固定版本已不可用时也必须失败关闭。Resource Type 只作为可发现的执行需求，不被伪装成可执行方法；具体预约和消耗在 Action 执行时解析。
 
-Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Executor Binding 覆盖策略。Protocol Binding 可解析为未来的 Task 负责人，也可直接指定当前 Lab 中对该 Project 拥有科研执行权的成员，或使用受治理的技能池。人工 Executor 档案是保留修订的 Lab 记录，包含可用时段、最大并行工作量，以及带等级、管理验证和可选到期时间的技能声明。技能池只接受具备全部必需技能、已验证且未过期、当前可用，并拥有 `research.run` 权限的人员；再依次按归一化活跃工作量、活跃项数和稳定用户 ID 选择。选定的人员、档案修订、匹配技能证据、工作量、容量和摘要都会固定到 Research Environment。
+Lab Owner 和 Manager 可以在 Project Research 中增加指定版本的 Executor Binding 覆盖策略。Protocol 或结构化 Human Work Binding 可解析为未来的 Task 负责人，也可直接指定当前 Lab 中对该 Project 拥有科研执行权的成员，或使用受治理的技能池。人工 Executor 档案是保留修订的 Lab 记录，包含可用时段、最大并行工作量，以及带等级、管理验证和可选到期时间的技能声明。技能池只接受具备全部必需技能、已验证且未过期、当前可用，并拥有 `research.run` 权限的人员；再依次按归一化活跃工作量、活跃项数和稳定用户 ID 选择。选定的人员、档案修订、匹配技能证据、工作量、容量和摘要都会固定到 Research Environment。
 
 每次 Binding 和档案变更都需先预览再确认，并追加不可变审计快照。Binding 可要求审批、禁止使用，或仅放行 Platform 内部只读 Tool；也可限制 Project、自主等级、每次 Run 的 Action 数和人员最低技能等级。之后的策略或档案修改不会改写正在运行的 Run。正式派发人工工作前，Platform 会加锁并复核固定人员的当前 Lab 成员身份、`research.run` 权限、可用性、已验证资质和剩余容量；权限撤销、资质过期或容量耗尽时均失败关闭。不使用 AI 时，仍可手工选择 Task 负责人或具体成员。
 
@@ -104,7 +104,7 @@ Research Task
   → 重规划或结束
 ```
 
-目标计划是可版本化的自适应 DAG，而不是只能向前的页面步骤。当前运行时支持三种有边界的受治理执行：2–4 个相互独立的只读 Tool Action 并行前沿、2–8 个只读 Tool Action 组成的无环依赖图，以及 2–8 个 Protocol Run、Tool、Resource Reservation、Instrument Job、External Service Job、隔离 Compute 与类型化 Wait Action 组成的混合无环图。依赖边持久化保存，初始只释放根节点；下游节点仅在全部前置完成后才进入自己的权限、策略、审批、资源、预算和执行器边界，任一前置失败或被拒绝会确定性跳过其后代。在同类 Tool 图中，下游节点可将一个已声明参数绑定到直接前置的有界结构化输出路径。Platform 只在该前置完成后解析值，记录来源 Action 修订和输出摘要，重建下游预览摘要，再于审批或执行前校验完整输入 Schema。路径缺失、数组下标越界、未声明目标或解析后类型不符时必须失败关闭，并沿图向后传播。混合图当前使用完整静态输入、已有的批准设备预订、准确固定的服务请求和 DataAsset 版本，不在不同 Action 类型之间隐式传递未校验数据。Protocol Record 提交以及 Resource、Instrument 与 External Service 的完成、取消和失败会进入同一个图屏障，因此只要依赖的人员、物理或外包工作尚未落定，Run 就不会提前重规划。由图规划的 Protocol Run 在前置完成且通过普通审批与固定 Executor Binding 校验前，不会创建 Human Work Item；之后被指派人员仍使用现有 Record 流程，只有经校验且与固定 Protocol 匹配的 Record 才能完成节点。由图规划的 Service 请求在前置完成前保持阻塞，不请求报价、不创建下单审批；所有前置完成后，Platform 会重新校验不可变契约快照、权限、输入 Schema 和预算，再进入普通报价与下单流程。非 Protocol 的通用 Human Work Item 图节点、循环和任意多 Agent 图仍是受控的后续能力。修改目标、成功标准、预算或高风险路径必须产生新的计划版本并重新确认。
+目标计划是可版本化的自适应 DAG，而不是只能向前的页面步骤。当前运行时支持三种有边界的受治理执行：2–4 个相互独立的只读 Tool Action 并行前沿、2–8 个只读 Tool Action 组成的无环依赖图，以及 2–8 个 Protocol Run、结构化 Human Work、Tool、Resource Reservation、Instrument Job、External Service Job、隔离 Compute 与类型化 Wait Action 组成的混合无环图。依赖边持久化保存，初始只释放根节点；下游节点仅在全部前置完成后才进入自己的权限、策略、审批、资源、预算和执行器边界，任一前置失败或被拒绝会确定性跳过其后代。在同类 Tool 图中，下游节点可将一个已声明参数绑定到直接前置的有界结构化输出路径。Platform 只在该前置完成后解析值，记录来源 Action 修订和输出摘要，重建下游预览摘要，再于审批或执行前校验完整输入 Schema。路径缺失、数组下标越界、未声明目标或解析后类型不符时必须失败关闭，并沿图向后传播。混合图当前使用完整静态输入、已有的批准设备预订、准确固定的服务请求和 DataAsset 版本，不在不同 Action 类型之间隐式传递未校验数据。Protocol Record 提交、Human Work 审核以及 Resource、Instrument 与 External Service 的完成、取消和失败会进入同一个图屏障，因此只要依赖的人员、物理或外包工作尚未落定，Run 就不会提前重规划。由图规划的 Protocol Run 在前置完成且通过普通审批与固定 Executor Binding 校验前，不会创建 Human Work Item；之后被指派人员仍使用现有 Record 流程，只有经校验且与固定 Protocol 匹配的 Record 才能完成节点。由图规划的结构化 Human Work 节点使用同一依赖和指派门禁，校验固定的类型化字段与 DataAsset 版本契约；提交后保持不可变，直到有权审核人接受或要求修改。接受会封存 Action 输出、生成已校验 Evidence 并释放下游节点。由图规划的 Service 请求在前置完成前保持阻塞，不请求报价、不创建下单审批；所有前置完成后，Platform 会重新校验不可变契约快照、权限、输入 Schema 和预算，再进入普通报价与下单流程。循环和任意多 Agent 图仍是受控的后续能力。修改目标、成功标准、预算或高风险路径必须产生新的计划版本并重新确认。
 
 ## 人机协作
 
@@ -113,8 +113,8 @@ Research Task
 1. Aira 选择已发布的 Protocol 版本并生成参数草稿。
 2. Platform 解析具体执行人、资源和审批要求。
 3. Platform 创建 Human Work Item，持久化指令和提交契约，然后将 Run 转为等待。
-4. 人员在确定性 Protocol/Record 界面执行并提交 Record/DataAsset。
-5. API 验证权限、Protocol 版本、Schema、资源消耗和提交完整性。
+4. 人员在确定性 Protocol/Record 界面或固定结构化 Human Work 表单执行，并提交 Record/DataAsset Evidence 或类型化结果。
+5. API 验证权限、固定的能力与契约版本、Schema、资源消耗和提交完整性；通用 Human Work 还必须经过独立的有权审核。
 6. 成功事件唤醒 Run，AIRA 根据真实证据继续。
 
 邮件、Slack 或其他渠道只是通知方式，Human Work Item 才是权威状态。
@@ -140,7 +140,7 @@ Lab Research 自治策略是版本化治理资产。辅助模式对每个 Aira �
 
 审批必须绑定预览版本或摘要哈希；源数据变化后原审批失效。权限、资源和策略校验全部在 API 层执行，不以前端隐藏替代。
 
-实施依然失败关闭：手工 Action 只在确认确定性预览后记为 `allow`；Aira 提议的人工 Protocol Action 始终为 `ask`。批准只激活当前摘要绑定的 Action，然后才创建 Human Work Item；拒绝会取消该提议、记录原因并请求重新规划。任何显式 `deny`、缺少必要价格或安全条件、超出限额或策略未覆盖的执行都不能自动通过。
+实施依然失败关闭：手工 Protocol 或结构化 Human Work Action 只在确认确定性预览后记为 `allow`；Aira 提议的人工 Action 始终为 `ask`。批准只激活当前摘要绑定的 Action，然后才创建 Human Work Item；拒绝会取消该提议、记录原因并请求重新规划。任何显式 `deny`、缺少必要价格或安全条件、超出限额或策略未覆盖的执行都不能自动通过。
 
 ## 科学可靠性
 
@@ -180,7 +180,7 @@ Paper 到 Knowledge 是明确的候选生成边界。具有 Knowledge 写入权�
 
 Knowledge 到方法的流转必须显式并固定版本。获授权用户先预览准确的 Knowledge 修订和目标 Project，再进入 Aira Protocol 生成器；Knowledge 正文通过正常权限接口读取，不进入 URL。保存生成结果时，Platform 会重新检查来源可见性、范围、目标 Project 写权限和修订新鲜度，然后原子写入不可变的 `Knowledge revision → Protocol version` 关系与来源快照。Personal Knowledge 可用于用户有权写入的 Project；Lab 与 Project Knowledge 只能留在各自 Lab 或 Project。已归档、已被取代、过期或不可访问的来源一律失败关闭。Protocol 响应只向同时有权读取两侧资产的人展示来源，避免 provenance 泄露 Restricted Knowledge。
 
-已完成的结构化 Action 输出有独立的晋升边界。获授权用户选择已完成 Action，预览准确输出摘要后确认创建待审核 Evidence。Platform 会锁定 Action，封存一份只可追加的快照，其中包含 Task、Run、Action 修订、类型、输出和规范 SHA-256 摘要；读取及结果包导出都会验证该摘要。在人员审核待定 Evidence 前，系统不会将该输出认定为科学上有效。这使 Tool、Instrument、Resource、Wait、External Service 和 Compute 结果可成为可审计的科研来源，同时不把它们伪装成 Record，也不静默视为事实。
+已完成的结构化 Action 输出有独立的晋升边界。获授权用户选择已完成 Action，预览准确输出摘要后确认创建待审核 Evidence。Platform 会锁定 Action，封存一份只可追加的快照，其中包含 Task、Run、Action 修订、类型、输出和规范 SHA-256 摘要；读取及结果包导出都会验证该摘要。在人员审核待定 Evidence 前，系统不会将该输出认定为科学上有效。这使 Tool、Instrument、Resource、Wait、External Service 和 Compute 结果可成为可审计的科研来源，同时不把它们伪装成 Record，也不静默视为事实。结构化 Human Work 将提交审核本身作为这道边界：接受时封存同样的不可变 Action 输出并直接创建已校验 Evidence，因此执行人的提交永远不能自我验证。
 
 反向流转必须经过 Evidence 门禁。具有 Knowledge 写权限的 Project 成员只能选择已校验、且指向准确 Record、DataAsset 版本或不可变 Action 输出快照的 Evidence；在预览保存位置和来源集合后，可创建 Project 范围的可编辑 Suggested Knowledge。确认时会锁定并重新校验每条 Evidence，将预览摘要与审核状态和不可变来源版本绑定，同时保存来源快照和准确的 `Evidence → Knowledge revision` 关系。该结果仍是候选认识，只有通过独立 Knowledge 审核权限才能成为组织已采纳的 Knowledge。待审核或已拒绝 Evidence、外部链接、Paper 及既有 Knowledge 都不能从该路径进入，且整个流程不依赖 AI。
 
@@ -282,7 +282,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - 受治理服务商目录、不可变服务契约、范围权限和 Research Environment 准确版本固定（已交付）；
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
-- 独立建议型 Reviewer Agent、有界并行与依赖只读 Tool 图，以及有界 Protocol/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；非 Protocol 的通用 Human Work Item 图节点、任意多 Agent 执行和复现评估；
+- 独立建议型 Reviewer Agent、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；循环、任意多 Agent 执行和复现评估；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性

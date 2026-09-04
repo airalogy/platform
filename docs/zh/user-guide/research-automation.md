@@ -91,7 +91,8 @@ AI 可用时，请先选择目标 Protocol 和 Evidence，可补充希望 Aira �
 ## 选择正确的 Action
 
 - **Protocol 工作**：把锁定版本的方法指派给人员。Lab 管理员可在“Executor Binding”中将对应 Protocol 版本配置为未来的 Task 负责人、当前 Project 中具备执行权的具体成员，或已验证技能池。在其中打开“人工 Executor 档案”，可记录成员可用时段、并行工作容量、技能等级、验证状态和资质到期时间。技能匹配会从满足全部必需技能和当前 Project 权限的人员中，选择归一化活跃工作量最低者，再将该人员和匹配证据固定。执行人使用正常 Record 表单完成实验，校验通过的 Record 会回传为 Evidence，而不是普通对话消息。Platform 会在派发时加锁并复核成员身份、权限、技能、可用性和容量。AI 关闭时，管理员仍可配置相同绑定，用户也可手工指派 Protocol 工作。
-- **待处理通知**：集中呈现新分配给你的 Protocol 工作和审批请求。打开后会将提醒标记为已读，并进入作为权威状态来源的 Research Task。部署管理员启用 SMTP 后，Platform 还会发送可重试邮件提醒；邮件等待发送、未启用或发送失败都不会移除站内事项，也不会阻塞执行。
+- **结构化 Human Work**：承载不属于可重复科学方法本身的观察、采集、协调或审核。创建时定义类型化字段、完成标准、Evidence 类型和允许关联的准确 DataAsset 版本数量，并在确认前预览保存位置与执行人。执行人填写生成的确定性表单、预览不可变提交并确认；之后必须由 Task 负责人或获授权 Research 审批人接受或退回修改。接受才会生成已校验 Evidence 并释放依赖它的下游 Action，Aira 不能验收自己提议的工作。若活动在定义实验“如何做”，应改用 Protocol 工作。
+- **待处理通知**：集中呈现新分配的 Protocol 或结构化 Human Work、等待审核的工作和审批请求。打开后会标记提醒为已读，并进入对应的权威工作页面。部署管理员启用 SMTP 后，Platform 还会发送可重试邮件提醒；邮件等待发送、未启用或发送失败都不会移除站内事项，也不会阻塞执行。
 - **科研工具**：运行白名单中且锁定版本的数字能力，例如检索已审核 Knowledge、检索文献或可选的 DOI 元数据解析。输入和输出都会经过 Schema 校验，执行有超时、重试和完整留痕。当多个只读检索确实彼此独立时，Aira 可创建包含 2–4 个 Action 的有界并行前沿；当某项检索必须等待另一项时，Aira 可改为创建包含 2–8 个 Tool Action 的无环依赖图。下游节点可从直接前置的结构化结果接收已声明参数；工作台会标出这些绑定，Platform 会记录准确来源回执，再校验最终参数。只有就绪且有效的节点才会请求审批或执行；前置失败、被拒绝或绑定无效时，下游节点会明确被跳过。只有整个并行前沿或依赖图结束后，Aira 才会重新规划。
 - **等待外部结果**：在人员、设备或外部服务返回结果前，把 Run 暂停在类型化边界。选择并确认预期结果契约；系统生成的事件键是不可变的交付引用，当前版本由获授权用户在工作台登记已收到的结果。
 - **预约资源**：从 Research Environment 已固定的资源类型中解析具体资源。库存预约需选择容器、准确数量、UCUM 单位与可选失效时间；设备预约需选择时段。Platform 会预览当前可用量与策略，拒绝过期或冲突的确认，并把权威库存预约或设备预约关联到 Action。
@@ -128,9 +129,9 @@ Platform 会在 API 层创建每个新的人工或 Aira Protocol、Tool、Wait�
 
 对于 External Service，Aira 只能选择已固定到 Research Environment 的准确服务，并生成符合固定输入 Schema 的请求草稿；这不等于已下单。Platform 会创建与手工路径相同的受治理 Service Job：需要时由服务管理员登记服务商报价，每个准确报价都会生成绑定摘要的下单审批，预算预留、样本交接、履约和结果接收仍由确定性界面控制。Action Planner 不会直接执行模型自由文本：Platform 会先校验 Action 类型、白名单、固定版本、输入参数、资源需求和结果契约，再创建正式 Action。物理 Action 和服务下单始终需要审批，其他 Aira Action 则继续按对应准确风险策略治理。
 
-Aira 也可将固定版本的 Protocol Run 放入混合依赖图。创建计划图不会立即派发实验工作；Platform 会等待全部前置条件，重新校验固定的人员 Executor Binding，进入普通审批，通过后才创建 Human Work Item。被指派人员使用现有 Record 表单完成工作；只有准确 Protocol 版本、提交者和 Record 全部校验通过后，下游分析或外部服务才会开始。其他已就绪分支可并行继续，但整张图稳定前 Run 不会重新规划。
+Aira 也可将固定版本的 Protocol Run 或结构化 Human Work 放入混合依赖图。创建计划图不会立即派发实验工作；Platform 会等待全部前置条件，重新校验固定的人员 Executor Binding，进入普通审批，通过后才创建 Human Work Item。Protocol 执行人使用现有 Record 表单完成工作；只有准确 Protocol 版本、提交者和 Record 全部校验通过后，下游工作才会开始。通用 Human Work 执行人填写固定生成的表单，并且只能关联准确的当前 DataAsset 版本；提交还须经有权人员接受，才能成为已校验 Evidence 并释放下游 Action。其他已就绪分支可并行继续，但整张图稳定前 Run 不会重新规划。
 
-已完成的 Tool、Instrument、Resource、External Service、Compute 和外部 Wait Action 会把类型明确的结果回传给后续 Aira 规划与结论。Platform 只保留有上限的近期结果窗口，并将其作为不可信证据提供。如需晋升准确结构化输出，用户必须经预览和确认将它登记为待审核 Evidence；Platform 会封存只可追加、由 SHA-256 绑定的快照，在 Task 结果包中呈现，且在它支持 Claim、Knowledge 候选或 Protocol 改进前仍需人工校验。这条路径不依赖 AI。
+已完成的 Human Work、Tool、Instrument、Resource、External Service、Compute 和外部 Wait Action 会把类型明确的结果回传给后续 Aira 规划与结论，Platform 只保留有上限的近期结果窗口。已接受的 Human Work 提交已经通过明确的审核门禁，会直接登记为已校验 Evidence；其他结构化输出仍须经预览和确认登记为待审核 Evidence。Platform 会封存只可追加、由 SHA-256 绑定的快照，在 Task 结果包中呈现，且在它支持 Claim、Knowledge 候选或 Protocol 改进前仍需人工校验。这些路径不依赖 AI。
 
 ## 提交外部结果
 
