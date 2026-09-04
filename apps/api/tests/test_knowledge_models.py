@@ -59,6 +59,18 @@ def test_knowledge_items_keep_review_and_lineage_fields():
     assert "reviewed_by_user_id" in ddl
     assert "superseded_by_id" in ddl
     assert "revision" in ddl
+    assert "generation_snapshot" in ddl
+    assert "ck_knowledge_item_generation_provenance" in ddl
+    assert "uq_knowledge_items_generation_id" in {
+        index.name for index in KnowledgeItem.__table__.indexes
+    }
+
+
+def test_knowledge_ai_provenance_migration_is_chained():
+    migration = import_module("migrations.versions.0037_knowledge_ai_provenance")
+
+    assert migration.down_revision == "0036_research_action_output_snapshots"
+    assert "generation_snapshot" in migration.ADDED_COLUMNS
 
 
 def test_protocol_lineage_pins_the_exact_knowledge_and_protocol_revisions():

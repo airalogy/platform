@@ -50,6 +50,12 @@ Platform 不接受 Runner 提交的任意文件系统路径作为资产。新增
 
 服务商返回结果后，先在当前 Task 创建或上传相关 DataAsset。选择“接收结果”，填写结果 JSON、选择准确的 DataAsset 版本并确认实际费用。Platform 会按锁定的结果 Schema 校验，拒绝高于已批准报价的费用，把预算预留结算为实际支出，完成 Action，并把类型化结果交回 Aira。登记失败会释放报价预留，并把 Run 交回 Aira 或普通人工控制。AI 关闭时，请求、报价、审批、交接、进度、结果、费用与操作者历史仍完整保留。
 
+## 从 Paper 形成 Suggested Knowledge
+
+进入“Knowledge”，选中一篇 Paper，先检查元数据、笔记、可见范围和可用全文。你始终可以选择“从论文创建 Knowledge”手工编写；AI 可用时，可选择“用 Aira 生成候选”，系统只会使用你当前有权读取的论文内容生成一份可编辑候选。
+
+请在普通 Knowledge 编辑器中检查候选类型、标题、内容、标签、假设与风险。保存时会先对准确位置和编辑后内容生成预览，再确认为普通、可修订的 Knowledge 资产。Platform 会重新检查 Paper 与文件权限，过期或来源变更的生成结果会被拒绝。Project/Lab 结果初始为“候选”，只有经单独授权的人员执行“审核并采纳”后，才会成为组织已采纳的 Knowledge；Personal 结果因不存在组织审核状态，会在你确认后成为私有草稿。两者都会显示 Aira 来源，编辑不会改变原始生成快照；Restricted 来源不会因此扩大权限，后续发布会创建带来源关系的新范围资产，而不是移动原对象。AI 关闭时，Aira 按钮自动消失，手工路径仍完整可用。
+
 ## 从 Knowledge 生成 Protocol 草稿
 
 进入“Knowledge”，切换到“Knowledge 笔记”，在有效条目上选择“生成 Protocol 草稿”。先核对固定的来源修订，选择符合范围的目标 Project，再进入 Aira 草拟。Platform 会通过受保护接口把 Knowledge 内容载入可编辑生成器，不会把正文放进 URL。检查并修改生成的 AIMD 后，选择“保存 Protocol”，再次确认目标 Project。

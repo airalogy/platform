@@ -36,6 +36,7 @@ export interface ResearchFileSummary {
   content_type: string
   size_bytes: number
   relationship_type: string
+  visibility: KnowledgeVisibility
 }
 
 export interface PaperLibraryEntry {
@@ -104,7 +105,10 @@ export interface KnowledgeItem {
   tags: string[]
   revision: number
   derived_from_id?: string | null
-  generated_by: "human" | "aira"
+  generated_by: "human" | "aira_assisted"
+  generation_id?: string | null
+  generation_model?: string | null
+  generation_snapshot?: AiraKnowledgeGeneration | null
   created_by_user_id: string
   reviewed_by_user_id?: string | null
   reviewed_at?: string | null
@@ -125,6 +129,58 @@ export interface KnowledgeItem {
   }>
   created_at: string
   updated_at: string
+}
+
+export interface AiraKnowledgeOutput {
+  title: string
+  kind: Exclude<KnowledgeKind, "decision">
+  body: string
+  tags: string[]
+  rationale: string
+  assumptions: string[]
+  warnings: string[]
+}
+
+export interface AiraKnowledgeGeneration {
+  id: string
+  model: string
+  generated_at: string
+  context_digest: string
+  instruction: string
+  source_snapshot: {
+    library_entry_id: string
+    entry_digest: string
+    paper_digest: string
+    files: Array<{
+      research_file_id: string
+      relationship_type: string
+      visibility: KnowledgeVisibility
+      checksum_sha256: string
+      extracted_text_digest: string
+    }>
+  }
+  output: AiraKnowledgeOutput
+}
+
+export interface AiraPaperKnowledgeDraft {
+  draft: Pick<AiraKnowledgeOutput, "title" | "kind" | "body" | "tags">
+  rationale: string
+  assumptions: string[]
+  warnings: string[]
+  source: AiraKnowledgeGeneration["source_snapshot"]
+  aira_generation: AiraKnowledgeGeneration
+  aira_receipt: string
+}
+
+export interface KnowledgeDraftPayload extends KnowledgeScope {
+  kind: KnowledgeKind
+  title: string
+  body: string
+  tags: string[]
+  paper_library_entry_ids?: string[]
+  research_file_ids?: string[]
+  aira_generation?: AiraKnowledgeGeneration
+  aira_receipt?: string
 }
 
 export interface KnowledgePublishPreview {
@@ -323,13 +379,39 @@ export function fetchKnowledgeItem(itemId: string) {
   })
 }
 
-export function createKnowledgeItem(payload: KnowledgeScope & {
-  kind: KnowledgeKind
-  title: string
-  body: string
-  tags: string[]
-  paper_library_entry_ids?: string[]
-  research_file_ids?: string[]
+export function draftPaperKnowledgeWithAira(
+  entryId: string,
+  instruction = "",
+  confirmRestrictedProcessing = false,
+) {
+  return getData<AiraPaperKnowledgeDraft>({
+    url: `/knowledge/papers/${entryId}/knowledge-draft-with-aira`,
+    method: "POST",
+    data: {
+      instruction,
+      confirm_restricted_processing: confirmRestrictedProcessing,
+    },
+  })
+}
+
+export function previewKnowledgeItem(payload: KnowledgeDraftPayload) {
+  return getData<{
+    preview_digest: string
+    command: Record<string, unknown>
+    effect: {
+      state: "suggested" | "draft"
+      generated_by: "human" | "aira_assisted"
+      requires_human_review: true
+    }
+  }>({
+    url: "/knowledge/items/preview",
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createKnowledgeItem(payload: KnowledgeDraftPayload & {
+  preview_digest?: string
 }) {
   return getData<KnowledgeItem>({ url: "/knowledge/items", method: "POST", data: payload })
 }

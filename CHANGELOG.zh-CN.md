@@ -33,6 +33,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - 新增可持久化的 Research Task 与 Run，并在产品内提供任务、指派工作与审批工作台：固定版本化 Research Environment，使用类型明确的 Protocol Action、绑定预览摘要的 `allow / ask / deny` 策略门禁、经过校验的 Record 表单交付与回传和仅追加的来源事件；Aira 可在服务重启后安全续跑，AI 不可用时仍可手工执行，科研结论必须由人明确审核。
 - 新增受治理的 Aira 意图入口，可将自然语言科研问题转换为可编辑的 Research Task 草稿；模型只能从当前用户有权且可执行的 Capability 目录中选择，Platform 在返回前重新校验每项选择，不在此步写入或执行任何操作，并在 AI 关闭时保留完整手工“预览→确认”路径。
 - 新增 Knowledge Core 和按范围私有化的 Paper Library：支持 DOI 规范化、无 DOI 候选冲突显式确认、DOI/PDF/URL/BibTeX/RIS 的“解析预览→确认导入”、内容哈希去重但不继承权限的文件存储、真实 PDF 与配额校验、全文检索、集合和 Project 关联、BibTeX/RIS 导出、Knowledge 修订与审核，以及保留来源关系且不扩大原文件权限的 Personal→Project、Project→Lab 发布；文件预览使用短时令牌、读取时再鉴权和仅追加审计，Restricted 内容使用对象级显式授权；可选 Scholar 只作为只读文献候选服务。
+- 新增受治理的 Paper 到 Knowledge 草拟：Aira 只接收当前用户有权读取的 Paper 元数据、笔记和有上限的本地提取文本，Restricted 处理需要显式确认，且文件读取会追加到访问审计；Platform 在生成后与“预览→确认”时重新鉴权来源，通过短时签名凭据绑定准确来源和原始模型输出，防止生成结果重放，并保存为带持久来源的可编辑 Knowledge；Project/Lab 范围为 Suggested，Personal 范围为私有 Draft；AI 关闭时完整手工路径仍可用。
 - Research Environment 现可固定 Project/Lab 中已审核 Knowledge 的具体修订，并将其作为受边界约束的 Aira 规划上下文；Restricted Knowledge 不进入共享 Task 快照，避免绕过对象级权限。
 - 新增保留修订历史的 Personal、Project 和 Lab Research Log：支持结构化进展、会议记录、反思、阻塞和里程碑，按角色控制发布，通过预览后确认保存，并在不可编辑的聚合时间线中呈现真实 Record、Protocol、Knowledge 与 Research Task 活动；现有 Record 热图、日历、导出与历史链接继续保留。
 - 新增版本化 DataAsset、按 Research Task 隔离的 Evidence 质量审核和关联 Evidence 且保留修订的科学 Claim；支持预览后确认创建、来源事件留痕、从已完成 Record 待办自动登记已校验 Evidence，并在 Research Result Package 与任务工作台中统一呈现正式科研资产。

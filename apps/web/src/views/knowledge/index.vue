@@ -168,6 +168,9 @@
                   <n-tag :type="stateType(item.state)" size="small" round>
                     {{ stateLabel(item.state) }}
                   </n-tag>
+                  <n-tag v-if="item.generated_by === 'aira_assisted'" type="info" size="small" round>
+                    {{ $t("page.knowledge.airaSuggested") }}
+                  </n-tag>
                   <span v-if="item.derived_from_id" class="aira-type-meta">{{ $t("page.knowledge.derived") }}</span>
                 </div>
                 <h2 class="aira-type-card-title mb-0 mt-2">
@@ -336,10 +339,22 @@
               <n-button @click="downloadExport('ris')">
                 {{ $t("page.knowledge.exportRis") }}
               </n-button>
-              <n-button type="primary" ghost @click="createKnowledgeFromPaper">
+              <n-button
+                v-if="instanceStore.aiEnabled"
+                type="primary"
+                :loading="airaDraftLoading"
+                data-testid="paper-aira-knowledge-draft"
+                @click="createAiraKnowledgeFromPaper"
+              >
+                {{ $t("page.knowledge.airaDraftFromPaper") }}
+              </n-button>
+              <n-button ghost @click="createKnowledgeFromPaper">
                 {{ $t("page.knowledge.createFromPaper") }}
               </n-button>
             </div>
+            <n-alert v-if="instanceStore.aiEnabled" type="warning" class="mt-3" :show-icon="false">
+              {{ $t("page.knowledge.airaProcessingNotice") }}
+            </n-alert>
           </template>
         </n-spin>
       </n-drawer-content>
@@ -455,6 +470,7 @@
 
 <script setup lang="ts">
 import type {
+  AiraPaperKnowledgeDraft,
   KnowledgeItem,
   KnowledgeKind,
   KnowledgePublishPreview,
@@ -471,6 +487,7 @@ import {
   addPaperToCollection,
   confirmKnowledgePublish,
   createCollection,
+  draftPaperKnowledgeWithAira,
   exportPaper,
   fetchCollections,
   fetchKnowledgeItems,
@@ -493,7 +510,13 @@ import ImportPaperModal from "./components/import-paper-modal.vue"
 import KnowledgeEditorModal from "./components/knowledge-editor-modal.vue"
 
 interface KnowledgeEditorHandle {
-  open: (options?: { item?: KnowledgeItem, paperId?: string, paperTitle?: string }) => void
+  open: (options?: {
+    item?: KnowledgeItem
+    paperId?: string
+    paperTitle?: string
+    restrictedSource?: boolean
+    airaDraft?: AiraPaperKnowledgeDraft
+  }) => void
 }
 
 const route = useRoute()
@@ -523,6 +546,7 @@ const paperDrawerVisible = ref(false)
 const paperLoading = ref(false)
 const paperSaving = ref(false)
 const fileLoading = ref(false)
+const airaDraftLoading = ref(false)
 const selectedPaper = ref<PaperLibraryEntry | null>(null)
 const paperNotes = ref("")
 const paperTags = ref<string[]>([])
@@ -828,6 +852,54 @@ function createKnowledgeFromPaper() {
   editorRef.value?.open({
     paperId: selectedPaper.value.id,
     paperTitle: selectedPaper.value.paper.title,
+    restrictedSource: paperHasRestrictedSource(selectedPaper.value),
+  })
+}
+
+function paperHasRestrictedSource(paper: PaperLibraryEntry) {
+  return paper.visibility === "restricted"
+    || paper.files?.some(file => file.visibility === "restricted") === true
+}
+
+async function runAiraKnowledgeDraft(confirmRestrictedProcessing = false) {
+  if (!selectedPaper.value || !instanceStore.aiEnabled)
+    return
+  airaDraftLoading.value = true
+  try {
+    const paper = selectedPaper.value
+    const draft = await draftPaperKnowledgeWithAira(
+      paper.id,
+      "",
+      confirmRestrictedProcessing,
+    )
+    paperDrawerVisible.value = false
+    editorRef.value?.open({
+      paperId: paper.id,
+      paperTitle: paper.paper.title,
+      restrictedSource: paperHasRestrictedSource(paper),
+      airaDraft: draft,
+    })
+  }
+  finally {
+    airaDraftLoading.value = false
+  }
+}
+
+function createAiraKnowledgeFromPaper() {
+  if (!selectedPaper.value || !instanceStore.aiEnabled)
+    return
+  if (!paperHasRestrictedSource(selectedPaper.value)) {
+    void runAiraKnowledgeDraft()
+    return
+  }
+  window.$dialog?.warning({
+    title: $t("page.knowledge.restrictedAiraTitle"),
+    content: $t("page.knowledge.restrictedAiraConfirm"),
+    positiveText: $t("common.confirm"),
+    negativeText: $t("common.cancel"),
+    async onPositiveClick() {
+      await runAiraKnowledgeDraft(true)
+    },
   })
 }
 

@@ -809,6 +809,13 @@ declare namespace I18n {
         exportBibtex: string
         exportRis: string
         createFromPaper: string
+        airaDraftFromPaper: string
+        airaSuggested: string
+        airaSuggestedHint: string
+        airaPersonalDraftHint: string
+        airaProcessingNotice: string
+        restrictedAiraTitle: string
+        restrictedAiraConfirm: string
         createProtocolDraft: string
         protocolDraftImpact: string
         protocolDraftSource: string

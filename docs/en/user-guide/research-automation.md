@@ -50,6 +50,12 @@ During fulfilment, a service manager can record the provider order reference and
 
 When the provider returns results, first create or upload the relevant Task DataAssets. Choose **Receive result**, enter the result JSON, select the exact DataAsset versions, and confirm the actual cost. Platform validates the pinned result Schema, rejects costs above the approved quote, converts the reservation to actual expense, completes the Action, and returns the typed result to Aira. A failure releases the reserved quote and returns the Run to Aira or normal manual control. All request, quote, approval, custody, progress, result, cost, and actor history remains on the Task when AI is disabled.
 
+## Turn a Paper into suggested Knowledge
+
+Open **Knowledge**, select a Paper, and review its metadata, notes, visibility, and available full text. You can always choose **Create Knowledge from paper** and write the item manually. When AI is enabled, choose **Draft with Aira** to prepare one editable candidate from only the Paper content you can currently access.
+
+Check the proposed type, title, content, tags, assumptions, and warnings in the ordinary Knowledge editor. Saving first previews the exact destination and edited content, then confirms a normal versioned Knowledge asset. Platform rechecks the Paper and file permissions and rejects a stale or expired generation. A Project or Lab result starts as **Suggested** and becomes organizationally adopted only after a separately authorized human uses **Review and adopt**. A Personal result becomes your private **Draft**, because Personal Knowledge has no organizational review state. Both show their Aira provenance, and editing never changes the original generation snapshot. Restricted source content does not gain wider visibility, and publishing later creates a separate scoped asset with lineage rather than moving the source. With AI disabled, the Aira button disappears and the manual path remains complete.
+
 ## Turn Knowledge into a Protocol draft
 
 Open **Knowledge**, switch to **Knowledge Notes**, and choose **Generate Protocol draft** on an active item. Review the pinned source revision, choose an eligible target Project, and open the Aira draft. Platform loads the protected Knowledge content into the editable generator without putting it in the URL. Review and revise the generated AIMD, then choose **Save Protocol** and confirm the Project destination.

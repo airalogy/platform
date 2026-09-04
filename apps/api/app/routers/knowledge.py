@@ -14,8 +14,9 @@ from uuid import UUID
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import Text, cast, exists, or_, select
+from sqlalchemy import Text, and_, cast, exists, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.exc import IntegrityError
 
 from app.config import config
 from app.database import DBSession
@@ -73,7 +74,15 @@ from app.services.knowledge import (
     utcnow,
     validate_visibility,
 )
+from app.services.knowledge_drafts import (
+    AiraKnowledgeGeneration,
+    create_knowledge_generation,
+    generate_knowledge_draft,
+    sign_knowledge_generation_receipt,
+    verify_knowledge_generation_receipt,
+)
 from app.services.literature_provider import get_literature_provider
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -129,13 +138,34 @@ class CollectionAssignmentParams(BaseModel):
     library_entry_ids: list[UUID] = Field(default_factory=list, max_length=500)
 
 
-class KnowledgeCreateParams(ScopeParams):
+class KnowledgeDraftParams(ScopeParams):
     kind: KnowledgeKind
     title: str = Field(min_length=1, max_length=512)
     body: str = Field(default="", max_length=2_000_000)
     tags: list[str] = Field(default_factory=list, max_length=100)
     paper_library_entry_ids: list[UUID] = Field(default_factory=list, max_length=100)
     research_file_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    aira_generation: AiraKnowledgeGeneration | None = None
+    aira_receipt: str | None = Field(default=None, min_length=1, max_length=8_000)
+
+    @model_validator(mode="after")
+    def validate_aira_provenance(self):
+        if bool(self.aira_generation) != bool(self.aira_receipt):
+            raise ValueError(
+                "Aira Knowledge generation and receipt must be supplied together"
+            )
+        return self
+
+
+class KnowledgeCreateParams(KnowledgeDraftParams):
+    preview_digest: str | None = Field(default=None, min_length=64, max_length=64)
+
+
+class AiraPaperKnowledgeDraftParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str = Field(default="", max_length=4_000)
+    confirm_restricted_processing: bool = False
 
 
 class KnowledgeUpdateParams(BaseModel):
@@ -182,6 +212,34 @@ class RestrictedGrantParams(BaseModel):
     resource_id: UUID
     user_id: UUID
     reason: str = Field(min_length=1, max_length=4_000)
+
+
+def _require_restricted_ai_confirmation(
+    restricted_source: bool,
+    *,
+    confirmed: bool,
+) -> None:
+    if restricted_source and not confirmed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Confirm that processing this Restricted Paper source with the "
+                "configured AI provider is permitted by the applicable research data policy"
+            ),
+        )
+
+
+def _has_restricted_source(
+    entry_visibility: str,
+    source_files: list[dict[str, Any]],
+) -> bool:
+    return (
+        entry_visibility == Visibility.RESTRICTED.value
+        or any(
+            source_file.get("visibility") == Visibility.RESTRICTED.value
+            for source_file in source_files
+        )
+    )
 
 
 @router.get("/literature/search")
@@ -596,7 +654,7 @@ async def confirm_paper_import(
             raise HTTPException(
                 status_code=409, detail="Imported entry is no longer available"
             )
-        return await _entry_payload(db_session, entry)
+        return await _entry_payload(db_session, current_user, entry)
     if draft.status != ImportDraftStatus.PENDING.value or draft.expires_at <= utcnow():
         raise HTTPException(status_code=409, detail="Import preview has expired")
     await resolve_scope(
@@ -667,11 +725,15 @@ async def confirm_paper_import(
     draft.confirmed_at = utcnow()
     draft.result_library_entry_id = entry.id
     await db_session.commit()
-    return await _entry_payload(db_session, entry)
+    return await _entry_payload(db_session, current_user, entry)
 
 
 async def _entry_payload(
-    db_session: DBSession, entry: PaperLibraryEntry, *, include_relations: bool = True
+    db_session: DBSession,
+    current_user: User,
+    entry: PaperLibraryEntry,
+    *,
+    include_relations: bool = True,
 ) -> dict[str, Any]:
     paper = await db_session.get(Paper, entry.paper_id)
     assert paper is not None
@@ -700,16 +762,29 @@ async def _entry_payload(
                 .where(PaperFileLink.library_entry_id == entry.id)
             )
         ).all()
-        payload["files"] = [
-            {
-                "id": research_file.id,
-                "filename": research_file.filename,
-                "content_type": blob.content_type,
-                "size_bytes": blob.size_bytes,
-                "relationship_type": link.relationship_type,
-            }
-            for link, research_file, blob in file_rows
-        ]
+        authorized_files = []
+        for link, research_file, blob in file_rows:
+            try:
+                await authorize_research_file(
+                    db_session,
+                    current_user,
+                    research_file,
+                )
+            except HTTPException as error:
+                if error.status_code in {403, 404}:
+                    continue
+                raise
+            authorized_files.append(
+                {
+                    "id": research_file.id,
+                    "filename": research_file.filename,
+                    "content_type": blob.content_type,
+                    "size_bytes": blob.size_bytes,
+                    "relationship_type": link.relationship_type,
+                    "visibility": research_file.visibility,
+                }
+            )
+        payload["files"] = authorized_files
         payload["project_ids"] = list(
             (
                 await db_session.scalars(
@@ -729,6 +804,64 @@ async def _entry_payload(
             ).all()
         )
     return payload
+
+
+async def _research_file_search_access(
+    db_session: DBSession,
+    current_user: User,
+    scope: ScopeContext,
+):
+    """Mirror object authorization inside full-text Paper search.
+
+    A visible Paper entry must not become a side channel for a linked
+    Restricted file. Uploaders and Lab Owners can read the object directly;
+    other readers need both the scoped capability and an explicit active
+    object grant, matching ``authorize_research_file``.
+    """
+
+    restricted_access = [
+        ResearchFile.visibility != Visibility.RESTRICTED.value,
+        ResearchFile.uploaded_by_user_id == current_user.id,
+    ]
+    if scope.lab_id is not None:
+        membership = await LabUser.find_by(
+            db_session,
+            [
+                LabUser.lab_id == scope.lab_id,
+                LabUser.user_id == current_user.id,
+            ],
+        )
+        if membership is not None and membership.role == LabRole.OWNER:
+            restricted_access.append(ResearchFile.lab_id == scope.lab_id)
+        else:
+            try:
+                await resolve_scope(
+                    db_session,
+                    current_user,
+                    scope_type=scope.scope_type,
+                    lab_id=scope.lab_id,
+                    project_id=scope.project_id,
+                    capability="knowledge.restricted.read",
+                )
+            except HTTPException as error:
+                if error.status_code != 403:
+                    raise
+            else:
+                restricted_access.append(
+                    exists(
+                        select(KnowledgeAccessGrant.id).where(
+                            KnowledgeAccessGrant.resource_type == "research_file",
+                            KnowledgeAccessGrant.resource_id == ResearchFile.id,
+                            KnowledgeAccessGrant.user_id == current_user.id,
+                            KnowledgeAccessGrant.permission == "read",
+                            KnowledgeAccessGrant.revoked_at.is_(None),
+                        )
+                    )
+                )
+    return and_(
+        *scope_conditions(ResearchFile, scope),
+        or_(*restricted_access),
+    )
 
 
 @router.get("/papers")
@@ -757,12 +890,19 @@ async def list_papers(
     ]
     if q.strip():
         pattern = f"%{q.strip()}%"
+        file_access = await _research_file_search_access(
+            db_session,
+            current_user,
+            scope,
+        )
         full_text_match = exists(
             select(PaperFileLink.id)
             .join(ResearchFile, ResearchFile.id == PaperFileLink.research_file_id)
             .join(ResearchFileBlob, ResearchFileBlob.id == ResearchFile.blob_id)
             .where(
                 PaperFileLink.library_entry_id == PaperLibraryEntry.id,
+                ResearchFile.archived_at.is_(None),
+                file_access,
                 ResearchFileBlob.extracted_text.ilike(pattern),
             )
         )
@@ -814,7 +954,7 @@ async def get_paper_entry(
     if entry is None or entry.archived_at is not None:
         raise HTTPException(status_code=404, detail="Paper not found")
     await authorize_library_entry(db_session, current_user, entry)
-    return await _entry_payload(db_session, entry)
+    return await _entry_payload(db_session, current_user, entry)
 
 
 @router.patch("/papers/{entry_id}")
@@ -833,7 +973,7 @@ async def update_paper_entry(
     if params.notes is not None:
         entry.notes = params.notes.strip()
     await db_session.commit()
-    return await _entry_payload(db_session, entry)
+    return await _entry_payload(db_session, current_user, entry)
 
 
 def _bibtex(paper: Paper) -> str:
@@ -1178,6 +1318,8 @@ async def _validate_knowledge_links(
     scope: ScopeContext,
     paper_ids: list[UUID],
     file_ids: list[UUID],
+    *,
+    target_visibility: Visibility,
 ) -> None:
     papers = list(
         (
@@ -1209,11 +1351,409 @@ async def _validate_knowledge_links(
         await authorize_library_entry(db_session, current_user, paper)
     for research_file in files:
         await authorize_research_file(db_session, current_user, research_file)
+    _require_restricted_source_visibility(
+        [item.visibility for item in [*papers, *files]],
+        target_visibility=target_visibility,
+    )
 
 
-@router.post("/items")
-async def create_knowledge_item(
-    params: KnowledgeCreateParams,
+def _require_restricted_source_visibility(
+    source_visibilities: list[str],
+    *,
+    target_visibility: Visibility,
+) -> None:
+    if (
+        target_visibility != Visibility.RESTRICTED
+        and Visibility.RESTRICTED.value in source_visibilities
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Knowledge linked to a Restricted source must remain Restricted",
+        )
+
+
+def _bounded_full_text(text: str, limit: int = 60_000) -> tuple[str, bool]:
+    normalized = text.strip()
+    if limit <= 0:
+        return "", bool(normalized)
+    if len(normalized) <= limit:
+        return normalized, False
+    marker = "\n\n[... full text truncated ...]\n\n"
+    if limit <= len(marker):
+        return normalized[:limit], True
+    content_limit = limit - len(marker)
+    head = int(content_limit * 0.75)
+    tail = content_limit - head
+    return (
+        f"{normalized[:head]}{marker}{normalized[-tail:]}",
+        True,
+    )
+
+
+def _bounded_context_text(text: str, limit: int) -> tuple[str, bool]:
+    normalized = text.strip()
+    if len(normalized) <= limit:
+        return normalized, False
+    return normalized[:limit], True
+
+
+def _bounded_context_json(value: Any, limit: int = 10_000) -> Any:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    if len(encoded) <= limit:
+        return value
+    return {
+        "truncated": True,
+        "digest": canonical_digest(value),
+        "preview": encoded[:limit],
+    }
+
+
+async def _paper_knowledge_context(
+    db_session: DBSession,
+    current_user: User,
+    entry_id: UUID,
+    *,
+    with_for_update: bool = False,
+) -> tuple[PaperLibraryEntry, ScopeContext, dict[str, Any], dict[str, Any]]:
+    entry = await db_session.get(
+        PaperLibraryEntry,
+        entry_id,
+        with_for_update=with_for_update,
+    )
+    if entry is None or entry.archived_at is not None:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    scope = await authorize_library_entry(
+        db_session,
+        current_user,
+        entry,
+        "knowledge.create",
+    )
+    paper = await db_session.get(
+        Paper,
+        entry.paper_id,
+        with_for_update=with_for_update,
+    )
+    if paper is None:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    file_statement = (
+        select(PaperFileLink, ResearchFile, ResearchFileBlob)
+        .join(
+            ResearchFile,
+            ResearchFile.id == PaperFileLink.research_file_id,
+        )
+        .join(ResearchFileBlob, ResearchFileBlob.id == ResearchFile.blob_id)
+        .where(
+            PaperFileLink.library_entry_id == entry.id,
+            ResearchFile.archived_at.is_(None),
+        )
+        .order_by(PaperFileLink.id)
+    )
+    if with_for_update:
+        file_statement = file_statement.with_for_update()
+    file_rows = (await db_session.execute(file_statement)).all()
+    full_text_sources: list[dict[str, Any]] = []
+    source_files: list[dict[str, Any]] = []
+    remaining_full_text = 40_000
+    for link, research_file, blob in file_rows:
+        try:
+            await authorize_research_file(db_session, current_user, research_file)
+        except HTTPException as error:
+            if error.status_code in {403, 404}:
+                continue
+            raise
+        extracted_text, truncated = _bounded_full_text(
+            blob.extracted_text,
+            remaining_full_text,
+        )
+        remaining_full_text -= len(extracted_text)
+        source_files.append(
+            {
+                "research_file_id": str(research_file.id),
+                "relationship_type": link.relationship_type,
+                "visibility": research_file.visibility,
+                "checksum_sha256": blob.checksum_sha256,
+                "extracted_text_digest": canonical_digest(blob.extracted_text),
+            }
+        )
+        if extracted_text:
+            full_text_sources.append(
+                {
+                    "research_file_id": str(research_file.id),
+                    "relationship_type": link.relationship_type,
+                    "excerpt": extracted_text,
+                    "truncated": truncated,
+                }
+            )
+
+    paper_source = {
+        "id": str(paper.id),
+        "doi": paper.doi,
+        "title": paper.title,
+        "abstract": paper.abstract,
+        "publication_year": paper.publication_year,
+        "authors": paper.authors,
+        "venue": paper.venue,
+        "identifiers": paper.identifiers,
+        "metadata_source": paper.metadata_source,
+        "updated_at": paper.updated_at.isoformat(),
+    }
+    entry_source = {
+        "library_entry_id": str(entry.id),
+        "scope": scope_payload(scope),
+        "visibility": entry.visibility,
+        "tags": entry.tags,
+        "notes": entry.notes,
+        "updated_at": entry.updated_at.isoformat(),
+    }
+    abstract, abstract_truncated = _bounded_context_text(paper.abstract, 20_000)
+    notes, notes_truncated = _bounded_context_text(entry.notes, 5_000)
+    paper_context = {
+        **paper_source,
+        "title": _bounded_context_text(paper.title, 2_000)[0],
+        "abstract": abstract,
+        "abstract_truncated": abstract_truncated,
+        "authors": _bounded_context_json(paper.authors),
+        "identifiers": _bounded_context_json(paper.identifiers),
+    }
+    entry_context = {
+        **entry_source,
+        "tags": _bounded_context_json(entry.tags),
+        "notes": notes,
+        "notes_truncated": notes_truncated,
+    }
+    source_snapshot = {
+        "library_entry_id": str(entry.id),
+        "entry_digest": canonical_digest(entry_source),
+        "paper_digest": canonical_digest(paper_source),
+        "files": source_files,
+    }
+    ai_context = {
+        "entry": entry_context,
+        "paper": paper_context,
+        "authorized_full_text": full_text_sources,
+        "source_snapshot": source_snapshot,
+    }
+    return entry, scope, ai_context, source_snapshot
+
+
+async def _verified_knowledge_generation(
+    db_session: DBSession,
+    current_user: User,
+    params: KnowledgeDraftParams,
+    *,
+    with_for_update: bool = False,
+) -> AiraKnowledgeGeneration | None:
+    generation = params.aira_generation
+    if generation is None or params.aira_receipt is None:
+        return None
+    try:
+        entry_id = UUID(str(generation.source_snapshot["library_entry_id"]))
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Aira Knowledge source is invalid",
+        ) from error
+    if (
+        len(params.paper_library_entry_ids) != 1
+        or params.paper_library_entry_ids[0] != entry_id
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Aira Knowledge must retain its exact source Paper",
+        )
+    source_entry, scope, ai_context, source_snapshot = await _paper_knowledge_context(
+        db_session,
+        current_user,
+        entry_id,
+        with_for_update=with_for_update,
+    )
+    if scope.model_values() != {
+        "scope_type": params.scope_type.value,
+        "owner_user_id": (
+            current_user.id if params.scope_type == OwnerScope.PERSONAL else None
+        ),
+        "lab_id": params.lab_id,
+        "project_id": params.project_id,
+    }:
+        raise HTTPException(
+            status_code=422,
+            detail="Aira Knowledge must be saved in its source Paper scope",
+        )
+    context_digest = canonical_digest(ai_context)
+    if (
+        context_digest != generation.context_digest
+        or canonical_digest(source_snapshot)
+        != canonical_digest(generation.source_snapshot)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Paper context changed while the Aira Knowledge draft was reviewed",
+        )
+    _require_restricted_source_visibility(
+        [
+            source_entry.visibility,
+            *(source_file["visibility"] for source_file in source_snapshot["files"]),
+        ],
+        target_visibility=params.visibility,
+    )
+    try:
+        verify_knowledge_generation_receipt(
+            params.aira_receipt,
+            generation,
+            user_id=current_user.id,
+            library_entry_id=entry_id,
+            context_digest=context_digest,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return generation
+
+
+def _knowledge_create_command(
+    params: KnowledgeDraftParams,
+    *,
+    generated_by: str,
+) -> dict[str, Any]:
+    return {
+        "scope_type": params.scope_type.value,
+        "lab_id": str(params.lab_id) if params.lab_id else None,
+        "project_id": str(params.project_id) if params.project_id else None,
+        "visibility": params.visibility.value,
+        "kind": params.kind.value,
+        "title": params.title.strip(),
+        "body": params.body.strip(),
+        "tags": _normalize_tags(params.tags),
+        "paper_library_entry_ids": sorted(
+            str(value) for value in set(params.paper_library_entry_ids)
+        ),
+        "research_file_ids": sorted(
+            str(value) for value in set(params.research_file_ids)
+        ),
+        "generated_by": generated_by,
+        "generation_id": (
+            str(params.aira_generation.id) if params.aira_generation else None
+        ),
+    }
+
+
+def _initial_knowledge_state(
+    params: KnowledgeDraftParams,
+    generation: AiraKnowledgeGeneration | None,
+) -> str:
+    if generation is not None and params.scope_type != OwnerScope.PERSONAL:
+        return KnowledgeState.SUGGESTED.value
+    return KnowledgeState.DRAFT.value
+
+
+@router.post("/papers/{entry_id}/knowledge-draft-with-aira")
+async def draft_paper_knowledge_with_aira(
+    entry_id: UUID,
+    params: AiraPaperKnowledgeDraftParams,
+    request: Request,
+    db_session: DBSession,
+    current_user: CurrentUser,
+):
+    if not config.effective_ai_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Aira is unavailable. Create Knowledge from this Paper manually "
+                "with the deterministic editor."
+            ),
+        )
+    entry, _, ai_context, source_snapshot = await _paper_knowledge_context(
+        db_session,
+        current_user,
+        entry_id,
+    )
+    restricted_source = _has_restricted_source(
+        entry.visibility,
+        source_snapshot["files"],
+    )
+    _require_restricted_ai_confirmation(
+        restricted_source,
+        confirmed=params.confirm_restricted_processing,
+    )
+    context_digest = canonical_digest(ai_context)
+    model_name = config.CHAT_MODEL_ACCURATE
+    usage_context = create_usage_context(
+        feature="knowledge.paper.draft",
+        user_id=current_user.id,
+        lab_id=entry.lab_id,
+        project_id=entry.project_id,
+        attributes={
+            "library_entry_id": str(entry.id),
+            "scope_type": entry.scope_type,
+        },
+    )
+    for source_file in source_snapshot["files"]:
+        db_session.add(
+            ResearchFileAccessAudit(
+                research_file_id=UUID(source_file["research_file_id"]),
+                lab_id=entry.lab_id,
+                actor_user_id=current_user.id,
+                action="aira_draft",
+                request_id=getattr(request.state, "request_id", None),
+                client_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent", "")[:512],
+                outcome="authorized",
+            )
+        )
+    # Never keep an authorization transaction open across model latency.
+    await db_session.commit()
+    output = await generate_knowledge_draft(
+        paper_context=ai_context,
+        instruction=params.instruction.strip(),
+        model_name=model_name,
+        usage_context=usage_context,
+    )
+    db_session.expire_all()
+    current_entry, _, current_context, current_source_snapshot = (
+        await _paper_knowledge_context(db_session, current_user, entry_id)
+    )
+    if canonical_digest(current_context) != context_digest:
+        raise HTTPException(
+            status_code=409,
+            detail="Paper context changed while Aira prepared the Knowledge draft",
+        )
+    generation = create_knowledge_generation(
+        output=output,
+        model_name=model_name,
+        context_digest=context_digest,
+        instruction=params.instruction.strip(),
+        source_snapshot=current_source_snapshot,
+    )
+    receipt = sign_knowledge_generation_receipt(
+        generation,
+        user_id=current_user.id,
+        library_entry_id=current_entry.id,
+    )
+    await db_session.commit()
+    return {
+        "draft": {
+            "title": output.title,
+            "kind": output.kind,
+            "body": output.body,
+            "tags": output.tags,
+        },
+        "rationale": output.rationale,
+        "assumptions": output.assumptions,
+        "warnings": output.warnings,
+        "source": current_source_snapshot,
+        "aira_generation": generation.model_dump(mode="json"),
+        "aira_receipt": receipt,
+    }
+
+
+@router.post("/items/preview")
+async def preview_knowledge_item(
+    params: KnowledgeDraftParams,
     db_session: DBSession,
     current_user: CurrentUser,
 ):
@@ -1232,16 +1772,103 @@ async def create_knowledge_item(
         scope,
         params.paper_library_entry_ids,
         params.research_file_ids,
+        target_visibility=params.visibility,
     )
+    generation = await _verified_knowledge_generation(
+        db_session,
+        current_user,
+        params,
+    )
+    command = _knowledge_create_command(
+        params,
+        generated_by="aira_assisted" if generation else "human",
+    )
+    initial_state = _initial_knowledge_state(params, generation)
+    return {
+        "preview_digest": canonical_digest(command),
+        "command": command,
+        "effect": {
+            "state": initial_state,
+            "generated_by": "aira_assisted" if generation else "human",
+            "requires_human_review": True,
+        },
+    }
+
+
+@router.post("/items")
+async def create_knowledge_item(
+    params: KnowledgeCreateParams,
+    db_session: DBSession,
+    current_user: CurrentUser,
+):
+    draft = KnowledgeDraftParams.model_validate(
+        params.model_dump(exclude={"preview_digest"})
+    )
+    scope = await resolve_scope(
+        db_session,
+        current_user,
+        scope_type=draft.scope_type,
+        lab_id=draft.lab_id,
+        project_id=draft.project_id,
+        capability="knowledge.create",
+    )
+    validate_visibility(scope, draft.visibility)
+    await _validate_knowledge_links(
+        db_session,
+        current_user,
+        scope,
+        draft.paper_library_entry_ids,
+        draft.research_file_ids,
+        target_visibility=draft.visibility,
+    )
+    generation = await _verified_knowledge_generation(
+        db_session,
+        current_user,
+        draft,
+        with_for_update=True,
+    )
+    generated_by = "aira_assisted" if generation else "human"
+    command = _knowledge_create_command(draft, generated_by=generated_by)
+    if generation and params.preview_digest is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Preview the Aira Knowledge draft before creating it",
+        )
+    if (
+        params.preview_digest is not None
+        and canonical_digest(command) != params.preview_digest
+    ):
+        raise HTTPException(status_code=409, detail="Knowledge preview has changed")
+    if generation is not None and await db_session.scalar(
+        select(KnowledgeItem.id).where(
+            KnowledgeItem.generation_id == generation.id
+        )
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This Aira Knowledge generation has already been used",
+        )
+    generation_snapshot = (
+        generation.model_dump(mode="json") if generation is not None else None
+    )
+    initial_state = _initial_knowledge_state(draft, generation)
     item = KnowledgeItem(
         **scope.model_values(),
-        visibility=params.visibility.value,
-        kind=params.kind.value,
-        state=KnowledgeState.DRAFT.value,
-        title=params.title.strip(),
-        body=params.body.strip(),
-        tags=_normalize_tags(params.tags),
-        generated_by="human",
+        visibility=draft.visibility.value,
+        kind=draft.kind.value,
+        state=initial_state,
+        title=draft.title.strip(),
+        body=draft.body.strip(),
+        tags=_normalize_tags(draft.tags),
+        generated_by=generated_by,
+        generation_id=generation.id if generation else None,
+        generation_model=generation.model if generation else None,
+        generation_snapshot=generation_snapshot,
+        generation_receipt_digest=(
+            hashlib.sha256(params.aira_receipt.encode()).hexdigest()
+            if generation is not None and params.aira_receipt is not None
+            else None
+        ),
         created_by_user_id=current_user.id,
     )
     db_session.add(item)
@@ -1255,15 +1882,26 @@ async def create_knowledge_item(
             created_by_user_id=current_user.id,
         )
     )
-    for entry_id in set(params.paper_library_entry_ids):
+    for entry_id in set(draft.paper_library_entry_ids):
         db_session.add(
             KnowledgePaperLink(knowledge_item_id=item.id, library_entry_id=entry_id)
         )
-    for file_id in set(params.research_file_ids):
+    for file_id in set(draft.research_file_ids):
         db_session.add(
             KnowledgeFileLink(knowledge_item_id=item.id, research_file_id=file_id)
         )
-    await db_session.commit()
+    try:
+        await db_session.commit()
+    except IntegrityError as error:
+        await db_session.rollback()
+        if generation is not None and "uq_knowledge_items_generation_id" in str(
+            error.orig
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="This Aira Knowledge generation has already been used",
+            ) from error
+        raise
     return await _knowledge_payload(db_session, item)
 
 
@@ -1540,7 +2178,10 @@ async def confirm_knowledge_publish(
         body=item.body,
         tags=item.tags,
         derived_from_id=item.id,
-        generated_by=item.generated_by,
+        # Publishing is a new, human-confirmed scoped asset. Its derived_from
+        # lineage retains access to the source asset's Aira provenance without
+        # reusing a single-use generation receipt in a wider scope.
+        generated_by="human",
         created_by_user_id=current_user.id,
     )
     db_session.add(published)

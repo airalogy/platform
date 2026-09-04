@@ -174,6 +174,8 @@ AIRA 的阶段性和最终结论不只保存为 Markdown。结构化状态至少
 - `Knowledge` 是经整理、可复用、可审核和可派生的认识，Paper Library 是 Knowledge 的文献视图。
 - Record 仍是一次 Protocol 执行的结构化证据，不转换为普通日志。
 
+Paper 到 Knowledge 是明确的候选生成边界。具有 Knowledge 写入权限的用户可请 Aira 从一条按范围授权的 Paper Library 记录中生成一份候选。Platform 会明确说明来源将由本实例配置的 AI 服务处理，且只会提供当前用户有权读取的论文元数据、文献库笔记和本地提取全文；Restricted 内容还必须在 API 层完成明确的科研数据策略确认，且模型读取的每个 ResearchFile 都会追加到访问审计。全文摘录有长度上限，并始终被当作不可信的科研内容。模型调用期间不保持数据库事务。生成后，Platform 会重新授权 Paper 及每个已使用的 ResearchFile，重算来源摘要，并签发一小时有效、绑定用户、来源条目、准确模型输出与来源快照的凭据。候选内容仍可自由编辑，但预览与确认时会再次校验当前来源和凭据，唯一生成 ID 防止重复使用。最终保存的是普通、可修订的 Knowledge，并保留原始生成来源：Project/Lab 范围仍为 Suggested，需获授权人员完成组织审核；Personal Knowledge 不存在组织审核状态，因此在用户确认后成为私有 Draft。两种状态都不表示已被独立验证。AI 关闭时，完整的手工 Paper 到 Knowledge 编辑路径仍然可用。
+
 Knowledge 到方法的流转必须显式并固定版本。获授权用户先预览准确的 Knowledge 修订和目标 Project，再进入 Aira Protocol 生成器；Knowledge 正文通过正常权限接口读取，不进入 URL。保存生成结果时，Platform 会重新检查来源可见性、范围、目标 Project 写权限和修订新鲜度，然后原子写入不可变的 `Knowledge revision → Protocol version` 关系与来源快照。Personal Knowledge 可用于用户有权写入的 Project；Lab 与 Project Knowledge 只能留在各自 Lab 或 Project。已归档、已被取代、过期或不可访问的来源一律失败关闭。Protocol 响应只向同时有权读取两侧资产的人展示来源，避免 provenance 泄露 Restricted Knowledge。
 
 已完成的结构化 Action 输出有独立的晋升边界。获授权用户选择已完成 Action，预览准确输出摘要后确认创建待审核 Evidence。Platform 会锁定 Action，封存一份只可追加的快照，其中包含 Task、Run、Action 修订、类型、输出和规范 SHA-256 摘要；读取及结果包导出都会验证该摘要。在人员审核待定 Evidence 前，系统不会将该输出认定为科学上有效。这使 Tool、Instrument、Resource、Wait、External Service 和 Compute 结果可成为可审计的科研来源，同时不把它们伪装成 Record，也不静默视为事实。
@@ -255,7 +257,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - 私有 Lab Paper Library、Knowledge、Evidence 和 Claim；
 - Scholar 作为可选 Literature Provider；
 - 文献调研、Python/R 计算和外部工具 Action；
-- Paper → Knowledge → Protocol Draft，Record/DataAsset → Suggested Knowledge；
+- 受治理的 Paper → Suggested Knowledge → Protocol Draft，以及 Record/DataAsset → Suggested Knowledge（已交付）；
 - 发酵类多源数据集成验收。
 
 ### P2：现实资源与治理

@@ -26,7 +26,7 @@
         </n-form-item>
       </div>
       <n-form-item :label="$t('page.knowledge.knowledgeTitle')" required>
-        <n-input v-model:value="form.title" />
+        <n-input v-model:value="form.title" data-testid="knowledge-title" />
       </n-form-item>
       <n-form-item :label="$t('page.knowledge.knowledgeBody')" required>
         <n-input
@@ -34,6 +34,7 @@
           type="textarea"
           :autosize="{ minRows: 8, maxRows: 18 }"
           :placeholder="$t('page.knowledge.knowledgeBodyPlaceholder')"
+          data-testid="knowledge-body"
         />
       </n-form-item>
       <n-form-item :label="$t('page.knowledge.tags')">
@@ -45,6 +46,28 @@
       <n-alert v-if="linkedPaperTitle" type="success">
         {{ $t("page.knowledge.createFromPaper") }} · {{ linkedPaperTitle }}
       </n-alert>
+      <n-alert
+        v-if="airaDraft"
+        type="info"
+        class="mt-3"
+        :title="$t('page.knowledge.airaSuggested')"
+      >
+        <p class="mb-0">
+          {{ $t(
+            props.scope.scope_type === "personal"
+              ? "page.knowledge.airaPersonalDraftHint"
+              : "page.knowledge.airaSuggestedHint",
+          ) }}
+        </p>
+        <p class="mb-0 mt-2">
+          {{ airaDraft.rationale }}
+        </p>
+        <ul v-if="airaDraft.assumptions.length || airaDraft.warnings.length" class="mb-0 mt-2 pl-5">
+          <li v-for="item in [...airaDraft.assumptions, ...airaDraft.warnings]" :key="item">
+            {{ item }}
+          </li>
+        </ul>
+      </n-alert>
     </n-form>
 
     <template #footer>
@@ -52,7 +75,13 @@
         <n-button @click="visible = false">
           {{ $t("common.cancel") }}
         </n-button>
-        <n-button type="primary" :disabled="!isValid" :loading="saving" @click="save">
+        <n-button
+          type="primary"
+          :disabled="!isValid"
+          :loading="saving"
+          data-testid="knowledge-create-confirm"
+          @click="save"
+        >
           {{ editing ? $t("common.save") : $t("page.knowledge.createKnowledge") }}
         </n-button>
       </div>
@@ -62,12 +91,17 @@
 
 <script setup lang="ts">
 import type {
+  AiraPaperKnowledgeDraft,
   KnowledgeItem,
   KnowledgeKind,
   KnowledgeScope,
   KnowledgeVisibility,
 } from "@/service/api/knowledge"
-import { createKnowledgeItem, updateKnowledgeItem } from "@/service/api/knowledge"
+import {
+  createKnowledgeItem,
+  previewKnowledgeItem,
+  updateKnowledgeItem,
+} from "@/service/api/knowledge"
 import { $t } from "@airalogy/shared/locales"
 
 interface Props {
@@ -79,6 +113,8 @@ interface OpenOptions {
   item?: KnowledgeItem
   paperId?: string
   paperTitle?: string
+  restrictedSource?: boolean
+  airaDraft?: AiraPaperKnowledgeDraft
 }
 
 const props = defineProps<Props>()
@@ -89,6 +125,7 @@ const saving = ref(false)
 const editing = ref<KnowledgeItem | null>(null)
 const linkedPaperId = ref("")
 const linkedPaperTitle = ref("")
+const airaDraft = ref<AiraPaperKnowledgeDraft | null>(null)
 const form = reactive({
   kind: "note" as KnowledgeKind,
   visibility: props.scope.visibility as KnowledgeVisibility,
@@ -124,6 +161,7 @@ function reset() {
   editing.value = null
   linkedPaperId.value = ""
   linkedPaperTitle.value = ""
+  airaDraft.value = null
   Object.assign(form, {
     kind: "note",
     visibility: props.scope.visibility,
@@ -149,8 +187,14 @@ function open(options: OpenOptions = {}) {
   else if (options.paperId) {
     linkedPaperId.value = options.paperId
     linkedPaperTitle.value = options.paperTitle || ""
-    form.kind = "reference"
-    form.title = options.paperTitle || ""
+    airaDraft.value = options.airaDraft || null
+    form.visibility = options.restrictedSource
+      ? "restricted"
+      : props.scope.visibility
+    form.kind = options.airaDraft?.draft.kind || "reference"
+    form.title = options.airaDraft?.draft.title || options.paperTitle || ""
+    form.body = options.airaDraft?.draft.body || ""
+    form.tags = [...(options.airaDraft?.draft.tags || [])]
   }
   visible.value = true
 }
@@ -160,8 +204,9 @@ async function save() {
     return
   saving.value = true
   try {
-    const item = editing.value
-      ? await updateKnowledgeItem(editing.value.id, {
+    let item: KnowledgeItem
+    if (editing.value) {
+      item = await updateKnowledgeItem(editing.value.id, {
         expected_revision: editing.value.revision,
         title: form.title.trim(),
         body: form.body.trim(),
@@ -169,7 +214,9 @@ async function save() {
         tags: form.tags,
         change_summary: form.changeSummary.trim(),
       })
-      : await createKnowledgeItem({
+    }
+    else {
+      const payload = {
         ...props.scope,
         visibility: form.visibility,
         kind: form.kind,
@@ -177,7 +224,15 @@ async function save() {
         body: form.body.trim(),
         tags: form.tags,
         paper_library_entry_ids: linkedPaperId.value ? [linkedPaperId.value] : [],
+        aira_generation: airaDraft.value?.aira_generation,
+        aira_receipt: airaDraft.value?.aira_receipt,
+      }
+      const preview = await previewKnowledgeItem(payload)
+      item = await createKnowledgeItem({
+        ...payload,
+        preview_digest: preview.preview_digest,
       })
+    }
     window.$message?.success(
       editing.value ? $t("page.knowledge.updated") : $t("page.knowledge.created"),
     )

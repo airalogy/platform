@@ -538,6 +538,9 @@ def snapshot_knowledge(item: KnowledgeItem) -> dict[str, Any]:
         "tags": item.tags,
         "visibility": item.visibility,
         "revision": item.revision,
+        "generated_by": item.generated_by,
+        "generation_id": str(item.generation_id) if item.generation_id else None,
+        "generation_model": item.generation_model,
     }
 
 
