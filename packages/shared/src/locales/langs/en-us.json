@@ -1115,6 +1115,7 @@
       "serviceOperationPreviewHint": "Confirm this immutable state transition and its exact payload.",
       "serviceOperationSaved": "External Service Job updated",
       "serviceJobStatus": {
+        "blocked": "Waiting for prerequisites",
         "awaiting_quote": "Awaiting quote",
         "awaiting_approval": "Awaiting order approval",
         "ordered": "Ordered",

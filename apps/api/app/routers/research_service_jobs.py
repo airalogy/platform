@@ -57,6 +57,7 @@ from app.services.research_runtime import (
     create_plan_version,
     emit_research_event,
     enqueue_research_advance,
+    hold_or_release_aira_action_group,
     require_research_capability,
     utcnow,
 )
@@ -846,15 +847,21 @@ async def create_service_progress(
         action.revision += 1
         append_aira_result(
             run,
-            channel="service_results",
-            result={
+            "service_results",
+            {
                 "action_id": str(action.id),
                 "service_job_id": str(job.id),
                 "status": "failed",
                 "error": params.reason,
             },
         )
-        if task.status == ResearchTaskStatus.ACTIVE.value:
+        graph_settled = await hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+        )
+        if graph_settled and task.status == ResearchTaskStatus.ACTIVE.value:
             run.status = ResearchRunStatus.RUNNING.value
             run.last_error = None
             if config.effective_ai_enabled:
@@ -1180,8 +1187,8 @@ async def create_service_result(
     action.revision += 1
     append_aira_result(
         run,
-        channel="service_results",
-        result={
+        "service_results",
+        {
             "action_id": str(action.id),
             "service_job_id": str(job.id),
             "service": job.offering_snapshot,
@@ -1190,7 +1197,13 @@ async def create_service_result(
             "data_asset_version_ids": [str(item) for item in params.data_asset_version_ids],
         },
     )
-    if task.status == ResearchTaskStatus.ACTIVE.value:
+    graph_settled = await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
+    if graph_settled and task.status == ResearchTaskStatus.ACTIVE.value:
         run.status = ResearchRunStatus.RUNNING.value
         run.last_error = None
         if config.effective_ai_enabled:

@@ -1119,6 +1119,7 @@ declare namespace I18n {
         serviceOperationPreviewHint: string
         serviceOperationSaved: string
         serviceJobStatus: {
+          blocked: string
           awaiting_quote: string
           awaiting_approval: string
           ordered: string

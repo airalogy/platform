@@ -1,6 +1,7 @@
 import asyncio
 import json
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 from app.libs import masterbrain
@@ -1199,6 +1200,44 @@ def test_planner_validates_service_request_against_pinned_contract(monkeypatch):
                 "qwen3.5-flash",
             )
         )
+
+
+def test_planner_validates_service_nodes_inside_governed_graph(monkeypatch):
+    proposal = AsyncMock(
+        return_value={
+            "decision": "action_graph",
+            "thought": "Prepare metadata before requesting sequencing",
+            "action_graph": [
+                {
+                    "node_id": "context",
+                    "decision": "tool",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "RNA", "limit": 5},
+                },
+                {
+                    "node_id": "sequencing",
+                    "decision": "service",
+                    "service_offering_id": PINNED_SERVICES[0]["source_id"],
+                    "service_request": {"sample_count": 4},
+                    "depends_on": ["context"],
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(research_planner, "aira_action_proposal", proposal)
+    context = {
+        "goal": "Sequence prepared RNA samples",
+        "tools": PINNED_TOOLS,
+        "services": PINNED_SERVICES,
+    }
+
+    result = asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    assert result.action_graph[1].decision == "service"
+    assert result.action_graph[1].service_request == {"sample_count": 4}
+    proposal.return_value["action_graph"][1]["service_offering_id"] = str(uuid4())
+    with pytest.raises(ValueError, match="outside the environment"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
 
 
 def test_planner_validates_compute_against_pinned_environment_and_assets(monkeypatch):

@@ -403,7 +403,8 @@ export interface ResearchInstrumentJob {
 }
 
 export type ResearchServiceJobStatus
-  = "awaiting_quote"
+  = "blocked"
+  | "awaiting_quote"
   | "awaiting_approval"
   | "ordered"
   | "in_fulfillment"

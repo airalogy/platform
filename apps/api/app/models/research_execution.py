@@ -178,6 +178,7 @@ class ResearchComputeJobStatus(StrEnum):
 
 
 class ResearchServiceJobStatus(StrEnum):
+    BLOCKED = "blocked"
     AWAITING_QUOTE = "awaiting_quote"
     AWAITING_APPROVAL = "awaiting_approval"
     ORDERED = "ordered"
@@ -864,7 +865,7 @@ class ResearchServiceJob(Base):
     __table_args__ = (
         UniqueConstraint("action_id", name="uq_research_service_job_action"),
         CheckConstraint(
-            "status IN ('awaiting_quote', 'awaiting_approval', 'ordered', "
+            "status IN ('blocked', 'awaiting_quote', 'awaiting_approval', 'ordered', "
             "'in_fulfillment', 'completed', 'failed', 'cancelled')",
             name="ck_research_service_job_status",
         ),

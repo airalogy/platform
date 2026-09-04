@@ -1871,83 +1871,9 @@ async def _materialize_aira_action(
             risk=service_revision.risk,
             quote_required=service_revision.quote_required,
             creation_digest=action.preview_digest,
-            status=ResearchServiceJobStatus.AWAITING_QUOTE.value,
-            quote_requested_at=utcnow(),
+            status=ResearchServiceJobStatus.BLOCKED.value,
         )
         db_session.add(service_job)
-        await db_session.flush()
-        if service_revision.quote_required:
-            action.status = ResearchActionStatus.WAITING.value
-            action.policy_decision = "allow"
-            action.revision += 1
-            run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
-            task.status = ResearchTaskStatus.ACTIVE.value
-            task.revision += 1
-            service_event_kind = "external_service.quote_requested"
-        else:
-            if service_revision.base_price is None or service_revision.currency is None:
-                raise ValueError("Pinned Service has no catalog price")
-            from app.services.research_external_services import (
-                request_service_order_approval,
-                validate_quote_budget,
-            )
-
-            await validate_quote_budget(
-                db_session,
-                task=task,
-                amount=Decimal(service_revision.base_price),
-                currency=service_revision.currency,
-            )
-            quote_command = {
-                "operation": "create_catalog_service_quote",
-                "service_job_id": str(service_job.id),
-                "amount": str(service_revision.base_price),
-                "currency": service_revision.currency,
-                "service_offering_revision_id": str(service_revision.id),
-            }
-            service_quote = ResearchServiceQuote(
-                service_job_id=service_job.id,
-                revision=1,
-                amount=service_revision.base_price,
-                currency=service_revision.currency,
-                terms=service_revision.terms,
-                source="catalog",
-                quote_digest=canonical_digest(quote_command),
-                created_by_user_id=run.requested_by_user_id,
-            )
-            db_session.add(service_quote)
-            await db_session.flush()
-            await request_service_order_approval(
-                db_session,
-                task=task,
-                run=run,
-                action=action,
-                job=service_job,
-                quote=service_quote,
-                requested_by_user_id=run.requested_by_user_id,
-                actor_user_id=None,
-                reason=(
-                    "Approve Aira's external service order for "
-                    f"{service_quote.amount} {service_quote.currency}"
-                ),
-            )
-            service_event_kind = "external_service.catalog_quote_created"
-        await emit_research_event(
-            db_session,
-            task_id=task.id,
-            run_id=run.id,
-            action_id=action.id,
-            kind=service_event_kind,
-            actor_user_id=None,
-            payload={
-                "service_job_id": str(service_job.id),
-                "provider_id": str(service_provider.id),
-                "service_offering_id": str(service_offering.id),
-                "service_version": service_revision.service_version,
-                "source": "aira",
-            },
-            idempotency_key=f"service-job:{service_job.id}:created",
-        )
     elif proposal.decision == "compute":
         from app.models.research_execution import (
             ResearchComputeJob,
@@ -2042,7 +1968,12 @@ async def _materialize_aira_action(
     if defer_activation:
         return action
     if proposal.decision == "service":
-        pass
+        await _activate_aira_service_request(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+        )
     elif policy_decision == "ask":
         approval = await request_action_approval(
             db_session,
@@ -2089,6 +2020,165 @@ async def _materialize_aira_action(
             "Aira Resource, Instrument, and Compute Actions require approval before activation"
         )
     return action
+
+
+async def _activate_aira_service_request(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+) -> ResearchServiceJob:
+    """Release one dependency-ready Service request into its quote workflow."""
+
+    service_job = (
+        await db_session.scalars(
+            select(ResearchServiceJob)
+            .where(ResearchServiceJob.action_id == action.id)
+            .with_for_update()
+        )
+    ).first()
+    if (
+        service_job is None
+        or service_job.status != ResearchServiceJobStatus.BLOCKED.value
+    ):
+        raise ValueError("Blocked graph Service Action has no releasable Service Job")
+    from app.services.research_external_services import (
+        pinned_service_job_context,
+        request_service_order_approval,
+        validate_quote_budget,
+    )
+    from app.services.research_instruments import validate_schema_payload
+
+    (
+        pinned_service,
+        service_provider,
+        service_offering,
+        service_revision,
+    ) = await pinned_service_job_context(
+        db_session,
+        run=run,
+        service_offering_id=service_job.service_offering_id,
+        lock=True,
+    )
+    current_contract = {
+        "provider_id": str(service_provider.id),
+        "service_offering_id": str(service_offering.id),
+        "service_offering_revision_id": str(service_revision.id),
+        "service_offering_revision": service_revision.revision,
+        "service_version": service_revision.service_version,
+        "provider_snapshot": (pinned_service.get("metadata") or {}).get("provider"),
+        "offering_snapshot": pinned_service,
+        "input_schema": service_revision.input_schema,
+        "result_schema": service_revision.result_schema,
+        "risk": service_revision.risk,
+        "quote_required": service_revision.quote_required,
+    }
+    captured_contract = {
+        "provider_id": str(service_job.provider_id),
+        "service_offering_id": str(service_job.service_offering_id),
+        "service_offering_revision_id": str(service_job.service_offering_revision_id),
+        "service_offering_revision": service_job.service_offering_revision,
+        "service_version": service_job.service_version,
+        "provider_snapshot": service_job.provider_snapshot,
+        "offering_snapshot": service_job.offering_snapshot,
+        "input_schema": service_job.input_schema,
+        "result_schema": service_job.result_schema,
+        "risk": service_job.risk,
+        "quote_required": service_job.quote_required,
+    }
+    if canonical_digest(current_contract) != canonical_digest(captured_contract):
+        raise ValueError("Pinned Service contract changed before graph release")
+    project = await db_session.get(Project, task.project_id)
+    requester = await db_session.get(User, run.requested_by_user_id)
+    if (
+        project is None
+        or requester is None
+        or not await has_research_capability(
+            db_session,
+            user=requester,
+            project=project,
+            capability="research.service.use",
+        )
+    ):
+        raise ValueError("Research service use access was revoked")
+    validate_schema_payload(
+        service_job.input_schema,
+        service_job.request_payload,
+        "Service request",
+    )
+
+    service_job.status = ResearchServiceJobStatus.AWAITING_QUOTE.value
+    service_job.quote_requested_at = utcnow()
+    service_job.revision += 1
+    if service_revision.quote_required:
+        action.status = ResearchActionStatus.WAITING.value
+        action.policy_decision = "allow"
+        action.revision += 1
+        run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
+        task.status = ResearchTaskStatus.ACTIVE.value
+        task.revision += 1
+        service_event_kind = "external_service.quote_requested"
+    else:
+        if service_revision.base_price is None or service_revision.currency is None:
+            raise ValueError("Pinned Service has no catalog price")
+        await validate_quote_budget(
+            db_session,
+            task=task,
+            amount=Decimal(service_revision.base_price),
+            currency=service_revision.currency,
+        )
+        quote_command = {
+            "operation": "create_catalog_service_quote",
+            "service_job_id": str(service_job.id),
+            "amount": str(service_revision.base_price),
+            "currency": service_revision.currency,
+            "service_offering_revision_id": str(service_revision.id),
+        }
+        service_quote = ResearchServiceQuote(
+            service_job_id=service_job.id,
+            revision=1,
+            amount=service_revision.base_price,
+            currency=service_revision.currency,
+            terms=service_revision.terms,
+            source="catalog",
+            quote_digest=canonical_digest(quote_command),
+            created_by_user_id=run.requested_by_user_id,
+        )
+        db_session.add(service_quote)
+        await db_session.flush()
+        await request_service_order_approval(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            job=service_job,
+            quote=service_quote,
+            requested_by_user_id=run.requested_by_user_id,
+            actor_user_id=None,
+            reason=(
+                "Approve Aira's external service order for "
+                f"{service_quote.amount} {service_quote.currency}"
+            ),
+        )
+        service_event_kind = "external_service.catalog_quote_created"
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind=service_event_kind,
+        actor_user_id=None,
+        payload={
+            "service_job_id": str(service_job.id),
+            "provider_id": str(service_provider.id),
+            "service_offering_id": str(service_offering.id),
+            "service_version": service_revision.service_version,
+            "source": ("aira_action_graph" if _aira_action_graph(action) else "aira"),
+        },
+        idempotency_key=f"service-job:{service_job.id}:created",
+    )
+    return service_job
 
 
 async def _materialize_aira_parallel_tools(
@@ -2370,6 +2460,19 @@ async def _cancel_blocked_graph_action(
         instrument_job.completed_at = completed_at
         instrument_job.revision += 1
         return
+    if action.kind == ResearchActionKind.EXTERNAL_SERVICE_JOB.value:
+        service_job = await ResearchServiceJob.find_by(
+            db_session, [ResearchServiceJob.action_id == action.id]
+        )
+        if service_job is None:
+            raise ValueError("Blocked graph Service Action has no Service Job")
+        if service_job.status != ResearchServiceJobStatus.BLOCKED.value:
+            raise ValueError("Blocked graph Service Job has already been released")
+        service_job.status = ResearchServiceJobStatus.CANCELLED.value
+        service_job.error = error
+        service_job.completed_at = completed_at
+        service_job.revision += 1
+        return
     raise ValueError("Blocked graph Action type cannot be cancelled")
 
 
@@ -2382,6 +2485,60 @@ async def _activate_released_graph_action(
 ) -> None:
     """Apply the pinned policy and activate one newly unblocked graph node."""
 
+    if action.kind == ResearchActionKind.EXTERNAL_SERVICE_JOB.value:
+        from app.services.research_budget import ResearchBudgetError
+
+        try:
+            await _activate_aira_service_request(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+            )
+        except (ValueError, ResearchBudgetError) as error:
+            service_job = await ResearchServiceJob.find_by(
+                db_session, [ResearchServiceJob.action_id == action.id]
+            )
+            if service_job is None:
+                raise ValueError(
+                    "Released graph Service Action has no Service Job"
+                ) from error
+            now = utcnow()
+            message = f"External Service release failed: {error}"
+            service_job.status = ResearchServiceJobStatus.FAILED.value
+            service_job.error = message
+            service_job.completed_at = now
+            service_job.revision += 1
+            action.status = ResearchActionStatus.FAILED.value
+            action.error = message
+            action.completed_at = now
+            action.revision += 1
+            run.last_error = message
+            append_aira_result(
+                run,
+                "service_results",
+                {
+                    "action_id": str(action.id),
+                    "service_job_id": str(service_job.id),
+                    "status": "failed",
+                    "error": message,
+                },
+            )
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                kind="external_service.release_failed",
+                actor_user_id=None,
+                payload={
+                    "service_job_id": str(service_job.id),
+                    "error": str(error)[:2000],
+                    "source": "aira_action_graph",
+                },
+                idempotency_key=f"service-job:{service_job.id}:release-failed",
+            )
+        return
     if action.policy_decision == "ask":
         approval = await request_action_approval(
             db_session,
@@ -2540,6 +2697,7 @@ async def hold_or_release_aira_action_group(
                 ResearchActionKind.TOOL_JOB.value,
                 ResearchActionKind.RESOURCE_RESERVATION.value,
                 ResearchActionKind.INSTRUMENT_JOB.value,
+                ResearchActionKind.EXTERNAL_SERVICE_JOB.value,
                 ResearchActionKind.COMPUTE_JOB.value,
                 ResearchActionKind.WAIT_EVENT.value,
             }
@@ -2754,6 +2912,7 @@ async def hold_or_release_aira_action_group(
         item.kind
         in {
             ResearchActionKind.RESOURCE_RESERVATION.value,
+            ResearchActionKind.EXTERNAL_SERVICE_JOB.value,
             ResearchActionKind.WAIT_EVENT.value,
         }
         for item in remaining

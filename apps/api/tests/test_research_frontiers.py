@@ -19,6 +19,8 @@ from app.models.research_execution import (
     ResearchInstrumentJobStatus,
     ResearchResourceReservation,
     ResearchResourceReservationStatus,
+    ResearchServiceJob,
+    ResearchServiceJobStatus,
     ResearchToolJob,
     ResearchToolJobStatus,
 )
@@ -871,11 +873,132 @@ def test_governed_action_graph_releases_an_instrument_after_resource_completion(
     assert run.status == ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
 
 
+def test_governed_action_graph_defers_service_quote_until_dependencies_complete(
+    monkeypatch,
+):
+    run_id = uuid4()
+    preparation = _graph_action(
+        run_id=run_id,
+        node_id="preparation",
+        position=1,
+        size=2,
+        status=ResearchActionStatus.COMPLETED.value,
+        kind="tool_job",
+        graph_type="mixed_governed",
+    )
+    service = _graph_action(
+        run_id=run_id,
+        node_id="sequencing",
+        position=2,
+        size=2,
+        depends_on_count=1,
+        kind="external_service_job",
+        graph_type="mixed_governed",
+    )
+    service.policy_decision = "ask"
+    for action in (preparation, service):
+        action.input_data["action_graph"]["id"] = "aira-action-graph:9:service"
+    dependency = ResearchActionDependency(
+        action_id=service.id,
+        depends_on_action_id=preparation.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(id=run_id, status=ResearchRunStatus.WAITING_FOR_TOOL.value)
+    db_session = AsyncMock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [preparation, service]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+
+    async def activate_service(*_args, action, **_kwargs):
+        action.status = ResearchActionStatus.WAITING.value
+
+    activate = AsyncMock(side_effect=activate_service)
+    generic_approval = AsyncMock()
+    monkeypatch.setattr(
+        research_runtime,
+        "_activate_aira_service_request",
+        activate,
+    )
+    monkeypatch.setattr(
+        research_runtime,
+        "request_action_approval",
+        generic_approval,
+    )
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=preparation,
+        )
+    )
+
+    assert settled is False
+    activate.assert_awaited_once()
+    generic_approval.assert_not_awaited()
+    assert service.status == ResearchActionStatus.WAITING.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_EVENT.value
+
+
+def test_governed_service_release_failure_is_typed_and_auditable(monkeypatch):
+    action = ResearchAction(
+        id=uuid4(),
+        kind="external_service_job",
+        status=ResearchActionStatus.PROPOSED.value,
+        input_data={"action_graph": {"id": "aira-action-graph:10:service"}},
+        policy_decision="ask",
+        revision=1,
+    )
+    job = ResearchServiceJob(
+        id=uuid4(),
+        action_id=action.id,
+        status=ResearchServiceJobStatus.BLOCKED.value,
+        revision=1,
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(id=uuid4(), aira_state={})
+    event = AsyncMock()
+    monkeypatch.setattr(
+        research_runtime,
+        "_activate_aira_service_request",
+        AsyncMock(side_effect=ValueError("Pinned contract was revoked")),
+    )
+    monkeypatch.setattr(
+        ResearchServiceJob,
+        "find_by",
+        AsyncMock(return_value=job),
+    )
+    monkeypatch.setattr(research_runtime, "emit_research_event", event)
+
+    asyncio.run(
+        research_runtime._activate_released_graph_action(
+            AsyncMock(),
+            task=task,
+            run=run,
+            action=action,
+        )
+    )
+
+    assert action.status == ResearchActionStatus.FAILED.value
+    assert job.status == ResearchServiceJobStatus.FAILED.value
+    assert "revoked" in action.error
+    assert run.aira_state["service_results"][0]["status"] == "failed"
+    event.assert_awaited_once()
+    assert event.await_args.kwargs["kind"] == "external_service.release_failed"
+
+
 def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
     resource_action = ResearchAction(
         id=uuid4(), kind="resource_reservation", input_data={}
     )
     instrument_action = ResearchAction(id=uuid4(), kind="instrument_job", input_data={})
+    service_action = ResearchAction(
+        id=uuid4(), kind="external_service_job", input_data={}
+    )
     reservation = ResearchResourceReservation(
         action_id=resource_action.id,
         status=ResearchResourceReservationStatus.PROPOSED.value,
@@ -884,6 +1007,11 @@ def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
     instrument_job = ResearchInstrumentJob(
         action_id=instrument_action.id,
         status=ResearchInstrumentJobStatus.QUEUED.value,
+        revision=1,
+    )
+    service_job = ResearchServiceJob(
+        action_id=service_action.id,
+        status=ResearchServiceJobStatus.BLOCKED.value,
         revision=1,
     )
     monkeypatch.setattr(
@@ -896,11 +1024,24 @@ def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
         "find_by",
         AsyncMock(return_value=instrument_job),
     )
+    monkeypatch.setattr(
+        ResearchServiceJob,
+        "find_by",
+        AsyncMock(return_value=service_job),
+    )
 
     asyncio.run(
         research_runtime._cancel_blocked_graph_action(
             AsyncMock(),
             action=resource_action,
+            error="Dependency failed",
+            completed_at=research_runtime.utcnow(),
+        )
+    )
+    asyncio.run(
+        research_runtime._cancel_blocked_graph_action(
+            AsyncMock(),
+            action=service_action,
             error="Dependency failed",
             completed_at=research_runtime.utcnow(),
         )
@@ -920,3 +1061,7 @@ def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
     assert instrument_job.error == "Dependency failed"
     assert instrument_job.completed_at is not None
     assert instrument_job.revision == 2
+    assert service_job.status == ResearchServiceJobStatus.CANCELLED.value
+    assert service_job.error == "Dependency failed"
+    assert service_job.completed_at is not None
+    assert service_job.revision == 2

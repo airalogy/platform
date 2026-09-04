@@ -1115,6 +1115,7 @@
       "serviceOperationPreviewHint": "请确认本次不可变状态变更及其准确载荷。",
       "serviceOperationSaved": "外部 Service Job 已更新",
       "serviceJobStatus": {
+        "blocked": "等待前置条件",
         "awaiting_quote": "等待报价",
         "awaiting_approval": "等待下单审批",
         "ordered": "已下单",
