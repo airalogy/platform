@@ -22,6 +22,7 @@ from app.models.research_execution import (
     ResearchExecutorBindingAudit,
     ResearchHumanExecutorProfile,
     ResearchHumanExecutorProfileAudit,
+    ResearchResourceConsumption,
     ResearchResourceReservation,
     ResearchToolJob,
     ResearchWaitEvent,
@@ -469,6 +470,27 @@ def test_resource_reservations_are_typed_and_follow_executor_bindings():
     assert migration.TABLE_NAMES == (
         "research_task_resource_requirements",
         "research_resource_reservations",
+    )
+
+
+def test_resource_consumptions_link_immutable_inventory_events_to_exact_records():
+    ddl = compile_table(ResearchResourceConsumption)
+
+    assert "uq_research_resource_consumption_inventory_event" in ddl
+    assert "fk_research_resource_consumption_record" in ddl
+    assert "FOREIGN KEY(record_id, record_version)" in ddl
+    assert "REFERENCES records (id, version)" in ddl
+    assert "remaining_quantity" in ddl
+
+    migration = import_module(
+        "migrations.versions.0038_research_resource_consumptions"
+    )
+    assert migration.down_revision == "0037_knowledge_ai_provenance"
+    assert migration.TABLE_NAMES == ("research_resource_consumptions",)
+    assert any(
+        "prevent_research_resource_consumption_mutation" in value
+        for value in migration.upgrade.__code__.co_consts
+        if isinstance(value, str)
     )
 
 

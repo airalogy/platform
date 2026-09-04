@@ -61,6 +61,7 @@ from app.models.research_execution import (
     ResearchComputeJobStatus,
     ResearchInstrumentJob,
     ResearchInstrumentJobStatus,
+    ResearchResourceConsumption,
     ResearchResourceReservation,
     ResearchResourceReservationStatus,
     ResearchServiceJob,
@@ -1261,6 +1262,40 @@ async def _action_data(
                 "lab_uid": lab.uid,
                 "project_uid": project.uid,
             }
+    resource_reservation_data = None
+    if resource_reservation is not None:
+        consumption_rows = (
+            await db_session.execute(
+                select(ResearchResourceConsumption, Record, Protocol)
+                .join(
+                    Record,
+                    and_(
+                        Record.id == ResearchResourceConsumption.record_id,
+                        Record.version
+                        == ResearchResourceConsumption.record_version,
+                    ),
+                )
+                .join(Protocol, Protocol.id == Record.protocol_id)
+                .where(
+                    ResearchResourceConsumption.research_resource_reservation_id
+                    == resource_reservation.id
+                )
+                .order_by(ResearchResourceConsumption.created_at)
+            )
+        ).all()
+        resource_reservation_data = {
+            **resource_reservation.as_dict(),
+            "consumptions": [
+                {
+                    **consumption.as_dict(),
+                    "record_number": record.number,
+                    "protocol_id": str(record.protocol_id),
+                    "protocol_uid": protocol.uid,
+                    "protocol_version": record.protocol_version,
+                }
+                for consumption, record, protocol in consumption_rows
+            ],
+        }
     return {
         **action.as_dict(),
         "assignee": _user_data(assignee),
@@ -1275,9 +1310,7 @@ async def _action_data(
             else None
         ),
         "wait_event": wait_event.as_dict() if wait_event else None,
-        "resource_reservation": (
-            resource_reservation.as_dict() if resource_reservation else None
-        ),
+        "resource_reservation": resource_reservation_data,
         "service_job": (
             await service_job_snapshot(db_session, service_job)
             if service_job is not None

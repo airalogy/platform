@@ -9,7 +9,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.protocol import Protocol
 from app.models.record import Record
+from app.models.research import ResearchAction, ResearchRun, ResearchTask
+from app.models.research_execution import (
+    ResearchResourceConsumption,
+    ResearchResourceReservation,
+    ResearchResourceReservationStatus,
+)
 from app.models.resource import (
     EquipmentBooking,
     InventoryBalance,
@@ -351,6 +358,276 @@ async def release_expired_inventory_reservations(
     return len(reservations)
 
 
+async def _sync_research_resource_consumption(
+    db_session: AsyncSession,
+    *,
+    inventory_reservation: InventoryReservation,
+    inventory_event: InventoryEvent,
+    record: Record,
+    field_path: str,
+    consumed_quantity: Decimal,
+    actor_user_id: UUID,
+    research_context: tuple[
+        ResearchResourceReservation,
+        ResearchAction,
+        ResearchRun,
+    ]
+    | None = None,
+) -> None:
+    context = research_context or await _research_resource_context(
+        db_session,
+        inventory_reservation=inventory_reservation,
+        record=record,
+    )
+    if context is None:
+        return
+    typed, action, run = context
+    existing = (
+        await db_session.scalars(
+            select(ResearchResourceConsumption).where(
+                ResearchResourceConsumption.inventory_event_id == inventory_event.id
+            )
+        )
+    ).first()
+    if existing is not None:
+        return
+    remaining = (
+        Decimal(0)
+        if inventory_reservation.status == "consumed"
+        else Decimal(inventory_reservation.quantity)
+    )
+    consumption = ResearchResourceConsumption(
+        research_resource_reservation_id=typed.id,
+        inventory_event_id=inventory_event.id,
+        record_id=record.id,
+        record_version=record.version,
+        field_path=field_path,
+        quantity=consumed_quantity,
+        unit=inventory_reservation.unit,
+        remaining_quantity=remaining,
+        remaining_unit=inventory_reservation.unit,
+        actor_user_id=actor_user_id,
+    )
+    db_session.add(consumption)
+    await db_session.flush()
+
+    if inventory_reservation.status == "consumed":
+        typed.status = ResearchResourceReservationStatus.COMPLETED.value
+    elif inventory_reservation.status == "active":
+        typed.status = ResearchResourceReservationStatus.ACTIVE.value
+    typed.revision += 1
+    consumption_payload = {
+        "consumption_id": str(consumption.id),
+        "inventory_event_id": str(inventory_event.id),
+        "record_id": str(record.id),
+        "record_version": record.version,
+        "field_path": field_path,
+        "quantity": str(consumed_quantity),
+        "unit": inventory_reservation.unit,
+        "remaining_quantity": str(remaining),
+        "remaining_unit": inventory_reservation.unit,
+        "reservation_status": typed.status,
+    }
+    action.output_data = {
+        **(action.output_data or {}),
+        "inventory_consumption": consumption_payload,
+    }
+    action.revision += 1
+    from .research_runtime import append_aira_result, emit_research_event
+
+    append_aira_result(
+        run,
+        "resource_results",
+        {
+            "action_id": str(action.id),
+            "kind": "inventory_consumption",
+            "resource_id": str(inventory_reservation.resource_id),
+            "status": typed.status,
+            "result": consumption_payload,
+            "observed_at": datetime.now(UTC).isoformat(),
+        },
+    )
+
+    await emit_research_event(
+        db_session,
+        task_id=run.task_id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="resource.inventory_consumed",
+        actor_user_id=actor_user_id,
+        payload={
+            "research_resource_reservation_id": str(typed.id),
+            "consumption_id": str(consumption.id),
+            "inventory_event_id": str(inventory_event.id),
+            "record_id": str(record.id),
+            "record_version": record.version,
+            "field_path": field_path,
+            "quantity": str(consumed_quantity),
+            "unit": inventory_reservation.unit,
+            "remaining_quantity": str(remaining),
+            "status": typed.status,
+        },
+        idempotency_key=f"research-resource:{typed.id}:consume:{inventory_event.id}",
+    )
+
+
+async def _research_resource_context(
+    db_session: AsyncSession,
+    *,
+    inventory_reservation: InventoryReservation,
+    record: Record,
+) -> tuple[ResearchResourceReservation, ResearchAction, ResearchRun] | None:
+    typed = (
+        await db_session.scalars(
+            select(ResearchResourceReservation)
+            .where(
+                ResearchResourceReservation.inventory_reservation_id
+                == inventory_reservation.id
+            )
+            .with_for_update()
+        )
+    ).first()
+    if typed is None:
+        return None
+    action = await db_session.get(ResearchAction, typed.action_id)
+    run = await db_session.get(ResearchRun, action.run_id) if action else None
+    task = await db_session.get(ResearchTask, run.task_id) if run else None
+    protocol = await db_session.get(Protocol, record.protocol_id)
+    if action is None or run is None or task is None or protocol is None:
+        raise InventoryError("Research Resource Reservation is incomplete")
+    if (
+        task.lab_id != inventory_reservation.lab_id
+        or task.project_id != protocol.project_id
+    ):
+        raise InventoryError(
+            "Research Resource Reservation belongs to another Project"
+        )
+    return typed, action, run
+
+
+async def consume_reserved_inventory_for_record(
+    db_session: AsyncSession,
+    *,
+    lab_id: UUID,
+    resource: Resource,
+    container_id: UUID,
+    reservation_id: UUID,
+    quantity: Decimal,
+    unit: str,
+    record: Record,
+    field_path: str,
+    actor_user_id: UUID,
+) -> InventoryEvent:
+    """Consume a reservation once and project actual use into Research state."""
+
+    idempotency_key = (
+        f"record:{record.id}:{record.version}:{field_path}:consume"
+    )
+    reservation = (
+        await db_session.scalars(
+            select(InventoryReservation)
+            .where(InventoryReservation.id == reservation_id)
+            .with_for_update()
+        )
+    ).first()
+    existing_event = (
+        await db_session.scalars(
+            select(InventoryEvent).where(
+                InventoryEvent.lab_id == lab_id,
+                InventoryEvent.idempotency_key == idempotency_key,
+            )
+        )
+    ).first()
+    if existing_event is not None:
+        if (
+            reservation is None
+            or reservation.lab_id != lab_id
+            or reservation.resource_id != resource.id
+            or reservation.container_id != container_id
+            or existing_event.resource_id != resource.id
+            or existing_event.container_id != container_id
+        ):
+            raise InventoryError(
+                "inventory reservation does not match the prior consumption"
+            )
+        requested = convert_quantity(quantity, unit, reservation.unit)
+        event_quantity = convert_quantity(
+            existing_event.quantity,
+            existing_event.unit,
+            reservation.unit,
+        )
+        if requested != event_quantity:
+            raise InventoryError("prior inventory consumption does not match this Record")
+        research_context = await _research_resource_context(
+            db_session,
+            inventory_reservation=reservation,
+            record=record,
+        )
+        await _sync_research_resource_consumption(
+            db_session,
+            inventory_reservation=reservation,
+            inventory_event=existing_event,
+            record=record,
+            field_path=field_path,
+            consumed_quantity=requested,
+            actor_user_id=actor_user_id,
+            research_context=research_context,
+        )
+        return existing_event
+    if (
+        reservation is None
+        or reservation.status != "active"
+        or reservation.lab_id != lab_id
+        or reservation.resource_id != resource.id
+        or reservation.container_id != container_id
+        or (
+            reservation.expires_at is not None
+            and reservation.expires_at <= datetime.now(UTC)
+        )
+    ):
+        raise InventoryError("inventory reservation is not active")
+    requested = convert_quantity(quantity, unit, reservation.unit)
+    if requested > reservation.quantity:
+        raise InventoryError("consumption exceeds reserved quantity")
+    research_context = await _research_resource_context(
+        db_session,
+        inventory_reservation=reservation,
+        record=record,
+    )
+    event = await apply_inventory_event(
+        db_session,
+        lab_id=lab_id,
+        actor_user_id=actor_user_id,
+        container_id=container_id,
+        kind=InventoryEventKind.CONSUMPTION.value,
+        quantity=quantity,
+        unit=unit,
+        idempotency_key=idempotency_key,
+        on_hand_direction=-1,
+        reserved_direction=-1,
+        record_id=record.id,
+        record_version=record.version,
+        reason="Protocol Record input consumption",
+    )
+    if event.resource_id != resource.id:
+        raise InventoryError(f"{field_path} container belongs to another resource")
+    if requested == reservation.quantity:
+        reservation.status = "consumed"
+    else:
+        reservation.quantity -= requested
+    await _sync_research_resource_consumption(
+        db_session,
+        inventory_reservation=reservation,
+        inventory_event=event,
+        record=record,
+        field_path=field_path,
+        consumed_quantity=requested,
+        actor_user_id=actor_user_id,
+        research_context=research_context,
+    )
+    return event
+
+
 async def transfer_inventory(
     db_session: AsyncSession,
     *,
@@ -651,57 +928,18 @@ async def commit_record_resources(
                     f"{binding.field_path} input consumption requires container and unit"
                 )
             if reservation_id:
-                reservation = (
-                    await db_session.execute(
-                        select(InventoryReservation)
-                        .where(
-                            InventoryReservation.id == reservation_id
-                        )
-                        .with_for_update()
-                    )
-                ).scalar_one_or_none()
-                if (
-                    reservation is None
-                    or reservation.status != "active"
-                    or reservation.lab_id != lab_id
-                    or reservation.resource_id != resource.id
-                    or reservation.container_id != container_id
-                    or (
-                        reservation.expires_at is not None
-                        and reservation.expires_at <= datetime.now(UTC)
-                    )
-                ):
-                    raise InventoryError("inventory reservation is not active")
-                requested = convert_quantity(
-                    binding.quantity, binding.unit, reservation.unit
-                )
-                if requested > reservation.quantity:
-                    raise InventoryError("consumption exceeds reserved quantity")
-                event = await apply_inventory_event(
+                await consume_reserved_inventory_for_record(
                     db_session,
                     lab_id=lab_id,
-                    actor_user_id=actor_user_id,
+                    resource=resource,
                     container_id=container_id,
-                    kind=InventoryEventKind.CONSUMPTION.value,
+                    reservation_id=reservation_id,
                     quantity=binding.quantity,
                     unit=binding.unit,
-                    idempotency_key=(
-                        f"record:{record.id}:{record.version}:{binding.field_path}:consume"
-                    ),
-                    on_hand_direction=-1,
-                    reserved_direction=-1,
-                    record_id=record.id,
-                    record_version=record.version,
-                    reason="Protocol Record input consumption",
+                    record=record,
+                    field_path=binding.field_path,
+                    actor_user_id=actor_user_id,
                 )
-                if event.resource_id != resource.id:
-                    raise InventoryError(
-                        f"{binding.field_path} container belongs to another resource"
-                    )
-                if requested == reservation.quantity:
-                    reservation.status = "consumed"
-                else:
-                    reservation.quantity -= requested
             else:
                 event = await apply_inventory_event(
                     db_session,

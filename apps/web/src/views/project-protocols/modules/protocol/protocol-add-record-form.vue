@@ -277,7 +277,12 @@ const { airalogyId } = useProtocolInfoStore()!
 const { currentRecorderRecordContext } = useChatProvider()
 
 const resourceLabId = computed(() => String(props.protocol?.lab_id || ""))
+const resourceProjectId = computed(() => String(props.protocol?.project_id || ""))
 const resourceTypeCache = shallowRef<Awaited<ReturnType<typeof fetchResourceTypes>>["items"]>([])
+const inventoryReservations = ref<Record<
+  string,
+  Awaited<ReturnType<typeof fetchResourceAvailability>>["inventory_reservations"]
+>>({})
 
 async function ensureResourceTypes() {
   if (resourceLabId.value && resourceTypeCache.value.length === 0) {
@@ -313,7 +318,15 @@ const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
       }
     },
     async getAvailability(resource: { id: string }, context: any) {
-      const response = await fetchResourceAvailability(resourceLabId.value, resource.id)
+      const response = await fetchResourceAvailability(
+        resourceLabId.value,
+        resource.id,
+        resourceProjectId.value || undefined,
+      )
+      inventoryReservations.value = {
+        ...inventoryReservations.value,
+        [resource.id]: response.inventory_reservations || [],
+      }
       if (context.role === "equipment") {
         return {
           equipment_slots: response.equipment_bookings.map(item => ({
@@ -592,6 +605,8 @@ provide(platformResourceResolverKey, {
   resolvers: resourceResolvers,
   record: resourceRecord,
   labId: resourceLabId,
+  projectId: resourceProjectId,
+  inventoryReservations,
 })
 
 const {

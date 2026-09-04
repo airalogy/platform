@@ -437,6 +437,7 @@ interface ResourceCommitSummary {
   unit?: string
   container?: string
   booking?: string
+  reservation?: string
 }
 
 function resourceCommitSummary(
@@ -479,6 +480,9 @@ function resourceCommitSummary(
       unit: value.unit ? String(value.unit) : undefined,
       container: value.container_id ? String(value.container_id) : undefined,
       booking: value.booking_id ? String(value.booking_id) : undefined,
+      reservation: value.reservation_id
+        ? String(value.snapshot?.research_reservation?.label || value.reservation_id)
+        : undefined,
     })
   }
   return summaries
@@ -532,6 +536,9 @@ function confirmRecordSubmission(
                       : null,
                     item.booking
                       ? h("div", `${t("page.protocol.addRecord.resourceBooking")}: ${item.booking}`)
+                      : null,
+                    item.reservation
+                      ? h("div", `${t("page.protocol.addRecord.resourceReservation")}: ${item.reservation}`)
                       : null,
                   ]),
                 ),

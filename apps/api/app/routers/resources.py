@@ -21,6 +21,11 @@ from app.database import DBSession
 from app.models.project import Project
 from app.models.protocol import Protocol, ProtocolKind
 from app.models.protocol_version import ProtocolVersion
+from app.models.research import ResearchAction, ResearchRun, ResearchTask
+from app.models.research_execution import (
+    ResearchResourceReservation,
+    ResearchResourceReservationStatus,
+)
 from app.models.resource import (
     BookingStatus,
     EquipmentBooking,
@@ -2030,6 +2035,7 @@ async def resolver_availability(
     resource_id: UUID,
     current_user: CurrentUser,
     db_session: DBSession,
+    project_id: UUID | None = None,
 ):
     resource = await _resource(db_session, lab_id, resource_id)
     if not await _can_read_resource(db_session, current_user.id, resource):
@@ -2065,6 +2071,58 @@ async def resolver_availability(
             .limit(50)
         )
     ).all()
+    research_reservations = []
+    if project_id is not None:
+        project = await db_session.get(Project, project_id)
+        if project is None or project.lab_id != lab_id:
+            raise HTTPException(status_code=404, detail="Project not found")
+        from app.services.research_runtime import has_research_capability
+
+        can_run_research = await has_research_capability(
+            db_session,
+            user=current_user,
+            project=project,
+            capability="research.run",
+        )
+        if can_run_research:
+            research_reservations = (
+                await db_session.execute(
+                    select(
+                        ResearchResourceReservation,
+                        InventoryReservation,
+                        ResearchAction,
+                        ResearchTask,
+                    )
+                    .join(
+                        InventoryReservation,
+                        InventoryReservation.id
+                        == ResearchResourceReservation.inventory_reservation_id,
+                    )
+                    .join(
+                        ResearchAction,
+                        ResearchAction.id == ResearchResourceReservation.action_id,
+                    )
+                    .join(ResearchRun, ResearchRun.id == ResearchAction.run_id)
+                    .join(ResearchTask, ResearchTask.id == ResearchRun.task_id)
+                    .where(
+                        ResearchTask.project_id == project_id,
+                        ResearchResourceReservation.kind == "inventory",
+                        ResearchResourceReservation.resource_id == resource.id,
+                        ResearchResourceReservation.status
+                        == ResearchResourceReservationStatus.ACTIVE.value,
+                        InventoryReservation.status == "active",
+                        or_(
+                            InventoryReservation.expires_at.is_(None),
+                            InventoryReservation.expires_at > _now(),
+                        ),
+                    )
+                    .order_by(
+                        ResearchAction.created_at,
+                        ResearchResourceReservation.id,
+                    )
+                    .limit(50)
+                )
+            ).all()
     return {
         "resource": {
             "id": resource.id,
@@ -2102,6 +2160,23 @@ async def resolver_availability(
                 "available": booking.status == BookingStatus.APPROVED.value,
             }
             for booking in bookings
+        ],
+        "inventory_reservations": [
+            {
+                "id": inventory.id,
+                "research_reservation_id": reservation.id,
+                "container_id": inventory.container_id,
+                "quantity": inventory.quantity,
+                "unit": inventory.unit,
+                "expires_at": inventory.expires_at,
+                "task_id": task.id,
+                "task_title": task.title,
+                "action_title": action.title,
+                "label": (
+                    f"{task.title} · {inventory.quantity} {inventory.unit}"
+                ),
+            }
+            for reservation, inventory, action, task in research_reservations
         ],
     }
 

@@ -209,6 +209,26 @@ export interface ResearchResourceReservation {
   revision: number
   created_at: string
   updated_at: string
+  consumptions?: ResearchResourceConsumption[]
+}
+
+export interface ResearchResourceConsumption {
+  id: string
+  research_resource_reservation_id: string
+  inventory_event_id: string
+  record_id: string
+  record_version: number
+  record_number: number
+  protocol_id: string
+  protocol_uid: string
+  protocol_version: string
+  field_path: string
+  quantity: string
+  unit: string
+  remaining_quantity: string
+  remaining_unit: string
+  actor_user_id: string
+  created_at: string
 }
 
 export interface ResearchRun {

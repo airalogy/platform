@@ -681,7 +681,24 @@ export function searchResourceRefs(
   })
 }
 
-export function fetchResourceAvailability(labId: string, resourceId: string) {
+export interface ResearchInventoryReservationOption {
+  id: string
+  research_reservation_id: string
+  container_id: string
+  quantity: string
+  unit: string
+  expires_at?: string | null
+  task_id: string
+  task_title: string
+  action_title: string
+  label: string
+}
+
+export function fetchResourceAvailability(
+  labId: string,
+  resourceId: string,
+  projectId?: string,
+) {
   return getData<{
     resource: { id: string, name: string, code: string, status: string }
     containers: Array<Record<string, unknown>>
@@ -693,8 +710,10 @@ export function fetchResourceAvailability(labId: string, resourceId: string) {
       label: string
       available: boolean
     }>
+    inventory_reservations: ResearchInventoryReservationOption[]
   }>({
     url: libraryUrl(labId, `/resolver/resources/${resourceId}/availability`),
+    params: projectId ? { project_id: projectId } : undefined,
   })
 }
 

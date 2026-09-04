@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Numeric,
     String,
@@ -1121,6 +1122,63 @@ class ResearchResourceReservation(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class ResearchResourceConsumption(Base):
+    """Append-only link from an inventory reservation to actual Record use."""
+
+    __tablename__ = "research_resource_consumptions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["record_id", "record_version"],
+            ["records.id", "records.version"],
+            ondelete="RESTRICT",
+            name="fk_research_resource_consumption_record",
+        ),
+        UniqueConstraint(
+            "inventory_event_id",
+            name="uq_research_resource_consumption_inventory_event",
+        ),
+        Index(
+            "ix_research_resource_consumptions_reservation_created",
+            "research_resource_reservation_id",
+            "created_at",
+        ),
+        Index(
+            "ix_research_resource_consumptions_record",
+            "record_id",
+            "record_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    research_resource_reservation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_resource_reservations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    inventory_event_id: Mapped[UUID] = mapped_column(
+        ForeignKey("inventory_events.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    record_id: Mapped[UUID] = mapped_column(nullable=False)
+    record_version: Mapped[int] = mapped_column(nullable=False)
+    field_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    remaining_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(38, 18), nullable=False
+    )
+    remaining_unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

@@ -1,3 +1,4 @@
+import type { ResearchInventoryReservationOption } from "@/service/api/resources"
 import type {
   AimdProtocolRecordData,
   AimdResourceResolverMap,
@@ -8,6 +9,8 @@ export interface PlatformResourceResolverContext {
   resolvers: ComputedRef<AimdResourceResolverMap | undefined>
   record: ComputedRef<AimdProtocolRecordData>
   labId: Ref<string>
+  projectId: Ref<string>
+  inventoryReservations: Ref<Record<string, ResearchInventoryReservationOption[]>>
 }
 
 export const platformResourceResolverKey: InjectionKey<PlatformResourceResolverContext>

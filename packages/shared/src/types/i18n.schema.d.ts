@@ -1141,6 +1141,10 @@ declare namespace I18n {
         syncBooking: string
         releaseReservation: string
         releaseReservationHint: string
+        inventoryConsumptionHistory: string
+        consumptionRecord: string
+        consumedAmount: string
+        remainingAmount: string
         releaseReason: string
         previewRelease: string
         confirmRelease: string
@@ -2412,6 +2416,10 @@ declare namespace I18n {
           resourceCommitDescription: string
           resourceContainer: string
           resourceBooking: string
+          resourceReservation: string
+          noResourceReservation: string
+          unavailableResourceReservation: string
+          resourceReservationHint: string
           confirmResourceCommit: string
           correctionReason: string
           workflowContinueTitle: string

@@ -98,6 +98,8 @@ The new Run preserves every earlier execution and scientific asset and inherits 
 
 Aira can request a pinned resource type, quantity, unit, or equipment window, but it cannot pick an arbitrary hidden resource or reserve it directly. Platform selects an accessible candidate deterministically and presents the exact impact for approval. If inventory, permissions, the resource revision, or a booking window changes before approval, the proposal is rejected and must be replanned.
 
+To record actual inventory use, select that reservation in the matching resource field of the normal Record form and submit the validated Record. Platform atomically deducts the consumed quantity from both stock and the outstanding reservation. Partial use leaves the remainder available for a later Record; full use marks the reservation completed. The Research Task shows an immutable consumption history with links to every exact Record revision. Repeating the same submission does not deduct stock twice.
+
 ## Register an Instrument Gateway
 
 Lab Owners and Managers can open **Lab resource library → Instrument gateways** to establish the local device boundary. Create a Gateway, preview the impact, confirm, then copy its one-time credential into the on-premises Gateway process. Platform never shows that credential again. Rotating it invalidates the old value immediately, so update the local process before resuming device work.

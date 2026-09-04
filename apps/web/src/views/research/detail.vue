@@ -504,6 +504,39 @@
                           <div v-else class="aira-type-meta mt-1">
                             {{ formatDateTime(action.resource_reservation.starts_at) }} – {{ formatDateTime(action.resource_reservation.ends_at) }}
                           </div>
+                          <div
+                            v-if="action.resource_reservation.consumptions?.length"
+                            class="mt-3 space-y-2"
+                          >
+                            <div class="aira-type-label">
+                              {{ $t("page.research.inventoryConsumptionHistory") }}
+                            </div>
+                            <button
+                              v-for="consumption in action.resource_reservation.consumptions"
+                              :key="consumption.id"
+                              type="button"
+                              class="research-consumption"
+                              @click="openResourceConsumptionRecord(consumption)"
+                            >
+                              <span class="aira-type-body">
+                                {{ $t("page.research.consumptionRecord", {
+                                  number: consumption.record_number,
+                                  version: consumption.record_version,
+                                }) }}
+                              </span>
+                              <span class="aira-type-meta">
+                                {{ $t("page.research.consumedAmount", {
+                                  quantity: consumption.quantity,
+                                  unit: consumption.unit,
+                                }) }}
+                                ·
+                                {{ $t("page.research.remainingAmount", {
+                                  quantity: consumption.remaining_quantity,
+                                  unit: consumption.remaining_unit,
+                                }) }}
+                              </span>
+                            </button>
+                          </div>
                         </div>
                         <research-resource-reservation-actions
                           :reservation="action.resource_reservation"
@@ -869,6 +902,7 @@ import type {
   ResearchActionStatus,
   ResearchEnvironmentExecutorBinding,
   ResearchProtocolRef,
+  ResearchResourceConsumption,
   ResearchReviewRecommendation,
   ResearchRun,
   ResearchRunOrigin,
@@ -1330,6 +1364,22 @@ function openRecord(action: ResearchAction) {
   })
 }
 
+function openResourceConsumptionRecord(consumption: ResearchResourceConsumption) {
+  if (!task.value)
+    return
+  void router.push({
+    name: "protocol-record-report",
+    params: {
+      labUid: task.value.lab.uid,
+      projectUid: task.value.project.uid,
+      protocolUid: consumption.protocol_uid,
+      protocolVersion: consumption.protocol_version,
+      recordId: consumption.record_id,
+      recordVersion: String(consumption.record_version),
+    },
+  })
+}
+
 function statusType(status: ResearchTaskStatus): TagProps["type"] {
   if (status === "completed")
     return "success"
@@ -1559,6 +1609,24 @@ onUnmounted(() => {
   border-radius: 0.625rem;
   background: white;
   padding: 0.625rem 0.75rem;
+}
+
+.research-consumption {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.2rem;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.625rem;
+  background: white;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+}
+
+.research-consumption:hover,
+.research-consumption:focus-visible {
+  border-color: rgb(var(--primary-color) / 45%);
+  outline: none;
 }
 
 .research-digital-result pre {

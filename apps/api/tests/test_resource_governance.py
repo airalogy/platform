@@ -14,6 +14,7 @@ from app.models.resource import InventoryEvent, ResourceRevision
 from app.routers import resources as resources_router
 from app.routers.access import GrantParams
 from app.routers.resources import _validation_issues, resource_capabilities
+from app.services import research_runtime
 from app.services.resource_bindings import extract_resource_bindings
 from app.services.resource_index import build_resource_indexes
 from app.services.resource_units import UnitError, convert_quantity
@@ -115,6 +116,137 @@ def test_resource_ref_bindings_keep_role_quantity_container_and_booking():
     assert bindings[0].unit == "mL"
     assert bindings[0].container_required is True
     assert bindings[1].booking_required is True
+
+
+def test_resource_resolver_lists_only_project_authorized_research_reservations(
+    monkeypatch,
+):
+    lab_id = uuid4()
+    project_id = uuid4()
+    resource_id = uuid4()
+    user = SimpleNamespace(id=uuid4())
+    resource = SimpleNamespace(
+        id=resource_id,
+        name="Shared reagent",
+        code="REAGENT-1",
+        status="active",
+    )
+    project = SimpleNamespace(id=project_id, lab_id=lab_id)
+    typed = SimpleNamespace(id=uuid4())
+    inventory = SimpleNamespace(
+        id=uuid4(),
+        container_id=uuid4(),
+        quantity=Decimal("2.5"),
+        unit="mL",
+        expires_at=None,
+    )
+    action = SimpleNamespace(title="Reserve assay reagent")
+    task = SimpleNamespace(id=uuid4(), title="Dose response")
+    db_session = SimpleNamespace(
+        get=AsyncMock(return_value=project),
+        execute=AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: []),
+                SimpleNamespace(all=lambda: [(typed, inventory, action, task)]),
+            ]
+        ),
+        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: [])),
+    )
+    has_access = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        resources_router,
+        "_resource",
+        AsyncMock(return_value=resource),
+    )
+    monkeypatch.setattr(
+        resources_router,
+        "_can_read_resource",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        research_runtime,
+        "has_research_capability",
+        has_access,
+    )
+
+    result = asyncio.run(
+        resources_router.resolver_availability(
+            lab_id=lab_id,
+            resource_id=resource_id,
+            current_user=user,
+            db_session=db_session,
+            project_id=project_id,
+        )
+    )
+
+    has_access.assert_awaited_once_with(
+        db_session,
+        user=user,
+        project=project,
+        capability="research.run",
+    )
+    assert result["inventory_reservations"] == [
+        {
+            "id": inventory.id,
+            "research_reservation_id": typed.id,
+            "container_id": inventory.container_id,
+            "quantity": inventory.quantity,
+            "unit": inventory.unit,
+            "expires_at": None,
+            "task_id": task.id,
+            "task_title": task.title,
+            "action_title": action.title,
+            "label": "Dose response · 2.5 mL",
+        }
+    ]
+
+
+def test_resource_resolver_keeps_normal_inventory_available_without_research_access(
+    monkeypatch,
+):
+    lab_id = uuid4()
+    project_id = uuid4()
+    resource = SimpleNamespace(
+        id=uuid4(),
+        name="Shared reagent",
+        code="REAGENT-1",
+        status="active",
+    )
+    project = SimpleNamespace(id=project_id, lab_id=lab_id)
+    db_session = SimpleNamespace(
+        get=AsyncMock(return_value=project),
+        execute=AsyncMock(return_value=SimpleNamespace(all=lambda: [])),
+        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: [])),
+    )
+    monkeypatch.setattr(
+        resources_router,
+        "_resource",
+        AsyncMock(return_value=resource),
+    )
+    monkeypatch.setattr(
+        resources_router,
+        "_can_read_resource",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        research_runtime,
+        "has_research_capability",
+        AsyncMock(return_value=False),
+    )
+
+    result = asyncio.run(
+        resources_router.resolver_availability(
+            lab_id=lab_id,
+            resource_id=resource.id,
+            current_user=SimpleNamespace(id=uuid4()),
+            db_session=db_session,
+            project_id=project_id,
+        )
+    )
+
+    assert result["containers"] == []
+    assert result["inventory_reservations"] == []
+    assert db_session.execute.await_count == 1
 
 
 def test_resource_index_projects_scalar_reference_and_list_values():
