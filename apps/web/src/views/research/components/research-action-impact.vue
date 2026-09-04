@@ -135,6 +135,12 @@
         <pre>{{ formatted(action.service_job.request_payload) }}</pre>
       </div>
     </div>
+    <div v-else-if="action.kind === 'human_work_item'" class="mt-2">
+      <div class="aira-type-meta">
+        {{ $t("page.research.submissionContract") }}
+      </div>
+      <pre>{{ formatted(action.requirements.submission_contract) }}</pre>
+    </div>
     <div v-else-if="action.protocol_run && Object.keys(action.protocol_run.initial_values || {}).length" class="mt-2">
       <div class="aira-type-meta">
         {{ $t("page.research.initialValues") }}
@@ -170,6 +176,8 @@ const kindTagType = computed<TagProps["type"]>(() => {
   if (props.action.kind === "resource_reservation")
     return "warning"
   if (props.action.kind === "external_service_job")
+    return "warning"
+  if (props.action.kind === "human_work_item")
     return "warning"
   return "default"
 })

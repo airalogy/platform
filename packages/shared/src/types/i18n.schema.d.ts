@@ -866,6 +866,7 @@ declare namespace I18n {
       research: {
         title: string
         taskDetail: string
+        workItemDetail: string
         eyebrow: string
         description: string
         projectTitle: string
@@ -874,6 +875,7 @@ declare namespace I18n {
         approvals: string
         notifications: string
         notificationWorkItem: string
+        notificationReview: string
         notificationApproval: string
         noNotifications: string
         reviewAttention: string
@@ -1208,6 +1210,8 @@ declare namespace I18n {
         due: string
         viewTask: string
         executeProtocol: string
+        completeHumanWork: string
+        backToTask: string
         backToTasks: string
         airaManaged: string
         startWithAira: string
@@ -1216,7 +1220,80 @@ declare namespace I18n {
         resume: string
         cancelTask: string
         cancelConfirm: string
+        addProtocolWork: string
         addHumanWork: string
+        structuredHumanWork: string
+        protocolWork: string
+        humanWorkBoundary: string
+        humanWorkTitlePlaceholder: string
+        humanWorkInstructionsPlaceholder: string
+        completionCriteria: string
+        evidenceKind: string
+        evidenceKindValue: {
+          observation: string
+          measurement: string
+          analysis: string
+          citation: string
+          validation: string
+        }
+        submissionFields: string
+        submissionFieldsHint: string
+        addField: string
+        fieldNumber: string
+        fieldLabel: string
+        fieldKey: string
+        fieldKeyInvalid: string
+        fieldKeyDuplicate: string
+        fieldType: string
+        requiredField: string
+        fieldDescription: string
+        choiceOptions: string
+        choiceOptionsPlaceholder: string
+        choiceOptionsInvalid: string
+        humanFieldType: {
+          text: string
+          long_text: string
+          number: string
+          boolean: string
+          date: string
+          choice: string
+        }
+        minimumDataAssets: string
+        maximumDataAssets: string
+        dataAssetRangeInvalid: string
+        humanWorkPreviewHint: string
+        humanWorkCreated: string
+        changesRequested: string
+        structuredSubmission: string
+        requiredResults: string
+        requiredProgress: string
+        booleanYes: string
+        booleanNo: string
+        supportingDataAssets: string
+        selectSupportingDataAssets: string
+        dataAssetCountContract: string
+        submissionNote: string
+        previewSubmission: string
+        confirmSubmission: string
+        submissionReady: string
+        humanWorkSubmitted: string
+        humanReview: string
+        reviewSubmission: string
+        waitingForHumanReview: string
+        reviewDecision: string
+        acceptSubmission: string
+        requestChanges: string
+        reviewReason: string
+        previewReview: string
+        confirmAcceptance: string
+        confirmChanges: string
+        humanWorkAccepted: string
+        humanWorkChangesRequested: string
+        submissionContract: string
+        linkedDataAssets: string
+        governance: string
+        humanWorkGovernanceHint: string
+        invalidHumanWorkContract: string
         addDigitalAction: string
         toolAction: string
         toolActionHint: string
@@ -1506,7 +1583,6 @@ declare namespace I18n {
         assetKind: string
         externalUri: string
         mediaType: string
-        evidenceKind: string
         evidenceSource: string
         dataAsset: string
         actionOutput: string
@@ -1584,13 +1660,6 @@ declare namespace I18n {
           pending: string
           validated: string
           rejected: string
-        }
-        evidenceKindValue: {
-          observation: string
-          measurement: string
-          analysis: string
-          citation: string
-          validation: string
         }
         artifactType: {
           record: string

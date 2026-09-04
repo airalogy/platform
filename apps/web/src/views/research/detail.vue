@@ -46,8 +46,15 @@
               {{ task.ai_available && hasAiraCapabilities ? $t("page.research.startWithAira") : $t("page.research.startTask") }}
             </n-button>
             <n-button v-if="canAddAction" secondary @click="openActionModal">
-              {{ $t("page.research.addHumanWork") }}
+              {{ $t("page.research.addProtocolWork") }}
             </n-button>
+            <research-human-work-action-modal
+              v-if="canAddAction"
+              :task-id="task.id"
+              :project-id="task.project_id"
+              :owner="task.owner"
+              @created="() => loadTask(true)"
+            />
             <research-digital-action-modal
               v-if="canAddDigitalAction"
               :task-id="task.id"
@@ -277,7 +284,7 @@
                       :loading="startingWorkItemId === action.work_item?.id"
                       @click="executeWorkItem(action)"
                     >
-                      {{ $t("page.research.executeProtocol") }}
+                      {{ actionWorkLabel(action) }}
                     </n-button>
                   </div>
                 </article>
@@ -788,7 +795,7 @@
       v-model:show="actionModalVisible"
       preset="card"
       class="research-modal"
-      :title="$t('page.research.addHumanWork')"
+      :title="$t('page.research.addProtocolWork')"
       :mask-closable="false"
       @after-leave="resetActionDraft"
     >
@@ -993,6 +1000,7 @@ import ResearchBudgetPanel from "./components/research-budget-panel.vue"
 import ResearchComputeActionModal from "./components/research-compute-action-modal.vue"
 import ResearchComputeJobActions from "./components/research-compute-job-actions.vue"
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
+import ResearchHumanWorkActionModal from "./components/research-human-work-action-modal.vue"
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
 import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
@@ -1042,6 +1050,10 @@ const pinnedExecutorBindings = computed<ResearchEnvironmentExecutorBinding[]>(()
   const bindings = latestRun.value?.environment_snapshot?.executor_bindings
   return Array.isArray(bindings) ? bindings as ResearchEnvironmentExecutorBinding[] : []
 })
+const pinnedHumanWork = computed(() => {
+  const capabilities = latestRun.value?.environment_snapshot?.human_work
+  return Array.isArray(capabilities) ? capabilities : []
+})
 const pinnedAutonomyPolicy = computed<ResearchAutonomyPolicySnapshot | null>(() => {
   const policy = latestRun.value?.environment_snapshot?.autonomy_policy
   return policy && typeof policy === "object"
@@ -1050,6 +1062,7 @@ const pinnedAutonomyPolicy = computed<ResearchAutonomyPolicySnapshot | null>(() 
 })
 const hasAiraCapabilities = computed(() => Boolean(
   task.value?.protocols.length
+  || pinnedHumanWork.value.some(item => item && typeof item === "object" && (item as { available?: boolean }).available !== false)
   || pinnedTools.value.some(item => item.available)
   || task.value?.resources.some(item => item.available)
   || task.value?.services.some(item => item.available),
@@ -1090,7 +1103,7 @@ const canAmendLimits = computed(() => Boolean(
   && !["completed", "cancelled", "archived"].includes(task.value.status),
 ))
 const openActions = computed(() => (task.value?.actions || []).filter(action =>
-  action.work_item && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),
+  action.work_item && ["open", "in_progress", "submitted", "changes_requested"].includes(action.work_item.status),
 ))
 const pendingApprovalActions = computed(() => (task.value?.actions || []).filter(action =>
   action.approval?.status === "pending" && action.status === "proposed",
@@ -1267,7 +1280,16 @@ async function createAction() {
 }
 
 async function executeWorkItem(action: ResearchAction) {
-  if (!action.work_item || !action.protocol || !task.value)
+  if (!action.work_item || !task.value)
+    return
+  if (action.kind === "human_work_item") {
+    await router.push({
+      name: "research-work-item-detail",
+      params: { workItemId: action.work_item.id },
+    })
+    return
+  }
+  if (!action.protocol)
     return
   startingWorkItemId.value = action.work_item.id
   try {
@@ -1289,12 +1311,38 @@ async function executeWorkItem(action: ResearchAction) {
 }
 
 function canExecuteAction(action: ResearchAction) {
+  if (action.kind === "human_work_item") {
+    return Boolean(
+      action.work_item
+      && (
+        (
+          String(action.work_item.assignee_user_id) === String(authStore.userInfo.id)
+          && ["open", "in_progress", "changes_requested"].includes(action.work_item.status)
+        )
+        || (
+          action.work_item.status === "submitted"
+          && (
+            String(task.value?.owner_user_id) === String(authStore.userInfo.id)
+            || task.value?.permissions.can_approve
+          )
+        )
+      ),
+    )
+  }
   return Boolean(
     action.work_item
     && action.protocol
     && String(action.work_item.assignee_user_id) === String(authStore.userInfo.id)
     && ["open", "in_progress", "changes_requested"].includes(action.work_item.status),
   )
+}
+
+function actionWorkLabel(action: ResearchAction) {
+  if (action.kind !== "human_work_item")
+    return $t("page.research.executeProtocol")
+  return action.work_item?.status === "submitted"
+    ? $t("page.research.reviewSubmission")
+    : $t("page.research.completeHumanWork")
 }
 
 function instrumentRiskType(risk: "read_only" | "low" | "medium" | "high") {
@@ -1550,6 +1598,8 @@ function eventLabel(kind: string) {
     "aira.action_proposed",
     "work_item.assigned",
     "work_item.started",
+    "work_item.submitted",
+    "work_item.changes_requested",
     "work_item.completed",
     "approval.requested",
     "approval.approved",

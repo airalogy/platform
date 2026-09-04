@@ -68,6 +68,61 @@ export type ResearchApprovalStatus =
   | "expired"
   | "revoked"
 
+export type HumanWorkValueType
+  = "text" | "long_text" | "number" | "boolean" | "date" | "choice"
+
+export interface HumanWorkField {
+  key: string
+  label: string
+  description: string
+  value_type: HumanWorkValueType
+  required: boolean
+  options: string[]
+  unit: string
+}
+
+export interface HumanWorkRequest {
+  title: string
+  instructions: string
+  completion_criteria: string
+  evidence_kind: "observation" | "measurement" | "analysis" | "citation" | "validation"
+  fields: HumanWorkField[]
+  data_asset_min_count: number
+  data_asset_max_count: number
+}
+
+export interface HumanWorkSubmissionContract {
+  schema: "airalogy.human-work-submission.v1"
+  type: "structured_values"
+  fields: HumanWorkField[]
+  data_asset_min_count: number
+  data_asset_max_count: number
+  evidence_kind: HumanWorkRequest["evidence_kind"]
+  completion_criteria: string
+}
+
+export interface HumanWorkSubmission {
+  work_item_id?: string
+  preview_digest?: string
+  values?: Record<string, unknown>
+  data_assets?: Array<{
+    data_asset_id: string
+    data_asset_version_id: string
+    version: number
+    name: string
+    kind: string
+    status: string
+  }>
+  note?: string
+  review?: {
+    decision: "accept" | "changes_requested"
+    reason: string
+    preview_digest: string
+    reviewed_by_user_id: string
+    reviewed_at: string
+  }
+}
+
 export interface ResearchUser {
   id: string
   username: string
@@ -317,8 +372,8 @@ export interface ResearchHumanWorkItem {
   assignee_user_id: string
   status: HumanWorkItemStatus
   instructions: string
-  submission_contract: Record<string, unknown>
-  submission: Record<string, unknown>
+  submission_contract: Record<string, unknown> | HumanWorkSubmissionContract
+  submission: Record<string, unknown> | HumanWorkSubmission
   record_id?: string | null
   record_version?: number | null
   validation_issues: Array<Record<string, unknown>>
@@ -650,9 +705,15 @@ export interface ResearchWorkItemDetail extends ResearchHumanWorkItem {
   assignee: ResearchUser
   action: ResearchAction
   run: ResearchRun
-  task: Pick<ResearchTaskSummary, "id" | "title" | "goal" | "status" | "revision">
+  task: Pick<ResearchTaskSummary, "id" | "title" | "goal" | "status" | "revision" | "owner_user_id">
   project: ResearchScope
   lab: ResearchScope
+  permissions: {
+    can_assign: boolean
+    can_start: boolean
+    can_submit: boolean
+    can_review: boolean
+  }
 }
 
 export interface ResearchApprovalDetail extends ResearchApproval {
@@ -682,7 +743,7 @@ export interface ResearchNotification {
   work_item_id?: string | null
   approval_id?: string | null
   recipient_user_id: string
-  kind: "work_item_assigned" | "approval_requested"
+  kind: "work_item_assigned" | "work_item_review_requested" | "approval_requested"
   priority: "normal" | "high"
   title: string
   message: string
@@ -811,6 +872,48 @@ export interface ManualProtocolActionPreview {
   protocol: ResearchProtocolRef
   assignee: ResearchUser
   effects: string[]
+}
+
+export interface ManualHumanWorkActionDraft {
+  assignee_user_id?: string
+  request: HumanWorkRequest
+  due_at?: string
+  idempotency_key: string
+}
+
+export interface ManualHumanWorkActionPreview {
+  preview_digest: string
+  command: Record<string, unknown>
+  destination: {
+    lab: ResearchScope
+    project: ResearchScope
+    task: Pick<ResearchTaskSummary, "id" | "title">
+    run: { id: string, number: number }
+  }
+  assignee: ResearchUser
+  effects: string[]
+}
+
+export interface HumanWorkSubmissionDraft {
+  expected_revision: number
+  values: Record<string, unknown>
+  data_asset_version_ids: string[]
+  note: string
+}
+
+export interface HumanWorkReviewDraft {
+  expected_revision: number
+  expected_action_revision: number
+  decision: "accept" | "changes_requested"
+  reason: string
+}
+
+export interface HumanWorkCommandPreview {
+  preview_digest: string
+  command: Record<string, unknown>
+  effects: string[]
+  completion_criteria?: string
+  evidence_kind?: HumanWorkRequest["evidence_kind"]
 }
 
 async function getData<T>(options: Parameters<typeof request<T>>[0]): Promise<T> {
@@ -971,6 +1074,28 @@ export function createManualProtocolAction(
   })
 }
 
+export function previewManualHumanWorkAction(
+  taskId: string,
+  payload: ManualHumanWorkActionDraft,
+) {
+  return getData<ManualHumanWorkActionPreview>({
+    url: `/research-tasks/${taskId}/human-actions/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function createManualHumanWorkAction(
+  taskId: string,
+  payload: ManualHumanWorkActionDraft & { preview_digest: string },
+) {
+  return getData<ResearchAction>({
+    url: `/research-tasks/${taskId}/human-actions`,
+    method: "POST",
+    data: payload,
+  })
+}
+
 export function fetchResearchWorkItems(params: {
   status?: HumanWorkItemStatus[]
   page?: number
@@ -1019,6 +1144,50 @@ export function submitResearchWorkItem(
 ) {
   return getData<ResearchWorkItemDetail>({
     url: `/research-work-items/${workItemId}/submit`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function previewHumanWorkSubmission(
+  workItemId: string,
+  payload: HumanWorkSubmissionDraft,
+) {
+  return getData<HumanWorkCommandPreview>({
+    url: `/research-work-items/${workItemId}/submission/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function submitHumanWork(
+  workItemId: string,
+  payload: HumanWorkSubmissionDraft & { preview_digest: string },
+) {
+  return getData<ResearchWorkItemDetail>({
+    url: `/research-work-items/${workItemId}/submission`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function previewHumanWorkReview(
+  workItemId: string,
+  payload: HumanWorkReviewDraft,
+) {
+  return getData<HumanWorkCommandPreview>({
+    url: `/research-work-items/${workItemId}/review/preview`,
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function reviewHumanWork(
+  workItemId: string,
+  payload: HumanWorkReviewDraft & { preview_digest: string },
+) {
+  return getData<ResearchWorkItemDetail>({
+    url: `/research-work-items/${workItemId}/review`,
     method: "POST",
     data: payload,
   })

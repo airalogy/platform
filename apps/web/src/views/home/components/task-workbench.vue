@@ -49,7 +49,7 @@
             </p>
             <div class="mt-5 flex flex-wrap gap-2">
               <n-button type="primary" @click="executeResearchWork(assignedWorkItem)">
-                {{ $t("page.research.executeProtocol") }}
+                {{ assignedWorkItem.action.kind === "protocol_run" ? $t("page.research.executeProtocol") : $t("page.research.completeHumanWork") }}
               </n-button>
               <n-button secondary @click="openResearchTask(assignedWorkItem.task.id)">
                 {{ $t("page.research.viewTask") }}
@@ -547,6 +547,10 @@ function openResearchTask(taskId: string) {
 }
 
 async function executeResearchWork(item: ResearchWorkItemDetail) {
+  if (item.action.kind === "human_work_item") {
+    await router.push({ name: "research-work-item-detail", params: { workItemId: item.id } })
+    return
+  }
   const protocol = item.action.protocol
   if (!protocol) {
     openResearchTask(item.task.id)

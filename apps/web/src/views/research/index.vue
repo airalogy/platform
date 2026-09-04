@@ -118,7 +118,7 @@
                     {{ item.lab.name }} / {{ item.project.name }}
                   </span>
                 </div>
-                <button type="button" class="mt-2 text-left" @click="openTaskById(item.task.id)">
+                <button type="button" class="mt-2 text-left" @click="openWorkItem(item.id)">
                   <h2 class="aira-type-card-title mb-0 hover:text-primary">
                     {{ item.action.title }}
                   </h2>
@@ -143,7 +143,7 @@
                   :loading="startingId === item.id"
                   @click="executeWorkItem(item)"
                 >
-                  {{ $t("page.research.executeProtocol") }}
+                  {{ item.action.kind === "protocol_run" ? $t("page.research.executeProtocol") : $t("page.research.completeHumanWork") }}
                 </n-button>
               </div>
             </div>
@@ -413,19 +413,25 @@ function openTaskById(taskId: string) {
   void router.push({ name: "research-task-detail", params: { taskId } })
 }
 
+function openWorkItem(workItemId: string) {
+  void router.push({ name: "research-work-item-detail", params: { workItemId } })
+}
+
 async function openNotification(notification: ResearchNotification) {
   if (!notification.read_at) {
     const updated = await readResearchNotification(notification.id)
     notification.read_at = updated.read_at
     notificationCount.value = Math.max(0, notificationCount.value - 1)
   }
-  openTaskById(notification.task_id)
+  await router.push(notification.target_path || { name: "research-task-detail", params: { taskId: notification.task_id } })
 }
 
 function notificationKindLabel(kind: ResearchNotification["kind"]) {
-  return kind === "approval_requested"
-    ? $t("page.research.notificationApproval")
-    : $t("page.research.notificationWorkItem")
+  if (kind === "approval_requested")
+    return $t("page.research.notificationApproval")
+  if (kind === "work_item_review_requested")
+    return $t("page.research.notificationReview")
+  return $t("page.research.notificationWorkItem")
 }
 
 function deliveryStatusLabel(status: ResearchNotification["deliveries"][number]["status"]) {
@@ -433,13 +439,16 @@ function deliveryStatusLabel(status: ResearchNotification["deliveries"][number][
 }
 
 function canExecute(item: ResearchWorkItemDetail) {
-  return Boolean(
-    item.action.protocol
-    && ["open", "in_progress", "changes_requested"].includes(item.status),
-  )
+  if (item.action.kind === "human_work_item")
+    return item.permissions.can_submit || item.permissions.can_review || item.status === "submitted"
+  return Boolean(item.action.protocol && ["open", "in_progress", "changes_requested"].includes(item.status))
 }
 
 async function executeWorkItem(item: ResearchWorkItemDetail) {
+  if (item.action.kind === "human_work_item") {
+    openWorkItem(item.id)
+    return
+  }
   const protocol = item.action.protocol
   if (!protocol)
     return

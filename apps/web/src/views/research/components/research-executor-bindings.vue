@@ -73,7 +73,7 @@
             />
           </n-form-item>
           <n-form-item
-            v-if="!editingId && selectedCapability?.kind === 'protocol'"
+            v-if="!editingId && selectedHumanCapability"
             :label="$t('page.research.humanExecutor')"
             required
           >
@@ -150,7 +150,7 @@
               <dt>{{ $t("page.research.bindingEnabled") }}</dt>
               <dd>{{ enabled ? $t("page.research.bindingEnabled") : $t("page.research.bindingDisabled") }}</dd>
             </div>
-            <div v-if="selectedCapability?.kind === 'protocol' || editingProtocol">
+            <div v-if="selectedHumanCapability || editingHumanCapability">
               <dt>{{ $t("page.research.humanExecutor") }}</dt>
               <dd>{{ selectedExecutorLabel }}</dd>
             </div>
@@ -261,11 +261,14 @@ const createDraft = reactive<ExecutorBindingDraft>({
 const capabilityOptions = computed(() => capabilities.value
   .filter(item => item.kind !== "resource" && item.available)
   .map(item => ({
-    label: `${item.kind === "protocol" ? "Protocol" : "Tool"} · ${item.name} · v${item.version}`,
+    label: `${capabilityKindLabel(item.kind)} · ${item.name} · v${item.version}`,
     value: item.key,
   })))
 const selectedCapability = computed(() =>
   capabilities.value.find(item => item.key === createDraft.capability_key),
+)
+const selectedHumanCapability = computed(() =>
+  ["protocol", "human"].includes(selectedCapability.value?.kind || ""),
 )
 const executorOptions = computed(() => [
   { label: $t("page.research.executorTaskOwner"), value: "task.owner" },
@@ -293,13 +296,16 @@ const selectedExecutorLabel = computed(() => {
 const editingProtocol = computed(() => editingId.value
   ? bindings.value.find(item => item.id === editingId.value)?.capability_key.startsWith("protocol:")
   : false)
+const editingHumanCapability = computed(() => editingId.value
+  ? bindings.value.find(item => item.id === editingId.value)?.capability_key === "human:structured-work"
+  : false)
 const skillPoolEditor = computed(() =>
   executorChoice.value === "skill_pool"
-  && (selectedCapability.value?.kind === "protocol" || editingProtocol.value),
+  && (selectedHumanCapability.value || editingProtocol.value || editingHumanCapability.value),
 )
 const policyOptions = computed(() => [
   { label: $t("page.research.policyAlwaysAsk"), value: "always_ask" },
-  ...(selectedCapability.value?.kind === "protocol" || editingProtocol.value
+  ...(selectedHumanCapability.value || editingProtocol.value || editingHumanCapability.value
     ? []
     : [{ label: $t("page.research.policyAllowReadOnly"), value: "allow_read_only" }]),
   { label: $t("page.research.policyDeny"), value: "deny" },
@@ -338,6 +344,14 @@ function capabilityName(key: string) {
   return capabilities.value.find(item => item.key === key)?.name || key
 }
 
+function capabilityKindLabel(kind: ResearchCapabilityDescriptor["kind"]) {
+  if (kind === "protocol")
+    return "Protocol"
+  if (kind === "human")
+    return $t("page.research.structuredHumanWork")
+  return "Tool"
+}
+
 function executorLabel(binding: ResearchExecutorBinding) {
   if (binding.executor_ref.type === "task_role")
     return $t("page.research.executorTaskOwner")
@@ -370,7 +384,7 @@ async function load() {
       fetchExecutorBindings(String(props.project.lab_id)),
       fetchEligibleResearchExecutors(String(props.project.id)),
     ])
-    capabilities.value = [...catalog.protocols, ...catalog.tools]
+    capabilities.value = [...catalog.protocols, ...catalog.human_work, ...catalog.tools]
     bindings.value = result.items
     eligibleExecutors.value = executors.items
     canManage.value = result.can_manage
@@ -429,12 +443,12 @@ function applyCapability(key: string) {
   if (!item)
     return
   createDraft.capability_version = item.version
-  if (item.kind === "protocol") {
+  if (item.kind === "protocol" || item.kind === "human") {
     createDraft.executor_type = "human"
     createDraft.executor_ref_type = "task_role"
     createDraft.executor_ref_id = "task.owner"
     executorChoice.value = "task.owner"
-    createDraft.mode = "protocol_record"
+    createDraft.mode = item.kind === "protocol" ? "protocol_record" : "structured_submission"
     if (policy.value === "allow_read_only")
       policy.value = "always_ask"
   }

@@ -16,7 +16,7 @@ export interface ResearchExecutorBinding {
   capability_version: string
   executor_type: "human" | "platform_tool"
   executor_ref: { type: string, id: string }
-  mode: "protocol_record" | "durable_job"
+  mode: "protocol_record" | "structured_submission" | "durable_job"
   approval_policy: ExecutorApprovalPolicy
   constraints: Record<string, unknown>
   priority: number

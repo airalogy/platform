@@ -35,6 +35,17 @@ export const researchRoute: CustomRoute<ResearchNameKey> = {
       },
     },
     {
+      path: "work-items/:workItemId",
+      name: "research-work-item-detail",
+      component: () => import("@/views/research/work-item.vue"),
+      meta: {
+        title: "Research Work Item",
+        i18nKey: "page.research.workItemDetail",
+        requiresAuth: true,
+        hideInMenu: true,
+      },
+    },
+    {
       path: "approvals",
       name: "research-approvals",
       component: () => import("@/views/research/index.vue"),
