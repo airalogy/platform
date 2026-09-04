@@ -94,6 +94,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Fixed fresh PostgreSQL deployments failing before the research migrations could complete by widening Alembic's internal version column before the first descriptive revision ID exceeds its legacy 32-character limit.
 - Updated independent runtime packaging workflows for the current pinned uv CLI: lockfiles are verified explicitly before building instead of passing the removed `build --locked` option, and release coverage now includes both runtime packages.
 - Fixed narrow-screen typography collisions by keeping the global fallback line height proportional, moving the public landing page and showcase cards onto the shared semantic type system, and delaying its two-column composition until sufficient width is available.
 - Made Protocol list rows responsive so long titles, ownership context, secondary creation metadata, metrics, and actions retain a stable visual hierarchy and wrap cleanly on narrow screens instead of compressing into one overflowing line; aggregated lists now retain the non-sensitive star and reuse metrics while record actions remain permission-gated.

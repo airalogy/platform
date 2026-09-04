@@ -256,6 +256,7 @@ def test_research_environment_knowledge_is_revision_pinned():
     migration = import_module("migrations.versions.0012_research_environment_knowledge")
     assert migration.down_revision == "0011_knowledge_core"
     assert migration.TABLE_NAMES == ("research_task_knowledge",)
+    assert migration.ALEMBIC_VERSION_LENGTH >= len(migration.revision)
 
 
 def test_aira_path_transitions_preserve_human_record_boundary():

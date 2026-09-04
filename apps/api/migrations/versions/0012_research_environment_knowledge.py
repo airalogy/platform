@@ -7,6 +7,7 @@ Create Date: 2026-09-02 00:00:00.000000
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 from migrations.model_registry import import_models
@@ -17,6 +18,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 TABLE_NAMES = ("research_task_knowledge",)
+ALEMBIC_VERSION_LENGTH = 128
 
 
 def _tables(metadata):
@@ -25,6 +27,16 @@ def _tables(metadata):
 
 def upgrade() -> None:
     bind = op.get_bind()
+    # Alembic creates this internal column as VARCHAR(32). This and later
+    # descriptive revision IDs are intentionally longer, so widen the column
+    # before Alembic records this revision after upgrade() returns.
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=32),
+        type_=sa.String(length=ALEMBIC_VERSION_LENGTH),
+        existing_nullable=False,
+    )
     import_models()
     from app.models.base import Base
 
@@ -37,3 +49,5 @@ def downgrade() -> None:
     from app.models.base import Base
 
     Base.metadata.drop_all(bind=bind, tables=list(reversed(_tables(Base.metadata))))
+    # Keep alembic_version widened. Alembic still stores this long revision ID
+    # until downgrade() returns, so narrowing here would make the downgrade fail.

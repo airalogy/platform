@@ -88,6 +88,7 @@ def test_compute_job_migration_follows_runner_governance():
     )
     assert output_migration.down_revision == "0032_research_compute_jobs"
     assert output_migration.TABLE_NAMES == ("research_compute_job_outputs",)
+    assert output_migration.ADDED_COLUMNS == ("output_manifest",)
 
 
 def test_compute_action_is_bounded_and_uses_safe_mount_names():

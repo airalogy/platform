@@ -18,6 +18,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 TABLE_NAMES = ("research_compute_job_outputs",)
+ADDED_COLUMNS = ("output_manifest",)
 
 
 def upgrade() -> None:
@@ -25,15 +26,20 @@ def upgrade() -> None:
     import_models()
     from app.models.base import Base
 
-    op.add_column(
-        "research_compute_jobs",
-        sa.Column(
-            "output_manifest",
-            sa.JSON(),
-            nullable=False,
-            server_default=sa.text("'[]'::json"),
-        ),
-    )
+    columns = {
+        column["name"]
+        for column in sa.inspect(bind).get_columns("research_compute_jobs")
+    }
+    if "output_manifest" not in columns:
+        op.add_column(
+            "research_compute_jobs",
+            sa.Column(
+                "output_manifest",
+                sa.JSON(),
+                nullable=False,
+                server_default=sa.text("'[]'::json"),
+            ),
+        )
     Base.metadata.create_all(
         bind=bind,
         tables=[Base.metadata.tables[name] for name in TABLE_NAMES],
@@ -49,4 +55,9 @@ def downgrade() -> None:
         bind=bind,
         tables=[Base.metadata.tables[name] for name in reversed(TABLE_NAMES)],
     )
-    op.drop_column("research_compute_jobs", "output_manifest")
+    columns = {
+        column["name"]
+        for column in sa.inspect(bind).get_columns("research_compute_jobs")
+    }
+    if "output_manifest" in columns:
+        op.drop_column("research_compute_jobs", "output_manifest")
