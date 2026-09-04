@@ -106,6 +106,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     action_dependency_guard_revision = import_module(
         "migrations.versions.0039_research_action_dependency_guard"
     )
+    autonomy_policy_revision = import_module(
+        "migrations.versions.0040_research_autonomy_policy"
+    )
     import_models()
 
     later_tables = {
@@ -158,6 +161,10 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     )
     assert action_dependency_guard_revision.down_revision == (
         "0038_research_resource_consumptions"
+    )
+    later_tables.update(autonomy_policy_revision.TABLE_NAMES)
+    assert autonomy_policy_revision.down_revision == (
+        "0039_research_action_dependency_guard"
     )
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 

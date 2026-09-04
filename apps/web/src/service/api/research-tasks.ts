@@ -1,3 +1,4 @@
+import type { ResearchAutonomyPolicySnapshot } from "./research-autonomy-policies"
 import type { ResearchComputeJob } from "./research-compute-jobs"
 import { request } from "../request"
 
@@ -504,6 +505,7 @@ export interface ResearchAction {
   output_data: Record<string, any>
   requirements: Record<string, unknown>
   policy_decision: string
+  policy_reason: string
   preview_digest: string
   revision: number
   due_at?: string | null
@@ -743,6 +745,7 @@ export interface ResearchTaskPreview {
     risk: string
   }>
   executor_bindings: ResearchEnvironmentExecutorBinding[]
+  autonomy_policy: ResearchAutonomyPolicySnapshot
   knowledge: ResearchKnowledgeRef[]
   resources: ResearchResourceRequirement[]
   services: ResearchServiceRequirement[]

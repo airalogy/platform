@@ -113,6 +113,8 @@ Email, Slack, and similar channels are notification transports. The Human Work I
 
 Every action type uses an `allow / ask / deny` policy. User-facing autonomy levels are Assisted, Bounded Autopilot, and Autonomous within Policy. Autonomy is granted per Lab + Capability + Executor after replay, shadow execution, and evaluation. A global autopilot option can never override a denial.
 
+The Lab Research autonomy policy is a versioned governance asset. Assisted always asks for every Aira-proposed Action. Bounded Autopilot and Autonomous within Policy may separately allow an internal read-only Tool only when its exact Executor Binding also permits it, open a passive typed Wait Event, or run low-risk Compute only when its pinned environment disables network access and the Action stays within explicit cost and runtime ceilings. People, instruments, resources, and external-service commitments remain approval-gated. Policy changes use preview-confirm, append an immutable revision audit, and affect only future Research Environments; every Run pins the exact policy snapshot and every Action records its decision reason.
+
 Important writes follow one contract:
 
 ```text
@@ -238,7 +240,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - people, instrument, and external-service Executor Binding adapters
 - revisioned people availability, capacity, and verified skills (delivered); sample semantics and automatic cost ingestion
 - immutable Compute Environment catalog, scoped permissions, preview-confirm revisions, exact Research Environment pinning, governed Runner identity/readiness/environment bindings, manual and Aira-planned approval/budget/lease/result Compute Jobs, declared output ingestion, draft DataAsset registration, and an independently supervised reference Runner (delivered)
-- Record-linked inventory consumption completion and immutable traceability (delivered); risk policy, approval thresholds, and resource-aware replanning
+- Record-linked inventory consumption completion and immutable traceability (delivered); versioned risk policy and bounded automatic-execution thresholds (delivered); resource-aware replanning
 
 ### P3: instruments, RaaS, and self-improvement
 

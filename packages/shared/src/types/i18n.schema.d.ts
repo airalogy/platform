@@ -911,6 +911,34 @@ declare namespace I18n {
         autonomyAssisted: string
         autonomyBounded: string
         autonomyPolicy: string
+        researchPolicy: string
+        researchPolicyHint: string
+        assistedAlwaysAsks: string
+        labPolicy: string
+        platformDefaultPolicy: string
+        policyManageAllowed: string
+        policyReadOnly: string
+        autonomyBoundedPolicyHint: string
+        autonomyFullPolicyHint: string
+        autoReadOnlyTools: string
+        autoReadOnlyToolsHint: string
+        autoWaitEvents: string
+        autoWaitEventsHint: string
+        autoIsolatedCompute: string
+        autoIsolatedComputeHint: string
+        automaticComputeLimits: string
+        automaticComputeLimitsHint: string
+        maxAutomaticCost: string
+        maxAutomaticRuntime: string
+        isolatedComputeBoundary: string
+        researchPolicyReasonPlaceholder: string
+        policyRevisionHistory: string
+        researchPolicyFutureRunsOnly: string
+        destination: string
+        confirmPolicy: string
+        backToPolicy: string
+        policySaved: string
+        policyDecision: string
         methods: string
         method: string
         methodsPlaceholder: string

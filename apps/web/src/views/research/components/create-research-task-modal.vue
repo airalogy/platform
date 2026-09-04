@@ -101,15 +101,23 @@
               {{ airaGuidance.rationale }}
             </p>
             <div v-if="airaGuidance.assumptions.length" class="mt-3">
-              <div class="aira-type-label">{{ $t("page.research.assumptionsToVerify") }}</div>
+              <div class="aira-type-label">
+                {{ $t("page.research.assumptionsToVerify") }}
+              </div>
               <ul class="aira-type-meta mb-0 mt-1 pl-5">
-                <li v-for="item in airaGuidance.assumptions" :key="item">{{ item }}</li>
+                <li v-for="item in airaGuidance.assumptions" :key="item">
+                  {{ item }}
+                </li>
               </ul>
             </div>
             <div v-if="airaGuidance.warnings.length" class="mt-3">
-              <div class="aira-type-label">{{ $t("page.research.draftWarnings") }}</div>
+              <div class="aira-type-label">
+                {{ $t("page.research.draftWarnings") }}
+              </div>
               <ul class="aira-type-meta mb-0 mt-1 pl-5">
-                <li v-for="item in airaGuidance.warnings" :key="item">{{ item }}</li>
+                <li v-for="item in airaGuidance.warnings" :key="item">
+                  {{ item }}
+                </li>
               </ul>
             </div>
           </n-alert>
@@ -342,6 +350,13 @@
                 </n-tag>
               </div>
             </div>
+          </div>
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <span class="aira-type-label">{{ $t("page.research.researchPolicy") }}</span>
+            <n-tag size="small" round type="info">
+              {{ preview.autonomy_policy.source === "lab_policy" ? $t("page.research.labPolicy") : $t("page.research.platformDefaultPolicy") }}
+              · r{{ preview.autonomy_policy.revision }}
+            </n-tag>
           </div>
         </section>
         <section class="research-preview-card">

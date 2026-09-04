@@ -20,6 +20,7 @@
           {{ $t("page.research.refresh") }}
         </n-button>
         <research-executor-bindings v-if="projectContext" :project="projectContext" />
+        <research-autonomy-policy v-if="projectContext" :project="projectContext" />
         <create-research-task-modal
           v-if="activeView === 'tasks'"
           :project="projectContext"
@@ -284,6 +285,7 @@ import { useRoute, useRouter } from "vue-router"
 import CreateResearchTaskModal from "./components/create-research-task-modal.vue"
 import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
+import ResearchAutonomyPolicy from "./components/research-autonomy-policy.vue"
 import ResearchExecutorBindings from "./components/research-executor-bindings.vue"
 
 const route = useRoute()

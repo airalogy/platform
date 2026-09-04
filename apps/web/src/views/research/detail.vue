@@ -436,14 +436,16 @@
                         {{ action.compute_job.error || action.compute_job.cancel_reason }}
                       </n-alert>
                       <div v-if="Object.keys(action.compute_job.result || {}).length" class="mt-3">
-                        <div class="aira-type-meta">{{ $t("page.research.computeResult") }}</div>
+                        <div class="aira-type-meta">
+                          {{ $t("page.research.computeResult") }}
+                        </div>
                         <pre>{{ formatPayload(action.compute_job.result) }}</pre>
                       </div>
                       <div v-if="action.compute_job.output_manifest?.length" class="mt-3">
                         <div class="aira-type-meta">
                           {{ $t("page.research.computeOutputs") }}
                         </div>
-                        <div class="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                        <div class="grid grid-cols-1 mt-2 gap-2 lg:grid-cols-2">
                           <div
                             v-for="output in action.compute_job.output_manifest"
                             :key="output.id"
@@ -479,7 +481,9 @@
                         </div>
                       </div>
                       <div v-if="Object.keys(action.compute_job.usage || {}).length" class="mt-3">
-                        <div class="aira-type-meta">{{ $t("page.research.computeUsage") }}</div>
+                        <div class="aira-type-meta">
+                          {{ $t("page.research.computeUsage") }}
+                        </div>
                         <pre>{{ formatPayload(action.compute_job.usage) }}</pre>
                       </div>
                     </div>
@@ -713,6 +717,14 @@
                   <span class="aira-type-meta">{{ binding.approval_policy.replaceAll("_", " ") }} · r{{ binding.revision }}</span>
                 </div>
               </div>
+              <div v-if="pinnedAutonomyPolicy" class="research-method mt-3">
+                <span class="aira-type-label">{{ $t("page.research.researchPolicy") }}</span>
+                <span class="aira-type-meta">
+                  {{ pinnedAutonomyPolicy.source === "lab_policy" ? $t("page.research.labPolicy") : $t("page.research.platformDefaultPolicy") }}
+                  · r{{ pinnedAutonomyPolicy.revision }}
+                  · {{ pinnedAutonomyPolicy.policy_digest.slice(0, 12) }}
+                </span>
+              </div>
               <n-divider />
               <h2 class="aira-type-card-title mb-0">
                 {{ $t("page.research.pinnedKnowledge") }}
@@ -845,8 +857,12 @@
       <section v-if="instanceStore.aiEnabled" class="reviewer-panel mb-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div class="aira-type-label">{{ $t("page.research.independentReviewer") }}</div>
-            <div class="aira-type-meta mt-1">{{ $t("page.research.independentReviewerHint") }}</div>
+            <div class="aira-type-label">
+              {{ $t("page.research.independentReviewer") }}
+            </div>
+            <div class="aira-type-meta mt-1">
+              {{ $t("page.research.independentReviewerHint") }}
+            </div>
           </div>
           <n-button size="small" type="info" secondary :loading="reviewGenerating" @click="requestReviewRecommendation">
             {{ $t("page.research.runIndependentReview") }}
@@ -862,24 +878,38 @@
               {{ $t("page.research.reviewerEvidenceCounts", { supporting: reviewRecommendation.supporting_evidence_ids.length, contradicting: reviewRecommendation.contradicting_evidence_ids.length }) }}
             </span>
           </div>
-          <p class="aira-type-body mb-0 mt-2 whitespace-pre-wrap">{{ reviewRecommendation.summary }}</p>
-          <div v-if="reviewRecommendation.uncertainties.length || reviewRecommendation.missing_checks.length || reviewRecommendation.risk_flags.length" class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <p class="aira-type-body mb-0 mt-2 whitespace-pre-wrap">
+            {{ reviewRecommendation.summary }}
+          </p>
+          <div v-if="reviewRecommendation.uncertainties.length || reviewRecommendation.missing_checks.length || reviewRecommendation.risk_flags.length" class="grid grid-cols-1 mt-3 gap-3 md:grid-cols-3">
             <div v-if="reviewRecommendation.uncertainties.length">
-              <div class="aira-type-eyebrow">{{ $t("page.research.reviewerUncertainties") }}</div>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.reviewerUncertainties") }}
+              </div>
               <ul class="reviewer-list">
-                <li v-for="item in reviewRecommendation.uncertainties" :key="item">{{ item }}</li>
+                <li v-for="item in reviewRecommendation.uncertainties" :key="item">
+                  {{ item }}
+                </li>
               </ul>
             </div>
             <div v-if="reviewRecommendation.missing_checks.length">
-              <div class="aira-type-eyebrow">{{ $t("page.research.reviewerMissingChecks") }}</div>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.reviewerMissingChecks") }}
+              </div>
               <ul class="reviewer-list">
-                <li v-for="item in reviewRecommendation.missing_checks" :key="item">{{ item }}</li>
+                <li v-for="item in reviewRecommendation.missing_checks" :key="item">
+                  {{ item }}
+                </li>
               </ul>
             </div>
             <div v-if="reviewRecommendation.risk_flags.length">
-              <div class="aira-type-eyebrow">{{ $t("page.research.reviewerRiskFlags") }}</div>
+              <div class="aira-type-eyebrow">
+                {{ $t("page.research.reviewerRiskFlags") }}
+              </div>
               <ul class="reviewer-list">
-                <li v-for="item in reviewRecommendation.risk_flags" :key="item">{{ item }}</li>
+                <li v-for="item in reviewRecommendation.risk_flags" :key="item">
+                  {{ item }}
+                </li>
               </ul>
             </div>
           </div>
@@ -917,6 +947,7 @@
 
 <script setup lang="ts">
 import type { ResearchToolDefinition } from "@/service/api/research-actions"
+import type { ResearchAutonomyPolicySnapshot } from "@/service/api/research-autonomy-policies"
 import type {
   HumanWorkItemStatus,
   ManualProtocolActionDraft,
@@ -1010,6 +1041,12 @@ const pinnedTools = computed<ResearchToolDefinition[]>(() => {
 const pinnedExecutorBindings = computed<ResearchEnvironmentExecutorBinding[]>(() => {
   const bindings = latestRun.value?.environment_snapshot?.executor_bindings
   return Array.isArray(bindings) ? bindings as ResearchEnvironmentExecutorBinding[] : []
+})
+const pinnedAutonomyPolicy = computed<ResearchAutonomyPolicySnapshot | null>(() => {
+  const policy = latestRun.value?.environment_snapshot?.autonomy_policy
+  return policy && typeof policy === "object"
+    ? policy as ResearchAutonomyPolicySnapshot
+    : null
 })
 const hasAiraCapabilities = computed(() => Boolean(
   task.value?.protocols.length

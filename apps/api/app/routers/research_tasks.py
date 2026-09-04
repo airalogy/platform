@@ -85,6 +85,7 @@ from app.services.access_control import (
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.model_usage import create_usage_context
 from app.services.research_assets import research_asset_bundle
+from app.services.research_autonomy_policy import current_autonomy_policy_snapshot
 from app.services.research_budget import (
     ResearchBudgetError,
     normalize_currency,
@@ -667,6 +668,7 @@ async def _validate_task_draft(
         ]
     ],
     list[tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]],
+    dict[str, Any],
 ]:
     project = await _project(db_session, draft.project_id)
     await require_research_capability(
@@ -678,6 +680,9 @@ async def _validate_task_draft(
     lab = await db_session.get(Lab, project.lab_id)
     if lab is None:
         raise HTTPException(status_code=404, detail="Lab not found")
+    _current_policy, autonomy_policy = await current_autonomy_policy_snapshot(
+        db_session, lab_id=lab.id
+    )
 
     owner_id = draft.owner_user_id or current_user.id
     owner = await db_session.get(User, owner_id)
@@ -971,6 +976,7 @@ async def _validate_task_draft(
             for definition in tools
         ],
         executor_binding_refs=executor_bindings,
+        autonomy_policy_ref=autonomy_policy,
         knowledge_refs=[
             {"id": item.id, "revision": item.revision} for item in knowledge_items
         ],
@@ -1017,6 +1023,7 @@ async def _validate_task_draft(
         resources,
         service_offerings,
         compute_environments,
+        autonomy_policy,
     )
 
 
@@ -1041,6 +1048,7 @@ def _task_preview(
     compute_environments: list[
         tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]
     ],
+    autonomy_policy: dict[str, Any],
     compute_runtime_available: bool,
 ) -> dict[str, Any]:
     ai_path_available = config.effective_ai_enabled and bool(
@@ -1077,6 +1085,7 @@ def _task_preview(
         ],
         "tools": [definition.payload() for definition in tools],
         "executor_bindings": executor_bindings,
+        "autonomy_policy": autonomy_policy,
         "knowledge": [
             {
                 "id": str(item.id),
@@ -1112,6 +1121,7 @@ def _task_preview(
             "Pin selected resource-type revisions as explicit requirements",
             "Pin selected external-service contract revisions",
             "Pin selected Compute Environment revisions without executing code",
+            "Pin the current Lab Research autonomy policy revision",
             "Enforce the confirmed deadline and budget as runtime stop boundaries",
             (
                 "Use AIRA after the Task is started"
@@ -1765,6 +1775,7 @@ async def preview_research_task(
         resources,
         service_offerings,
         compute_environments,
+        autonomy_policy,
     ) = await _validate_task_draft(db_session, current_user, params)
     compute_runtime_available = any(
         [
@@ -1788,6 +1799,7 @@ async def preview_research_task(
         resources=resources,
         service_offerings=service_offerings,
         compute_environments=compute_environments,
+        autonomy_policy=autonomy_policy,
         compute_runtime_available=compute_runtime_available,
     )
 
@@ -1810,6 +1822,7 @@ async def create_research_task(
         resources,
         service_offerings,
         compute_environments,
+        autonomy_policy,
     ) = await _validate_task_draft(db_session, current_user, params)
     expected_digest = canonical_digest(command)
     if params.preview_digest != expected_digest:
@@ -1949,6 +1962,7 @@ async def create_research_task(
             *pinned_compute,
         ],
         "executor_bindings": executor_bindings,
+        "autonomy_policy": autonomy_policy,
         "knowledge": pinned_knowledge,
         "ai_available_at_capture": config.effective_ai_enabled,
         "autonomy_level": task.autonomy_level,

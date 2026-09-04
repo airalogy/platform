@@ -223,6 +223,7 @@ declare module 'vue' {
     IconTablerScan: typeof import('~icons/tabler/scan')['default']
     IconTablerSearch: typeof import('~icons/tabler/search')['default']
     IconTablerSettings: typeof import('~icons/tabler/settings')['default']
+    IconTablerShieldCheck: typeof import('~icons/tabler/shield-check')['default']
     IconTablerShieldLock: typeof import('~icons/tabler/shield-lock')['default']
     IconTablerShieldSearch: typeof import('~icons/tabler/shield-search')['default']
     IconTablerSparkles: typeof import('~icons/tabler/sparkles')['default']

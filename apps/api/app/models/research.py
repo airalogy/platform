@@ -571,6 +571,7 @@ class ResearchAction(Base):
     policy_decision: Mapped[str] = mapped_column(
         String(16), nullable=False, default="ask"
     )
+    policy_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     preview_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     error: Mapped[str | None] = mapped_column(Text)

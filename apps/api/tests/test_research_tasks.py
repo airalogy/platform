@@ -5,11 +5,6 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
-
 from app.main import app
 from app.models.research import (
     ResearchActionKind,
@@ -39,6 +34,10 @@ from app.services.research_runtime import (
     research_run_has_executable_ai_path,
     research_task_command,
 )
+from fastapi import HTTPException
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
 
 
 def test_research_task_command_is_canonical_and_digest_is_stable():
@@ -65,6 +64,12 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
                 "approval_policy": "always_ask",
             }
         ],
+        autonomy_policy_ref={
+            "id": None,
+            "revision": 0,
+            "source": "platform_default",
+            "policy_digest": "a" * 64,
+        },
         knowledge_refs=[{"id": str(uuid4()), "revision": 2}],
         resource_refs=[
             {"id": str(uuid4()), "revision_id": str(uuid4()), "revision": 3}
@@ -110,6 +115,12 @@ def test_research_task_command_is_canonical_and_digest_is_stable():
                 "approval_policy": "always_ask",
             }
         ],
+        "autonomy_policy_ref": {
+            "id": None,
+            "revision": 0,
+            "source": "platform_default",
+            "policy_digest": "a" * 64,
+        },
         "knowledge_refs": [ANY],
         "resource_refs": [ANY],
         "service_refs": [ANY],
@@ -486,6 +497,18 @@ def test_research_action_policy_fails_closed_for_aira_execution():
             source="aira",
             executor_type="platform_tool",
             requirements={"risk": "read_only"},
+        )[0]
+        == "ask"
+    )
+    assert (
+        evaluate_research_action_policy(
+            autonomy_level="assisted",
+            source="aira",
+            executor_type="platform_tool",
+            requirements={
+                "risk": "read_only",
+                "approval_policy": "allow_read_only",
+            },
         )[0]
         == "ask"
     )

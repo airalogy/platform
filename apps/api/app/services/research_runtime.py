@@ -106,12 +106,13 @@ def evaluate_research_action_policy(
     source: str,
     executor_type: str,
     requirements: dict[str, Any],
+    policy_snapshot: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
-    """Return a fail-closed P0 policy decision for an Action proposal.
+    """Return a fail-closed policy decision for an Action proposal.
 
     Manual Actions have already passed the deterministic preview/confirmation
-    contract. Aira-generated physical work remains approval-gated for every
-    autonomy level until Lab policy, resource, risk, and budget rules exist.
+    contract. Aira-generated work is evaluated against the exact Lab policy
+    snapshot captured in its Research Environment.
     """
 
     approval_policy = requirements.get("approval_policy")
@@ -119,23 +120,14 @@ def evaluate_research_action_policy(
         return "deny", "The Action is prohibited by an explicit requirement."
     if source == "manual":
         return "allow", "The user confirmed the deterministic Action preview."
-    if (
-        approval_policy == "allow_read_only"
-        and executor_type == "platform_tool"
-        and requirements.get("risk") == "read_only"
-    ):
-        return (
-            "allow",
-            "The pinned Lab Executor Binding allows this internal read-only Tool.",
-        )
-    if executor_type == "human":
-        return (
-            "ask",
-            "Aira-proposed human execution requires approval before assignment.",
-        )
-    return (
-        "ask",
-        f"No allow policy is configured for {autonomy_level} {executor_type} execution.",
+
+    from app.services.research_autonomy_policy import evaluate_automatic_action
+
+    return evaluate_automatic_action(
+        policy_snapshot=policy_snapshot,
+        autonomy_level=autonomy_level,
+        executor_type=executor_type,
+        requirements=requirements,
     )
 
 
@@ -237,6 +229,7 @@ def research_task_command(
     protocol_ids: list[UUID],
     tool_refs: list[dict[str, Any]],
     executor_binding_refs: list[dict[str, Any]],
+    autonomy_policy_ref: dict[str, Any],
     knowledge_refs: list[dict[str, Any]],
     resource_refs: list[dict[str, Any]],
     service_refs: list[dict[str, Any]],
@@ -270,6 +263,12 @@ def research_task_command(
             }
             for item in executor_binding_refs
         ],
+        "autonomy_policy_ref": {
+            "id": autonomy_policy_ref.get("id"),
+            "revision": int(autonomy_policy_ref["revision"]),
+            "source": str(autonomy_policy_ref["source"]),
+            "policy_digest": str(autonomy_policy_ref["policy_digest"]),
+        },
         "knowledge_refs": [
             {"id": str(item["id"]), "revision": int(item["revision"])}
             for item in knowledge_refs
@@ -1006,6 +1005,7 @@ async def _materialize_human_protocol_action(
         source="aira",
         executor_type="human",
         requirements=requirements,
+        policy_snapshot=(run.environment_snapshot or {}).get("autonomy_policy"),
     )
     if policy_decision == "deny":
         raise ValueError(policy_reason)
@@ -1026,6 +1026,7 @@ async def _materialize_human_protocol_action(
         input_data=input_data,
         requirements=requirements,
         policy_decision=policy_decision,
+        policy_reason=policy_reason,
         preview_digest=preview_digest,
         idempotency_key=idempotency_key,
     )
@@ -1733,6 +1734,7 @@ async def _materialize_aira_action(
         source="aira",
         executor_type=executor_type,
         requirements=requirements,
+        policy_snapshot=(run.environment_snapshot or {}).get("autonomy_policy"),
     )
     if policy_decision == "deny":
         raise ValueError(policy_reason)
@@ -1762,6 +1764,7 @@ async def _materialize_aira_action(
         input_data=input_data,
         requirements=requirements,
         policy_decision=policy_decision,
+        policy_reason=policy_reason,
         preview_digest=canonical_digest(action_proposal),
         idempotency_key=idempotency_key,
     )
@@ -2757,6 +2760,8 @@ async def build_research_result_package(
                 "status": item.status,
                 "title": item.title,
                 "error": item.error,
+                "policy_decision": item.policy_decision,
+                "policy_reason": item.policy_reason,
                 "depends_on_action_ids": dependency_ids_by_action[item.id],
                 "result_bindings": list(
                     (_aira_action_graph(item) or {}).get("result_bindings") or []

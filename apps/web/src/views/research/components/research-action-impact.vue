@@ -4,6 +4,9 @@
       <n-tag size="small" round :type="kindTagType">
         {{ kindLabel }}
       </n-tag>
+      <n-tag size="small" round :type="action.policy_decision === 'allow' ? 'success' : 'warning'">
+        {{ $t("page.research.policyDecision") }} · {{ action.policy_decision }}
+      </n-tag>
       <span v-if="action.tool_job" class="aira-type-meta">
         {{ action.tool_job.tool_key }} · v{{ action.tool_job.tool_version }}
       </span>
@@ -29,13 +32,18 @@
         {{ action.protocol.name }} · v{{ action.protocol.version }}
       </span>
     </div>
+    <p v-if="action.policy_reason" class="aira-type-meta mb-0 mt-2">
+      {{ action.policy_reason }}
+    </p>
 
     <div v-if="action.tool_job" class="mt-2">
-      <div class="aira-type-meta">{{ $t("page.research.toolArguments") }}</div>
+      <div class="aira-type-meta">
+        {{ $t("page.research.toolArguments") }}
+      </div>
       <pre>{{ formatted(action.tool_job.arguments) }}</pre>
     </div>
     <div v-else-if="action.instrument_job" class="mt-2 space-y-2">
-      <div class="flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+      <div class="aira-type-meta flex flex-wrap gap-x-4 gap-y-1">
         <span>{{ $t("page.research.equipment") }} · {{ instrumentResource }}</span>
         <span>{{ $t("page.research.gateway") }} · {{ action.input_data.gateway_name || action.instrument_job.gateway_id }}</span>
         <span>{{ $t("page.research.approvedBooking") }} · {{ action.instrument_job.equipment_booking_id }}</span>
@@ -49,43 +57,59 @@
         {{ action.instrument_job.device_confirmation_required ? $t("page.research.deviceConfirmationRequired") : $t("page.research.deviceConfirmationNotRequired") }}
       </div>
       <div>
-        <div class="aira-type-meta">{{ $t("page.research.instrumentArguments") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.instrumentArguments") }}
+        </div>
         <pre>{{ formatted(action.instrument_job.arguments) }}</pre>
       </div>
     </div>
     <div v-else-if="action.compute_job" class="mt-2 space-y-2">
-      <div class="flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+      <div class="aira-type-meta flex flex-wrap gap-x-4 gap-y-1">
         <span>{{ $t("page.research.computeEnvironment") }} · {{ action.compute_job.environment_snapshot.name || action.compute_job.compute_environment_id }} · r{{ action.compute_job.compute_environment_revision }}</span>
         <span>{{ $t("page.research.computeSourceDigest") }} · {{ action.compute_job.source_sha256 }}</span>
         <span v-if="action.compute_job.estimated_cost">≤ {{ action.compute_job.estimated_cost }} {{ action.compute_job.currency }}</span>
       </div>
       <div>
-        <div class="aira-type-meta">{{ $t("page.research.computeResourceLimits") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.computeResourceLimits") }}
+        </div>
         <pre>{{ formatted(action.compute_job.resource_limits) }}</pre>
       </div>
       <div v-if="action.compute_job.source_code">
-        <div class="aira-type-meta">{{ $t("page.research.computeSource") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.computeSource") }}
+        </div>
         <pre>{{ action.compute_job.source_code }}</pre>
       </div>
       <div>
-        <div class="aira-type-meta">{{ $t("page.research.computeInputPayload") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.computeInputPayload") }}
+        </div>
         <pre>{{ formatted(action.compute_job.input_payload) }}</pre>
       </div>
       <div v-if="computeInputAssets.length">
-        <div class="aira-type-meta">{{ $t("page.research.computeInputAssets") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.computeInputAssets") }}
+        </div>
         <pre>{{ formatted(computeInputAssets) }}</pre>
       </div>
       <div v-if="action.compute_job.output_manifest?.length">
-        <div class="aira-type-meta">{{ $t("page.research.computeOutputFiles") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.computeOutputFiles") }}
+        </div>
         <pre>{{ formatted(action.compute_job.output_manifest) }}</pre>
       </div>
     </div>
     <div v-else-if="action.wait_event" class="mt-2">
-      <div class="aira-type-meta">{{ $t("page.research.expectedPayload") }}</div>
+      <div class="aira-type-meta">
+        {{ $t("page.research.expectedPayload") }}
+      </div>
       <pre>{{ formatted(action.wait_event.payload_schema) }}</pre>
     </div>
     <div v-else-if="action.resource_reservation" class="mt-2">
-      <div class="aira-type-meta">{{ $t("page.research.reservationImpact") }}</div>
+      <div class="aira-type-meta">
+        {{ $t("page.research.reservationImpact") }}
+      </div>
       <div class="aira-type-body mt-1">
         <template v-if="action.resource_reservation.kind === 'inventory'">
           {{ action.resource_reservation.quantity }} {{ action.resource_reservation.unit }}
@@ -99,18 +123,22 @@
       </p>
     </div>
     <div v-else-if="action.service_job" class="mt-2 space-y-2">
-      <div class="flex flex-wrap gap-x-4 gap-y-1 aira-type-meta">
+      <div class="aira-type-meta flex flex-wrap gap-x-4 gap-y-1">
         <span>{{ $t("page.research.serviceJobStatusLabel") }} · {{ $t(`page.research.serviceJobStatus.${action.service_job.status}` as I18n.I18nKey) }}</span>
         <span>{{ $t("page.research.serviceContractRevision") }} · r{{ action.service_job.service_offering_revision }}</span>
         <span v-if="action.service_job.quote">{{ action.service_job.quote.amount }} {{ action.service_job.quote.currency }}</span>
       </div>
       <div>
-        <div class="aira-type-meta">{{ $t("page.research.serviceRequestPayload") }}</div>
+        <div class="aira-type-meta">
+          {{ $t("page.research.serviceRequestPayload") }}
+        </div>
         <pre>{{ formatted(action.service_job.request_payload) }}</pre>
       </div>
     </div>
     <div v-else-if="action.protocol_run && Object.keys(action.protocol_run.initial_values || {}).length" class="mt-2">
-      <div class="aira-type-meta">{{ $t("page.research.initialValues") }}</div>
+      <div class="aira-type-meta">
+        {{ $t("page.research.initialValues") }}
+      </div>
       <pre>{{ formatted(action.protocol_run.initial_values) }}</pre>
     </div>
   </div>

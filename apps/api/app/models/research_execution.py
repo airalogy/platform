@@ -49,6 +49,80 @@ class ResearchExecutorBindingPolicy(StrEnum):
     DENY = "deny"
 
 
+class ResearchAutonomyPolicy(Base):
+    """Current Lab policy for automatic Research Action execution."""
+
+    __tablename__ = "research_autonomy_policies"
+    __table_args__ = (
+        UniqueConstraint("lab_id", name="uq_research_autonomy_policies_lab"),
+        CheckConstraint("revision >= 1", name="ck_research_autonomy_policies_revision"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class ResearchAutonomyPolicyAudit(Base):
+    """Immutable revision ledger for Lab Research autonomy policy."""
+
+    __tablename__ = "research_autonomy_policy_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_id",
+            "revision",
+            name="uq_research_autonomy_policy_audits_revision",
+        ),
+        Index(
+            "ix_research_autonomy_policy_audits_lab_created",
+            "lab_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    policy_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_autonomy_policies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    lab_id: Mapped[UUID] = mapped_column(
+        ForeignKey("labs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchResourceReservationStatus(StrEnum):
     PROPOSED = "proposed"
     ACTIVE = "active"
@@ -768,7 +842,9 @@ class ResearchServiceOfferingRevision(Base):
     base_price: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
     currency: Mapped[str | None] = mapped_column(String(3))
     sla_hours: Mapped[int | None] = mapped_column()
-    sample_requirements: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    sample_requirements: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     logistics_policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     terms: Mapped[str] = mapped_column(Text, nullable=False, default="")
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -854,7 +930,9 @@ class ResearchServiceJob(Base):
     actual_amount: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
     error: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=ResearchServiceJobStatus.AWAITING_QUOTE.value
+        String(32),
+        nullable=False,
+        default=ResearchServiceJobStatus.AWAITING_QUOTE.value,
     )
     revision: Mapped[int] = mapped_column(nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
@@ -866,9 +944,7 @@ class ResearchServiceJob(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    quote_requested_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
+    quote_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -973,7 +1049,9 @@ class ResearchServiceCustodyEvent(Base):
     tracking_ref: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     condition: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     event_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     actor_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -1051,7 +1129,9 @@ class ResearchBudgetEntry(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
-    source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
+    source_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="manual"
+    )
     source_ref: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     command_digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -1067,9 +1147,7 @@ class ResearchBudgetEntry(Base):
 class ResearchResourceReservation(Base):
     __tablename__ = "research_resource_reservations"
     __table_args__ = (
-        UniqueConstraint(
-            "action_id", name="uq_research_resource_reservation_action"
-        ),
+        UniqueConstraint("action_id", name="uq_research_resource_reservation_action"),
         Index(
             "ix_research_resource_reservations_resource_status",
             "resource_id",
@@ -1170,9 +1248,7 @@ class ResearchResourceConsumption(Base):
     field_path: Mapped[str] = mapped_column(String(512), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
-    remaining_quantity: Mapped[Decimal] = mapped_column(
-        Numeric(38, 18), nullable=False
-    )
+    remaining_quantity: Mapped[Decimal] = mapped_column(Numeric(38, 18), nullable=False)
     remaining_unit: Mapped[str] = mapped_column(String(32), nullable=False)
     actor_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -1605,7 +1681,9 @@ class ResearchInstrumentJob(Base):
     lease_token_digest: Mapped[str | None] = mapped_column(String(64))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempt_count: Mapped[int] = mapped_column(nullable=False, default=0)
-    device_confirmation: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    device_confirmation: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error: Mapped[str | None] = mapped_column(Text)
     stop_reason: Mapped[str | None] = mapped_column(Text)

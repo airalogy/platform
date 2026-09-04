@@ -129,6 +129,8 @@ Research Task
 
 面向用户的自主等级为 Assisted、Bounded Autopilot 和 Autonomous within Policy。自主权按 Lab + Capability + Executor 分别授予，必须经过回放、影子运行和评估，不存在一次打开的全局无限权限。
 
+Lab Research 自治策略是版本化治理资产。辅助模式对每个 Aira 提议的 Action 都要求确认。“有边界的自动执行”和“策略范围内自主执行”可分别允许：仅在精确 Executor Binding 也允许时执行内部只读 Tool，创建被动的类型化 Wait Event，以及仅在固定环境禁止网络且不超过明确费用与时间上限时运行低风险 Compute。人员、仪器、资源和外部服务承诺仍必须审批。策略变更使用“预览 → 确认”并追加不可变修订审计，只影响未来 Research Environment；每个 Run 固定精确策略快照，每个 Action 记录判定原因。
+
 重要写入使用统一契约：
 
 ```text
@@ -138,7 +140,7 @@ Research Task
 
 审批必须绑定预览版本或摘要哈希；源数据变化后原审批失效。权限、资源和策略校验全部在 API 层执行，不以前端隐藏替代。
 
-P0 采用有意的失败关闭策略：手工创建的 Protocol Action 只在确认确定性预览后记为 `allow`；Aira 提议的人工 Protocol Action 在所有自主级别下都是 `ask`。批准只激活当前摘要绑定的 Action，然后才创建 Human Work Item；拒绝会取消该提议、记录原因并请求重新规划。更广泛的自动 `allow` 规则必须等 Lab 策略、资源、风险和预算控制完成后才能开放。
+实施依然失败关闭：手工 Action 只在确认确定性预览后记为 `allow`；Aira 提议的人工 Protocol Action 始终为 `ask`。批准只激活当前摘要绑定的 Action，然后才创建 Human Work Item；拒绝会取消该提议、记录原因并请求重新规划。任何显式 `deny`、缺少必要价格或安全条件、超出限额或策略未覆盖的执行都不能自动通过。
 
 ## 科学可靠性
 
@@ -270,7 +272,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - 人员、设备和外部服务 Executor Binding 适配器；
 - 保留修订的人员可用性、容量与已验证技能（已交付）；样品语义和自动成本采集；
 - 不可变 Compute Environment 目录、范围权限、“预览→确认”修订、Research Environment 准确版本固定、受治理的 Runner 身份/就绪报告/环境绑定、人工与 Aira 规划共用的审批/预算/租约/结果 Compute Job、声明输出摄取、草稿 DataAsset 登记，以及可独立监管的参考 Runner（已交付）；
-- Record 关联的库存消耗完成与不可变追溯（已交付）；风险策略、审批阈值和资源感知的计划重排。
+- Record 关联的库存消耗完成与不可变追溯（已交付）；版本化风险策略与受限自动执行阈值（已交付）；资源感知的计划重排。
 
 ### P3：设备、RaaS 与自我改进
 

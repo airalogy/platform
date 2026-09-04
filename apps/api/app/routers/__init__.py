@@ -54,6 +54,7 @@ from .record_exports import router as record_exports_router
 from .records import router as records_router
 from .research_actions import router as research_actions_router
 from .research_assets import router as research_assets_router
+from .research_autonomy_policies import router as research_autonomy_policies_router
 from .research_budget import router as research_budget_router
 from .research_capabilities import router as research_capabilities_router
 from .research_compute import router as research_compute_router
@@ -124,6 +125,7 @@ app = FastAPI(
     root_path=config.API_ROOT_PATH,
     lifespan=lifespan,
 )
+
 
 # 自定义一个 Filter，为所有日志记录添加 request_id
 class RequestIdFilter(logging.Filter):
@@ -225,9 +227,8 @@ async def logger_middleware(request: Request, call_next):
     request_id_var.set(request_id)
     request.state.request_id = request_id
     body = ""
-    if (
-        config.LOG_REQUEST_BODIES
-        and request.headers.get("content-type", "").startswith("application/json")
+    if config.LOG_REQUEST_BODIES and request.headers.get("content-type", "").startswith(
+        "application/json"
     ):
         request_body = await request.body()
         body = safe_json_body(request_body)
@@ -308,6 +309,7 @@ app.include_router(research_instrument_gateways_router)
 app.include_router(research_instrument_jobs_router)
 app.include_router(research_instrument_runtime_router)
 app.include_router(research_actions_router)
+app.include_router(research_autonomy_policies_router)
 app.include_router(research_budget_router)
 app.include_router(research_result_packages_router)
 app.include_router(research_resources_router)
