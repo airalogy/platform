@@ -2134,7 +2134,7 @@ def _apply_aira_step(state: dict[str, Any], step: dict[str, Any]) -> dict[str, A
     return result
 
 
-async def _result_package(
+async def build_research_result_package(
     db_session: AsyncSession,
     *,
     task: ResearchTask,
@@ -2228,7 +2228,7 @@ async def _finish_aira_run(
     task: ResearchTask,
     run: ResearchRun,
 ) -> dict[str, Any]:
-    package = await _result_package(db_session, task=task, run=run)
+    package = await build_research_result_package(db_session, task=task, run=run)
     now = utcnow()
     run.status = ResearchRunStatus.COMPLETED.value
     run.completed_at = now

@@ -162,7 +162,9 @@ AIRA 的阶段性和最终结论不只保存为 Markdown。结构化状态至少
 - 异常、偏差、不确定性和未解决问题；
 - 成功标准评估与建议的下一步。
 
-最终交付是 `Research Result Package`，包含摘要、目标状态、Claim/Evidence、固定的 Protocol 版本、Records、DataAssets、Knowledge 候选、Protocol 改进建议、失败尝试、验证报告和可复现清单。可读报告是该结构化包的视图。
+最终交付是 `Research Result Package`，包含摘要、目标状态、Claim/Evidence、固定的 Protocol 版本、Records、DataAssets、Knowledge 候选、Protocol 改进建议、失败尝试、验证报告、未解决问题、预算状态和可复现清单。Aira 自动执行与完全手工执行使用同一结果包构建器，不会因 AI 关闭而丢失完整交付物。
+
+只有最终人工审核才会封存结果包。Platform 为每次 Run 保存一份仅追加快照，记录准确 Task 修订、审核人、定稿时间和规范 SHA-256 摘要；读取已封存快照时会重新校验摘要。引入封存机制之前产生的历史结果包仍可读取和导出，但会明确标记为“未封存”，不伪装成不可变快照。Task 工作台可查看完整快照，并导出可携带的 JSON 或双语 Markdown；两者都是同一结构化结果包的视图。
 
 ## Knowledge、Log 与三个循环
 

@@ -1381,6 +1381,16 @@ declare namespace I18n {
         parallelBranch: string
         viewEvidenceRecord: string
         resultPackage: string
+        inspectResultPackage: string
+        downloadResultPackage: string
+        resultPackageLoadError: string
+        resultPackageDownloadError: string
+        resultPackageSealed: string
+        resultPackageUnsealed: string
+        resultPackageDigest: string
+        finalizedAt: string
+        notFinalized: string
+        completeResultSnapshot: string
         researchConclusion: string
         noConclusion: string
         definitionOfDone: string

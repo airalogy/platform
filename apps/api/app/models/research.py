@@ -399,6 +399,46 @@ class ResearchRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ResearchResultPackageSnapshot(Base):
+    """Append-only, human-finalized result package for one Research Run."""
+
+    __tablename__ = "research_result_package_snapshots"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_research_result_package_snapshot_run"),
+        CheckConstraint(
+            "task_revision > 0", name="ck_research_result_package_task_revision"
+        ),
+        CheckConstraint(
+            "length(digest) = 64", name="ck_research_result_package_digest"
+        ),
+        Index(
+            "ix_research_result_package_task_finalized",
+            "task_id",
+            "finalized_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    task_revision: Mapped[int] = mapped_column(nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(96), nullable=False)
+    package: Mapped[dict] = mapped_column(JSON, nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    finalized_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    finalized_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ResearchPlanVersion(Base):
     __tablename__ = "research_plan_versions"
     __table_args__ = (

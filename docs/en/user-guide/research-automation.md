@@ -138,6 +138,8 @@ Execution success is not scientific truth. Before completing a Task:
 
 When AI is available, choose **Run independent review** to ask the separate Reviewer Agent to critique the exact current result context. Inspect its recommendation, supporting and contradicting Evidence counts, uncertainties, missing checks, and risk flags. Choose **Use as review draft** only when you want to copy its suggested outcome and summary into the editable human form; revise it as needed, then confirm it yourself. A generated recommendation cannot complete the Task, becomes stale when the scientific context changes, and remains an immutable advisory record. When AI is disabled, complete the same human review directly without this optional panel.
 
+After confirmation, the **Result package** panel exposes the exact human-finalized Run snapshot. Open it to verify its digest, finalization time, goal, criteria, reviewed conclusion, and asset counts. Download JSON when another system needs the full structured artifact, or Markdown for a readable handoff; both exports include the same digest and full machine-readable snapshot. Older packages are marked **unsealed legacy package** so their compatibility does not imply immutability.
+
 Cancelling a Task preserves existing Records, Action history, tool provenance, and scientific assets while preventing unfinished work from resuming it. Outstanding inventory reservations and pending or approved equipment bookings are returned automatically; explicit early release also uses preview and confirmation.
 
 ## Permissions and safety

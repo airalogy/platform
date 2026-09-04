@@ -33,6 +33,7 @@ from app.models.research import (
     ResearchHumanWorkItem,
     ResearchPlanVersion,
     ResearchProtocolRun,
+    ResearchResultPackageSnapshot,
     ResearchReviewRecommendation,
     ResearchRun,
     ResearchRunStatus,
@@ -118,6 +119,11 @@ from app.services.research_resources import (
     activate_aira_resource_action,
     release_research_run_reservations,
 )
+from app.services.research_result_packages import (
+    ResearchResultPackageError,
+    normalize_final_result_package,
+    result_package_digest,
+)
 from app.services.research_review import generate_research_review
 from app.services.research_runtime import (
     ACTIVE_WORK_ITEM_STATUSES,
@@ -125,6 +131,7 @@ from app.services.research_runtime import (
     activate_protocol_action,
     activate_tool_action,
     activate_wait_event_action,
+    build_research_result_package,
     canonical_digest,
     create_plan_version,
     emit_research_event,
@@ -2621,8 +2628,26 @@ async def complete_research_task(
     task, project, lab = await _task_context(
         db_session, current_user, task_id, "research.run"
     )
+    task = (
+        await db_session.scalars(
+            select(ResearchTask)
+            .where(ResearchTask.id == task.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).one()
     if task.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Research Task has changed")
+    if task.status not in {
+        ResearchTaskStatus.REVIEW_REQUIRED.value,
+        ResearchTaskStatus.ACTIVE.value,
+        ResearchTaskStatus.PAUSED.value,
+        ResearchTaskStatus.FAILED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Research Task is not ready for final human review",
+        )
     if current_user.id != task.owner_user_id:
         await require_research_capability(
             db_session,
@@ -2734,24 +2759,38 @@ async def complete_research_task(
             detail="Complete or cancel unfinished Research Actions first",
         )
     run = await _latest_run(db_session, task.id)
-    now = utcnow()
-    if run is not None:
-        released_resource_ids = await release_research_run_reservations(
-            db_session,
-            run_id=run.id,
-            actor_user_id=current_user.id,
-            reason=params.reason or "Research Task completed",
+    if run is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Research Task has no Research Run to finalize",
         )
-        run.status = ResearchRunStatus.COMPLETED.value
-        run.completed_at = run.completed_at or now
+    now = utcnow()
+    released_resource_ids = await release_research_run_reservations(
+        db_session,
+        run_id=run.id,
+        actor_user_id=current_user.id,
+        reason=params.reason or "Research Task completed",
+    )
+    run.status = ResearchRunStatus.COMPLETED.value
+    run.completed_at = run.completed_at or now
+    base_package = task.result_package or {}
+    if base_package.get("schema") != "airalogy.research-result-package.v1":
+        base_package = await build_research_result_package(
+            db_session, task=task, run=run
+        )
     task.status = ResearchTaskStatus.COMPLETED.value
     task.outcome = params.outcome.value
     task.scientific_outcome = params.scientific_outcome.value
     task.conclusion = params.conclusion.strip()
     task.completed_at = now
-    task.result_package = {
-        **(task.result_package or {}),
+    final_package = {
+        **base_package,
         **scientific_assets,
+        "schema": "airalogy.research-result-package.v1",
+        "task_id": str(task.id),
+        "run_id": str(run.id),
+        "goal": task.goal,
+        "success_criteria": task.success_criteria,
         "goal_assessment": params.outcome.value,
         "scientific_outcome": params.scientific_outcome.value,
         "reviewed_conclusion": task.conclusion,
@@ -2763,24 +2802,41 @@ async def complete_research_task(
             else None
         ),
     }
-    if run is not None:
-        run.result_package = task.result_package
     task.revision += 1
+    try:
+        final_package = normalize_final_result_package(final_package)
+    except ResearchResultPackageError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    package_digest = result_package_digest(final_package)
+    task.result_package = final_package
+    run.result_package = final_package
+    snapshot = ResearchResultPackageSnapshot(
+        task_id=task.id,
+        run_id=run.id,
+        task_revision=task.revision,
+        schema_version=final_package["schema"],
+        package=final_package,
+        digest=package_digest,
+        finalized_by_user_id=current_user.id,
+        finalized_at=now,
+    )
+    db_session.add(snapshot)
+    await db_session.flush()
     await emit_research_event(
         db_session,
         task_id=task.id,
-        run_id=run.id if run else None,
+        run_id=run.id,
         kind="task.completed",
         actor_user_id=current_user.id,
         payload={
             "outcome": task.outcome,
             "scientific_outcome": task.scientific_outcome,
             "reason": params.reason,
+            "result_package_snapshot_id": str(snapshot.id),
+            "result_package_digest": package_digest,
             "released_resource_reservation_ids": [
                 str(item) for item in released_resource_ids
-            ]
-            if run
-            else [],
+            ],
         },
     )
     await db_session.commit()

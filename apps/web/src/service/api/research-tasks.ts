@@ -241,6 +241,7 @@ export interface ResearchRunOrigin {
 export interface ResearchResultPackage {
   schema?: string
   goal?: string
+  success_criteria?: string[]
   goal_assessment?: string
   scientific_outcome?: string
   narrative_conclusion?: string
@@ -254,6 +255,26 @@ export interface ResearchResultPackage {
   failed_attempts?: string[]
   unresolved_questions?: string[]
   reproducibility?: Record<string, unknown>
+  budget?: Record<string, unknown>
+  reviewed_by_user_id?: string
+  reviewed_at?: string
+  generated_at?: string
+}
+
+export interface ResearchResultPackageEnvelope {
+  snapshot: {
+    id?: string | null
+    sealed: boolean
+    task_id: string
+    run_id: string
+    run_number: number
+    task_revision?: number | null
+    schema_version: string
+    digest: string
+    finalized_by_user_id?: string | null
+    finalized_at?: string | null
+  }
+  package: ResearchResultPackage
 }
 
 export interface ResearchProtocolRun {
@@ -790,6 +811,33 @@ export function fetchResearchTask(taskId: string) {
     url: `/research-tasks/${taskId}`,
     metadata: { showError: false },
   })
+}
+
+export function fetchResearchResultPackage(taskId: string, runId?: string) {
+  return getData<ResearchResultPackageEnvelope>({
+    url: `/research-tasks/${taskId}/result-package`,
+    params: { run_id: runId },
+    metadata: { showError: false },
+  })
+}
+
+export async function downloadResearchResultPackage(
+  taskId: string,
+  format: "json" | "markdown",
+  language: "en" | "zh",
+  runId?: string,
+) {
+  const { data, error } = await request<Blob, "blob">({
+    url: `/research-tasks/${taskId}/result-package/export`,
+    params: { run_id: runId, format, language },
+    responseType: "blob",
+    metadata: { showError: false },
+  })
+  if (error)
+    throw error
+  if (!data)
+    throw new Error("Research Result Package export returned no data")
+  return data
 }
 
 export function previewResearchRun(taskId: string, payload: ResearchRunDraft) {

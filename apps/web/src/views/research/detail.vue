@@ -524,25 +524,13 @@
               @changed="() => loadTask(true)"
             />
 
-            <section v-if="hasResult" class="research-panel">
-              <div class="aira-type-eyebrow">
-                {{ $t("page.research.resultPackage") }}
-              </div>
-              <h2 class="aira-type-section-title mb-0 mt-1">
-                {{ $t("page.research.researchConclusion") }}
-              </h2>
-              <p class="aira-type-body aira-text-secondary mb-0 mt-4 whitespace-pre-wrap">
-                {{ resultConclusion || $t("page.research.noConclusion") }}
-              </p>
-              <div class="mt-4 flex flex-wrap gap-2">
-                <n-tag v-if="task.outcome" type="success" round>
-                  {{ outcomeLabel(task.outcome) }}
-                </n-tag>
-                <n-tag v-if="task.scientific_outcome" type="info" round>
-                  {{ scientificOutcomeLabel(task.scientific_outcome) }}
-                </n-tag>
-              </div>
-            </section>
+            <research-result-package-panel
+              :task-id="task.id"
+              :outcome="task.outcome"
+              :scientific-outcome="task.scientific_outcome"
+              :conclusion="resultConclusion"
+              :result-package="task.result_package"
+            />
           </div>
 
           <aside class="space-y-5">
@@ -919,6 +907,7 @@ import ResearchDigitalActionModal from "./components/research-digital-action-mod
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
 import ResearchResourceReservationActions from "./components/research-resource-reservation-actions.vue"
+import ResearchResultPackagePanel from "./components/research-result-package-panel.vue"
 import ResearchServiceActionModal from "./components/research-service-action-modal.vue"
 import ResearchServiceJobActions from "./components/research-service-job-actions.vue"
 import ResearchWaitEventSignal from "./components/research-wait-event-signal.vue"
@@ -1011,7 +1000,6 @@ const openActions = computed(() => (task.value?.actions || []).filter(action =>
 const pendingApprovalActions = computed(() => (task.value?.actions || []).filter(action =>
   action.approval?.status === "pending" && action.status === "proposed",
 ))
-const hasResult = computed(() => Boolean(task.value?.conclusion || Object.keys(task.value?.result_package || {}).length))
 const resultConclusion = computed(() => task.value?.result_package.reviewed_conclusion
   || task.value?.conclusion
   || task.value?.result_package.narrative_conclusion
