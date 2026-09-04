@@ -128,6 +128,8 @@ Platform 会在 API 层创建每个新的人工或 Aira Protocol、Tool、Wait�
 
 对于 External Service，Aira 只能选择已固定到 Research Environment 的准确服务，并生成符合固定输入 Schema 的请求草稿；这不等于已下单。Platform 会创建与手工路径相同的受治理 Service Job：需要时由服务管理员登记服务商报价，每个准确报价都会生成绑定摘要的下单审批，预算预留、样本交接、履约和结果接收仍由确定性界面控制。Action Planner 不会直接执行模型自由文本：Platform 会先校验 Action 类型、白名单、固定版本、输入参数、资源需求和结果契约，再创建正式 Action。物理 Action 和服务下单始终需要审批，其他 Aira Action 则继续按对应准确风险策略治理。
 
+Aira 也可将固定版本的 Protocol Run 放入混合依赖图。创建计划图不会立即派发实验工作；Platform 会等待全部前置条件，重新校验固定的人员 Executor Binding，进入普通审批，通过后才创建 Human Work Item。被指派人员使用现有 Record 表单完成工作；只有准确 Protocol 版本、提交者和 Record 全部校验通过后，下游分析或外部服务才会开始。其他已就绪分支可并行继续，但整张图稳定前 Run 不会重新规划。
+
 已完成的 Tool、Instrument、Resource、External Service、Compute 和外部 Wait Action 会把类型明确的结果回传给后续 Aira 规划与结论。Platform 只保留有上限的近期结果窗口，并将其作为不可信证据提供。如需晋升准确结构化输出，用户必须经预览和确认将它登记为待审核 Evidence；Platform 会封存只可追加、由 SHA-256 绑定的快照，在 Task 结果包中呈现，且在它支持 Claim、Knowledge 候选或 Protocol 改进前仍需人工校验。这条路径不依赖 AI。
 
 ## 提交外部结果

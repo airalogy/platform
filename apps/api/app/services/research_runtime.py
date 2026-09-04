@@ -1219,6 +1219,8 @@ async def _aira_planner_context(
         "protocols": [
             {
                 "index": task_protocol.position,
+                "id": str(protocol.id),
+                "version_id": str(version.id),
                 "name": protocol.name,
                 "version": version.version,
             }
@@ -1317,6 +1319,7 @@ async def _materialize_aira_action(
     """Turn one validated Aira decision into a governed typed Action."""
 
     if proposal.decision not in {
+        "protocol",
         "tool",
         "resource",
         "instrument",
@@ -1361,7 +1364,88 @@ async def _materialize_aira_action(
             summary=proposal.thought or f"Aira proposed {proposal.decision}",
         )
 
-    if proposal.decision == "tool":
+    assignee_user_id: UUID | None = None
+    if proposal.decision == "protocol":
+        if proposal.protocol_id is None:
+            raise ValueError("Aira Protocol graph proposal is incomplete")
+        pinned_protocol = next(
+            (
+                item
+                for item in list(
+                    (run.environment_snapshot or {}).get("protocols") or []
+                )
+                if str(item.get("id") or "") == str(proposal.protocol_id)
+            ),
+            None,
+        )
+        task_protocol = await ResearchTaskProtocol.find_by(
+            db_session,
+            [
+                ResearchTaskProtocol.task_id == task.id,
+                ResearchTaskProtocol.protocol_id == proposal.protocol_id,
+            ],
+        )
+        if pinned_protocol is None or task_protocol is None:
+            raise ValueError("Aira proposed a Protocol outside the environment")
+        protocol = await db_session.get(Protocol, task_protocol.protocol_id)
+        version = await db_session.get(
+            ProtocolVersion, task_protocol.protocol_version_id
+        )
+        if (
+            protocol is None
+            or version is None
+            or str(pinned_protocol.get("version_id") or "") != str(version.id)
+            or str(pinned_protocol.get("version") or "") != version.version
+            or version.protocol_id != protocol.id
+        ):
+            raise ValueError("Pinned Protocol version is unavailable")
+        from app.services.research_executor_bindings import (
+            enforce_environment_binding_action_limit,
+            environment_executor_binding,
+        )
+
+        executor_binding = environment_executor_binding(
+            run.environment_snapshot or {},
+            f"protocol:{protocol.id}",
+            version.version,
+            legacy_capability={
+                "key": f"protocol:{protocol.id}",
+                "version": version.version,
+                "kind": "protocol",
+                "metadata": {},
+            },
+            owner_user_id=task.owner_user_id,
+        )
+        await enforce_environment_binding_action_limit(
+            db_session, run=run, binding=executor_binding
+        )
+        executor_ref = executor_binding.get(
+            "resolved_executor_ref"
+        ) or executor_binding.get("executor_ref")
+        if (executor_ref or {}).get("type") != "user":
+            raise ValueError("Pinned Protocol Executor did not resolve to a user")
+        try:
+            assignee_user_id = UUID(str(executor_ref["id"]))
+        except ValueError as error:
+            raise ValueError("Pinned Protocol executor user is invalid") from error
+        requirements = {
+            "record_required": True,
+            "approval_policy": executor_binding["approval_policy"],
+            "executor_binding": executor_binding,
+        }
+        executor_type = "human"
+        kind = ResearchActionKind.PROTOCOL_RUN.value
+        title = protocol.name
+        description = proposal.thought
+        input_data = {
+            "protocol_id": str(protocol.id),
+            "protocol_version": version.version,
+            "protocol_position": task_protocol.position,
+            "initial_values": proposal.protocol_initial_values,
+            "source": "aira",
+            "resume_run": True,
+        }
+    elif proposal.decision == "tool":
         from app.services.research_capabilities import pinned_tool_definition
         from app.services.research_tools import (
             validate_tool_argument_template,
@@ -1784,6 +1868,7 @@ async def _materialize_aira_action(
         title=title,
         description=action_proposal["description"] or "",
         executor_type=executor_type,
+        assignee_user_id=assignee_user_id,
         input_data=input_data,
         requirements=requirements,
         policy_decision=policy_decision,
@@ -1795,7 +1880,28 @@ async def _materialize_aira_action(
     await db_session.flush()
 
     compute_job = None
-    if proposal.decision == "tool":
+    if proposal.decision == "protocol":
+        protocol_run = ResearchProtocolRun(
+            action_id=action.id,
+            protocol_id=protocol.id,
+            protocol_version_id=version.id,
+            protocol_version=version.version,
+            initial_values=proposal.protocol_initial_values,
+        )
+        db_session.add(protocol_run)
+        db_session.add(
+            ResearchArtifactLink(
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                artifact_type="protocol",
+                artifact_id=str(protocol.id),
+                artifact_version=version.version,
+                relation="method",
+                link_metadata={"position": task_protocol.position},
+            )
+        )
+    elif proposal.decision == "tool":
         tool_job = ResearchToolJob(
             action_id=action.id,
             tool_key=definition.key,
@@ -1999,6 +2105,17 @@ async def _materialize_aira_action(
                 },
                 idempotency_key=f"compute-job:{compute_job.id}:requested",
             )
+    elif proposal.decision == "protocol":
+        await activate_protocol_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            protocol=protocol,
+            version=version,
+            instructions=action.description,
+            actor_user_id=None,
+        )
     elif proposal.decision == "tool":
         await activate_tool_action(
             db_session,
@@ -2403,6 +2520,13 @@ async def _cancel_blocked_graph_action(
 ) -> None:
     """Mirror a dependency skip into the Action's typed execution object."""
 
+    if action.kind == ResearchActionKind.PROTOCOL_RUN.value:
+        protocol_run = await ResearchProtocolRun.find_by(
+            db_session, [ResearchProtocolRun.action_id == action.id]
+        )
+        if protocol_run is None:
+            raise ValueError("Blocked graph Protocol Action has no Protocol Run")
+        return
     if action.kind == ResearchActionKind.TOOL_JOB.value:
         tool_job = await ResearchToolJob.find_by(
             db_session, [ResearchToolJob.action_id == action.id]
@@ -2579,6 +2703,29 @@ async def _activate_released_graph_action(
         return
     if action.policy_decision != "allow":
         raise ValueError("Blocked graph Action has no executable policy")
+    if action.kind == ResearchActionKind.PROTOCOL_RUN.value:
+        protocol_run = await ResearchProtocolRun.find_by(
+            db_session, [ResearchProtocolRun.action_id == action.id]
+        )
+        if protocol_run is None:
+            raise ValueError("Released graph Protocol Action has no Protocol Run")
+        protocol = await db_session.get(Protocol, protocol_run.protocol_id)
+        version = await db_session.get(
+            ProtocolVersion, protocol_run.protocol_version_id
+        )
+        if protocol is None or version is None:
+            raise ValueError("Released graph Protocol context is unavailable")
+        await activate_protocol_action(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            protocol=protocol,
+            version=version,
+            instructions=action.description,
+            actor_user_id=None,
+        )
+        return
     if action.kind == ResearchActionKind.TOOL_JOB.value:
         await activate_tool_action(
             db_session,
@@ -2694,6 +2841,7 @@ async def hold_or_release_aira_action_group(
         if graph_type == "mixed_digital"
         else (
             {
+                ResearchActionKind.PROTOCOL_RUN.value,
                 ResearchActionKind.TOOL_JOB.value,
                 ResearchActionKind.RESOURCE_RESERVATION.value,
                 ResearchActionKind.INSTRUMENT_JOB.value,
@@ -2898,16 +3046,33 @@ async def hold_or_release_aira_action_group(
         return True
     if task.status == ResearchTaskStatus.PAUSED.value:
         run.status = ResearchRunStatus.PAUSED.value
-    elif any(item.status == ResearchActionStatus.PROPOSED.value for item in remaining):
+        return False
+    active_remaining = [
+        item for item in remaining if item.status != ResearchActionStatus.BLOCKED.value
+    ]
+    if not active_remaining:
+        raise ValueError("Aira dependency graph has no released Action")
+    if any(
+        item.status == ResearchActionStatus.PROPOSED.value for item in active_remaining
+    ):
         run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
-    elif any(item.kind == ResearchActionKind.COMPUTE_JOB.value for item in remaining):
+    elif any(
+        item.kind == ResearchActionKind.COMPUTE_JOB.value for item in active_remaining
+    ):
         run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
     elif any(
-        item.kind == ResearchActionKind.INSTRUMENT_JOB.value for item in remaining
+        item.kind == ResearchActionKind.INSTRUMENT_JOB.value
+        for item in active_remaining
     ):
         run.status = ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
-    elif any(item.kind == ResearchActionKind.TOOL_JOB.value for item in remaining):
+    elif any(
+        item.kind == ResearchActionKind.TOOL_JOB.value for item in active_remaining
+    ):
         run.status = ResearchRunStatus.WAITING_FOR_TOOL.value
+    elif any(
+        item.kind == ResearchActionKind.PROTOCOL_RUN.value for item in active_remaining
+    ):
+        run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value
     elif any(
         item.kind
         in {
@@ -2915,7 +3080,7 @@ async def hold_or_release_aira_action_group(
             ResearchActionKind.EXTERNAL_SERVICE_JOB.value,
             ResearchActionKind.WAIT_EVENT.value,
         }
-        for item in remaining
+        for item in active_remaining
     ):
         run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
     else:

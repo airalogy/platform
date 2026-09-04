@@ -104,7 +104,7 @@ Research Task
   → 重规划或结束
 ```
 
-目标计划是可版本化的自适应 DAG，而不是只能向前的页面步骤。当前运行时支持三种有边界的受治理执行：2–4 个相互独立的只读 Tool Action 并行前沿、2–8 个只读 Tool Action 组成的无环依赖图，以及 2–8 个 Tool、Resource Reservation、Instrument Job、External Service Job、隔离 Compute 与类型化 Wait Action 组成的混合无环图。依赖边持久化保存，初始只释放根节点；下游节点仅在全部前置完成后才进入自己的权限、策略、审批、资源、预算和执行器边界，任一前置失败或被拒绝会确定性跳过其后代。在同类 Tool 图中，下游节点可将一个已声明参数绑定到直接前置的有界结构化输出路径。Platform 只在该前置完成后解析值，记录来源 Action 修订和输出摘要，重建下游预览摘要，再于审批或执行前校验完整输入 Schema。路径缺失、数组下标越界、未声明目标或解析后类型不符时必须失败关闭，并沿图向后传播。混合图当前使用完整静态输入、已有的批准设备预订、准确固定的服务请求和 DataAsset 版本，不在不同 Action 类型之间隐式传递未校验数据。Resource、Instrument 与 External Service 的完成、取消和失败会进入同一个图屏障，因此只要依赖的物理或外包工作尚未落定，Run 就不会提前重规划。由图规划的 Service 请求在前置完成前保持阻塞，不请求报价、不创建下单审批；所有前置完成后，Platform 会重新校验不可变契约快照、权限、输入 Schema 和预算，再进入普通报价与下单流程。Protocol/Human Work Item 图节点、循环和任意多 Agent 图仍是受控的后续能力。修改目标、成功标准、预算或高风险路径必须产生新的计划版本并重新确认。
+目标计划是可版本化的自适应 DAG，而不是只能向前的页面步骤。当前运行时支持三种有边界的受治理执行：2–4 个相互独立的只读 Tool Action 并行前沿、2–8 个只读 Tool Action 组成的无环依赖图，以及 2–8 个 Protocol Run、Tool、Resource Reservation、Instrument Job、External Service Job、隔离 Compute 与类型化 Wait Action 组成的混合无环图。依赖边持久化保存，初始只释放根节点；下游节点仅在全部前置完成后才进入自己的权限、策略、审批、资源、预算和执行器边界，任一前置失败或被拒绝会确定性跳过其后代。在同类 Tool 图中，下游节点可将一个已声明参数绑定到直接前置的有界结构化输出路径。Platform 只在该前置完成后解析值，记录来源 Action 修订和输出摘要，重建下游预览摘要，再于审批或执行前校验完整输入 Schema。路径缺失、数组下标越界、未声明目标或解析后类型不符时必须失败关闭，并沿图向后传播。混合图当前使用完整静态输入、已有的批准设备预订、准确固定的服务请求和 DataAsset 版本，不在不同 Action 类型之间隐式传递未校验数据。Protocol Record 提交以及 Resource、Instrument 与 External Service 的完成、取消和失败会进入同一个图屏障，因此只要依赖的人员、物理或外包工作尚未落定，Run 就不会提前重规划。由图规划的 Protocol Run 在前置完成且通过普通审批与固定 Executor Binding 校验前，不会创建 Human Work Item；之后被指派人员仍使用现有 Record 流程，只有经校验且与固定 Protocol 匹配的 Record 才能完成节点。由图规划的 Service 请求在前置完成前保持阻塞，不请求报价、不创建下单审批；所有前置完成后，Platform 会重新校验不可变契约快照、权限、输入 Schema 和预算，再进入普通报价与下单流程。非 Protocol 的通用 Human Work Item 图节点、循环和任意多 Agent 图仍是受控的后续能力。修改目标、成功标准、预算或高风险路径必须产生新的计划版本并重新确认。
 
 ## 人机协作
 
@@ -282,7 +282,7 @@ Instrument Job 必须同时引用 Research Environment 中已固定的资源类�
 - 受治理服务商目录、不可变服务契约、范围权限和 Research Environment 准确版本固定（已交付）；
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
-- 独立建议型 Reviewer Agent、有界并行与依赖只读 Tool 图，以及有界 Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；Protocol/Human 图节点、任意多 Agent 执行和复现评估；
+- 独立建议型 Reviewer Agent、有界并行与依赖只读 Tool 图，以及有界 Protocol/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；非 Protocol 的通用 Human Work Item 图节点、任意多 Agent 执行和复现评估；
 - 蛋白纯化方法演进与 OT-2 设备治理验收。
 
 ## 交付完整性

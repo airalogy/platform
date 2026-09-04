@@ -168,9 +168,13 @@ class AiraActionGraphNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     node_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
-    decision: Literal["tool", "resource", "instrument", "service", "compute", "wait"]
+    decision: Literal[
+        "protocol", "tool", "resource", "instrument", "service", "compute", "wait"
+    ]
     thought: str = Field(default="", max_length=4000)
     depends_on: list[str] = Field(default_factory=list, max_length=7)
+    protocol_id: UUID | None = None
+    protocol_initial_values: dict[str, Any] = Field(default_factory=dict)
     tool_key: str | None = Field(default=None, max_length=128)
     instrument_command_id: UUID | None = None
     service_offering_id: UUID | None = None
@@ -205,11 +209,31 @@ class AiraActionGraphNode(BaseModel):
             raise ValueError("Action graph dependencies must be unique")
         if self.node_id in self.depends_on:
             raise ValueError("An Action graph node cannot depend on itself")
-        if self.decision == "tool":
+        if self.decision == "protocol":
+            if self.protocol_id is None:
+                raise ValueError("A Protocol graph node requires protocol_id")
+            if any(
+                [
+                    self.tool_key,
+                    self.instrument_command_id,
+                    self.service_offering_id,
+                    self.arguments,
+                    self.resource_request,
+                    self.service_request,
+                    self.compute_request,
+                    self.wait_template_key,
+                ]
+            ):
+                raise ValueError(
+                    "A Protocol graph node contains fields for another type"
+                )
+        elif self.decision == "tool":
             if not self.tool_key:
                 raise ValueError("A Tool graph node requires tool_key")
             if any(
                 [
+                    self.protocol_id,
+                    self.protocol_initial_values,
                     self.instrument_command_id,
                     self.service_offering_id,
                     self.resource_request,
@@ -224,6 +248,8 @@ class AiraActionGraphNode(BaseModel):
                 raise ValueError("A Resource graph node requires resource_request")
             if any(
                 [
+                    self.protocol_id,
+                    self.protocol_initial_values,
                     self.tool_key,
                     self.instrument_command_id,
                     self.service_offering_id,
@@ -243,6 +269,8 @@ class AiraActionGraphNode(BaseModel):
                 )
             if any(
                 [
+                    self.protocol_id,
+                    self.protocol_initial_values,
                     self.tool_key,
                     self.service_offering_id,
                     self.resource_request,
@@ -259,6 +287,8 @@ class AiraActionGraphNode(BaseModel):
                 raise ValueError("A Service graph node requires service_offering_id")
             if any(
                 [
+                    self.protocol_id,
+                    self.protocol_initial_values,
                     self.tool_key,
                     self.instrument_command_id,
                     self.arguments,
@@ -275,6 +305,8 @@ class AiraActionGraphNode(BaseModel):
                 raise ValueError("A Compute graph node requires compute_request")
             if any(
                 [
+                    self.protocol_id,
+                    self.protocol_initial_values,
                     self.tool_key,
                     self.instrument_command_id,
                     self.service_offering_id,
@@ -292,6 +324,8 @@ class AiraActionGraphNode(BaseModel):
                 raise ValueError("A Wait graph node requires wait_template_key")
             if any(
                 [
+                    self.protocol_id,
+                    self.protocol_initial_values,
                     self.tool_key,
                     self.instrument_command_id,
                     self.service_offering_id,
@@ -310,7 +344,12 @@ class AiraActionGraphNode(BaseModel):
         """Return the exact single-Action proposal represented by this node."""
 
         data: dict[str, Any] = {"decision": self.decision, "thought": self.thought}
-        if self.decision == "tool":
+        if self.decision == "protocol":
+            data.update(
+                protocol_id=self.protocol_id,
+                protocol_initial_values=self.protocol_initial_values,
+            )
+        elif self.decision == "tool":
             data.update(tool_key=self.tool_key, arguments=self.arguments)
         elif self.decision == "resource":
             data["resource_request"] = self.resource_request
@@ -354,6 +393,8 @@ class AiraActionProposal(BaseModel):
         "finish",
     ]
     thought: str = Field(default="", max_length=4000)
+    protocol_id: UUID | None = None
+    protocol_initial_values: dict[str, Any] = Field(default_factory=dict)
     tool_key: str | None = Field(default=None, max_length=128)
     instrument_command_id: UUID | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -386,6 +427,12 @@ class AiraActionProposal(BaseModel):
         )
         if self.decision == "tool" and not self.tool_key:
             raise ValueError("A tool proposal requires tool_key")
+        if self.decision != "protocol" and self.protocol_id is not None:
+            raise ValueError("protocol_id is only valid for a protocol proposal")
+        if self.decision != "protocol" and self.protocol_initial_values:
+            raise ValueError(
+                "protocol_initial_values are only valid for a protocol proposal"
+            )
         if self.decision == "parallel_tools" and len(self.parallel_tools) < 2:
             raise ValueError("A parallel Tool proposal requires at least two calls")
         if self.decision != "parallel_tools" and self.parallel_tools:
@@ -745,9 +792,11 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         "action_graph": [
             {
                 "node_id": "stable local ID",
-                "decision": "tool | resource | instrument | service | compute | wait",
+                "decision": "protocol | tool | resource | instrument | service | compute | wait",
                 "thought": "why this Action is needed",
                 "depends_on": "local node IDs that must complete first",
+                "protocol_id": "required only for protocol; choose one listed ID",
+                "protocol_initial_values": "optional editable Record defaults for protocol",
                 "tool_key": "required only for tool",
                 "instrument_command_id": "required only for instrument",
                 "service_offering_id": "required only for service",
@@ -817,7 +866,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
             "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. When a downstream argument comes from a direct parent's output, omit that static argument and declare one result_binding using the parent's output_schema. Platform resolves and Schema-validates bindings before approval or execution. Platform will release a node only after every dependency completes; a failed dependency or invalid binding skips its descendants before replanning.",
-            "Use action_graph only for a two-to-eight-node acyclic dependency graph that mixes at least two of Tool, Resource, Instrument, External Service, Compute, and Wait. Every node keeps its normal contract, permissions, approval, resource, budget, and executor gate. A Resource, Instrument, or External Service node is never permission to reserve, operate, or order: Platform releases it only after prerequisites complete, then revalidates it and enters the ordinary approval or quote workflow. Nodes may depend on completion but mixed graphs cannot bind one node's output into another node's input yet; use only complete static inputs, existing approved bookings, and exact pinned assets. A failed, cancelled, or rejected prerequisite skips its descendants before replanning.",
+            "Use action_graph only for a two-to-eight-node acyclic dependency graph that mixes at least two of Protocol, Tool, Resource, Instrument, External Service, Compute, and Wait. Every node keeps its normal contract, permissions, approval, resource, budget, and executor gate. A Protocol, Resource, Instrument, or External Service node is never permission to assign a person, reserve, operate, or order: Platform releases it only after prerequisites complete, then revalidates it and enters the ordinary human-work, approval, or quote workflow. Nodes may depend on completion but mixed graphs cannot bind one node's output into another node's input yet; use only complete static inputs, existing approved bookings, and exact pinned assets. A failed, cancelled, or rejected prerequisite skips its descendants before replanning.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
@@ -928,6 +977,18 @@ async def plan_next_research_action(
                     tool_catalog[source.tool_key], binding.source_path
                 )
 
+    def validate_protocol_request(protocol_id: UUID | None) -> None:
+        pinned = next(
+            (
+                item
+                for item in list(context.get("protocols") or [])
+                if str(item.get("id") or "") == str(protocol_id or "")
+            ),
+            None,
+        )
+        if pinned is None:
+            raise ValueError("Aira proposed a Protocol outside the environment")
+
     def validate_resource_request(request: AiraResourceRequest | None) -> None:
         if request is None:
             raise ValueError("Aira Resource proposal is incomplete")
@@ -999,7 +1060,9 @@ async def plan_next_research_action(
 
     if proposal.decision == "action_graph":
         for node in proposal.action_graph:
-            if node.decision == "tool":
+            if node.decision == "protocol":
+                validate_protocol_request(node.protocol_id)
+            elif node.decision == "tool":
                 validate_tool_call(
                     node.tool_key or "",
                     node.arguments,

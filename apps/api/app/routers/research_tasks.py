@@ -4066,13 +4066,16 @@ async def submit_research_work_item(
             },
         }
     )
+    is_graph_action = bool((action.input_data or {}).get("action_graph"))
     run.aira_state = {
         **state,
-        "path_status": "waiting_for_phased_research_conclusion",
+        "path_status": (
+            state.get("path_status") or "waiting_for_next_protocol"
+            if is_graph_action
+            else "waiting_for_phased_research_conclusion"
+        ),
         "steps": steps,
     }
-    run.status = ResearchRunStatus.RUNNING.value
-    run.last_error = None
     task.status = ResearchTaskStatus.ACTIVE.value
     task.revision += 1
     await emit_research_event(
@@ -4089,20 +4092,31 @@ async def submit_research_work_item(
         },
         idempotency_key=(f"work-item:{item.id}:record:{record.id}:v{record.version}"),
     )
-    if config.effective_ai_enabled and await research_run_has_executable_ai_path(
-        db_session, task=task, run=run
-    ):
-        await enqueue_research_advance(db_session, task=task, run=run)
-    else:
-        await emit_research_event(
-            db_session,
-            task_id=task.id,
-            run_id=run.id,
-            kind="run.manual_control_required",
-            actor_user_id=current_user.id,
-            payload={"reason": "ai_disabled_or_no_capability_after_record"},
-            idempotency_key=f"run:{run.id}:manual:record:{record.id}:v{record.version}",
-        )
+    graph_settled = await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
+    if graph_settled:
+        run.status = ResearchRunStatus.RUNNING.value
+        run.last_error = None
+        if config.effective_ai_enabled and await research_run_has_executable_ai_path(
+            db_session, task=task, run=run
+        ):
+            await enqueue_research_advance(db_session, task=task, run=run)
+        else:
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                kind="run.manual_control_required",
+                actor_user_id=current_user.id,
+                payload={"reason": "ai_disabled_or_no_capability_after_record"},
+                idempotency_key=(
+                    f"run:{run.id}:manual:record:{record.id}:v{record.version}"
+                ),
+            )
     await db_session.commit()
     return await _work_item_data(db_session, item, action, run, task, project, lab)
 

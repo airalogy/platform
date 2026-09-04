@@ -16,6 +16,16 @@ from app.services.research_planner import (
 )
 from pydantic import ValidationError
 
+PINNED_PROTOCOLS = [
+    {
+        "index": 1,
+        "id": "11111111-1111-1111-1111-111111111111",
+        "version_id": "11111111-1111-1111-1111-111111111112",
+        "name": "RNA extraction",
+        "version": "1.0.0",
+    }
+]
+
 PINNED_TOOLS = [
     {
         "key": "knowledge.search",
@@ -1236,6 +1246,44 @@ def test_planner_validates_service_nodes_inside_governed_graph(monkeypatch):
     assert result.action_graph[1].decision == "service"
     assert result.action_graph[1].service_request == {"sample_count": 4}
     proposal.return_value["action_graph"][1]["service_offering_id"] = str(uuid4())
+    with pytest.raises(ValueError, match="outside the environment"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+
+def test_planner_validates_protocol_nodes_inside_governed_graph(monkeypatch):
+    proposal = AsyncMock(
+        return_value={
+            "decision": "action_graph",
+            "thought": "Collect context before assigning the wet-lab method",
+            "action_graph": [
+                {
+                    "node_id": "context",
+                    "decision": "tool",
+                    "tool_key": "knowledge.search",
+                    "arguments": {"query": "RNA", "limit": 5},
+                },
+                {
+                    "node_id": "extraction",
+                    "decision": "protocol",
+                    "protocol_id": PINNED_PROTOCOLS[0]["id"],
+                    "protocol_initial_values": {"sample_count": 4},
+                    "depends_on": ["context"],
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(research_planner, "aira_action_proposal", proposal)
+    context = {
+        "goal": "Extract RNA from prepared samples",
+        "protocols": PINNED_PROTOCOLS,
+        "tools": PINNED_TOOLS,
+    }
+
+    result = asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    assert result.action_graph[1].decision == "protocol"
+    assert result.action_graph[1].protocol_initial_values == {"sample_count": 4}
+    proposal.return_value["action_graph"][1]["protocol_id"] = str(uuid4())
     with pytest.raises(ValueError, match="outside the environment"):
         asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
 

@@ -9,6 +9,8 @@ from app.models.research import (
     ResearchAction,
     ResearchActionDependency,
     ResearchActionStatus,
+    ResearchArtifactLink,
+    ResearchProtocolRun,
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
@@ -24,7 +26,7 @@ from app.models.research_execution import (
     ResearchToolJob,
     ResearchToolJobStatus,
 )
-from app.services import research_runtime
+from app.services import research_executor_bindings, research_runtime
 from app.services.research_frontiers import (
     frontier_run_status,
     hold_or_release_parallel_frontier,
@@ -816,6 +818,121 @@ def test_aira_mixed_action_graph_persists_dependencies_before_release(monkeypatc
     release.assert_awaited_once()
 
 
+def test_protocol_graph_node_materializes_without_assigning_human_work(monkeypatch):
+    protocol_id = uuid4()
+    protocol_version_id = uuid4()
+    assignee_id = uuid4()
+    task = ResearchTask(
+        id=uuid4(),
+        project_id=uuid4(),
+        owner_user_id=uuid4(),
+        autonomy_level="assisted",
+        status=ResearchTaskStatus.ACTIVE.value,
+    )
+    run = ResearchRun(
+        id=uuid4(),
+        plan_version=3,
+        requested_by_user_id=uuid4(),
+        environment_snapshot={
+            "protocols": [
+                {
+                    "id": str(protocol_id),
+                    "version_id": str(protocol_version_id),
+                    "version": "1.0.0",
+                }
+            ],
+            "executor_bindings": [
+                {
+                    "capability_key": f"protocol:{protocol_id}",
+                    "capability_version": "1.0.0",
+                    "approval_policy": "always_ask",
+                    "executor_type": "human",
+                    "resolved_executor_ref": {
+                        "type": "user",
+                        "id": str(assignee_id),
+                    },
+                }
+            ],
+        },
+    )
+    task_protocol = SimpleNamespace(
+        protocol_id=protocol_id,
+        protocol_version_id=protocol_version_id,
+        position=1,
+    )
+    protocol = SimpleNamespace(id=protocol_id, name="RNA extraction")
+    version = SimpleNamespace(
+        id=protocol_version_id,
+        protocol_id=protocol_id,
+        version="1.0.0",
+    )
+    proposal = AiraActionProposal.model_validate(
+        {
+            "decision": "protocol",
+            "protocol_id": str(protocol_id),
+            "protocol_initial_values": {"sample_count": 4},
+            "thought": "Run the pinned method after context collection",
+        }
+    )
+    added = []
+    db_session = AsyncMock()
+    db_session.add = added.append
+    db_session.scalar.side_effect = [0, 0]
+
+    async def get_model(model, _item_id):
+        if model is research_runtime.Protocol:
+            return protocol
+        if model is research_runtime.ProtocolVersion:
+            return version
+        return None
+
+    db_session.get.side_effect = get_model
+    monkeypatch.setattr(ResearchAction, "find_by", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        research_runtime.ResearchTaskProtocol,
+        "find_by",
+        AsyncMock(return_value=task_protocol),
+    )
+    monkeypatch.setattr(
+        research_executor_bindings,
+        "enforce_environment_binding_action_limit",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    action = asyncio.run(
+        research_runtime._materialize_aira_action(
+            db_session,
+            task=task,
+            run=run,
+            proposal=proposal,
+            step_index=6,
+            create_plan=False,
+            action_graph={
+                "id": "aira-action-graph:6:protocol",
+                "type": "mixed_governed",
+                "node_id": "assay",
+                "position": 2,
+                "size": 2,
+                "depends_on_count": 1,
+                "dependency_count": 1,
+                "result_bindings": [],
+            },
+            defer_activation=True,
+        )
+    )
+
+    assert action.kind == "protocol_run"
+    assert action.status == ResearchActionStatus.BLOCKED.value
+    assert action.assignee_user_id == assignee_id
+    assert action.input_data["initial_values"] == {"sample_count": 4}
+    assert any(isinstance(item, ResearchProtocolRun) for item in added)
+    assert any(isinstance(item, ResearchArtifactLink) for item in added)
+    assert not any(
+        isinstance(item, research_runtime.ResearchHumanWorkItem) for item in added
+    )
+
+
 def test_governed_action_graph_releases_an_instrument_after_resource_completion(
     monkeypatch,
 ):
@@ -944,6 +1061,124 @@ def test_governed_action_graph_defers_service_quote_until_dependencies_complete(
     assert run.status == ResearchRunStatus.WAITING_FOR_EVENT.value
 
 
+def test_governed_action_graph_releases_protocol_assignment_only_after_dependencies(
+    monkeypatch,
+):
+    run_id = uuid4()
+    context = _graph_action(
+        run_id=run_id,
+        node_id="context",
+        position=1,
+        size=2,
+        status=ResearchActionStatus.COMPLETED.value,
+        kind="tool_job",
+        graph_type="mixed_governed",
+    )
+    protocol = _graph_action(
+        run_id=run_id,
+        node_id="assay",
+        position=2,
+        size=2,
+        depends_on_count=1,
+        kind="protocol_run",
+        graph_type="mixed_governed",
+    )
+    protocol.policy_decision = "ask"
+    for action in (context, protocol):
+        action.input_data["action_graph"]["id"] = "aira-action-graph:10:protocol"
+    dependency = ResearchActionDependency(
+        action_id=protocol.id,
+        depends_on_action_id=context.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    task = ResearchTask(
+        id=uuid4(),
+        owner_user_id=uuid4(),
+        status=ResearchTaskStatus.ACTIVE.value,
+        revision=1,
+    )
+    run = ResearchRun(
+        id=run_id,
+        requested_by_user_id=uuid4(),
+        status=ResearchRunStatus.WAITING_FOR_TOOL.value,
+    )
+    db_session = AsyncMock()
+    db_session.add = Mock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [context, protocol]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+    approval = AsyncMock()
+    activation = AsyncMock()
+    monkeypatch.setattr(research_runtime, "request_action_approval", approval)
+    monkeypatch.setattr(research_runtime, "activate_protocol_action", activation)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=context,
+        )
+    )
+
+    assert settled is False
+    assert protocol.status == ResearchActionStatus.PROPOSED.value
+    approval.assert_awaited_once()
+    activation.assert_not_awaited()
+    assert run.status == ResearchRunStatus.WAITING_FOR_APPROVAL.value
+
+
+def test_governed_graph_ignores_blocked_child_kind_for_waiting_state():
+    run_id = uuid4()
+    resource = _graph_action(
+        run_id=run_id,
+        node_id="reagent",
+        position=1,
+        size=2,
+        status=ResearchActionStatus.WAITING.value,
+        kind="resource_reservation",
+        graph_type="mixed_governed",
+    )
+    protocol = _graph_action(
+        run_id=run_id,
+        node_id="assay",
+        position=2,
+        size=2,
+        depends_on_count=1,
+        kind="protocol_run",
+        graph_type="mixed_governed",
+    )
+    for action in (resource, protocol):
+        action.input_data["action_graph"]["id"] = "aira-action-graph:11:blocked"
+    dependency = ResearchActionDependency(
+        action_id=protocol.id,
+        depends_on_action_id=resource.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(id=run_id, status=ResearchRunStatus.RUNNING.value)
+    db_session = AsyncMock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [resource, protocol]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=resource,
+        )
+    )
+
+    assert settled is False
+    assert protocol.status == ResearchActionStatus.BLOCKED.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_EVENT.value
+
+
 def test_governed_service_release_failure_is_typed_and_auditable(monkeypatch):
     action = ResearchAction(
         id=uuid4(),
@@ -991,7 +1226,8 @@ def test_governed_service_release_failure_is_typed_and_auditable(monkeypatch):
     assert event.await_args.kwargs["kind"] == "external_service.release_failed"
 
 
-def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
+def test_dependency_skip_cancels_typed_governed_executions(monkeypatch):
+    protocol_action = ResearchAction(id=uuid4(), kind="protocol_run", input_data={})
     resource_action = ResearchAction(
         id=uuid4(), kind="resource_reservation", input_data={}
     )
@@ -1014,6 +1250,17 @@ def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
         status=ResearchServiceJobStatus.BLOCKED.value,
         revision=1,
     )
+    protocol_run = ResearchProtocolRun(
+        action_id=protocol_action.id,
+        protocol_id=uuid4(),
+        protocol_version_id=uuid4(),
+        protocol_version="1.0.0",
+    )
+    monkeypatch.setattr(
+        ResearchProtocolRun,
+        "find_by",
+        AsyncMock(return_value=protocol_run),
+    )
     monkeypatch.setattr(
         ResearchResourceReservation,
         "find_by",
@@ -1030,6 +1277,14 @@ def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
         AsyncMock(return_value=service_job),
     )
 
+    asyncio.run(
+        research_runtime._cancel_blocked_graph_action(
+            AsyncMock(),
+            action=protocol_action,
+            error="Dependency failed",
+            completed_at=research_runtime.utcnow(),
+        )
+    )
     asyncio.run(
         research_runtime._cancel_blocked_graph_action(
             AsyncMock(),
