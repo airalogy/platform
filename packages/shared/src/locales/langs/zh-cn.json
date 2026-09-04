@@ -1608,6 +1608,7 @@
         "cancelled": "本次 Run 已取消"
       },
       "actionStatus": {
+        "blocked": "等待前置步骤",
         "proposed": "待确认",
         "approved": "已批准",
         "queued": "排队中",
@@ -1620,6 +1621,8 @@
         "skipped": "已跳过",
         "cancelled": "已取消"
       },
+      "dependencyNode": "依赖节点 {position}/{size}",
+      "dependsOn": "依赖 {actions}",
       "actionKind": {
         "protocol_run": "Protocol 执行",
         "tool_job": "数字工具",

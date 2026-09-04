@@ -111,6 +111,24 @@ class AiraToolRequest(BaseModel):
         return self
 
 
+class AiraToolGraphNode(AiraToolRequest):
+    """One read-only Tool node in a bounded dependency graph."""
+
+    node_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    depends_on: list[str] = Field(default_factory=list, max_length=7)
+
+    @model_validator(mode="after")
+    def normalize_graph_node(self):
+        self.depends_on = [item.strip() for item in self.depends_on]
+        if any(not item for item in self.depends_on):
+            raise ValueError("Tool graph dependencies cannot be blank")
+        if len(self.depends_on) != len(set(self.depends_on)):
+            raise ValueError("Tool graph dependencies must be unique")
+        if self.node_id in self.depends_on:
+            raise ValueError("A Tool graph node cannot depend on itself")
+        return self
+
+
 class AiraActionProposal(BaseModel):
     """One untrusted AI proposal, validated before any Action is persisted."""
 
@@ -120,6 +138,7 @@ class AiraActionProposal(BaseModel):
         "protocol",
         "tool",
         "parallel_tools",
+        "tool_graph",
         "resource",
         "instrument",
         "service",
@@ -132,6 +151,7 @@ class AiraActionProposal(BaseModel):
     instrument_command_id: UUID | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
     parallel_tools: list[AiraToolRequest] = Field(default_factory=list, max_length=4)
+    tool_graph: list[AiraToolGraphNode] = Field(default_factory=list, max_length=8)
     wait_template_key: (
         Literal[
             "data_asset.ready",
@@ -174,6 +194,52 @@ class AiraActionProposal(BaseModel):
             ]
             if len(calls) != len(set(calls)):
                 raise ValueError("Parallel Tool calls contain duplicates")
+        if self.decision == "tool_graph":
+            if len(self.tool_graph) < 2:
+                raise ValueError("A Tool graph proposal requires at least two nodes")
+            node_ids = [item.node_id for item in self.tool_graph]
+            if len(node_ids) != len(set(node_ids)):
+                raise ValueError("Tool graph node IDs must be unique")
+            known_ids = set(node_ids)
+            if not any(item.depends_on for item in self.tool_graph):
+                raise ValueError(
+                    "A Tool graph proposal requires at least one dependency"
+                )
+            for item in self.tool_graph:
+                unknown = set(item.depends_on) - known_ids
+                if unknown:
+                    raise ValueError("Tool graph dependency references an unknown node")
+            dependencies = {
+                item.node_id: set(item.depends_on) for item in self.tool_graph
+            }
+            visiting: set[str] = set()
+            visited: set[str] = set()
+
+            def visit(node_id: str) -> None:
+                if node_id in visited:
+                    return
+                if node_id in visiting:
+                    raise ValueError("Tool graph dependencies contain a cycle")
+                visiting.add(node_id)
+                for parent_id in dependencies[node_id]:
+                    visit(parent_id)
+                visiting.remove(node_id)
+                visited.add(node_id)
+
+            for node_id in node_ids:
+                visit(node_id)
+            calls = [
+                json.dumps(
+                    {"tool_key": item.tool_key, "arguments": item.arguments},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for item in self.tool_graph
+            ]
+            if len(calls) != len(set(calls)):
+                raise ValueError("Tool graph calls contain duplicates")
+        elif self.tool_graph:
+            raise ValueError("tool_graph is only valid for a Tool graph proposal")
         if self.decision == "instrument" and self.instrument_command_id is None:
             raise ValueError("An instrument proposal requires instrument_command_id")
         if self.decision != "tool" and self.tool_key:
@@ -374,7 +440,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     ]
     decision_schema = {
         "decision": (
-            "protocol | tool | parallel_tools | resource | instrument | service | "
+            "protocol | tool | parallel_tools | tool_graph | resource | instrument | service | "
             "compute | wait | finish"
         ),
         "thought": "short scientific reason",
@@ -384,6 +450,15 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
                 "tool_key": "listed read-only Tool key",
                 "arguments": "must match that Tool's input_schema",
                 "purpose": "why this independent call is needed",
+            }
+        ],
+        "tool_graph": [
+            {
+                "node_id": "stable local ID, for example search_internal",
+                "tool_key": "listed read-only Tool key",
+                "arguments": "must match that Tool's input_schema",
+                "purpose": "why this call is needed",
+                "depends_on": "local node IDs that must complete first",
             }
         ],
         "instrument_command_id": "required only for instrument; choose one listed ID",
@@ -438,10 +513,11 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
     return "\n".join(
         [
             "You are the Action Planner inside Airalogy Platform.",
-            "Choose exactly one next boundary: protocol, tool, parallel_tools, resource, instrument, service, compute, wait, or finish.",
+            "Choose exactly one next boundary: protocol, tool, parallel_tools, tool_graph, resource, instrument, service, compute, wait, or finish.",
             "A Protocol is a versioned scientific method for physical or structured execution.",
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
+            "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. Platform will release a node only after every dependency completes; a failed dependency skips its descendants before replanning.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
@@ -483,6 +559,7 @@ async def plan_next_research_action(
     proposal = AiraActionProposal.model_validate(raw)
     if proposal.decision == "protocol" and not context.get("protocols"):
         raise ValueError("Aira proposed a Protocol but none is available")
+
     def validate_tool_call(
         tool_key: str,
         arguments: dict[str, Any],
@@ -518,6 +595,13 @@ async def plan_next_research_action(
             validate_tool_call(
                 call.tool_key,
                 call.arguments,
+                require_read_only=True,
+            )
+    if proposal.decision == "tool_graph":
+        for node in proposal.tool_graph:
+            validate_tool_call(
+                node.tool_key,
+                node.arguments,
                 require_read_only=True,
             )
     if proposal.decision == "resource":

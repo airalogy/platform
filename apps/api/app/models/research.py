@@ -69,6 +69,7 @@ class ResearchActionKind(StrEnum):
 
 
 class ResearchActionStatus(StrEnum):
+    BLOCKED = "blocked"
     PROPOSED = "proposed"
     APPROVED = "approved"
     QUEUED = "queued"
@@ -593,6 +594,10 @@ class ResearchActionDependency(Base):
     __table_args__ = (
         UniqueConstraint(
             "action_id", "depends_on_action_id", name="uq_research_action_dependency"
+        ),
+        CheckConstraint(
+            "action_id <> depends_on_action_id",
+            name="ck_research_action_dependency_not_self",
         ),
     )
 

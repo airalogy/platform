@@ -1612,6 +1612,7 @@ declare namespace I18n {
           cancelled: string
         }
         actionStatus: {
+          blocked: string
           proposed: string
           approved: string
           queued: string
@@ -1624,6 +1625,8 @@ declare namespace I18n {
           skipped: string
           cancelled: string
         }
+        dependencyNode: string
+        dependsOn: string
         actionKind: {
           protocol_run: string
           tool_job: string

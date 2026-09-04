@@ -28,6 +28,7 @@ export type ResearchRunStatus =
   | "cancelled"
 
 export type ResearchActionStatus =
+  | "blocked"
   | "proposed"
   | "approved"
   | "queued"
@@ -511,6 +512,11 @@ export interface ResearchAction {
   started_at?: string | null
   completed_at?: string | null
   error?: string | null
+  dependencies: Array<{
+    action_id: string
+    condition: Record<string, unknown>
+  }>
+  dependent_action_ids: string[]
   protocol_run?: ResearchProtocolRun | null
   protocol?: ResearchProtocolRef | null
   work_item?: ResearchHumanWorkItem | null

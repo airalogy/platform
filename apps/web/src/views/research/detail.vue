@@ -212,6 +212,12 @@
                             size: action.input_data.parallel_group.size,
                           }) }}
                         </n-tag>
+                        <n-tag v-if="action.input_data.action_graph" type="info" round size="small">
+                          {{ $t("page.research.dependencyNode", {
+                            position: action.input_data.action_graph.position,
+                            size: action.input_data.action_graph.size,
+                          }) }}
+                        </n-tag>
                         <span v-if="action.protocol" class="aira-type-meta">
                           {{ action.protocol.name }} · v{{ action.protocol.version }}
                         </span>
@@ -303,6 +309,12 @@
                             size: action.input_data.parallel_group.size,
                           }) }}
                         </n-tag>
+                        <n-tag v-if="action.input_data.action_graph" type="info" size="small" round>
+                          {{ $t("page.research.dependencyNode", {
+                            position: action.input_data.action_graph.position,
+                            size: action.input_data.action_graph.size,
+                          }) }}
+                        </n-tag>
                         <n-tag :type="actionStatusType(action.status)" size="small" round>
                           {{ actionStatusLabel(action.status) }}
                         </n-tag>
@@ -310,6 +322,9 @@
                     </div>
                     <p v-if="action.description" class="aira-type-meta line-clamp-2 mb-0 mt-1">
                       {{ action.description }}
+                    </p>
+                    <p v-if="action.dependencies.length" class="aira-type-meta mb-0 mt-1">
+                      {{ $t("page.research.dependsOn", { actions: actionDependencyLabel(action) }) }}
                     </p>
                     <n-button
                       v-if="action.protocol_run?.record_id && action.protocol"
@@ -1407,9 +1422,18 @@ function actionStatusType(status: ResearchActionStatus): TagProps["type"] {
     return "success"
   if (status === "failed" || status === "cancelled")
     return "error"
-  if (status === "waiting")
+  if (status === "waiting" || status === "blocked")
     return "warning"
   return "info"
+}
+
+function actionDependencyLabel(action: ResearchAction) {
+  return action.dependencies
+    .map((dependency) => {
+      const parent = task.value?.actions.find(item => item.id === dependency.action_id)
+      return parent ? `#${parent.sequence} ${parent.title}` : dependency.action_id
+    })
+    .join(", ")
 }
 
 function taskStatusLabel(status: ResearchTaskStatus) {

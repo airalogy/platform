@@ -43,6 +43,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 - Research Task 工作台新增数字 Action 控件，支持预览确认的工具检索、外部结果边界、根据契约生成的信号表单、结果查看、中英文完整状态和产品内使用指南。
 - 新增由 Platform 治理的 Aira Action Planner，可在固定版本 Protocol、白名单且固定版本的 Tool、类型化外部 Wait 与结束研究路径之间选择；AI 提案必须经过 Schema 校验、摘要绑定、审批与完整留痕，也能在未预选 Protocol 的纯数字科研任务中运行，不会把 Tool 伪装成 Protocol。
 - 新增有界的 Aira 并行 Tool 前沿：规划器可同时发起 2–4 个相互独立且固定版本的只读检索，每个分支仍保留独立策略与审批边界，工作台明确标出并行分支，并且只有所有分支都完成、失败或被拒绝后才会重新规划，避免首个结果提前触发竞态。
+- 新增有界的 Aira Tool 依赖图：规划器可将 2–8 个固定版本的只读 Tool 节点持久化为无环图；Platform 只释放根节点和已满足前置条件的节点，失败或被拒绝的前置会确定性跳过其后代；准确边集在工作台可见并进入封存结果包，整张图稳定后才会重新规划。
 - 新增由 Project Protocol、白名单 Tool 与 Lab 资源定义派生的 Capability Registry；创建 Research Task 时现需明确选择并固定数字能力版本，记录初始 Executor Binding，Aira 和手工 Tool Action 对 Research Environment 之外的能力或已不可用的固定版本必须失败关闭。
 - 新增 Lab 治理、保留修订的 Protocol/Tool Executor Binding：只有 Owner/Manager 可通过“预览→确认”配置，每次变更留下不可变审计快照，可限制 Project、自主等级与每次 Run 的 Action 数，按优先级确定性解析，禁止策略必须失败关闭，仅 Platform 内部只读 Tool 可窄范围自动放行；已运行 Run 继续使用固定策略。
 - 新增受治理的 Protocol 人工 Executor 直接指派：Lab 管理员可选择 Task 负责人或当前 Project 中具备科研执行权限的具体成员，确定用户会固定到 Research Environment；若其后来离开 Lab 或失去执行权，派发工作时必须失败关闭。

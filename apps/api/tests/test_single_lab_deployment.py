@@ -103,6 +103,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     resource_consumption_revision = import_module(
         "migrations.versions.0038_research_resource_consumptions"
     )
+    action_dependency_guard_revision = import_module(
+        "migrations.versions.0039_research_action_dependency_guard"
+    )
     import_models()
 
     later_tables = {
@@ -152,6 +155,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(resource_consumption_revision.TABLE_NAMES)
     assert resource_consumption_revision.down_revision == (
         "0037_knowledge_ai_provenance"
+    )
+    assert action_dependency_guard_revision.down_revision == (
+        "0038_research_resource_consumptions"
     )
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 

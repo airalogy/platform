@@ -1608,6 +1608,7 @@
         "cancelled": "Run cancelled"
       },
       "actionStatus": {
+        "blocked": "Waiting for dependencies",
         "proposed": "Proposed",
         "approved": "Approved",
         "queued": "Queued",
@@ -1620,6 +1621,8 @@
         "skipped": "Skipped",
         "cancelled": "Cancelled"
       },
+      "dependencyNode": "Dependency node {position}/{size}",
+      "dependsOn": "Depends on {actions}",
       "actionKind": {
         "protocol_run": "Protocol execution",
         "tool_job": "Digital tool",

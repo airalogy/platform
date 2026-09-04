@@ -24,6 +24,7 @@ from app.models.record import Record
 from app.models.research import (
     HumanWorkItemStatus,
     ResearchAction,
+    ResearchActionDependency,
     ResearchActionKind,
     ResearchActionStatus,
     ResearchApproval,
@@ -114,7 +115,6 @@ from app.services.research_external_services import (
     release_service_budget,
     service_job_snapshot,
 )
-from app.services.research_frontiers import hold_or_release_parallel_frontier
 from app.services.research_instruments import activate_aira_instrument_action
 from app.services.research_resources import (
     ResearchResourceError,
@@ -139,6 +139,7 @@ from app.services.research_runtime import (
     emit_research_event,
     enqueue_research_advance,
     has_research_capability,
+    hold_or_release_aira_action_group,
     initial_aira_state,
     require_research_capability,
     research_run_has_executable_ai_path,
@@ -1212,6 +1213,8 @@ async def _action_data(
     *,
     project: Project,
     lab: Lab,
+    dependency_rows: list[ResearchActionDependency] | None = None,
+    dependent_action_ids: list[UUID] | None = None,
 ) -> dict[str, Any]:
     assignee = (
         await db_session.get(User, action.assignee_user_id)
@@ -1250,6 +1253,26 @@ async def _action_data(
             .limit(1)
         )
     ).first()
+    if dependency_rows is None:
+        dependency_rows = list(
+            (
+                await db_session.scalars(
+                    select(ResearchActionDependency).where(
+                        ResearchActionDependency.action_id == action.id
+                    )
+                )
+            ).all()
+        )
+    if dependent_action_ids is None:
+        dependent_action_ids = list(
+            (
+                await db_session.scalars(
+                    select(ResearchActionDependency.action_id).where(
+                        ResearchActionDependency.depends_on_action_id == action.id
+                    )
+                )
+            ).all()
+        )
     protocol_data = None
     if protocol_run is not None:
         protocol = await db_session.get(Protocol, protocol_run.protocol_id)
@@ -1271,8 +1294,7 @@ async def _action_data(
                     Record,
                     and_(
                         Record.id == ResearchResourceConsumption.record_id,
-                        Record.version
-                        == ResearchResourceConsumption.record_version,
+                        Record.version == ResearchResourceConsumption.record_version,
                     ),
                 )
                 .join(Protocol, Protocol.id == Record.protocol_id)
@@ -1321,6 +1343,14 @@ async def _action_data(
             if approval is not None
             else None
         ),
+        "dependencies": [
+            {
+                "action_id": str(item.depends_on_action_id),
+                "condition": item.condition,
+            }
+            for item in dependency_rows
+        ],
+        "dependent_action_ids": [str(item) for item in dependent_action_ids],
     }
 
 
@@ -1562,11 +1592,43 @@ async def _task_detail(
     resource_access = await resolve_resource_access(
         db_session, current_user.id, task.lab_id
     )
+    action_dependencies = (
+        list(
+            (
+                await db_session.scalars(
+                    select(ResearchActionDependency).where(
+                        ResearchActionDependency.action_id.in_(
+                            [action.id for action in actions]
+                        )
+                    )
+                )
+            ).all()
+        )
+        if actions
+        else []
+    )
+    dependencies_by_action: dict[UUID, list[ResearchActionDependency]] = {
+        action.id: [] for action in actions
+    }
+    dependents_by_action: dict[UUID, list[UUID]] = {action.id: [] for action in actions}
+    for dependency in action_dependencies:
+        dependencies_by_action[dependency.action_id].append(dependency)
+        if dependency.depends_on_action_id in dependents_by_action:
+            dependents_by_action[dependency.depends_on_action_id].append(
+                dependency.action_id
+            )
     return {
         **summary,
         "runs": [run.as_dict() for run in runs],
         "actions": [
-            await _action_data(db_session, action, project=project, lab=lab)
+            await _action_data(
+                db_session,
+                action,
+                project=project,
+                lab=lab,
+                dependency_rows=dependencies_by_action[action.id],
+                dependent_action_ids=dependents_by_action[action.id],
+            )
             for action in actions
         ],
         "events": [event.as_dict() for event in events],
@@ -4376,7 +4438,7 @@ async def approve_research_action(
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
-    await hold_or_release_parallel_frontier(
+    await hold_or_release_aira_action_group(
         db_session,
         task=task,
         run=run,
@@ -4538,7 +4600,7 @@ async def reject_research_action(
         },
         idempotency_key=f"approval:{approval.id}:rejected",
     )
-    frontier_settled = await hold_or_release_parallel_frontier(
+    frontier_settled = await hold_or_release_aira_action_group(
         db_session,
         task=task,
         run=run,
