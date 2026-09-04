@@ -439,6 +439,34 @@ def test_action_proposal_is_strict_and_decision_specific():
     )
     assert mixed_graph.action_graph[1].decision == "wait"
     assert mixed_graph.action_graph[1].depends_on == ["search"]
+    governed_graph = AiraActionProposal.model_validate(
+        {
+            "decision": "action_graph",
+            "thought": "Reserve reagent before operating the booked instrument",
+            "action_graph": [
+                {
+                    "node_id": "reagent",
+                    "decision": "resource",
+                    "resource_request": {
+                        "resource_type_key": PINNED_RESOURCES[0]["key"],
+                        "kind": "inventory",
+                        "quantity": "2.5",
+                        "unit": "mg",
+                        "purpose": "Prepare the planned assay",
+                    },
+                },
+                {
+                    "node_id": "incubator",
+                    "decision": "instrument",
+                    "instrument_command_id": PINNED_INSTRUMENTS[0]["id"],
+                    "arguments": {"temperature": 37},
+                    "depends_on": ["reagent"],
+                },
+            ],
+        }
+    )
+    assert governed_graph.action_graph[0].decision == "resource"
+    assert governed_graph.action_graph[1].decision == "instrument"
     with pytest.raises(ValidationError, match="at least two Action types"):
         AiraActionProposal.model_validate(
             {
@@ -834,6 +862,55 @@ def test_planner_validates_mixed_action_graph_against_environment(monkeypatch):
     proposal.return_value["action_graph"][1]["compute_request"][
         "compute_environment_revision_id"
     ] = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    with pytest.raises(ValueError, match="outside the environment"):
+        asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+
+def test_planner_validates_physical_graph_nodes_against_live_options(monkeypatch):
+    proposal = AsyncMock(
+        return_value={
+            "decision": "action_graph",
+            "thought": "Reserve reagent before using the booked incubator",
+            "action_graph": [
+                {
+                    "node_id": "reagent",
+                    "decision": "resource",
+                    "resource_request": {
+                        "resource_type_key": PINNED_RESOURCES[0]["key"],
+                        "kind": "inventory",
+                        "quantity": "2.5",
+                        "unit": "mg",
+                        "purpose": "Prepare the assay",
+                    },
+                },
+                {
+                    "node_id": "incubator",
+                    "decision": "instrument",
+                    "instrument_command_id": PINNED_INSTRUMENTS[0]["id"],
+                    "arguments": {"temperature": 37},
+                    "depends_on": ["reagent"],
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(research_planner, "aira_action_proposal", proposal)
+    context = {
+        "goal": "Culture the cells",
+        "protocols": [],
+        "tools": [],
+        "resource_requirements": PINNED_RESOURCES,
+        "instrument_commands": PINNED_INSTRUMENTS,
+    }
+
+    result = asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
+
+    assert [node.decision for node in result.action_graph] == [
+        "resource",
+        "instrument",
+    ]
+    proposal.return_value["action_graph"][1]["instrument_command_id"] = (
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    )
     with pytest.raises(ValueError, match="outside the environment"):
         asyncio.run(plan_next_research_action(context, "qwen3.5-flash"))
 

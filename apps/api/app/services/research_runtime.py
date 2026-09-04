@@ -2348,6 +2348,28 @@ async def _cancel_blocked_graph_action(
         compute_job.completed_at = completed_at
         compute_job.revision += 1
         return
+    if action.kind == ResearchActionKind.RESOURCE_RESERVATION.value:
+        reservation = await ResearchResourceReservation.find_by(
+            db_session, [ResearchResourceReservation.action_id == action.id]
+        )
+        if reservation is None:
+            raise ValueError("Blocked graph Resource Action has no reservation")
+        from app.models.research_execution import ResearchResourceReservationStatus
+
+        reservation.status = ResearchResourceReservationStatus.CANCELLED.value
+        reservation.revision += 1
+        return
+    if action.kind == ResearchActionKind.INSTRUMENT_JOB.value:
+        instrument_job = await ResearchInstrumentJob.find_by(
+            db_session, [ResearchInstrumentJob.action_id == action.id]
+        )
+        if instrument_job is None:
+            raise ValueError("Blocked graph Instrument Action has no Instrument Job")
+        instrument_job.status = ResearchInstrumentJobStatus.CANCELLED.value
+        instrument_job.error = error
+        instrument_job.completed_at = completed_at
+        instrument_job.revision += 1
+        return
     raise ValueError("Blocked graph Action type cannot be cancelled")
 
 
@@ -2513,11 +2535,24 @@ async def hold_or_release_aira_action_group(
             ResearchActionKind.WAIT_EVENT.value,
         }
         if graph_type == "mixed_digital"
-        else {ResearchActionKind.TOOL_JOB.value}
+        else (
+            {
+                ResearchActionKind.TOOL_JOB.value,
+                ResearchActionKind.RESOURCE_RESERVATION.value,
+                ResearchActionKind.INSTRUMENT_JOB.value,
+                ResearchActionKind.COMPUTE_JOB.value,
+                ResearchActionKind.WAIT_EVENT.value,
+            }
+            if graph_type == "mixed_governed"
+            else {ResearchActionKind.TOOL_JOB.value}
+        )
     )
     if any(item.kind not in supported_kinds for item in actions):
         raise ValueError("Aira dependency graph contains an unsupported Action type")
-    if graph_type == "mixed_digital" and len({item.kind for item in actions}) < 2:
+    if (
+        graph_type in {"mixed_digital", "mixed_governed"}
+        and len({item.kind for item in actions}) < 2
+    ):
         raise ValueError("Aira mixed dependency graph does not mix Action types")
 
     action_ids = [item.id for item in actions]
@@ -2709,9 +2744,20 @@ async def hold_or_release_aira_action_group(
         run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
     elif any(item.kind == ResearchActionKind.COMPUTE_JOB.value for item in remaining):
         run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
+    elif any(
+        item.kind == ResearchActionKind.INSTRUMENT_JOB.value for item in remaining
+    ):
+        run.status = ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
     elif any(item.kind == ResearchActionKind.TOOL_JOB.value for item in remaining):
         run.status = ResearchRunStatus.WAITING_FOR_TOOL.value
-    elif any(item.kind == ResearchActionKind.WAIT_EVENT.value for item in remaining):
+    elif any(
+        item.kind
+        in {
+            ResearchActionKind.RESOURCE_RESERVATION.value,
+            ResearchActionKind.WAIT_EVENT.value,
+        }
+        for item in remaining
+    ):
         run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
     else:
         raise ValueError("Aira dependency graph has no aggregate waiting state")
@@ -2840,7 +2886,7 @@ async def _materialize_aira_action_graph(
     proposal: AiraActionProposal,
     step_index: int,
 ) -> list[ResearchAction]:
-    """Persist and release one bounded mixed Tool/Compute/Wait graph."""
+    """Persist and release one bounded mixed governed Action graph."""
 
     if proposal.decision != "action_graph" or len(proposal.action_graph) < 2:
         raise ValueError("Aira mixed Action dependency graph is incomplete")
@@ -2891,7 +2937,7 @@ async def _materialize_aira_action_graph(
             idempotency_key_override=f"{graph_id}:{node.node_id}",
             action_graph={
                 "id": graph_id,
-                "type": "mixed_digital",
+                "type": "mixed_governed",
                 "node_id": node.node_id,
                 "position": position,
                 "size": size,
@@ -2925,7 +2971,7 @@ async def _materialize_aira_action_graph(
         actor_user_id=None,
         payload={
             "graph_id": graph_id,
-            "graph_type": "mixed_digital",
+            "graph_type": "mixed_governed",
             "plan_version": run.plan_version,
             "action_ids": [str(item.id) for item in actions],
             "action_kinds": [item.kind for item in actions],

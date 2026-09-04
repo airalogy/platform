@@ -51,6 +51,7 @@ from app.services.research_runtime import (
     create_plan_version,
     emit_research_event,
     enqueue_research_advance,
+    hold_or_release_aira_action_group,
     require_research_capability,
     utcnow,
 )
@@ -785,7 +786,17 @@ async def sync_resource_reservation(
                 if next_action_status == ResearchActionStatus.COMPLETED.value
                 else f"Equipment booking {booking.status}"
             )
-            if task.status == ResearchTaskStatus.ACTIVE.value and config.effective_ai_enabled:
+            graph_settled = await hold_or_release_aira_action_group(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+            )
+            if (
+                graph_settled
+                and task.status == ResearchTaskStatus.ACTIVE.value
+                and config.effective_ai_enabled
+            ):
                 await enqueue_research_advance(db_session, task=task, run=run)
         await emit_research_event(
             db_session,

@@ -163,16 +163,18 @@ class AiraToolGraphNode(AiraToolRequest):
 
 
 class AiraActionGraphNode(BaseModel):
-    """One governed digital Action in a bounded mixed dependency graph."""
+    """One governed Action in a bounded mixed dependency graph."""
 
     model_config = ConfigDict(extra="forbid")
 
     node_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
-    decision: Literal["tool", "compute", "wait"]
+    decision: Literal["tool", "resource", "instrument", "compute", "wait"]
     thought: str = Field(default="", max_length=4000)
     depends_on: list[str] = Field(default_factory=list, max_length=7)
     tool_key: str | None = Field(default=None, max_length=128)
+    instrument_command_id: UUID | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
+    resource_request: AiraResourceRequest | None = None
     compute_request: AiraComputeRequest | None = None
     wait_template_key: (
         Literal[
@@ -204,19 +206,73 @@ class AiraActionGraphNode(BaseModel):
         if self.decision == "tool":
             if not self.tool_key:
                 raise ValueError("A Tool graph node requires tool_key")
-            if self.compute_request or self.wait_template_key:
+            if any(
+                [
+                    self.instrument_command_id,
+                    self.resource_request,
+                    self.compute_request,
+                    self.wait_template_key,
+                ]
+            ):
                 raise ValueError("A Tool graph node contains fields for another type")
+        elif self.decision == "resource":
+            if self.resource_request is None:
+                raise ValueError("A Resource graph node requires resource_request")
+            if any(
+                [
+                    self.tool_key,
+                    self.instrument_command_id,
+                    self.arguments,
+                    self.compute_request,
+                    self.wait_template_key,
+                ]
+            ):
+                raise ValueError(
+                    "A Resource graph node contains fields for another type"
+                )
+        elif self.decision == "instrument":
+            if self.instrument_command_id is None:
+                raise ValueError(
+                    "An Instrument graph node requires instrument_command_id"
+                )
+            if any(
+                [
+                    self.tool_key,
+                    self.resource_request,
+                    self.compute_request,
+                    self.wait_template_key,
+                ]
+            ):
+                raise ValueError(
+                    "An Instrument graph node contains fields for another type"
+                )
         elif self.decision == "compute":
             if self.compute_request is None:
                 raise ValueError("A Compute graph node requires compute_request")
-            if self.tool_key or self.arguments or self.wait_template_key:
+            if any(
+                [
+                    self.tool_key,
+                    self.instrument_command_id,
+                    self.arguments,
+                    self.resource_request,
+                    self.wait_template_key,
+                ]
+            ):
                 raise ValueError(
                     "A Compute graph node contains fields for another type"
                 )
         else:
             if not self.wait_template_key:
                 raise ValueError("A Wait graph node requires wait_template_key")
-            if self.tool_key or self.arguments or self.compute_request:
+            if any(
+                [
+                    self.tool_key,
+                    self.instrument_command_id,
+                    self.arguments,
+                    self.resource_request,
+                    self.compute_request,
+                ]
+            ):
                 raise ValueError("A Wait graph node contains fields for another type")
         if self.decision != "wait" and any([self.wait_title, self.wait_description]):
             raise ValueError("Wait labels are only valid for a Wait graph node")
@@ -228,6 +284,13 @@ class AiraActionGraphNode(BaseModel):
         data: dict[str, Any] = {"decision": self.decision, "thought": self.thought}
         if self.decision == "tool":
             data.update(tool_key=self.tool_key, arguments=self.arguments)
+        elif self.decision == "resource":
+            data["resource_request"] = self.resource_request
+        elif self.decision == "instrument":
+            data.update(
+                instrument_command_id=self.instrument_command_id,
+                arguments=self.arguments,
+            )
         elif self.decision == "compute":
             data["compute_request"] = self.compute_request
         else:
@@ -649,11 +712,13 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
         "action_graph": [
             {
                 "node_id": "stable local ID",
-                "decision": "tool | compute | wait",
+                "decision": "tool | resource | instrument | compute | wait",
                 "thought": "why this Action is needed",
                 "depends_on": "local node IDs that must complete first",
                 "tool_key": "required only for tool",
-                "arguments": "required only for tool and must match input_schema",
+                "instrument_command_id": "required only for instrument",
+                "arguments": "tool or instrument arguments matching input_schema",
+                "resource_request": "the same bounded object used by resource",
                 "compute_request": "the same bounded object used by compute",
                 "wait_template_key": "required only for wait",
                 "wait_title": "optional only for wait",
@@ -717,7 +782,7 @@ def aira_action_planner_prompt(context: dict[str, Any]) -> str:
             "A Tool is a listed deterministic digital capability. Never invent a tool.",
             "Use parallel_tools only for two to four independent listed read-only Tool calls whose results are all needed before replanning. Never use it for physical work, writes, dependent calls, or duplicate calls.",
             "Use tool_graph only for two to eight listed read-only Tool calls when at least one call depends on another. Give every node a unique local ID and an acyclic depends_on list. When a downstream argument comes from a direct parent's output, omit that static argument and declare one result_binding using the parent's output_schema. Platform resolves and Schema-validates bindings before approval or execution. Platform will release a node only after every dependency completes; a failed dependency or invalid binding skips its descendants before replanning.",
-            "Use action_graph only for a two-to-eight-node acyclic dependency graph that mixes at least two of Tool, Compute, and Wait. Every node keeps its normal contract and policy gate. Nodes may depend on completion but mixed graphs cannot bind one node's output into another node's input yet; use only complete static inputs and exact pinned assets. A failed, cancelled, or rejected prerequisite skips its descendants before replanning.",
+            "Use action_graph only for a two-to-eight-node acyclic dependency graph that mixes at least two of Tool, Resource, Instrument, Compute, and Wait. Every node keeps its normal contract, permissions, approval, resource, budget, and executor gate. A Resource or Instrument node is never permission to reserve or operate: Platform revalidates it and requires approval when released. Nodes may depend on completion but mixed graphs cannot bind one node's output into another node's input yet; use only complete static inputs, existing approved bookings, and exact pinned assets. A failed, cancelled, or rejected prerequisite skips its descendants before replanning.",
             "A Resource request names only a listed Resource type and an exact need; Platform selects the concrete inventory or equipment.",
             "An Instrument is one listed exact-version physical command with an approved booking. Choose only its ID; Platform resolves and rechecks the device and booking, and a human must approve before delivery.",
             "A Service is one listed exact-version external provider contract. Choose only its offering ID and a request matching the listed Schema. Platform creates a draft request, then independently governs quote, order approval, budget, sample custody, and result receipt. Never claim that selecting it places an order.",
@@ -827,16 +892,8 @@ async def plan_next_research_action(
                 validate_tool_output_path(
                     tool_catalog[source.tool_key], binding.source_path
                 )
-    if proposal.decision == "action_graph":
-        for node in proposal.action_graph:
-            if node.decision == "tool":
-                validate_tool_call(
-                    node.tool_key or "",
-                    node.arguments,
-                    require_read_only=True,
-                )
-    if proposal.decision == "resource":
-        request = proposal.resource_request
+
+    def validate_resource_request(request: AiraResourceRequest | None) -> None:
         if request is None:
             raise ValueError("Aira Resource proposal is incomplete")
         pinned = next(
@@ -856,15 +913,17 @@ async def plan_next_research_action(
             )
         if request.kind == "equipment" and not capabilities.get("booking"):
             raise ValueError("Aira proposed equipment for a non-bookable Resource type")
-    if proposal.decision == "instrument":
+
+    def validate_instrument_request(
+        command_id: UUID | None, arguments: dict[str, Any]
+    ) -> None:
         from app.services.research_instruments import validate_schema_payload
 
         pinned = next(
             (
                 item
                 for item in list(context.get("instrument_commands") or [])
-                if str(item.get("id") or "")
-                == str(proposal.instrument_command_id or "")
+                if str(item.get("id") or "") == str(command_id or "")
             ),
             None,
         )
@@ -876,9 +935,26 @@ async def plan_next_research_action(
             raise ValueError("Aira proposed an unavailable Instrument command")
         validate_schema_payload(
             dict(pinned.get("input_schema") or {}),
-            proposal.arguments,
+            arguments,
             "Instrument arguments",
         )
+
+    if proposal.decision == "action_graph":
+        for node in proposal.action_graph:
+            if node.decision == "tool":
+                validate_tool_call(
+                    node.tool_key or "",
+                    node.arguments,
+                    require_read_only=True,
+                )
+            elif node.decision == "resource":
+                validate_resource_request(node.resource_request)
+            elif node.decision == "instrument":
+                validate_instrument_request(node.instrument_command_id, node.arguments)
+    if proposal.decision == "resource":
+        validate_resource_request(proposal.resource_request)
+    if proposal.decision == "instrument":
+        validate_instrument_request(proposal.instrument_command_id, proposal.arguments)
     if proposal.decision == "service":
         from app.services.research_instruments import validate_schema_payload
 

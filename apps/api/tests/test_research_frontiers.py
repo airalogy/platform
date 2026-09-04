@@ -14,7 +14,14 @@ from app.models.research import (
     ResearchTask,
     ResearchTaskStatus,
 )
-from app.models.research_execution import ResearchToolJob, ResearchToolJobStatus
+from app.models.research_execution import (
+    ResearchInstrumentJob,
+    ResearchInstrumentJobStatus,
+    ResearchResourceReservation,
+    ResearchResourceReservationStatus,
+    ResearchToolJob,
+    ResearchToolJobStatus,
+)
 from app.services import research_runtime
 from app.services.research_frontiers import (
     frontier_run_status,
@@ -795,7 +802,7 @@ def test_aira_mixed_action_graph_persists_dependencies_before_release(monkeypatc
     assert [item.kind for item in actions] == ["tool_job", "wait_event"]
     assert all(item[1]["defer_activation"] is True for item in materialized)
     assert all(
-        item[1]["action_graph"]["type"] == "mixed_digital" for item in materialized
+        item[1]["action_graph"]["type"] == "mixed_governed" for item in materialized
     )
     dependency = next(
         call.args[0]
@@ -805,3 +812,111 @@ def test_aira_mixed_action_graph_persists_dependencies_before_release(monkeypatc
     assert dependency.action_id == actions[1].id
     assert dependency.depends_on_action_id == actions[0].id
     release.assert_awaited_once()
+
+
+def test_governed_action_graph_releases_an_instrument_after_resource_completion(
+    monkeypatch,
+):
+    run_id = uuid4()
+    resource = _graph_action(
+        run_id=run_id,
+        node_id="reagent",
+        position=1,
+        size=2,
+        status=ResearchActionStatus.COMPLETED.value,
+        kind="resource_reservation",
+        graph_type="mixed_governed",
+    )
+    instrument = _graph_action(
+        run_id=run_id,
+        node_id="incubator",
+        position=2,
+        size=2,
+        depends_on_count=1,
+        kind="instrument_job",
+        graph_type="mixed_governed",
+    )
+    for action in (resource, instrument):
+        action.input_data["action_graph"]["id"] = "aira-action-graph:8:physical"
+    dependency = ResearchActionDependency(
+        action_id=instrument.id,
+        depends_on_action_id=resource.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    task = ResearchTask(id=uuid4(), status=ResearchTaskStatus.ACTIVE.value)
+    run = ResearchRun(id=run_id, status=ResearchRunStatus.WAITING_FOR_EVENT.value)
+    db_session = AsyncMock()
+    db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [resource, instrument]),
+        SimpleNamespace(all=lambda: [dependency]),
+    ]
+
+    async def activate(*_args, action, **_kwargs):
+        action.status = ResearchActionStatus.QUEUED.value
+
+    monkeypatch.setattr(research_runtime, "_activate_released_graph_action", activate)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+
+    settled = asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=resource,
+        )
+    )
+
+    assert settled is False
+    assert instrument.status == ResearchActionStatus.QUEUED.value
+    assert run.status == ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
+
+
+def test_dependency_skip_cancels_typed_physical_executions(monkeypatch):
+    resource_action = ResearchAction(
+        id=uuid4(), kind="resource_reservation", input_data={}
+    )
+    instrument_action = ResearchAction(id=uuid4(), kind="instrument_job", input_data={})
+    reservation = ResearchResourceReservation(
+        action_id=resource_action.id,
+        status=ResearchResourceReservationStatus.PROPOSED.value,
+        revision=1,
+    )
+    instrument_job = ResearchInstrumentJob(
+        action_id=instrument_action.id,
+        status=ResearchInstrumentJobStatus.QUEUED.value,
+        revision=1,
+    )
+    monkeypatch.setattr(
+        ResearchResourceReservation,
+        "find_by",
+        AsyncMock(return_value=reservation),
+    )
+    monkeypatch.setattr(
+        ResearchInstrumentJob,
+        "find_by",
+        AsyncMock(return_value=instrument_job),
+    )
+
+    asyncio.run(
+        research_runtime._cancel_blocked_graph_action(
+            AsyncMock(),
+            action=resource_action,
+            error="Dependency failed",
+            completed_at=research_runtime.utcnow(),
+        )
+    )
+    asyncio.run(
+        research_runtime._cancel_blocked_graph_action(
+            AsyncMock(),
+            action=instrument_action,
+            error="Dependency failed",
+            completed_at=research_runtime.utcnow(),
+        )
+    )
+
+    assert reservation.status == ResearchResourceReservationStatus.CANCELLED.value
+    assert reservation.revision == 2
+    assert instrument_job.status == ResearchInstrumentJobStatus.CANCELLED.value
+    assert instrument_job.error == "Dependency failed"
+    assert instrument_job.completed_at is not None
+    assert instrument_job.revision == 2

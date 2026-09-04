@@ -4367,8 +4367,6 @@ async def approve_research_action(
                 else "Equipment is already booked in that time range"
             )
             raise HTTPException(status_code=409, detail=detail) from error
-        if action.status == ResearchActionStatus.COMPLETED.value:
-            await enqueue_research_advance(db_session, task=task, run=run)
     elif action.kind == ResearchActionKind.INSTRUMENT_JOB.value:
         try:
             instrument_payload = await activate_aira_instrument_action(
@@ -4452,12 +4450,19 @@ async def approve_research_action(
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
-    await hold_or_release_aira_action_group(
+    graph_settled = await hold_or_release_aira_action_group(
         db_session,
         task=task,
         run=run,
         action=action,
     )
+    if (
+        graph_settled
+        and action.status == ResearchActionStatus.COMPLETED.value
+        and task.status == ResearchTaskStatus.ACTIVE.value
+        and config.effective_ai_enabled
+    ):
+        await enqueue_research_advance(db_session, task=task, run=run)
     task.revision += 1
     if activation_event is not None:
         event_kind, event_payload = activation_event

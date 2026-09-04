@@ -56,6 +56,7 @@ from app.services.research_runtime import (
     create_plan_version,
     emit_research_event,
     enqueue_research_advance,
+    hold_or_release_aira_action_group,
     require_research_capability,
     utcnow,
 )
@@ -756,6 +757,13 @@ async def stop_instrument_job(
         },
         idempotency_key=f"instrument-job:{job.id}:stop:{job.revision}",
     )
+    if action.status == ResearchActionStatus.CANCELLED.value:
+        await hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+        )
     await db_session.commit()
     return {**action.as_dict(), "instrument_job": instrument_job_snapshot(job)}
 
@@ -816,6 +824,7 @@ async def _gateway_job_context(
 
 async def _pause_for_instrument_failure(
     *,
+    db_session: DBSession,
     job: ResearchInstrumentJob,
     action: ResearchAction,
     run: ResearchRun,
@@ -837,6 +846,12 @@ async def _pause_for_instrument_failure(
         run.last_error = error
         task.status = ResearchTaskStatus.PAUSED.value
         task.revision += 1
+        await hold_or_release_aira_action_group(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+        )
 
 
 @gateway_router.post("/jobs/lease")
@@ -928,7 +943,12 @@ async def lease_instrument_job(
     if invalid_reason is not None:
         if action is not None and run is not None and task is not None:
             await _pause_for_instrument_failure(
-                job=job, action=action, run=run, task=task, error=invalid_reason
+                db_session=db_session,
+                job=job,
+                action=action,
+                run=run,
+                task=task,
+                error=invalid_reason,
             )
             await emit_research_event(
                 db_session,
@@ -1040,6 +1060,7 @@ async def start_instrument_job(
     if resource is None or resource.current_revision_id != job.resource_revision_id:
         error = "Equipment revision changed after delivery"
         await _pause_for_instrument_failure(
+            db_session=db_session,
             job=job,
             action=action,
             run=run,
@@ -1272,9 +1293,19 @@ async def complete_instrument_job(
         },
         idempotency_key=f"instrument-job:{job.id}:completed",
     )
-    if task.status == ResearchTaskStatus.ACTIVE.value and config.effective_ai_enabled:
+    graph_settled = await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+    )
+    if (
+        graph_settled
+        and task.status == ResearchTaskStatus.ACTIVE.value
+        and config.effective_ai_enabled
+    ):
         await enqueue_research_advance(db_session, task=task, run=run)
-    elif task.status == ResearchTaskStatus.ACTIVE.value:
+    elif graph_settled and task.status == ResearchTaskStatus.ACTIVE.value:
         run.last_error = "AI is disabled; continue this Research Task manually."
         await emit_research_event(
             db_session,
@@ -1320,7 +1351,12 @@ async def fail_instrument_job(
     }:
         raise HTTPException(status_code=409, detail="Instrument Job is not active")
     await _pause_for_instrument_failure(
-        job=job, action=action, run=run, task=task, error=params.error
+        db_session=db_session,
+        job=job,
+        action=action,
+        run=run,
+        task=task,
+        error=params.error,
     )
     await emit_research_event(
         db_session,
@@ -1391,6 +1427,12 @@ async def acknowledge_instrument_job_stopped(
         actor_user_id=None,
         payload={"instrument_job_id": str(job.id), "reason": job.stop_reason},
         idempotency_key=f"instrument-job:{job.id}:stopped",
+    )
+    await hold_or_release_aira_action_group(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
     )
     await db_session.commit()
     return {"status": job.status}
