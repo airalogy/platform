@@ -112,6 +112,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     autonomy_grant_revision = import_module(
         "migrations.versions.0043_research_autonomy_grants"
     )
+    sample_lineage_revision = import_module(
+        "migrations.versions.0044_sample_lineage_semantics"
+    )
     import_models()
 
     later_tables = {
@@ -172,6 +175,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(autonomy_grant_revision.TABLE_NAMES)
     assert autonomy_grant_revision.down_revision == (
         "0042_human_work_review_notifications"
+    )
+    assert sample_lineage_revision.down_revision == (
+        "0043_research_autonomy_grants"
     )
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 

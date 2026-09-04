@@ -5,18 +5,25 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-from pydantic import ValidationError
-
 from app.main import app
 from app.models.access_control import AccessScopeType
-from app.models.resource import InventoryEvent, ResourceRevision
+from app.models.resource import InventoryEvent, ResourceLineage, ResourceRevision
 from app.routers import resources as resources_router
 from app.routers.access import GrantParams
-from app.routers.resources import _validation_issues, resource_capabilities
+from app.routers.resources import (
+    ResourceTypeParams,
+    SampleLineageParams,
+    _lineage_data,
+    _validation_issues,
+    resource_capabilities,
+)
 from app.services import research_runtime
 from app.services.resource_bindings import extract_resource_bindings
 from app.services.resource_index import build_resource_indexes
+from app.services.resource_lineage import (
+    ResourceLineageError,
+    ensure_lineage_is_acyclic,
+)
 from app.services.resource_units import UnitError, convert_quantity
 from app.services.schema_governance import (
     SchemaGovernanceError,
@@ -25,6 +32,8 @@ from app.services.schema_governance import (
     preview_declarative_migration,
     projection_not_collected,
 )
+from fastapi import HTTPException
+from pydantic import ValidationError
 
 
 def test_inventory_units_use_exact_decimal_and_reject_cross_dimension():
@@ -116,6 +125,103 @@ def test_resource_ref_bindings_keep_role_quantity_container_and_booking():
     assert bindings[0].unit == "mL"
     assert bindings[0].container_required is True
     assert bindings[1].booking_required is True
+
+
+def test_sample_capability_rejects_equipment_only_capabilities():
+    with pytest.raises(ValidationError, match="equipment-only"):
+        ResourceTypeParams(
+            protocol_version_id=uuid4(),
+            code="sample",
+            name="Sample",
+            capabilities={"sample": True, "booking": True},
+            booking_policy="auto",
+        )
+
+
+def test_sample_lineage_rejects_self_reference():
+    resource_id = uuid4()
+    with pytest.raises(ValidationError, match="own lineage parent"):
+        SampleLineageParams(
+            parent_resource_id=resource_id,
+            child_resource_id=resource_id,
+            relationship="derived_from",
+            reason="invalid",
+            idempotency_key="self-edge",
+        )
+
+
+def test_sample_lineage_cycle_detection_walks_existing_graph():
+    parent_id = uuid4()
+    child_id = uuid4()
+    intermediate_id = uuid4()
+    db_session = SimpleNamespace(
+        scalars=AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: [intermediate_id]),
+                SimpleNamespace(all=lambda: [parent_id]),
+            ]
+        )
+    )
+
+    with pytest.raises(ResourceLineageError, match="acyclic"):
+        asyncio.run(
+            ensure_lineage_is_acyclic(
+                db_session,
+                parent_resource_id=parent_id,
+                child_resource_id=child_id,
+            )
+        )
+
+
+def test_resource_lineage_model_accepts_manual_sample_provenance():
+    edge = ResourceLineage(
+        parent_resource_id=uuid4(),
+        child_resource_id=uuid4(),
+        relationship="aliquot_of",
+        reason="Tube A was aliquoted into Tube B",
+        created_by_user_id=uuid4(),
+        idempotency_key="lineage-1",
+    )
+
+    assert edge.record_id is None
+    assert edge.record_version is None
+    assert edge.relationship == "aliquot_of"
+
+
+def test_sample_lineage_redacts_an_inaccessible_connected_resource():
+    parent_id = uuid4()
+    child_id = uuid4()
+    edge = ResourceLineage(
+        parent_resource_id=parent_id,
+        child_resource_id=child_id,
+        record_id=uuid4(),
+        record_version=2,
+        source_action_id=uuid4(),
+        relationship="derived_from",
+        reason="Sensitive upstream identity",
+        created_by_user_id=uuid4(),
+        idempotency_key="private-edge",
+    )
+
+    payload = _lineage_data(
+        edge,
+        current_resource_id=child_id,
+        resources={
+            parent_id: SimpleNamespace(name="Restricted parent", code="SECRET"),
+            child_id: SimpleNamespace(name="Visible child", code="SAMPLE-2"),
+        },
+        access={parent_id: False, child_id: True},
+    )
+
+    assert payload["parent_resource_id"] is None
+    assert payload["parent_name"] is None
+    assert payload["child_resource_id"] == child_id
+    assert payload["reason"] == ""
+    assert payload["record_id"] is None
+    assert payload["source_action_id"] is None
+    assert payload["created_by_user_id"] is None
+    assert payload["redacted"] is True
+    assert "idempotency_key" not in payload
 
 
 def test_resource_resolver_lists_only_project_authorized_research_reservations(
@@ -442,6 +548,8 @@ def test_unrelated_member_cannot_open_infrastructure_shell(monkeypatch):
 def test_openapi_exposes_resource_and_schema_governance_contracts():
     paths = app.openapi()["paths"]
     assert "/labs/{lab_id}/resource-library/resources" in paths
+    assert "/labs/{lab_id}/resource-library/lineage/preview" in paths
+    assert "/labs/{lab_id}/resource-library/lineage/confirm" in paths
     assert "/labs/{lab_id}/resource-library/capabilities" in paths
     assert "/labs/{lab_id}/resource-library/definition-versions" in paths
     assert "/labs/{lab_id}/resource-library/inventory/reservations" in paths

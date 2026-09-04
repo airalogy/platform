@@ -377,6 +377,74 @@
       </template>
     </n-modal>
 
+    <n-modal
+      v-model:show="sampleLineageModalVisible"
+      preset="dialog"
+      :title="$t('page.resourceLibrary.addSampleLineage')"
+      :show-icon="false"
+      :mask-closable="false"
+    >
+      <n-alert type="info" class="mb-4">
+        {{ $t("page.resourceLibrary.sampleLineageImpact") }}
+      </n-alert>
+      <n-form label-placement="top">
+        <n-form-item :label="$t('page.resourceLibrary.parentSample')" required>
+          <n-select
+            v-model:value="sampleLineageDraft.parent_resource_id"
+            remote
+            filterable
+            :disabled="!!sampleLineagePreview"
+            :options="sampleResourceOptions"
+            :loading="sampleResourceOptionsLoading"
+            data-testid="sample-lineage-parent"
+            @search="loadSampleResourceOptions"
+          />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.lineageRelationshipLabel')" required>
+          <n-select
+            v-model:value="sampleLineageDraft.relationship"
+            :disabled="!!sampleLineagePreview"
+            :options="sampleLineageRelationshipOptions"
+            data-testid="sample-lineage-relationship"
+          />
+        </n-form-item>
+        <n-form-item :label="$t('page.resourceLibrary.reason')" required>
+          <n-input
+            v-model:value="sampleLineageDraft.reason"
+            type="textarea"
+            :disabled="!!sampleLineagePreview"
+            :placeholder="$t('page.resourceLibrary.sampleLineageReasonPlaceholder')"
+            data-testid="sample-lineage-reason"
+          />
+        </n-form-item>
+      </n-form>
+      <n-alert v-if="sampleLineagePreview" type="warning">
+        {{
+          $t("page.resourceLibrary.sampleLineagePreview", {
+            parent: sampleLineagePreview.impact.parent.name,
+            child: sampleLineagePreview.impact.child.name,
+          })
+        }}
+      </n-alert>
+      <template #action>
+        <n-button @click="closeSampleLineage">
+          {{ $t("common.cancel") }}
+        </n-button>
+        <n-button v-if="sampleLineagePreview" secondary @click="sampleLineagePreview = null">
+          {{ $t("common.edit") }}
+        </n-button>
+        <n-button
+          type="primary"
+          :loading="saving"
+          :disabled="!sampleLineageDraft.parent_resource_id || !sampleLineageDraft.reason.trim()"
+          @click="sampleLineagePreview ? confirmSampleLineageWrite() : previewSampleLineageWrite()"
+          data-testid="sample-lineage-submit"
+        >
+          {{ sampleLineagePreview ? $t("common.confirm") : $t("common.preview") }}
+        </n-button>
+      </template>
+    </n-modal>
+
     <n-modal v-model:show="bookingModalVisible" preset="dialog" :title="$t('page.resourceLibrary.newBooking')" :show-icon="false">
       <n-form label-placement="top">
         <n-form-item :label="$t('page.resourceLibrary.equipment')" required>
@@ -435,6 +503,9 @@
             </n-space>
           </n-checkbox-group>
         </n-form-item>
+        <n-alert v-if="typeDraft.capabilities.includes('sample')" type="info" class="mb-4">
+          {{ $t("page.resourceLibrary.sampleCapabilityHint") }}
+        </n-alert>
         <n-form-item :label="$t('page.resourceLibrary.bookingPolicy')">
           <n-select v-model:value="typeDraft.booking_policy" :options="bookingPolicyOptions" />
         </n-form-item>
@@ -718,12 +789,26 @@
               <n-empty v-else :description="$t('page.resourceLibrary.noRelatedRecords')" />
             </n-collapse-item>
             <n-collapse-item :title="$t('page.resourceLibrary.lineage')" name="lineage">
+              <div v-if="selectedResourceIsSample && canOperateResource" class="mb-3 flex items-start justify-between gap-3">
+                <p class="aira-type-caption aira-text-muted">
+                  {{ $t("page.resourceLibrary.sampleLineageHint") }}
+                </p>
+                <n-button secondary size="small" data-testid="sample-lineage-add" @click="openSampleLineage">
+                  {{ $t("page.resourceLibrary.addSampleLineage") }}
+                </n-button>
+              </div>
               <n-list v-if="selectedResource.lineage.length" bordered>
                 <n-list-item v-for="edge in selectedResource.lineage" :key="String(edge.id)">
                   <n-thing
-                    :title="`${String(edge.parent_resource_id)} → ${String(edge.child_resource_id)}`"
-                    :description="`${String(edge.relationship)} · Record ${String(edge.record_id)} v${String(edge.record_version)}`"
-                  />
+                    :title="`${sampleLineageResourceLabel(edge, 'parent')} → ${sampleLineageResourceLabel(edge, 'child')}`"
+                    :description="sampleLineageDescription(edge)"
+                  >
+                    <template #header-extra>
+                      <n-tag size="small" :bordered="false">
+                        {{ $t(`page.resourceLibrary.lineageRelationship.${edge.relationship}` as any) }}
+                      </n-tag>
+                    </template>
+                  </n-thing>
                 </n-list-item>
               </n-list>
               <n-empty v-else :description="$t('page.resourceLibrary.noLineage')" />
@@ -951,16 +1036,20 @@ import type {
   ResourceDetail,
   ResourceItem,
   ResourceLibrarySection,
+  ResourceLineage,
+  ResourceLineageRelationship,
   ResourceLocation,
   ResourceMigrationPreview,
   ResourceNotification,
   ResourceOverview,
   ResourceTemplate,
   ResourceType,
+  SampleLineagePreview,
 } from "@/service/api/resources"
 import type { DataTableColumns } from "naive-ui"
 import {
   commitResourceImport,
+  confirmSampleLineage,
   createEquipmentBooking,
   createEquipmentServiceEvent,
   createInventoryReservation,
@@ -985,6 +1074,7 @@ import {
   fetchResourceTypes,
   postInventoryOperation,
   previewResourceTypeMigration,
+  previewSampleLineage,
   readResourceNotification,
   registerResourceType,
   releaseInventoryReservation,
@@ -1086,7 +1176,7 @@ const bookingPolicyOptions = [
   { label: $t("page.resourceLibrary.bookingApproval"), value: "approval" },
   { label: $t("page.resourceLibrary.bookingAuthorized"), value: "authorized" },
 ]
-const capabilityOptions = ["inventory", "lots", "containers", "expiry", "serial_number", "booking", "maintenance", "calibration"]
+const capabilityOptions = ["sample", "inventory", "lots", "containers", "expiry", "serial_number", "booking", "maintenance", "calibration"]
 const inventoryOperationOptions = computed(() => [
   { label: $t("page.resourceLibrary.receipt"), value: "receipt" },
   { label: $t("page.resourceLibrary.consumption"), value: "consumption" },
@@ -1104,6 +1194,10 @@ function statusLabel(value: string) {
   return $t(key as any)
 }
 
+function isSampleResource(item: ResourceItem) {
+  return item.sample_semantics
+}
+
 const resourceColumns: DataTableColumns<ResourceItem> = [
   { title: $t("common.name"), key: "name", minWidth: 180 },
   { title: $t("page.resourceLibrary.stableCode"), key: "code", minWidth: 150 },
@@ -1111,7 +1205,15 @@ const resourceColumns: DataTableColumns<ResourceItem> = [
     title: $t("page.resourceLibrary.resourceType"),
     key: "resource_type_id",
     minWidth: 150,
-    render: row => resourceTypes.value.find(item => item.id === row.resource_type_id)?.name || "-",
+    render: (row) => {
+      const name = resourceTypes.value.find(item => item.id === row.resource_type_id)?.name || "-"
+      return (
+        <div class="flex items-center gap-2">
+          <span>{name}</span>
+          {isSampleResource(row) && <NTag size="small" bordered={false} type="info">{$t("page.resourceLibrary.sample")}</NTag>}
+        </div>
+      )
+    },
   },
   {
     title: $t("common.status"),
@@ -1438,6 +1540,18 @@ const typeDraft = reactive({
   capabilities: ["inventory", "containers"] as string[],
   booking_policy: "none",
 })
+watch(
+  () => typeDraft.capabilities.includes("sample"),
+  (enabled) => {
+    if (!enabled) {
+      return
+    }
+    typeDraft.capabilities = typeDraft.capabilities.filter(
+      capability => !["booking", "maintenance", "calibration"].includes(capability),
+    )
+    typeDraft.booking_policy = "none"
+  },
+)
 
 function openNewResourceType() {
   editingResourceType.value = null
@@ -1535,6 +1649,140 @@ async function runResourceMigration() {
 
 const detailVisible = ref(false)
 const selectedResource = ref<ResourceDetail | null>(null)
+const selectedResourceIsSample = computed(() => (
+  selectedResource.value ? isSampleResource(selectedResource.value) : false
+))
+const sampleResourceCandidates = ref<ResourceItem[]>([])
+const sampleResourceOptionsLoading = ref(false)
+const sampleResourceOptions = computed(() => sampleResourceCandidates.value
+  .filter(item => isSampleResource(item) && item.id !== selectedResource.value?.id)
+  .map(item => ({ label: `${item.name} · ${item.code}`, value: item.id })))
+const sampleLineageRelationshipOptions = computed(() => [
+  "derived_from",
+  "aliquot_of",
+  "split_from",
+  "pooled_from",
+].map(value => ({
+  label: $t(`page.resourceLibrary.lineageRelationship.${value}` as any),
+  value: value as ResourceLineageRelationship,
+})))
+const sampleLineageModalVisible = ref(false)
+const sampleLineagePreview = ref<SampleLineagePreview | null>(null)
+const sampleLineageDraft = reactive({
+  parent_resource_id: null as string | null,
+  relationship: "derived_from" as ResourceLineageRelationship,
+  reason: "",
+  idempotency_key: "",
+})
+
+async function loadSampleResourceOptions(query = "") {
+  if (!labId.value) {
+    sampleResourceCandidates.value = []
+    return
+  }
+  sampleResourceOptionsLoading.value = true
+  try {
+    const response = await fetchResources(labId.value, {
+      q: query.trim() || undefined,
+      page_size: 200,
+    })
+    sampleResourceCandidates.value = response.items
+  }
+  finally {
+    sampleResourceOptionsLoading.value = false
+  }
+}
+
+async function openSampleLineage() {
+  Object.assign(sampleLineageDraft, {
+    parent_resource_id: null,
+    relationship: "derived_from",
+    reason: "",
+    idempotency_key: crypto.randomUUID(),
+  })
+  sampleLineagePreview.value = null
+  sampleLineageModalVisible.value = true
+  await loadSampleResourceOptions()
+}
+
+function closeSampleLineage() {
+  sampleLineageModalVisible.value = false
+  sampleLineagePreview.value = null
+}
+
+function sampleLineageDescription(edge: ResourceLineage) {
+  if (edge.redacted) {
+    return $t("page.resourceLibrary.sampleLineageRedacted")
+  }
+  const source = edge.source_type === "record" && edge.record_id
+    ? `Record ${edge.record_id} v${edge.record_version}`
+    : $t(`page.resourceLibrary.lineageSource.${edge.source_type}` as any)
+  return [source, edge.reason, formatDate(edge.created_at)].filter(Boolean).join(" · ")
+}
+
+function sampleLineageResourceLabel(
+  edge: ResourceLineage,
+  side: "parent" | "child",
+) {
+  const name = side === "parent" ? edge.parent_name : edge.child_name
+  const code = side === "parent" ? edge.parent_code : edge.child_code
+  return name && code
+    ? `${name} (${code})`
+    : $t("page.resourceLibrary.restrictedSample")
+}
+
+async function previewSampleLineageWrite() {
+  if (
+    !labId.value
+    || !selectedResource.value
+    || !sampleLineageDraft.parent_resource_id
+    || !sampleLineageDraft.reason.trim()
+  ) {
+    return
+  }
+  saving.value = true
+  try {
+    sampleLineagePreview.value = await previewSampleLineage(labId.value, {
+      parent_resource_id: sampleLineageDraft.parent_resource_id,
+      child_resource_id: selectedResource.value.id,
+      relationship: sampleLineageDraft.relationship,
+      reason: sampleLineageDraft.reason.trim(),
+      idempotency_key: sampleLineageDraft.idempotency_key,
+    })
+  }
+  finally {
+    saving.value = false
+  }
+}
+
+async function confirmSampleLineageWrite() {
+  if (
+    !labId.value
+    || !selectedResource.value
+    || !sampleLineageDraft.parent_resource_id
+    || !sampleLineagePreview.value
+  ) {
+    return
+  }
+  saving.value = true
+  try {
+    await confirmSampleLineage(labId.value, {
+      parent_resource_id: sampleLineageDraft.parent_resource_id,
+      child_resource_id: selectedResource.value.id,
+      relationship: sampleLineageDraft.relationship,
+      reason: sampleLineageDraft.reason.trim(),
+      idempotency_key: sampleLineageDraft.idempotency_key,
+      preview_digest: sampleLineagePreview.value.preview_digest,
+    })
+    selectedResource.value = await fetchResource(labId.value, selectedResource.value.id)
+    closeSampleLineage()
+    window.$message?.success($t("page.resourceLibrary.sampleLineageCreated"))
+  }
+  finally {
+    saving.value = false
+  }
+}
+
 async function openResource(row: ResourceItem) {
   detailVisible.value = true
   if (!labId.value)

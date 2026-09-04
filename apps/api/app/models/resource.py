@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -35,6 +36,15 @@ class ResourceStatus(StrEnum):
     DEPLETED = "depleted"
     RETIRED = "retired"
     ARCHIVED = "archived"
+
+
+class ResourceLineageRelationship(StrEnum):
+    """Controlled identity relationships between governed Sample resources."""
+
+    DERIVED_FROM = "derived_from"
+    ALIQUOT_OF = "aliquot_of"
+    SPLIT_FROM = "split_from"
+    POOLED_FROM = "pooled_from"
 
 
 class InventoryEventKind(StrEnum):
@@ -593,6 +603,21 @@ class ResourceLineage(Base):
             "record_version",
             name="uq_resource_lineage_edge",
         ),
+        UniqueConstraint(
+            "idempotency_key", name="uq_resource_lineage_idempotency"
+        ),
+        CheckConstraint(
+            "(record_id IS NULL) = (record_version IS NULL)",
+            name="ck_resource_lineage_record_pair",
+        ),
+        CheckConstraint(
+            "parent_resource_id <> child_resource_id",
+            name="ck_resource_lineage_distinct_resources",
+        ),
+        CheckConstraint(
+            "relationship IN ('derived_from', 'aliquot_of', 'split_from', 'pooled_from')",
+            name="ck_resource_lineage_relationship",
+        ),
         Index("ix_resource_lineage_child", "child_resource_id"),
     )
 
@@ -605,11 +630,22 @@ class ResourceLineage(Base):
     child_resource_id: Mapped[UUID] = mapped_column(
         ForeignKey("resources.id", ondelete="RESTRICT"), nullable=False
     )
-    record_id: Mapped[UUID] = mapped_column(nullable=False)
-    record_version: Mapped[int] = mapped_column(nullable=False)
+    record_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    record_version: Mapped[int | None] = mapped_column(nullable=True)
+    # Stored as an immutable provenance reference. The Research tables are
+    # installed after the resource schema in fresh deployments, so this cannot
+    # be a migration-time foreign key without breaking bootstrap ordering.
+    source_action_id: Mapped[UUID | None] = mapped_column(nullable=True)
     relationship: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="derived_from"
+        String(32),
+        nullable=False,
+        default=ResourceLineageRelationship.DERIVED_FROM.value,
     )
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

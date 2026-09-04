@@ -119,6 +119,61 @@ export default async function globalSetup(_: FullConfig) {
       }),
       "restricted resource creation",
     )
+    const sampleType = await requiredJson<{ id: string }>(
+      await api.post(`/labs/${quickstart.lab.id}/resource-library/types`, {
+        headers,
+        data: {
+          protocol_version_id: plasmidDefinition.id,
+          code: "e2e_sample",
+          name: "E2E Sample",
+          description: "Playwright-managed Sample type",
+          capabilities: {
+            sample: true,
+            inventory: true,
+            containers: true,
+          },
+          booking_policy: "none",
+        },
+      }),
+      "Sample resource type registration",
+    )
+    const sampleData = {
+      aliases: null,
+      backbone: null,
+      sequence: null,
+      sequence_file: null,
+      resistance_markers: null,
+      host_species: null,
+      copy_number: null,
+      external_source: null,
+      features: [],
+    }
+    const parentSample = await requiredJson<{ id: string }>(
+      await api.post(`/labs/${quickstart.lab.id}/resource-library/resources`, {
+        headers,
+        data: {
+          resource_type_id: sampleType.id,
+          name: "E2E Parent Sample",
+          code: "E2E-SAMPLE-PARENT",
+          visibility: "lab",
+          data: { ...sampleData, construct_name: "Parent Sample" },
+        },
+      }),
+      "parent Sample creation",
+    )
+    const childSample = await requiredJson<{ id: string }>(
+      await api.post(`/labs/${quickstart.lab.id}/resource-library/resources`, {
+        headers,
+        data: {
+          resource_type_id: sampleType.id,
+          name: "E2E Child Sample",
+          code: "E2E-SAMPLE-CHILD",
+          visibility: "lab",
+          data: { ...sampleData, construct_name: "Child Sample" },
+        },
+      }),
+      "child Sample creation",
+    )
     const container = await requiredJson<{ id: string }>(
       await api.post(`/labs/${quickstart.lab.id}/resource-library/resources/${labResource.id}/containers`, {
         headers,
@@ -148,6 +203,9 @@ export default async function globalSetup(_: FullConfig) {
         resourceType,
         labResource,
         restrictedResource,
+        sampleType,
+        parentSample,
+        childSample,
         container,
       }, null, 2),
       "utf8",

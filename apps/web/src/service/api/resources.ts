@@ -57,6 +57,7 @@ export interface ResourceItem {
   code: string
   status: "active" | "quarantined" | "depleted" | "retired" | "archived"
   visibility: "lab" | "restricted"
+  sample_semantics: boolean
   data?: Record<string, unknown>
   revision?: number
   created_at: string
@@ -77,8 +78,49 @@ export interface ResourceDetail extends ResourceItem {
   containers: Array<Record<string, unknown>>
   inventory_events: InventoryEvent[]
   record_links: Array<Record<string, unknown>>
-  lineage: Array<Record<string, unknown>>
+  lineage: ResourceLineage[]
   equipment_service_events: Array<Record<string, unknown>>
+}
+
+export type ResourceLineageRelationship = "derived_from" | "aliquot_of" | "split_from" | "pooled_from"
+
+export interface ResourceLineage {
+  id: string
+  parent_resource_id: string | null
+  child_resource_id: string | null
+  parent_name: string | null
+  parent_code: string | null
+  child_name: string | null
+  child_code: string | null
+  relationship: ResourceLineageRelationship
+  direction: "incoming" | "outgoing"
+  source_type: "record" | "action" | "manual"
+  record_id: string | null
+  record_version: number | null
+  source_action_id: string | null
+  reason: string
+  redacted: boolean
+  created_at: string
+}
+
+export interface SampleLineageDraft {
+  parent_resource_id: string
+  child_resource_id: string
+  relationship: ResourceLineageRelationship
+  reason: string
+  idempotency_key: string
+}
+
+export interface SampleLineagePreview {
+  impact: {
+    parent: { id: string, name: string, code: string, revision_id: string }
+    child: { id: string, name: string, code: string, revision_id: string }
+    relationship: ResourceLineageRelationship
+    reason: string
+    idempotency_key: string
+    immutable: true
+  }
+  preview_digest: string
 }
 
 export interface InventoryEvent {
@@ -292,6 +334,25 @@ export function fetchResources(
 export function fetchResource(labId: string, resourceId: string) {
   return getData<ResourceDetail>({
     url: libraryUrl(labId, `/resources/${resourceId}`),
+  })
+}
+
+export function previewSampleLineage(labId: string, payload: SampleLineageDraft) {
+  return getData<SampleLineagePreview>({
+    url: libraryUrl(labId, "/lineage/preview"),
+    method: "POST",
+    data: payload,
+  })
+}
+
+export function confirmSampleLineage(
+  labId: string,
+  payload: SampleLineageDraft & { preview_digest: string },
+) {
+  return getData<ResourceLineage>({
+    url: libraryUrl(labId, "/lineage/confirm"),
+    method: "POST",
+    data: payload,
   })
 }
 

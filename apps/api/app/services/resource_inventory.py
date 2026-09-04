@@ -35,6 +35,7 @@ from app.models.resource import (
 
 from .resource_bindings import ResourceBinding
 from .resource_index import build_resource_indexes
+from .resource_lineage import ResourceLineageError, ensure_lineage_is_acyclic
 from .resource_units import UnitError, convert_quantity, normalize_ucum_unit
 
 
@@ -1027,10 +1028,31 @@ async def commit_record_resources(
             )
         )
 
-    for parent in {resource.id: resource for resource in input_resources}.values():
-        for child in {
-            resource.id: resource for resource in output_resources
-        }.values():
+    input_by_id = {resource.id: resource for resource in input_resources}
+    output_by_id = {resource.id: resource for resource in output_resources}
+    lineage_resource_ids = sorted(
+        set(input_by_id) | set(output_by_id), key=str
+    )
+    if len(lineage_resource_ids) > 1:
+        await db_session.scalars(
+            select(Resource.id)
+            .where(Resource.id.in_(lineage_resource_ids))
+            .order_by(Resource.id)
+            .with_for_update()
+        )
+
+    for parent in input_by_id.values():
+        for child in output_by_id.values():
+            if parent.id == child.id:
+                continue
+            try:
+                await ensure_lineage_is_acyclic(
+                    db_session,
+                    parent_resource_id=parent.id,
+                    child_resource_id=child.id,
+                )
+            except ResourceLineageError as error:
+                raise InventoryError(str(error)) from error
             db_session.add(
                 ResourceLineage(
                     parent_resource_id=parent.id,
@@ -1038,6 +1060,11 @@ async def commit_record_resources(
                     record_id=record.id,
                     record_version=record.version,
                     relationship="derived_from",
+                    reason="Protocol Record input-to-output lineage",
+                    created_by_user_id=actor_user_id,
+                    idempotency_key=(
+                        f"record:{record.id}:{record.version}:lineage:{parent.id}:{child.id}"
+                    ),
                 )
             )
     await db_session.flush()

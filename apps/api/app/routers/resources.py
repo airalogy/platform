@@ -59,6 +59,10 @@ from app.services.resource_inventory import (
     set_inventory_on_hand,
     transfer_inventory,
 )
+from app.services.resource_lineage import (
+    ResourceLineageError,
+    validate_sample_lineage,
+)
 from app.services.resource_schema import resource_data_schema
 from app.services.resource_units import UnitError, normalize_ucum_unit
 
@@ -78,6 +82,7 @@ RESOURCE_CAPABILITIES = {
     "booking",
     "maintenance",
     "calibration",
+    "sample",
 }
 BOOKING_POLICIES = {"none", "auto", "approval", "authorized"}
 RESOURCE_STATUSES = {item.value for item in ResourceStatus}
@@ -188,6 +193,54 @@ def _json_hash(value: Any) -> str:
 
 def _model_data(model, **extra) -> dict[str, Any]:
     return model.as_dict(**extra)
+
+
+def _lineage_data(
+    item: ResourceLineage,
+    *,
+    current_resource_id: UUID,
+    resources: dict[UUID, Resource],
+    access: dict[UUID, bool],
+) -> dict[str, Any]:
+    parent_visible = access.get(item.parent_resource_id, False)
+    child_visible = access.get(item.child_resource_id, False)
+    fully_visible = parent_visible and child_visible
+    return _model_data(
+        item,
+        excludes=["idempotency_key"],
+        parent_resource_id=item.parent_resource_id if parent_visible else None,
+        child_resource_id=item.child_resource_id if child_visible else None,
+        parent_name=(
+            resources[item.parent_resource_id].name if parent_visible else None
+        ),
+        parent_code=(
+            resources[item.parent_resource_id].code if parent_visible else None
+        ),
+        child_name=(
+            resources[item.child_resource_id].name if child_visible else None
+        ),
+        child_code=(
+            resources[item.child_resource_id].code if child_visible else None
+        ),
+        record_id=item.record_id if fully_visible else None,
+        record_version=item.record_version if fully_visible else None,
+        source_action_id=item.source_action_id if fully_visible else None,
+        created_by_user_id=item.created_by_user_id if fully_visible else None,
+        reason=item.reason if fully_visible else "",
+        redacted=not fully_visible,
+        direction=(
+            "outgoing"
+            if item.parent_resource_id == current_resource_id
+            else "incoming"
+        ),
+        source_type=(
+            "record"
+            if item.record_id is not None
+            else "action"
+            if item.source_action_id is not None
+            else "manual"
+        ),
+    )
 
 
 def _validation_issues(schema: dict, data: dict) -> list[dict[str, str]]:
@@ -425,6 +478,13 @@ class ResourceTypeParams(BaseModel):
             raise ValueError(f"Unknown resource capabilities: {sorted(unknown)}")
         if self.booking_policy != "none" and not self.capabilities.get("booking"):
             raise ValueError("booking_policy requires the booking capability")
+        if self.capabilities.get("sample") and any(
+            self.capabilities.get(item)
+            for item in ("booking", "maintenance", "calibration")
+        ):
+            raise ValueError(
+                "sample cannot be combined with equipment-only capabilities"
+            )
         return self
 
 
@@ -444,6 +504,91 @@ class ResourceRevisionParams(BaseModel):
     status: str | None = None
     visibility: Literal["lab", "restricted"] | None = None
     reason: str = Field(min_length=1)
+
+
+class SampleLineageParams(BaseModel):
+    parent_resource_id: UUID
+    child_resource_id: UUID
+    relationship: Literal[
+        "derived_from", "aliquot_of", "split_from", "pooled_from"
+    ]
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def validate_resources(self):
+        if self.parent_resource_id == self.child_resource_id:
+            raise ValueError("A Sample cannot be its own lineage parent")
+        return self
+
+
+class SampleLineageConfirmParams(SampleLineageParams):
+    preview_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+async def _sample_lineage_preview(
+    db_session: DBSession,
+    *,
+    lab_id: UUID,
+    user_id: UUID,
+    params: SampleLineageParams,
+) -> dict[str, Any]:
+    parent = await _resource(db_session, lab_id, params.parent_resource_id)
+    child = await _resource(db_session, lab_id, params.child_resource_id)
+    for resource in (parent, child):
+        if not await _can_read_resource(db_session, user_id, resource):
+            raise HTTPException(status_code=403, detail="Permission denied")
+        await _require(
+            db_session,
+            user_id=user_id,
+            lab_id=lab_id,
+            capability="resource.operate",
+            resource_type_id=resource.resource_type_id,
+            resource_id=resource.id,
+        )
+    try:
+        await validate_sample_lineage(
+            db_session,
+            parent=parent,
+            child=child,
+            relationship=params.relationship,
+        )
+    except ResourceLineageError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+    duplicate = await db_session.scalar(
+        select(ResourceLineage.id).where(
+            ResourceLineage.parent_resource_id == parent.id,
+            ResourceLineage.child_resource_id == child.id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(status_code=409, detail="Sample lineage already exists")
+
+    impact = {
+        "parent": {
+            "id": str(parent.id),
+            "name": parent.name,
+            "code": parent.code,
+            "revision_id": str(parent.current_revision_id),
+        },
+        "child": {
+            "id": str(child.id),
+            "name": child.name,
+            "code": child.code,
+            "revision_id": str(child.current_revision_id),
+        },
+        "relationship": params.relationship,
+        "reason": params.reason,
+        "idempotency_key": params.idempotency_key,
+        "immutable": True,
+    }
+    return {
+        "impact": impact,
+        "preview_digest": _json_hash(
+            {"lab_id": str(lab_id), "user_id": str(user_id), **impact}
+        ),
+    }
 
 
 class LocationParams(BaseModel):
@@ -553,6 +698,41 @@ class PrepareOutputParams(BaseModel):
 
 
 BUILTIN_TEMPLATES = [
+    {
+        "id": "sample",
+        "name": "科研样本",
+        "name_en": "Research sample",
+        "capabilities": {
+            "sample": True,
+            "inventory": True,
+            "lots": True,
+            "containers": True,
+            "expiry": True,
+        },
+        "aimd": """---
+id = "research_sample_resource"
+name = "科研样本"
+version = "1.0.0"
+kind = "resource_definition"
+---
+
+# 科研样本
+
+样本名称：{{**var**|sample_name: str|required=true, title="样本名称"}}
+
+样本类别：{{**var**|sample_class: str | None|title="样本类别"}}
+
+来源说明：{{**var**|source_description: str | None|title="来源说明"}}
+
+采集时间：{{**var**|collected_at: str | None|title="采集时间"}}
+
+保存条件：{{**var**|storage_condition: str | None|title="保存条件"}}
+
+生物安全级别：{{**var**|biosafety_level: str | None|title="生物安全级别"}}
+
+用途或同意限制：{{**var**|use_restriction: str | None|title="用途或同意限制"}}
+""",
+    },
     {
         "id": "plasmid",
         "name": "质粒",
@@ -1024,11 +1204,21 @@ async def list_resources(
         if not await _can_read_resource(db_session, current_user.id, item):
             continue
         revision = await db_session.get(ResourceRevision, item.current_revision_id)
+        type_revision = (
+            await db_session.get(
+                ResourceTypeRevision, revision.resource_type_revision_id
+            )
+            if revision
+            else None
+        )
         items.append(
             _model_data(
                 item,
                 data=revision.data if revision else {},
                 revision=revision.revision if revision else None,
+                sample_semantics=bool(
+                    type_revision and type_revision.capabilities.get("sample")
+                ),
             )
         )
     return {"items": items, "page": page, "page_size": page_size}
@@ -1098,7 +1288,115 @@ async def create_resource(
         raise HTTPException(
             status_code=409, detail="Resource stable code already exists"
         ) from error
-    return _model_data(resource, data=revision.data, revision=revision.revision)
+    return _model_data(
+        resource,
+        data=revision.data,
+        revision=revision.revision,
+        sample_semantics=bool(type_revision.capabilities.get("sample")),
+    )
+
+
+@router.post("/lineage/preview")
+async def preview_sample_lineage(
+    lab_id: UUID,
+    params: SampleLineageParams,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    """Preview one immutable Sample identity relationship without writing it."""
+    return await _sample_lineage_preview(
+        db_session,
+        lab_id=lab_id,
+        user_id=current_user.id,
+        params=params,
+    )
+
+
+@router.post("/lineage/confirm")
+async def confirm_sample_lineage(
+    lab_id: UUID,
+    params: SampleLineageConfirmParams,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    """Revalidate and append a preview-bound Sample lineage relationship."""
+    existing = await db_session.scalar(
+        select(ResourceLineage).where(
+            ResourceLineage.idempotency_key == params.idempotency_key
+        )
+    )
+    if existing is not None:
+        parent = await _resource(db_session, lab_id, existing.parent_resource_id)
+        child = await _resource(db_session, lab_id, existing.child_resource_id)
+        for resource in (parent, child):
+            if not await _can_read_resource(db_session, current_user.id, resource):
+                raise HTTPException(status_code=403, detail="Permission denied")
+            await _require(
+                db_session,
+                user_id=current_user.id,
+                lab_id=lab_id,
+                capability="resource.operate",
+                resource_type_id=resource.resource_type_id,
+                resource_id=resource.id,
+            )
+        if (
+            existing.parent_resource_id == params.parent_resource_id
+            and existing.child_resource_id == params.child_resource_id
+            and existing.relationship == params.relationship
+        ):
+            return _model_data(existing, idempotent_replay=True)
+        raise HTTPException(
+            status_code=409, detail="Lineage idempotency key was already used"
+        )
+
+    locked = (
+        await db_session.scalars(
+            select(Resource)
+            .where(
+                Resource.id.in_(
+                    [params.parent_resource_id, params.child_resource_id]
+                ),
+                Resource.lab_id == lab_id,
+                Resource.archived_at.is_(None),
+            )
+            .order_by(Resource.id)
+            .with_for_update()
+        )
+    ).all()
+    if len(locked) != 2:
+        raise HTTPException(status_code=404, detail="Sample Resource not found")
+
+    preview = await _sample_lineage_preview(
+        db_session,
+        lab_id=lab_id,
+        user_id=current_user.id,
+        params=params,
+    )
+    if preview["preview_digest"] != params.preview_digest:
+        raise HTTPException(
+            status_code=409,
+            detail="Sample state changed after preview; review the impact again",
+        )
+
+    edge = ResourceLineage(
+        parent_resource_id=params.parent_resource_id,
+        child_resource_id=params.child_resource_id,
+        relationship=params.relationship,
+        reason=params.reason,
+        created_by_user_id=current_user.id,
+        idempotency_key=params.idempotency_key,
+    )
+    db_session.add(edge)
+    try:
+        await db_session.commit()
+    except IntegrityError as error:
+        await db_session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Sample lineage changed concurrently; preview it again",
+        ) from error
+    await db_session.refresh(edge)
+    return _model_data(edge, idempotent_replay=False)
 
 
 @router.get("/resources/{resource_id}")
@@ -1164,6 +1462,27 @@ async def get_resource(
             )
         )
     ).all()
+    lineage_resource_ids = {
+        value
+        for edge in lineage
+        for value in (edge.parent_resource_id, edge.child_resource_id)
+    }
+    lineage_resources = {
+        item.id: item
+        for item in (
+            await db_session.scalars(
+                select(Resource).where(Resource.id.in_(lineage_resource_ids))
+            )
+        ).all()
+    }
+    lineage_resource_access = {
+        item.id: (
+            item.id == resource.id
+            or await _can_read_resource(db_session, current_user.id, item)
+        )
+        for item in lineage_resources.values()
+    }
+
     service_events = (
         await db_session.scalars(
             select(EquipmentServiceEvent)
@@ -1171,6 +1490,13 @@ async def get_resource(
             .order_by(EquipmentServiceEvent.starts_at.desc())
         )
     ).all()
+    current_type_revision = (
+        await db_session.get(
+            ResourceTypeRevision, revisions[0].resource_type_revision_id
+        )
+        if revisions
+        else None
+    )
     return _model_data(
         resource,
         current_revision=(
@@ -1179,6 +1505,10 @@ async def get_resource(
         revisions=[_model_data(item) for item in revisions],
         data=revisions[0].data if revisions else {},
         revision=revisions[0].revision if revisions else None,
+        sample_semantics=bool(
+            current_type_revision
+            and current_type_revision.capabilities.get("sample")
+        ),
         lots=[_model_data(item) for item in lots],
         containers=[
             _model_data(
@@ -1196,7 +1526,15 @@ async def get_resource(
         ],
         inventory_events=[_model_data(item) for item in events],
         record_links=[_model_data(item) for item in links],
-        lineage=[_model_data(item) for item in lineage],
+        lineage=[
+            _lineage_data(
+                item,
+                current_resource_id=resource.id,
+                resources=lineage_resources,
+                access=lineage_resource_access,
+            )
+            for item in lineage
+        ],
         equipment_service_events=[
             _model_data(item) for item in service_events
         ],
@@ -1265,7 +1603,11 @@ async def revise_resource(
     )
     await db_session.commit()
     await db_session.refresh(resource)
-    return _model_data(resource, current_revision=_model_data(revision))
+    return _model_data(
+        resource,
+        current_revision=_model_data(revision),
+        sample_semantics=bool(type_revision.capabilities.get("sample")),
+    )
 
 
 @router.delete("/resources/{resource_id}")

@@ -97,3 +97,36 @@ test("inventory rejects over-consumption and commits a valid operation", async (
   await expect(page.getByText("E2E valid consumption")).toBeVisible()
   await expect(page.getByText(/10 → 8/)).toBeVisible()
 })
+
+test("Sample lineage uses preview-confirm and returns to the immutable timeline", async ({ page }) => {
+  const fixtures = await loadFixtures()
+  await page.goto(`/labs/${fixtures.lab.uid}/resources/resources`)
+  await page.getByText("E2E Child Sample", { exact: true }).click()
+
+  const detail = page.getByTestId("resource-detail")
+  await expect(detail).toBeVisible()
+  await detail.getByText("Upstream and downstream lineage", { exact: true }).click()
+  await detail.getByTestId("sample-lineage-add").click()
+  await page.getByTestId("sample-lineage-parent").click()
+  await selectVisibleOption(page, "E2E Parent Sample · E2E-SAMPLE-PARENT")
+  await page.getByTestId("sample-lineage-relationship").click()
+  await selectVisibleOption(page, "Aliquot of")
+  await page.getByTestId("sample-lineage-reason").locator("textarea").fill("E2E controlled aliquot")
+
+  const previewed = page.waitForResponse(response =>
+    response.url().endsWith("/resource-library/lineage/preview")
+    && response.ok(),
+  )
+  await page.getByTestId("sample-lineage-submit").click()
+  await previewed
+  await expect(page.getByText(/Confirm the immutable relationship/)).toBeVisible()
+
+  const confirmed = page.waitForResponse(response =>
+    response.url().endsWith("/resource-library/lineage/confirm")
+    && response.ok(),
+  )
+  await page.getByTestId("sample-lineage-submit").click()
+  await confirmed
+  await expect(detail.getByText(/E2E Parent Sample.*E2E Child Sample/)).toBeVisible()
+  await expect(detail.getByText("E2E controlled aliquot", { exact: false })).toBeVisible()
+})

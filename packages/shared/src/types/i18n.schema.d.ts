@@ -3111,6 +3111,7 @@ declare namespace I18n {
         recentResourcesHint: string
         searchPlaceholder: string
         resourceType: string
+        sample: string
         noResources: string
         appendOnlyHint: string
         locationsHint: string
@@ -3143,6 +3144,7 @@ declare namespace I18n {
         migrateReadyResources: string
         resourceMigrationQueued: string
         capabilities: string
+        sampleCapabilityHint: string
         bookingPolicy: string
         bookingNone: string
         bookingAuto: string
@@ -3158,6 +3160,27 @@ declare namespace I18n {
         relatedRecords: string
         noRelatedRecords: string
         lineage: string
+        sampleLineageHint: string
+        addSampleLineage: string
+        parentSample: string
+        lineageRelationshipLabel: string
+        sampleLineageReasonPlaceholder: string
+        sampleLineageImpact: string
+        sampleLineagePreview: string
+        sampleLineageCreated: string
+        restrictedSample: string
+        sampleLineageRedacted: string
+        lineageRelationship: {
+          derived_from: string
+          aliquot_of: string
+          split_from: string
+          pooled_from: string
+        }
+        lineageSource: {
+          record: string
+          action: string
+          manual: string
+        }
         noLineage: string
         resourceAudit: string
         noInventoryEvents: string
