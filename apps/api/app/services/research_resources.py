@@ -103,7 +103,9 @@ async def resolve_aira_resource_request(
     requirement = _requirement(run, str(request["resource_type_key"]))
     capabilities = dict((requirement.get("metadata") or {}).get("capabilities") or {})
     kind = str(request["kind"])
-    required_capability = "inventory.operate" if kind == "inventory" else "equipment.book"
+    required_capability = (
+        "inventory.operate" if kind == "inventory" else "equipment.book"
+    )
     if kind == "inventory" and not capabilities.get("inventory"):
         raise ResearchResourceError("Pinned Resource type does not support inventory")
     if kind == "equipment" and not capabilities.get("booking"):
@@ -166,7 +168,9 @@ async def resolve_aira_resource_request(
                             InventoryBalance,
                             InventoryBalance.container_id == ResourceContainer.id,
                         )
-                        .outerjoin(ResourceLot, ResourceLot.id == ResourceContainer.lot_id)
+                        .outerjoin(
+                            ResourceLot, ResourceLot.id == ResourceContainer.lot_id
+                        )
                         .where(
                             ResourceContainer.resource_id == resource.id,
                             ResourceContainer.status == "active",
@@ -247,6 +251,194 @@ async def resolve_aira_resource_request(
     raise ResearchResourceError(
         "No accessible Resource currently satisfies the Aira request"
     )
+
+
+async def resource_availability_for_planner(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    user_id: UUID,
+) -> list[dict[str, Any]]:
+    """Return bounded, permission-filtered live availability for Aira planning."""
+
+    now = datetime.now(UTC)
+    snapshots: list[dict[str, Any]] = []
+    for requirement in list((run.environment_snapshot or {}).get("resources") or [])[
+        :20
+    ]:
+        key = str(requirement.get("key") or "")
+        metadata = dict(requirement.get("metadata") or {})
+        capabilities = dict(metadata.get("capabilities") or {})
+        snapshot: dict[str, Any] = {
+            "resource_type_key": key,
+            "resource_type_revision_id": requirement.get("source_revision_id"),
+            "inventory_supported": bool(capabilities.get("inventory")),
+            "booking_supported": bool(capabilities.get("booking")),
+            "inventory_options": [],
+            "equipment_options": [],
+        }
+        try:
+            resource_type_id = UUID(str(requirement["source_id"]))
+            type_revision_id = UUID(str(requirement["source_revision_id"]))
+        except (KeyError, ValueError):
+            snapshot.update(available=False, reason="invalid_pinned_requirement")
+            snapshots.append(snapshot)
+            continue
+        resources = list(
+            (
+                await db_session.scalars(
+                    select(Resource)
+                    .where(
+                        Resource.lab_id == task.lab_id,
+                        Resource.resource_type_id == resource_type_id,
+                        Resource.status == ResourceStatus.ACTIVE.value,
+                        Resource.archived_at.is_(None),
+                    )
+                    .order_by(Resource.code, Resource.id)
+                    .limit(50)
+                )
+            ).all()
+        )
+        for resource in resources:
+            if resource.current_revision_id is None:
+                continue
+            revision = await db_session.get(
+                ResourceRevision, resource.current_revision_id
+            )
+            if (
+                revision is None
+                or revision.resource_type_revision_id != type_revision_id
+            ):
+                continue
+            base = {
+                "resource_id": str(resource.id),
+                "name": resource.name,
+                "code": resource.code,
+                "revision_id": str(revision.id),
+                "revision": revision.revision,
+            }
+            if capabilities.get("inventory") and await _can_operate_resource(
+                db_session,
+                user_id=user_id,
+                task=task,
+                resource=resource,
+                capability="inventory.operate",
+            ):
+                rows = list(
+                    (
+                        await db_session.execute(
+                            select(ResourceContainer, InventoryBalance, ResourceLot)
+                            .join(
+                                InventoryBalance,
+                                InventoryBalance.container_id == ResourceContainer.id,
+                            )
+                            .outerjoin(
+                                ResourceLot, ResourceLot.id == ResourceContainer.lot_id
+                            )
+                            .where(
+                                ResourceContainer.resource_id == resource.id,
+                                ResourceContainer.status == "active",
+                                ResourceContainer.archived_at.is_(None),
+                                InventoryBalance.on_hand > InventoryBalance.reserved,
+                                or_(
+                                    ResourceContainer.lot_id.is_(None),
+                                    and_(
+                                        ResourceLot.status == "active",
+                                        or_(
+                                            ResourceLot.expires_at.is_(None),
+                                            ResourceLot.expires_at > now,
+                                        ),
+                                    ),
+                                ),
+                            )
+                            .order_by(
+                                ResourceLot.expires_at.asc().nulls_last(),
+                                ResourceContainer.code,
+                                ResourceContainer.id,
+                            )
+                            .limit(10)
+                        )
+                    ).all()
+                )
+                if rows:
+                    snapshot["inventory_options"].append(
+                        {
+                            **base,
+                            "balances": [
+                                {
+                                    "container_code": container.code,
+                                    "available": str(balance.available),
+                                    "unit": balance.unit,
+                                    "balance_version": balance.version,
+                                    "lot_expires_at": (
+                                        lot.expires_at.isoformat()
+                                        if lot is not None
+                                        and lot.expires_at is not None
+                                        else None
+                                    ),
+                                }
+                                for container, balance, lot in rows
+                            ],
+                        }
+                    )
+            if capabilities.get("booking") and await _can_operate_resource(
+                db_session,
+                user_id=user_id,
+                task=task,
+                resource=resource,
+                capability="equipment.book",
+            ):
+                bookings = list(
+                    (
+                        await db_session.scalars(
+                            select(EquipmentBooking)
+                            .where(
+                                EquipmentBooking.resource_id == resource.id,
+                                EquipmentBooking.status.in_(
+                                    [
+                                        BookingStatus.PENDING.value,
+                                        BookingStatus.APPROVED.value,
+                                    ]
+                                ),
+                                EquipmentBooking.ends_at > now,
+                            )
+                            .order_by(EquipmentBooking.starts_at)
+                            .limit(20)
+                        )
+                    ).all()
+                )
+                snapshot["equipment_options"].append(
+                    {
+                        **base,
+                        "booking_policy": metadata.get("booking_policy", "none"),
+                        "busy_windows": [
+                            {
+                                "starts_at": booking.starts_at.isoformat(),
+                                "ends_at": booking.ends_at.isoformat(),
+                            }
+                            for booking in bookings
+                        ],
+                    }
+                )
+        inventory_options = list(snapshot["inventory_options"])
+        equipment_options = list(snapshot["equipment_options"])
+        snapshot.update(
+            available=bool(inventory_options or equipment_options),
+            accessible_resource_count=len(
+                {
+                    item["resource_id"]
+                    for item in [*inventory_options, *equipment_options]
+                }
+            ),
+            reason=(
+                None
+                if inventory_options or equipment_options
+                else "no_accessible_live_candidate"
+            ),
+        )
+        snapshots.append(snapshot)
+    return snapshots
 
 
 async def activate_aira_resource_action(

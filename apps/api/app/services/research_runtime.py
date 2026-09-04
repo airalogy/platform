@@ -1166,6 +1166,14 @@ async def _aira_planner_context(
     compute_inputs: list[dict[str, Any]] = []
     project = await db_session.get(Project, task.project_id)
     requester = await db_session.get(User, run.requested_by_user_id)
+    from app.services.research_resources import resource_availability_for_planner
+
+    resource_availability = await resource_availability_for_planner(
+        db_session,
+        task=task,
+        run=run,
+        user_id=run.requested_by_user_id,
+    )
     if (
         project is not None
         and requester is not None
@@ -1220,6 +1228,7 @@ async def _aira_planner_context(
         "resource_requirements": list(
             (run.environment_snapshot or {}).get("resources") or []
         ),
+        "resource_availability": resource_availability,
         "services": list((run.environment_snapshot or {}).get("services") or []),
         "compute": compute_options,
         "compute_inputs": compute_inputs,
@@ -1274,6 +1283,9 @@ async def _aira_planner_context(
         "rejected_actions": list((run.aira_state or {}).get("rejected_actions") or [])[
             -20:
         ],
+        "resource_constraints": list(
+            (run.aira_state or {}).get("resource_constraints") or []
+        )[-20:],
         "reviewed_knowledge": [
             {
                 "id": item.get("id"),
@@ -2931,6 +2943,77 @@ async def _materialize_aira_action_graph(
     return actions
 
 
+async def _recover_unavailable_resource_proposal(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    proposal: AiraActionProposal,
+    step_index: int,
+    error: ValueError,
+) -> list[ResearchAction] | None:
+    """Record a live Resource miss, then wait after one equivalent replan."""
+
+    request = proposal.resource_request
+    if proposal.decision != "resource" or request is None:
+        raise ValueError("Resource recovery requires a complete Resource proposal")
+    request_snapshot = request.model_dump(mode="json")
+    request_digest = canonical_digest(request_snapshot)
+    state = dict(run.aira_state or {})
+    previous_constraints = list(state.get("resource_constraints") or [])
+    repeat_count = 1 + sum(
+        item.get("request_digest") == request_digest for item in previous_constraints
+    )
+    constraint = {
+        "request_digest": request_digest,
+        "resource_type_key": request.resource_type_key,
+        "kind": request.kind,
+        "request": request_snapshot,
+        "reason": str(error),
+        "observed_at": utcnow().isoformat(),
+        "repeat_count": repeat_count,
+    }
+    run.aira_state = {
+        **state,
+        "resource_constraints": [*previous_constraints[-19:], constraint],
+    }
+    run.last_error = None
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="aira.resource_unavailable",
+        actor_user_id=None,
+        payload=constraint,
+        idempotency_key=(
+            f"run:{run.id}:resource-unavailable:{request_digest}:{repeat_count}"
+        ),
+    )
+    if repeat_count < 2:
+        return None
+    wait_proposal = AiraActionProposal(
+        decision="wait",
+        thought=(
+            "The same governed Resource request remained unavailable after replanning."
+        ),
+        wait_template_key="resource.available",
+        wait_title="Wait for required Research Resource",
+        wait_description=f"{request.resource_type_key}: {error}",
+    )
+    return [
+        await _materialize_aira_action(
+            db_session,
+            task=task,
+            run=run,
+            proposal=wait_proposal,
+            step_index=step_index,
+            idempotency_key_override=(
+                f"aira-resource-wait:{step_index}:{request_digest[:24]}"
+            ),
+        )
+    ]
+
+
 def _apply_aira_step(state: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     result = {**state, "steps": [*(state.get("steps") or []), step]}
     data = step.get("data") or {}
@@ -3260,6 +3343,7 @@ async def process_research_run_advance(
                     await db_session.rollback()
                     continue
                 current_task = await db_session.get(ResearchTask, current_run.task_id)
+                materialized_decision = proposal.decision
                 if proposal.decision == "parallel_tools":
                     actions = await _materialize_aira_parallel_tools(
                         db_session,
@@ -3284,6 +3368,35 @@ async def process_research_run_advance(
                         proposal=proposal,
                         step_index=step_index,
                     )
+                elif proposal.decision == "resource":
+                    from app.services.research_resources import ResearchResourceError
+
+                    try:
+                        actions = [
+                            await _materialize_aira_action(
+                                db_session,
+                                task=current_task,
+                                run=current_run,
+                                proposal=proposal,
+                                step_index=step_index,
+                            )
+                        ]
+                    except ResearchResourceError as error:
+                        recovered_actions = (
+                            await _recover_unavailable_resource_proposal(
+                                db_session,
+                                task=current_task,
+                                run=current_run,
+                                proposal=proposal,
+                                step_index=step_index,
+                                error=error,
+                            )
+                        )
+                        if recovered_actions is None:
+                            await db_session.commit()
+                            continue
+                        actions = recovered_actions
+                        materialized_decision = "wait"
                 else:
                     actions = [
                         await _materialize_aira_action(
@@ -3299,7 +3412,7 @@ async def process_research_run_advance(
                     "status": current_run.status,
                     "action_id": str(actions[0].id),
                     "action_ids": [str(action.id) for action in actions],
-                    "decision": proposal.decision,
+                    "decision": materialized_decision,
                 }
             if proposal.decision == "finish":
                 planned_step = {

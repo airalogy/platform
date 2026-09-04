@@ -606,7 +606,9 @@ def test_planner_prompt_preserves_protocol_tool_and_wait_boundaries():
         "data_asset.ready",
         "research_file.received",
         "external_service.finished",
+        "resource.available",
     }
+    assert "RESOURCE_AVAILABILITY" in prompt
     bounded = json.loads(_bounded_json({"value": "x" * 31_000}))
     assert bounded["truncated"] is True
     assert len(bounded["sha256"]) == 64
