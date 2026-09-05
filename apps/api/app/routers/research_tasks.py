@@ -2820,7 +2820,11 @@ async def resume_research_task(
     task.revision += 1
     run.last_error = None
     run.completed_at = None
-    if pending_approval is not None:
+    from app.services.research_runtime import restore_pending_action_boundary
+
+    if await restore_pending_action_boundary(db_session, task=task, run=run):
+        pass
+    elif pending_approval is not None:
         run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
     elif open_work_item is not None:
         run.status = ResearchRunStatus.WAITING_FOR_HUMAN.value

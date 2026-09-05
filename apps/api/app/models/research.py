@@ -121,6 +121,9 @@ class ResearchTaskOutcome(StrEnum):
 
 
 class ResearchTask(Base):
+    # Async responses serialize updated_at after flush; fetch SQL defaults now
+    # instead of triggering implicit synchronous I/O from as_dict().
+    __mapper_args__ = {"eager_defaults": True}
     __tablename__ = "research_tasks"
     __table_args__ = (
         CheckConstraint(
@@ -356,6 +359,7 @@ class ResearchTaskComputeEnvironment(Base):
 
 
 class ResearchRun(Base):
+    __mapper_args__ = {"eager_defaults": True}
     __tablename__ = "research_runs"
     __table_args__ = (
         UniqueConstraint("task_id", "run_number", name="uq_research_run_number"),
@@ -538,6 +542,7 @@ class ResearchReviewRecommendation(Base):
 
 
 class ResearchAction(Base):
+    __mapper_args__ = {"eager_defaults": True}
     __tablename__ = "research_actions"
     __table_args__ = (
         UniqueConstraint("run_id", "sequence", name="uq_research_action_sequence"),
@@ -648,6 +653,7 @@ class ResearchProtocolRun(Base):
 
 
 class ResearchHumanWorkItem(Base):
+    __mapper_args__ = {"eager_defaults": True}
     __tablename__ = "research_human_work_items"
     __table_args__ = (
         UniqueConstraint("action_id", name="uq_research_human_work_item_action"),

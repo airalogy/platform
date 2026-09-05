@@ -23,10 +23,13 @@ from app.models.resource import (
     ResourceTypeRevision,
 )
 from app.services.persistent_jobs import (
+    JobDeferred,
     claim_job,
     complete_job,
+    defer_job,
     fail_job,
     renew_job_lease,
+    utcnow,
 )
 from app.services.record_exports import (
     expire_record_exports,
@@ -103,9 +106,7 @@ async def _protocol_versions(
 ) -> tuple[dict[str, ProtocolVersion], list[dict]]:
     versions = (
         await db_session.scalars(
-            select(ProtocolVersion).where(
-                ProtocolVersion.protocol_id == protocol_id
-            )
+            select(ProtocolVersion).where(ProtocolVersion.protocol_id == protocol_id)
         )
     ).all()
     versions_by_name = {item.version: item for item in versions}
@@ -117,9 +118,7 @@ async def _protocol_versions(
     return versions_by_name, manifests
 
 
-async def _project_records(
-    db_session: AsyncSession, job: PersistentJob
-) -> dict:
+async def _project_records(db_session: AsyncSession, job: PersistentJob) -> dict:
     protocol_id = UUID(str(job.payload["protocol_id"]))
     target_name = str(job.payload["target_version"])
     source_name = job.payload.get("source_version")
@@ -147,9 +146,7 @@ async def _project_records(
     if source_name:
         conditions.append(Record.protocol_version == source_name)
     records = (
-        await db_session.scalars(
-            select(Record).join(latest, and_(*conditions))
-        )
+        await db_session.scalars(select(Record).join(latest, and_(*conditions)))
     ).all()
     completed = 0
     needs_review = 0
@@ -182,12 +179,8 @@ async def _project_records(
     }
 
 
-async def _migrate_resources(
-    db_session: AsyncSession, job: PersistentJob
-) -> dict:
-    target_revision_id = UUID(
-        str(job.payload["target_resource_type_revision_id"])
-    )
+async def _migrate_resources(db_session: AsyncSession, job: PersistentJob) -> dict:
+    target_revision_id = UUID(str(job.payload["target_resource_type_revision_id"]))
     actor_user_id = UUID(str(job.payload["actor_user_id"]))
     target_type_revision = await db_session.get(
         ResourceTypeRevision, target_revision_id
@@ -210,9 +203,7 @@ async def _migrate_resources(
                 {"resource_id": raw_resource_id, "issue": "resource_not_found"}
             )
             continue
-        current = await db_session.get(
-            ResourceRevision, resource.current_revision_id
-        )
+        current = await db_session.get(ResourceRevision, resource.current_revision_id)
         source_type_revision = await db_session.get(
             ResourceTypeRevision, current.resource_type_revision_id
         )
@@ -237,15 +228,11 @@ async def _migrate_resources(
                 versions_by_name=versions,
             )
         except ValueError as error:
-            needs_review.append(
-                {"resource_id": str(resource.id), "issue": str(error)}
-            )
+            needs_review.append({"resource_id": str(resource.id), "issue": str(error)})
             continue
         schema_issues = [
             {
-                "path": ".".join(
-                    str(segment) for segment in issue.absolute_path
-                ),
+                "path": ".".join(str(segment) for segment in issue.absolute_path),
                 "message": issue.message,
             }
             for issue in Draft202012Validator(
@@ -291,9 +278,7 @@ async def _migrate_resources(
     }
 
 
-async def process_persistent_job(
-    db_session: AsyncSession, job: PersistentJob
-) -> dict:
+async def process_persistent_job(db_session: AsyncSession, job: PersistentJob) -> dict:
     if job.kind == "research_run_advance":
         return await process_research_run_advance(
             db_session,
@@ -322,6 +307,61 @@ async def process_persistent_job(
     raise ValueError(f"Unsupported persistent job kind: {job.kind}")
 
 
+async def reconcile_exhausted_jobs(db_session: AsyncSession) -> int:
+    """Settle crashed final attempts; never repeat an uncertain model operation."""
+    jobs = list(
+        (
+            await db_session.scalars(
+                select(PersistentJob)
+                .where(
+                    PersistentJob.status == JobStatus.RUNNING.value,
+                    PersistentJob.lease_expires_at < utcnow(),
+                    PersistentJob.attempts >= PersistentJob.max_attempts,
+                )
+                .order_by(PersistentJob.lease_expires_at)
+                .limit(20)
+                .with_for_update(skip_locked=True)
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    for job in jobs:
+        error = "Worker lease expired on the final attempt; execution outcome is uncertain. Inspect results before explicitly retrying."
+        job.status = JobStatus.FAILED.value
+        job.last_error = error
+        job.lease_owner = None
+        job.lease_expires_at = None
+        if job.kind == "research_tool_job":
+            await mark_research_tool_job_failure(
+                db_session,
+                tool_job_id=UUID(str(job.payload["tool_job_id"])),
+                error=error,
+                terminal=True,
+                interrupted=True,
+            )
+        elif job.kind == "research_run_advance":
+            await mark_research_run_job_failure(
+                db_session,
+                run_id=UUID(str(job.payload["run_id"])),
+                error=error,
+                terminal=True,
+            )
+        elif job.kind == "record_export":
+            await mark_record_export_failed(
+                db_session, UUID(str(job.payload["export_id"])), error
+            )
+        elif job.kind == "research_notification_delivery":
+            await record_research_notification_delivery_failure(
+                db_session,
+                delivery_id=UUID(str(job.payload["delivery_id"])),
+                attempt_number=job.attempts,
+                error=error,
+                terminal=True,
+            )
+    await db_session.flush()
+    return len(jobs)
+
+
 async def run_persistent_job_worker(
     stop_event: asyncio.Event,
     *,
@@ -336,6 +376,7 @@ async def run_persistent_job_worker(
                     await release_expired_inventory_reservations(db_session)
                     await expire_record_exports(db_session)
                     await reconcile_expired_instrument_leases(db_session)
+                    await reconcile_exhausted_jobs(db_session)
                     job = await claim_job(
                         db_session,
                         worker_id=worker_id,
@@ -350,11 +391,10 @@ async def run_persistent_job_worker(
                         lease_seconds=lease_seconds,
                     )
                 if job is None:
-                    await asyncio.wait_for(
-                        stop_event.wait(), timeout=poll_seconds
-                    )
+                    await asyncio.wait_for(stop_event.wait(), timeout=poll_seconds)
                     continue
                 lease_stop = asyncio.Event()
+                job_id = job.id
                 lease_task = asyncio.create_task(
                     _maintain_job_lease(
                         job.id,
@@ -375,11 +415,18 @@ async def run_persistent_job_worker(
                         result=result,
                     )
                     await db_session.commit()
+                except JobDeferred as error:
+                    lease_stop.set()
+                    await lease_task
+                    await defer_job(
+                        db_session, job=job, worker_id=worker_id, reason=str(error)
+                    )
+                    await db_session.commit()
                 except Exception as error:  # noqa: BLE001 - job failures are persisted
                     lease_stop.set()
                     await lease_task
                     await db_session.rollback()
-                    job = await db_session.get(PersistentJob, job.id)
+                    job = await db_session.get(PersistentJob, job_id)
                     if job is not None:
                         await fail_job(
                             db_session,

@@ -560,6 +560,14 @@ async def _validate_evidence_artifact(
         run = await db_session.get(ResearchRun, action.run_id)
         if run is None or run.task_id != context.task.id:
             raise HTTPException(status_code=404, detail="Research Action not found")
+        from app.services.research_action_outputs import (
+            require_evidence_eligible_action,
+        )
+
+        try:
+            require_evidence_eligible_action(action)
+        except ResearchActionOutputError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
         snapshot = await ResearchActionOutputSnapshot.find_by(
             db_session,
             [ResearchActionOutputSnapshot.action_id == action.id],
@@ -1473,6 +1481,18 @@ async def review_evidence(
         raise HTTPException(status_code=409, detail="Evidence review state has changed")
     if evidence.quality_state != EvidenceQuality.PENDING.value:
         raise HTTPException(status_code=409, detail="Evidence review is already final")
+    if (
+        evidence.artifact_type == "action_output"
+        and params.quality_state == EvidenceQuality.VALIDATED.value
+    ):
+        await _validate_evidence_artifact(
+            db_session,
+            current_user,
+            context,
+            artifact_type="action_output",
+            artifact_id=evidence.artifact_id,
+            artifact_version=evidence.artifact_version,
+        )
     evidence.quality_state = params.quality_state
     evidence.validation_report = params.validation_report
     evidence.reviewed_by_user_id = current_user.id

@@ -1509,6 +1509,7 @@
       "specialistPreviewBoundary": "Confirmation creates an approval-gated advisory Action against this exact context digest. The result remains advice until the ordinary Research planner and deterministic Action flows use it.",
       "specialistContext": "Pinned context",
       "specialistContextSources": "Inspect {count} pinned context sources",
+      "specialistContextCoverage": "Context limits: {omitted} sources omitted and {truncated} excerpts shortened. Recent results are prioritized across categories; this is not the complete research history.",
       "specialistFindings": "Source-grounded findings",
       "specialistRecommendations": "Suggested next boundaries",
       "adviceOnly": "Advice only",

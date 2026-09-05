@@ -3278,7 +3278,7 @@ async def hold_or_release_aira_action_group(
                 )
                 changed = True
                 continue
-            if all(
+            if task.status == ResearchTaskStatus.ACTIVE.value and all(
                 parent.status == ResearchActionStatus.COMPLETED.value
                 for parent in parents
             ):
@@ -3413,6 +3413,106 @@ async def hold_or_release_aira_action_group(
     else:
         raise ValueError("Aira dependency graph has no aggregate waiting state")
     return False
+
+
+async def restore_pending_action_boundary(
+    db_session: AsyncSession, *, task: ResearchTask, run: ResearchRun
+) -> bool:
+    """Resume the existing frontier before permitting a new Planner generation."""
+    from app.services.research_frontiers import TERMINAL_ACTION_STATUSES, parallel_group
+
+    actions = list(
+        (
+            await db_session.scalars(
+                select(ResearchAction)
+                .where(
+                    ResearchAction.run_id == run.id,
+                    ResearchAction.status.not_in(TERMINAL_ACTION_STATUSES),
+                )
+                .order_by(ResearchAction.sequence)
+            )
+        ).all()
+    )
+    seen_groups: set[str] = set()
+    for action in actions:
+        group = _aira_action_graph(action) or parallel_group(action)
+        if group is not None and str(group["id"]) not in seen_groups:
+            seen_groups.add(str(group["id"]))
+            await hold_or_release_aira_action_group(
+                db_session, task=task, run=run, action=action
+            )
+    pending = [
+        action for action in actions if action.status not in TERMINAL_ACTION_STATUSES
+    ]
+    if not pending:
+        return False
+    if task.status == ResearchTaskStatus.ACTIVE.value:
+        from sqlalchemy import update
+        from app.models.resource import PersistentJob
+
+        tool_ids = list(
+            (
+                await db_session.scalars(
+                    select(ResearchToolJob.id).where(
+                        ResearchToolJob.action_id.in_(
+                            [
+                                action.id
+                                for action in pending
+                                if action.kind == ResearchActionKind.TOOL_JOB.value
+                            ]
+                        ),
+                        ResearchToolJob.status == ResearchToolJobStatus.QUEUED.value,
+                    )
+                )
+            ).all()
+        )
+        if tool_ids:
+            await db_session.execute(
+                update(PersistentJob)
+                .where(
+                    PersistentJob.status == "pending",
+                    PersistentJob.idempotency_key.in_(
+                        [f"research-tool-job:{tool_id}" for tool_id in tool_ids]
+                    ),
+                )
+                .values(available_at=utcnow())
+            )
+    if task.status == ResearchTaskStatus.PAUSED.value:
+        run.status = ResearchRunStatus.PAUSED.value
+    elif any(
+        action.status == ResearchActionStatus.PROPOSED.value for action in pending
+    ):
+        run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
+    else:
+        kinds = {action.kind for action in pending}
+        for kind, status in (
+            (
+                ResearchActionKind.INSTRUMENT_JOB.value,
+                ResearchRunStatus.WAITING_FOR_INSTRUMENT.value,
+            ),
+            (
+                ResearchActionKind.COMPUTE_JOB.value,
+                ResearchRunStatus.WAITING_FOR_COMPUTE.value,
+            ),
+            (
+                ResearchActionKind.TOOL_JOB.value,
+                ResearchRunStatus.WAITING_FOR_TOOL.value,
+            ),
+            (
+                ResearchActionKind.PROTOCOL_RUN.value,
+                ResearchRunStatus.WAITING_FOR_HUMAN.value,
+            ),
+            (
+                ResearchActionKind.HUMAN_WORK_ITEM.value,
+                ResearchRunStatus.WAITING_FOR_HUMAN.value,
+            ),
+        ):
+            if kind in kinds:
+                run.status = status
+                break
+        else:
+            run.status = ResearchRunStatus.WAITING_FOR_EVENT.value
+    return True
 
 
 async def _materialize_aira_tool_graph(

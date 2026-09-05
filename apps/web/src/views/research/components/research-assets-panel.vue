@@ -371,7 +371,7 @@
               </div>
             </div>
           </div>
-          <div v-if="instanceStore.aiEnabled" class="mb-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+          <div v-if="instanceStore.aiEnabled" class="mb-4 border border-blue-200 rounded-lg bg-blue-50/70 p-3">
             <div class="aira-type-label mb-2">
               {{ $t("page.research.airaClaimDraft") }}
             </div>
@@ -461,7 +461,7 @@
               @update:value="clearProtocolImprovementGeneration"
             />
           </n-form-item>
-          <div v-if="instanceStore.aiEnabled" class="mb-4 rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+          <div v-if="instanceStore.aiEnabled" class="mb-4 border border-blue-200 rounded-lg bg-blue-50/70 p-3">
             <div class="aira-type-label mb-2">
               {{ $t("page.research.airaImprovementDraft") }}
             </div>
@@ -637,6 +637,9 @@ const evidenceKindValues: EvidenceKind[] = ["observation", "measurement", "analy
 const evidenceKindOptions = computed(() => evidenceKindValues.map(value => ({ value, label: evidenceKindLabel(value) })))
 const actionOutputOptions = computed(() => props.actions
   .filter(action => action.status === "completed" && Object.keys(action.output_data || {}).length)
+  .filter(action => action.requirements?.risk !== "model_advisory"
+    && action.input_data?.tool_key !== "aira.specialist"
+    && action.output_data?.tool_key !== "aira.specialist")
   .map(action => ({
     value: action.id,
     label: `${action.title} · ${action.kind}`,

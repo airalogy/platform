@@ -1512,6 +1512,7 @@ declare namespace I18n {
         specialistPreviewBoundary: string
         specialistContext: string
         specialistContextSources: string
+        specialistContextCoverage: string
         specialistFindings: string
         specialistRecommendations: string
         adviceOnly: string

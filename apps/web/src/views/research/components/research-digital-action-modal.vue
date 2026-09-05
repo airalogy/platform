@@ -423,7 +423,9 @@
               </div>
               <div>
                 <dt>{{ $t("page.research.specialistContext") }}</dt>
-                <dd class="font-mono">{{ shortDigest(String(preview.command.specialist_context?.digest || "")) }}</dd>
+                <dd class="font-mono">
+                  {{ shortDigest(String(preview.command.specialist_context?.digest || "")) }}
+                </dd>
               </div>
             </dl>
             <p class="aira-type-body aira-text-secondary mb-0 mt-3">
@@ -434,6 +436,9 @@
                 :title="$t('page.research.specialistContextSources', { count: preview.command.specialist_context?.sources?.length || 0 })"
                 name="specialist-context"
               >
+                <p v-if="specialistCoverage.omitted || specialistCoverage.truncated" class="aira-type-meta">
+                  {{ $t("page.research.specialistContextCoverage", specialistCoverage) }}
+                </p>
                 <div class="space-y-2">
                   <div
                     v-for="source in (preview.command.specialist_context?.sources || [])"
@@ -650,6 +655,13 @@ const visible = ref(false)
 const mode = ref<Mode>("tool")
 const previewKind = ref<Mode>("tool")
 const preview = ref<DigitalActionPreview<any> | null>(null)
+const specialistCoverage = computed(() => {
+  const coverage = (preview.value?.command.specialist_context?.coverage || {}) as Record<string, { omitted: number, truncated: number }>
+  return Object.values(coverage).reduce((total, item) => ({
+    omitted: total.omitted + item.omitted,
+    truncated: total.truncated + item.truncated,
+  }), { omitted: 0, truncated: 0 })
+})
 const submitting = ref(false)
 const toolsLoading = ref(false)
 const instrumentsLoading = ref(false)

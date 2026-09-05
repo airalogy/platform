@@ -4,30 +4,37 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Never, cast
 from uuid import UUID
 
 from jsonschema import Draft202012Validator
 from masterbrain.usage import UsageContext
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import config
 from app.models.knowledge import KnowledgeItem, KnowledgeState, OwnerScope, Visibility
+from app.models.project import Project
 from app.models.research import (
     ResearchAction,
     ResearchActionStatus,
+    ResearchApproval,
     ResearchRun,
     ResearchRunStatus,
     ResearchTask,
     ResearchTaskStatus,
 )
 from app.models.research_execution import ResearchToolJob, ResearchToolJobStatus
+from app.models.user import User
 from app.services.literature_provider import get_literature_provider
 from app.services.model_usage import create_usage_context
+from app.services.persistent_jobs import JobDeferred
+from app.services.research_budget import reached_operational_limit
 from app.services.research_runtime import (
+    TERMINAL_RUN_STATUSES,
     emit_research_event,
     enqueue_research_advance,
+    has_research_capability,
     hold_or_release_aira_action_group,
     utcnow,
 )
@@ -326,12 +333,14 @@ async def _search_knowledge(
                 select(KnowledgeItem)
                 .where(
                     KnowledgeItem.lab_id == task.lab_id,
-                    KnowledgeItem.archived_at.is_(None),
                     KnowledgeItem.state == KnowledgeState.REVIEWED.value,
                     KnowledgeItem.visibility != Visibility.RESTRICTED.value,
                     or_(
                         KnowledgeItem.scope_type == OwnerScope.LAB.value,
-                        KnowledgeItem.project_id == task.project_id,
+                        and_(
+                            KnowledgeItem.scope_type == OwnerScope.PROJECT.value,
+                            KnowledgeItem.project_id == task.project_id,
+                        ),
                     ),
                     or_(
                         KnowledgeItem.title.ilike(pattern),
@@ -425,28 +434,202 @@ async def execute_research_tool(
     return result
 
 
+async def _locked_tool_context(
+    db_session: AsyncSession, tool_job_id: UUID
+) -> tuple[ResearchTask, ResearchRun, ResearchAction, ResearchToolJob]:
+    """Refresh and lock root-to-leaf; callbacks must not reuse pre-call ORM state."""
+    ids = (
+        await db_session.execute(
+            select(ResearchTask.id, ResearchRun.id, ResearchAction.id)
+            .join(ResearchRun, ResearchRun.task_id == ResearchTask.id)
+            .join(ResearchAction, ResearchAction.run_id == ResearchRun.id)
+            .join(ResearchToolJob, ResearchToolJob.action_id == ResearchAction.id)
+            .where(ResearchToolJob.id == tool_job_id)
+        )
+    ).one_or_none()
+    if ids is None:
+        raise ValueError("Research Tool Job context was not found")
+    objects = []
+    for model, object_id in zip(
+        (ResearchTask, ResearchRun, ResearchAction, ResearchToolJob),
+        (*ids, tool_job_id),
+        strict=True,
+    ):
+        objects.append(
+            (
+                await db_session.execute(
+                    select(model)
+                    .where(model.id == object_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+        )
+    return cast(
+        tuple[ResearchTask, ResearchRun, ResearchAction, ResearchToolJob],
+        tuple(objects),
+    )
+
+
+def _tool_context_stopped(task: ResearchTask, run: ResearchRun) -> bool:
+    return (
+        run.status in TERMINAL_RUN_STATUSES
+        or task.archived_at is not None
+        or task.status
+        not in {ResearchTaskStatus.ACTIVE.value, ResearchTaskStatus.PAUSED.value}
+    )
+
+
+async def _defer_tool_dispatch(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    reason: str,
+    pause: bool = False,
+) -> Never:
+    if pause:
+        task.status = ResearchTaskStatus.PAUSED.value
+        task.revision += 1
+        run.status = ResearchRunStatus.PAUSED.value
+        run.last_error = reason
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="tool_job.dispatch_blocked",
+            actor_user_id=None,
+            payload={"reason": reason},
+            idempotency_key=f"action:{action.id}:dispatch-blocked:{task.revision}",
+        )
+    raise JobDeferred(reason)
+
+
+async def _check_tool_dispatch(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    tool_job: ResearchToolJob,
+) -> ResearchToolDefinition:
+    """Recheck dynamic authority at dispatch, not only at preview/approval."""
+    if task.status == "paused" or run.status == "paused":
+        await _defer_tool_dispatch(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            reason="Research Task is paused",
+        )
+    limit = await reached_operational_limit(db_session, task=task)
+    if limit:
+        task.outcome = "stopped_time" if limit[0] == "time" else "stopped_budget"
+        await _defer_tool_dispatch(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            pause=True,
+            reason=f"Research Task {limit[0]} limit reached before Tool dispatch",
+        )
+    requester = await db_session.get(User, run.requested_by_user_id)
+    project = await db_session.get(Project, task.project_id)
+    if (
+        requester is None
+        or project is None
+        or project.deleted_at is not None
+        or project.lab_id != task.lab_id
+        or not await has_research_capability(
+            db_session, user=requester, project=project, capability="research.run"
+        )
+    ):
+        await _defer_tool_dispatch(
+            db_session,
+            task=task,
+            run=run,
+            action=action,
+            pause=True,
+            reason="Research execution permission was revoked before Tool dispatch",
+        )
+    from app.services.research_autonomy_policy import evaluate_automatic_action
+    from app.services.research_capabilities import (
+        pinned_tool_definition,
+        tool_capability,
+    )
+    from app.services.research_executor_bindings import (
+        enforce_environment_binding_scope,
+        environment_executor_binding,
+        validate_executor_binding_for_capability,
+    )
+
+    try:
+        definition = pinned_tool_definition(
+            run.environment_snapshot or {}, tool_job.tool_key
+        )
+        if definition.version != tool_job.tool_version:
+            raise ValueError("Pinned Research Tool version changed")
+        capability = tool_capability(definition).payload()
+        binding = environment_executor_binding(
+            run.environment_snapshot or {},
+            capability["key"],
+            definition.version,
+            legacy_capability=capability,
+            owner_user_id=task.owner_user_id,
+        )
+        validate_executor_binding_for_capability(binding, capability)
+        enforce_environment_binding_scope(
+            binding, project_id=task.project_id, autonomy_level=task.autonomy_level
+        )
+        if action.policy_decision not in {"allow", "ask"}:
+            raise ValueError("Tool execution is not authorized")
+        approval = await db_session.scalar(
+            select(ResearchApproval.id)
+            .where(
+                ResearchApproval.action_id == action.id,
+                ResearchApproval.status == "approved",
+                ResearchApproval.preview_digest == action.preview_digest,
+            )
+            .limit(1)
+        )
+        if action.input_data.get("source") == "aira" and approval is None:
+            decision, reason = evaluate_automatic_action(
+                policy_snapshot=(run.environment_snapshot or {}).get("autonomy_policy"),
+                autonomy_level=task.autonomy_level,
+                executor_type=action.executor_type,
+                requirements=action.requirements or {},
+            )
+            if decision != "allow":
+                raise ValueError(reason)
+        validate_tool_arguments(definition, tool_job.arguments)
+    except ValueError as error:
+        await _defer_tool_dispatch(
+            db_session, task=task, run=run, action=action, pause=True, reason=str(error)
+        )
+    return definition
+
+
 async def process_research_tool_job(
     db_session: AsyncSession,
     *,
     tool_job_id: UUID,
 ) -> dict[str, Any]:
-    tool_job = await db_session.get(ResearchToolJob, tool_job_id)
-    if tool_job is None:
-        raise ValueError("Research Tool Job was not found")
-    action = await db_session.get(ResearchAction, tool_job.action_id)
-    if action is None:
-        raise ValueError("Research Action was not found")
-    run = await db_session.get(ResearchRun, action.run_id)
-    task = await db_session.get(ResearchTask, run.task_id) if run else None
-    if run is None or task is None:
-        raise ValueError("Research Tool Job context was not found")
+    task, run, action, tool_job = await _locked_tool_context(db_session, tool_job_id)
     if tool_job.status == ResearchToolJobStatus.COMPLETED.value:
         return tool_job.output
-    if action.status == ResearchActionStatus.CANCELLED.value:
+    if (
+        tool_job.status == ResearchToolJobStatus.CANCELLED.value
+        or action.status == ResearchActionStatus.CANCELLED.value
+        or _tool_context_stopped(task, run)
+    ):
         tool_job.status = ResearchToolJobStatus.CANCELLED.value
         tool_job.completed_at = tool_job.completed_at or utcnow()
         await db_session.flush()
         return {"status": "cancelled"}
+    if tool_job.status == ResearchToolJobStatus.FAILED.value:
+        return {"status": "failed"}
     if action.status not in {
         ResearchActionStatus.APPROVED.value,
         ResearchActionStatus.QUEUED.value,
@@ -454,10 +637,9 @@ async def process_research_tool_job(
     }:
         raise ValueError("Research Tool Action is not executable")
 
-    definition = get_research_tool(tool_job.tool_key)
-    if definition.version != tool_job.tool_version:
-        raise ValueError("Pinned Research Tool version is unavailable")
-    validate_tool_arguments(definition, tool_job.arguments)
+    definition = await _check_tool_dispatch(
+        db_session, task=task, run=run, action=action, tool_job=tool_job
+    )
     specialist_context: dict[str, Any] | None = None
     specialist_model: str | None = None
     specialist_usage: UsageContext | None = None
@@ -526,42 +708,13 @@ async def process_research_tool_job(
     # The tool call intentionally runs without a long-lived write transaction.
     # Re-lock and refresh the execution chain so a concurrent Task cancellation
     # wins over a late external result.
-    tool_job = (
-        await db_session.execute(
-            select(ResearchToolJob)
-            .where(ResearchToolJob.id == tool_job_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one()
-    action = (
-        await db_session.execute(
-            select(ResearchAction)
-            .where(ResearchAction.id == tool_job.action_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one()
-    run = (
-        await db_session.execute(
-            select(ResearchRun)
-            .where(ResearchRun.id == action.run_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one()
-    task = (
-        await db_session.execute(
-            select(ResearchTask)
-            .where(ResearchTask.id == run.task_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-    ).scalar_one()
+    task, run, action, tool_job = await _locked_tool_context(db_session, tool_job_id)
+    if tool_job.status in {"completed", "failed"}:
+        return {"status": tool_job.status}
     if (
         tool_job.status == ResearchToolJobStatus.CANCELLED.value
         or action.status == ResearchActionStatus.CANCELLED.value
-        or task.status == ResearchTaskStatus.CANCELLED.value
+        or _tool_context_stopped(task, run)
     ):
         tool_job.status = ResearchToolJobStatus.CANCELLED.value
         tool_job.completed_at = tool_job.completed_at or utcnow()
@@ -648,13 +801,26 @@ async def mark_research_tool_job_failure(
     tool_job_id: UUID,
     error: str,
     terminal: bool,
+    interrupted: bool = False,
 ) -> None:
-    tool_job = await db_session.get(ResearchToolJob, tool_job_id)
-    if tool_job is None:
+    try:
+        task, run, action, tool_job = await _locked_tool_context(
+            db_session, tool_job_id
+        )
+    except ValueError:
         return
-    action = await db_session.get(ResearchAction, tool_job.action_id)
-    run = await db_session.get(ResearchRun, action.run_id) if action else None
-    task = await db_session.get(ResearchTask, run.task_id) if run else None
+    if tool_job.status in {"completed", "failed", "cancelled"}:
+        return
+    if action.status == "cancelled" or _tool_context_stopped(task, run):
+        tool_job.status = ResearchToolJobStatus.CANCELLED.value
+        tool_job.completed_at = tool_job.completed_at or utcnow()
+        await db_session.flush()
+        return
+    if interrupted:
+        task.status = ResearchTaskStatus.PAUSED.value
+        task.revision += 1
+        run.status = ResearchRunStatus.PAUSED.value
+        run.last_error = error[:8000]
     tool_job.error = error[:8000]
     if terminal:
         now = utcnow()

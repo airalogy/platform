@@ -166,7 +166,7 @@ def _context_source(
     return {
         "ref": reference,
         "type": source_type,
-        "title": title,
+        "title": _bounded_text(title, byte_limit=256),
         "content": _bounded_text(content),
     }
 
@@ -242,7 +242,13 @@ def build_specialist_context_snapshot(
         ("human_results", "human_result"),
         ("rejected_actions", "rejected_action"),
     )
+    recent_results: list[list[dict[str, str]]] = []
+    earlier_results: dict[str, int] = {}
     for state_key, source_type in result_groups:
+        earlier_results[source_type] = max(
+            0, len((run.aira_state or {}).get(state_key) or []) - 12
+        )
+        group = []
         for index, result in enumerate(
             list((run.aira_state or {}).get(state_key) or [])[-12:], start=1
         ):
@@ -250,7 +256,7 @@ def build_specialist_context_snapshot(
             reference = (
                 f"action:{action_id}" if action_id else f"result:{state_key}:{index}"
             )
-            sources.append(
+            group.append(
                 _context_source(
                     reference,
                     source_type,
@@ -258,20 +264,59 @@ def build_specialist_context_snapshot(
                     result,
                 )
             )
+        recent_results.append(list(reversed(group)))
+
+    # One newest result from every category precedes any older result. Reserve
+    # room for Knowledge as well; a long search history must not hide a new
+    # measurement, human submission, or rejection from the critic.
+    results = [
+        group[index]
+        for index in range(12)
+        for group in recent_results
+        if index < len(group)
+    ]
+    for source in results:
+        source["content"] = _bounded_text(source["content"], byte_limit=2000)
+    core = [s for s in sources if s["type"] != "reviewed_knowledge"]
+    knowledge = [s for s in sources if s["type"] == "reviewed_knowledge"]
 
     bounded_sources: list[dict[str, str]] = []
     seen_refs: set[str] = set()
-    for source in sources:
-        if source["ref"] in seen_refs:
-            continue
-        candidate = [*bounded_sources, source]
-        candidate_size = len(
-            json.dumps(candidate, ensure_ascii=False, sort_keys=True).encode()
-        )
-        if candidate_size > MAX_SPECIALIST_CONTEXT_BYTES:
-            break
-        bounded_sources.append(source)
-        seen_refs.add(source["ref"])
+    coverage: dict[str, dict[str, int]] = {}
+    for group, quota in (
+        (core, 14000),
+        (results, 28000),
+        (knowledge, MAX_SPECIALIST_CONTEXT_BYTES),
+    ):
+        used = 0
+        for source in group:
+            if source["ref"] in seen_refs:
+                continue
+            seen_refs.add(source["ref"])
+            counts = coverage.setdefault(
+                source["type"], {"included": 0, "omitted": 0, "truncated": 0}
+            )
+            size = (
+                len(json.dumps(source, ensure_ascii=False, sort_keys=True).encode()) + 2
+            )
+            candidate_size = len(
+                json.dumps(
+                    [*bounded_sources, source], ensure_ascii=False, sort_keys=True
+                ).encode()
+            )
+            if used + size > quota or candidate_size > MAX_SPECIALIST_CONTEXT_BYTES:
+                counts["omitted"] += 1
+                continue
+            bounded_sources.append(source)
+            used += size
+            counts["included"] += 1
+            counts["truncated"] += int("[truncated by Platform]" in source["content"])
+    for source_type, omitted in earlier_results.items():
+        if omitted:
+            counts = coverage.setdefault(
+                source_type, {"included": 0, "omitted": 0, "truncated": 0}
+            )
+            counts["omitted"] += omitted
 
     payload: dict[str, Any] = {
         "schema": SPECIALIST_CONTEXT_SCHEMA,
@@ -281,6 +326,7 @@ def build_specialist_context_snapshot(
         "run_plan_version": run.plan_version,
         "model": model_name,
         "sources": bounded_sources,
+        "coverage": coverage,
     }
     payload["digest"] = _canonical_digest(payload)
     return payload
@@ -330,6 +376,7 @@ def specialist_agent_prompt(
             "You have no tools, web access, write authority, approval authority, or execution authority.",
             "Do not claim an experiment, analysis, order, approval, or instrument operation occurred unless a supplied source says so.",
             "Do not invent citations, values, assets, or source references.",
+            "coverage reports omitted or truncated sources. Disclose these limitations; missing context is not evidence of absence.",
             "Every finding must cite at least one exact ref from context.sources; every recommendation must cite its basis_refs from the same set.",
             "Return advice, uncertainties, risks, and suggested typed next boundaries. Platform decides whether any Action is proposed or executed.",
             f"Role: {request.role}",

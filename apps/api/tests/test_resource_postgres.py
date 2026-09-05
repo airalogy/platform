@@ -26,7 +26,13 @@ from app.models.resource import (
     ResourceContainer,
     ResourceType,
 )
-from app.services.persistent_jobs import claim_job, enqueue_job
+from app.services.persistent_jobs import (
+    claim_job,
+    complete_job,
+    enqueue_job,
+    fail_job,
+    renew_job_lease,
+)
 from app.services.resource_inventory import (
     InventoryError,
     apply_inventory_event,
@@ -337,6 +343,32 @@ async def exercise_counts_expiry_and_job_recovery():
             )
             assert recovered.id == job.id
             assert recovered.attempts == 2
+
+    async with sessions() as stale_session:
+        another = await enqueue_job(
+            stale_session,
+            kind="lease-fencing-test",
+            payload={},
+            idempotency_key=uuid4().hex,
+        )
+        stale = await claim_job(
+            stale_session, worker_id="stale", job_id=another.id, lease_seconds=0
+        )
+        await stale_session.commit()
+        async with sessions() as new_session:
+            current = await claim_job(
+                new_session, worker_id="current", job_id=another.id
+            )
+            assert current.attempts == 2
+            await new_session.commit()
+        for operation, kwargs in (
+            (complete_job, {}),
+            (fail_job, {"error": "late error"}),
+            (renew_job_lease, {}),
+        ):
+            with pytest.raises(ValueError, match="not owned"):
+                await operation(stale_session, job=stale, worker_id="stale", **kwargs)
+            await stale_session.rollback()
 
     await engine.dispose()
 

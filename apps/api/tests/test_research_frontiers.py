@@ -317,6 +317,55 @@ def _graph_action(
     return action
 
 
+def test_paused_graph_defers_dependency_release_until_explicit_resume(monkeypatch):
+    run_id = uuid4()
+    root = _graph_action(
+        run_id=run_id, node_id="root", position=1, size=2, status="completed"
+    )
+    child = _graph_action(
+        run_id=run_id, node_id="child", position=2, size=2, depends_on_count=1
+    )
+    dependency = ResearchActionDependency(
+        action_id=child.id,
+        depends_on_action_id=root.id,
+        condition={"required_status": "completed", "on_unsatisfied": "skipped"},
+    )
+    task = ResearchTask(id=uuid4(), status="paused")
+    run = ResearchRun(id=run_id, status="paused")
+    db = AsyncMock()
+    db.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [root, child]),
+        SimpleNamespace(all=lambda: [dependency]),
+        SimpleNamespace(all=lambda: [child]),
+        SimpleNamespace(all=lambda: [root, child]),
+        SimpleNamespace(all=lambda: [dependency]),
+        SimpleNamespace(all=list),
+    ]
+
+    async def activate(*args, action, **kwargs):
+        action.status = "queued"
+
+    activation = AsyncMock(side_effect=activate)
+    monkeypatch.setattr(research_runtime, "_activate_released_graph_action", activation)
+    monkeypatch.setattr(research_runtime, "emit_research_event", AsyncMock())
+    asyncio.run(
+        research_runtime.hold_or_release_aira_action_group(
+            db, task=task, run=run, action=root
+        )
+    )
+    activation.assert_not_awaited()
+    assert child.status == "blocked" and run.status == "paused"
+    task.status = "active"
+    assert (
+        asyncio.run(
+            research_runtime.restore_pending_action_boundary(db, task=task, run=run)
+        )
+        is True
+    )
+    assert child.status == "queued" and run.status == "waiting_for_tool"
+    activation.assert_awaited_once()
+
+
 def test_tool_graph_releases_only_ready_nodes(monkeypatch):
     run_id = uuid4()
     root = _graph_action(run_id=run_id, node_id="root", position=1, size=2)

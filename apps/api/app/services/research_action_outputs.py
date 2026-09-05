@@ -17,9 +17,21 @@ class ResearchActionOutputError(ValueError):
     pass
 
 
+def require_evidence_eligible_action(action: ResearchAction) -> None:
+    if (
+        (action.requirements or {}).get("risk") == "model_advisory"
+        or (action.input_data or {}).get("tool_key") == "aira.specialist"
+        or (action.output_data or {}).get("tool_key") == "aira.specialist"
+    ):
+        raise ResearchActionOutputError(
+            "Specialist advice cannot become Evidence; register the underlying scientific source instead"
+        )
+
+
 def action_output_payload(action: ResearchAction, *, task_id: UUID) -> dict[str, Any]:
     """Build the exact source payload eligible for scientific review."""
 
+    require_evidence_eligible_action(action)
     if action.status != ResearchActionStatus.COMPLETED.value:
         raise ResearchActionOutputError(
             "Only a completed Research Action can become Evidence"

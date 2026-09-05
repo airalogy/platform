@@ -116,6 +116,11 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Recheck Task/Run state, current Research execution access, pinned Tool/Executor scope, approvals or unexpired autonomy grants, and budget/deadline limits immediately before Tool dispatch. Deferred work preserves its retry allowance; crashed final attempts settle into an explicit uncertain-outcome pause without repeating model calls; late callbacks cannot overwrite terminal states.
+- Explicit resume restores the existing dependency frontier and wakes pending jobs without creating a competing Planner generation; completed parents cannot release downstream work while paused.
+- Fetch server-generated Research update timestamps during async writes so successful Task/Action/Work Item transitions return valid responses; fix Knowledge Tool search to use the actual reviewed-state model and explicit Lab/Project scope.
+- Reject Specialist advice as an Evidence source in both registration and review, including existing snapshots, and remove it from the source picker. Balance Specialist context across recent result categories and Knowledge, exposing omitted/truncated source counts in bilingual previews and model context.
+
 - Revalidated evaluated autonomy grants when dependency-delayed digital Actions are actually released, so an expired or no-longer-matching grant falls back to a fresh human approval instead of reusing an earlier automatic decision.
 - Fixed fresh PostgreSQL deployments failing before the research migrations could complete by widening Alembic's internal version column before the first descriptive revision ID exceeds its legacy 32-character limit.
 - Updated independent runtime packaging workflows for the current pinned uv CLI: lockfiles are verified explicitly before building instead of passing the removed `build --locked` option, and release coverage now includes both runtime packages.

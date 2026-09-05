@@ -15,6 +15,38 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class JobDeferred(Exception):
+    """No external work started; preserve the job without spending an attempt."""
+
+
+async def _require_current_lease(
+    db_session: AsyncSession, job: PersistentJob, worker_id: str
+) -> None:
+    # A worker may retain this ORM object across external latency while another
+    # process reclaims/exhausts the lease. Cached ownership is not authority.
+    await db_session.refresh(job, with_for_update=True)
+    if (
+        job.status != JobStatus.RUNNING.value
+        or job.lease_owner != worker_id
+        or job.lease_expires_at is None
+        or job.lease_expires_at <= utcnow()
+    ):
+        raise ValueError("job lease is expired or not owned by this worker")
+
+
+async def defer_job(
+    db_session: AsyncSession, *, job: PersistentJob, worker_id: str, reason: str
+) -> None:
+    await _require_current_lease(db_session, job, worker_id)
+    job.status = JobStatus.PENDING.value
+    job.attempts = max(0, job.attempts - 1)
+    job.available_at = utcnow() + timedelta(seconds=30)
+    job.lease_owner = None
+    job.lease_expires_at = None
+    job.last_error = reason[:8000]
+    await db_session.flush()
+
+
 async def enqueue_job(
     db_session: AsyncSession,
     *,
@@ -52,6 +84,7 @@ async def claim_job(
     worker_id: str,
     kinds: set[str] | None = None,
     lease_seconds: int = 60,
+    job_id: UUID | None = None,
 ) -> PersistentJob | None:
     now = utcnow()
     conditions = [
@@ -67,6 +100,8 @@ async def claim_job(
     ]
     if kinds:
         conditions.append(PersistentJob.kind.in_(kinds))
+    if job_id is not None:
+        conditions.append(PersistentJob.id == job_id)
     job = (
         await db_session.execute(
             select(PersistentJob)
@@ -94,11 +129,7 @@ async def renew_job_lease(
     worker_id: str,
     lease_seconds: int = 60,
 ) -> None:
-    if (
-        job.status != JobStatus.RUNNING.value
-        or job.lease_owner != worker_id
-    ):
-        raise ValueError("job lease is not owned by this worker")
+    await _require_current_lease(db_session, job, worker_id)
     job.lease_expires_at = utcnow() + timedelta(seconds=lease_seconds)
     await db_session.flush()
 
@@ -110,8 +141,7 @@ async def complete_job(
     worker_id: str,
     result: dict | None = None,
 ) -> None:
-    if job.lease_owner != worker_id:
-        raise ValueError("job lease is not owned by this worker")
+    await _require_current_lease(db_session, job, worker_id)
     job.status = JobStatus.SUCCEEDED.value
     job.result = result or {}
     job.lease_owner = None
@@ -127,8 +157,7 @@ async def fail_job(
     error: str,
     retry_delay_seconds: int = 30,
 ) -> None:
-    if job.lease_owner != worker_id:
-        raise ValueError("job lease is not owned by this worker")
+    await _require_current_lease(db_session, job, worker_id)
     job.last_error = error[:8000]
     job.lease_owner = None
     job.lease_expires_at = None

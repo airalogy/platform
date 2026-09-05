@@ -106,6 +106,47 @@ def test_specialist_request_is_strict_and_normalized():
         )
 
 
+def test_context_reserves_recent_results_across_categories_and_reports_omissions():
+    task, run = task_and_run()
+    run.environment_snapshot["knowledge"] = [
+        {
+            "id": str(uuid4()),
+            "revision": 1,
+            "state": "reviewed",
+            "visibility": "lab",
+            "title": "Long prior knowledge",
+            "body": "科研" * 4000,
+        }
+        for _ in range(50)
+    ]
+    latest_refs = []
+    for key in (
+        "tool_results",
+        "instrument_results",
+        "compute_results",
+        "resource_results",
+        "service_results",
+        "event_results",
+        "human_results",
+        "rejected_actions",
+    ):
+        run.aira_state[key] = [
+            {"action_id": str(uuid4()), "result": "long" * 2000} for _ in range(12)
+        ]
+        latest_refs.append("action:" + run.aira_state[key][-1]["action_id"])
+    snapshot = build_specialist_context_snapshot(
+        task=task, run=run, model_name="test-model"
+    )
+    validate_specialist_context_snapshot(snapshot)
+    assert set(latest_refs) <= {source["ref"] for source in snapshot["sources"]}
+    assert snapshot["coverage"]["reviewed_knowledge"]["included"] > 0
+    assert snapshot["coverage"]["reviewed_knowledge"]["omitted"] > 0
+    assert snapshot["coverage"]["instrument_result"]["truncated"] > 0
+    assert snapshot == build_specialist_context_snapshot(
+        task=task, run=run, model_name="test-model"
+    )
+
+
 def test_specialist_context_is_stable_bounded_and_excludes_unsafe_knowledge():
     task, run = task_and_run()
     first = build_specialist_context_snapshot(

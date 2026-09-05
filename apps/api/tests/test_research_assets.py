@@ -23,12 +23,6 @@ from app.models.research_asset import (
     ResearchClaimRevision,
     ResearchEvidence,
 )
-from app.services.research_action_outputs import (
-    ResearchActionOutputError,
-    action_output_digest,
-    action_output_payload,
-    verify_action_output_snapshot,
-)
 from app.routers.research_assets import (
     AiraClaimDraftRequest,
     ClaimDraft,
@@ -38,6 +32,12 @@ from app.routers.research_assets import (
     ProtocolImprovementDraft,
     _knowledge_suggestion_command,
     _protocol_improvement_command,
+)
+from app.services.research_action_outputs import (
+    ResearchActionOutputError,
+    action_output_digest,
+    action_output_payload,
+    verify_action_output_snapshot,
 )
 from app.services.research_claims import (
     AiraClaimEvidenceOutput,
@@ -59,6 +59,26 @@ from app.services.research_runtime import canonical_digest
 
 def compile_table(model) -> str:
     return str(CreateTable(model.__table__).compile(dialect=postgresql.dialect()))
+
+
+@pytest.mark.parametrize("marker", ["input", "output", "risk"])
+def test_specialist_advice_cannot_be_promoted_to_evidence(marker):
+    action = ResearchAction(
+        id=uuid4(),
+        run_id=uuid4(),
+        kind="tool_job",
+        status="completed",
+        revision=1,
+        input_data={"tool_key": "aira.specialist"} if marker == "input" else {},
+        output_data={"tool_key": "aira.specialist"}
+        if marker == "output"
+        else {"advice": "test"},
+        requirements={"risk": "model_advisory"} if marker == "risk" else {},
+    )
+    with pytest.raises(
+        ResearchActionOutputError, match="advice cannot become Evidence"
+    ):
+        action_output_payload(action, task_id=uuid4())
 
 
 def test_data_assets_have_immutable_versions_and_one_real_source():

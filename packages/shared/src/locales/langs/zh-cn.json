@@ -1509,6 +1509,7 @@
       "specialistPreviewBoundary": "确认后会针对这个准确的上下文摘要创建一个需审批的建议型 Action。结果仍是建议，需由常规 Research 规划器和确定性 Action 流程继续处理。",
       "specialistContext": "已锁定上下文",
       "specialistContextSources": "检查 {count} 个已锁定上下文来源",
+      "specialistContextCoverage": "上下文容量限制：省略了 {omitted} 个来源，缩短了 {truncated} 段内容。已优先保留各类最新结果；这不代表完整研究历史。",
       "specialistFindings": "有来源依据的发现",
       "specialistRecommendations": "建议的下一步边界",
       "adviceOnly": "仅供建议",
