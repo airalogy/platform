@@ -73,5 +73,11 @@ test("E2E infrastructure changes run the full browser suite", () => {
 })
 
 test("the explicit full mode runs the full browser suite", () => {
-  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "full-e2e"])
+  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "research-integration", "full-e2e"])
+})
+
+test("research runtime changes require real database integration", () => {
+  for (const file of ["apps/api/app/services/research_tools.py", "apps/api/app/services/persistent_jobs.py", "apps/api/tests/test_research_integration.py"]) {
+    assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "api-tests", "research-integration"])
+  }
 })

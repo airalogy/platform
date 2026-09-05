@@ -31,6 +31,12 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "api:test"],
   },
+  researchIntegration: {
+    id: "research-integration",
+    label: "research API and persistent-worker integration",
+    command: "corepack",
+    args: ["pnpm", "research:integration"],
+  },
   gatewayTests: {
     id: "gateway-tests",
     label: "Instrument Gateway tests",
@@ -108,6 +114,20 @@ export function buildCheckPlan(files, fullRequested = false) {
   if (files.some(file => file.startsWith("apps/api/"))) {
     plan.push(checks.apiTests)
   }
+  if (fullRequested || files.some(file =>
+    /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
+    || [
+      "apps/api/app/services/persistent_jobs.py",
+      "apps/api/app/services/resource_job_worker.py",
+      "apps/api/app/models/base.py",
+      "apps/api/app/database.py",
+      "tests/e2e/scripts/api-env.sh",
+      "tests/e2e/scripts/research-integration.sh",
+      ".github/workflows/research-integration.yml",
+    ].includes(file),
+  )) {
+    plan.push(checks.researchIntegration)
+  }
 
   if (hasPath(files, GATEWAY_FILES, ["apps/instrument-gateway/"])) {
     plan.push(checks.gatewayTests)
@@ -124,7 +144,8 @@ export function buildCheckPlan(files, fullRequested = false) {
   const needsFullE2e = fullRequested || hasPath(files, FULL_E2E_FILES, ["tests/e2e/"])
   if (needsFullE2e) {
     plan.push(checks.fullE2e)
-  } else if (hasPath(files, AI_E2E_FILES, AI_E2E_PREFIXES)) {
+  }
+  else if (hasPath(files, AI_E2E_FILES, AI_E2E_PREFIXES)) {
     plan.push(checks.aiE2e)
   }
 
@@ -143,7 +164,8 @@ function diffFiles(from, to) {
 function baseForNewBranch(localSha) {
   try {
     return runGit(["merge-base", localSha, "origin/main"])
-  } catch {
+  }
+  catch {
     return runGit(["rev-list", "--max-parents=0", localSha]).split("\n")[0]
   }
 }
@@ -171,7 +193,8 @@ function filesFromUpstream() {
   try {
     const upstream = runGit(["rev-parse", "--verify", "@{upstream}"])
     return diffFiles(upstream, "HEAD").sort()
-  } catch {
+  }
+  catch {
     const root = runGit(["rev-list", "--max-parents=0", "HEAD"]).split("\n")[0]
     return diffFiles(root, "HEAD").sort()
   }

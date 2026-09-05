@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+
 from app.models.research import ResearchAction, ResearchActionStatus
 from app.models.research_asset import (
     ProtocolImprovementProposal,
@@ -47,7 +49,6 @@ from app.services.research_specialists import (
     build_specialist_context_snapshot,
     validate_specialist_context_snapshot,
 )
-from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[3]
 SCENARIOS_PATH = ROOT / "benchmarks/research-automation/scenarios.json"
@@ -265,8 +266,8 @@ def test_protein_purification_benchmark_binds_evidence_to_one_method_version():
         task_id=task_id,
         kind="measurement",
         artifact_type="action_output",
-        artifact_id=str(output_snapshot.id),
-        artifact_version=str(action.revision),
+        artifact_id=str(action.id),
+        artifact_version=output_snapshot.digest,
         summary="The wash condition improved purity while retaining bounded yield.",
         quality_state="validated",
         validation_report={"replicates": 3, "reviewed": True},

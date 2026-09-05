@@ -270,7 +270,7 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - Research Result Package；
 - 旧 Protocol Workflow 兼容。
 
-验收基准是 CNT 类迭代实验：任务创建后 Aira 选择下一个 Protocol，人员提交真实 Record，Run 恢复、形成阶段结论并继续，直到结束。它的平台状态与治理契约现已纳入可执行验收套件。
+目标验收场景是 CNT 类迭代实验：任务创建后 Aira 选择下一个 Protocol，人员提交真实 Record，Run 恢复、形成阶段结论并继续，直到结束。快速基准覆盖部分状态契约，并非这个完整实验室场景。
 
 ### P1：Knowledge 与数字自动化
 
@@ -278,7 +278,7 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - Scholar 作为可选 Literature Provider；
 - 文献调研、Python/R 计算和外部工具 Action；
 - 受治理的 Paper → Suggested Knowledge → Protocol Draft，以及 Record/DataAsset → Suggested Knowledge（已交付）；
-- 发酵类多源数据集成验收（已纳入可执行验收套件）。
+- 发酵类多源数据集成（已有函数级契约测试；完整场景合格验证待开展）。
 
 ### P2：现实资源与治理
 
@@ -298,13 +298,19 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 - Aira 规划与手工外部服务请求共用报价、下单审批、预算预留、物流、交接、履约和结果接收治理（已交付）；
 - 由 Evidence 支持、经人审核的 Protocol 改进建议与准确新版本来源链（已交付，不依赖 AI）；
 - 独立建议型 Reviewer Agent、有来源依据的 2–4 角色 Specialist Agent Panel、正式人工定稿的复现评估、有界并行与依赖只读 Tool 图，以及有界 Protocol/结构化 Human Work/Tool/Resource/Instrument/External Service/Compute/Wait 混合图（已交付）；有界 Instrument 反馈循环只存在于其明确控制会话契约内，任意 Action 图循环、相互依赖的 Agent 对话和无限制多 Agent 执行仍待后续实现；
-- 蛋白纯化方法演进与 OT-2 设备治理验收（已纳入可执行验收套件）。
+- 蛋白纯化方法演进与 OT-2 设备治理（已有函数级契约测试；完整场景合格验证待开展）。
 
 ### 可执行验收套件
 
-在仓库根目录运行 `pnpm research:benchmarks`，即可执行 `benchmarks/research-automation/scenarios.json` 中固定的四条跨模块场景：CNT 人机迭代、发酵多源数据整合、蛋白纯化方法演进、OT-2 受治理设备控制。套件会检查类型化状态流转、真实 Record 边界、不可变 Action 输出 Evidence、人工定稿 Result Package、准确的 Protocol 改进来源链、有上限的设备程序、安全联锁，以及后续高风险物理步骤前的新一轮人工复核。场景还明确记录被禁止的捷径，防止未来重构静默地把模型输出当作 Record、自动应用 AI 建议、绕过安全检查或重试物理操作。
+验证分为两层。`pnpm research:benchmarks` 对 `benchmarks/research-automation/scenarios.json` 中的 CNT 迭代、发酵整合、蛋白纯化方法演进和 OT-2 治理执行快速函数级契约测试。这些夹具和场景名称不代表完整场景已经通过真实 API、Record 提交或物理设备运行；“禁止捷径”标签本身也不是反向集成测试。
 
-这些是软件验收基准，不是模拟出来的科研成功结论。它们证明的是 Platform 编排和治理契约；真实部署仍必须在目标实验室内对 Protocol、操作人员、设备适配器、联锁、数据质量与科学结论分别完成合格验证。
+`pnpm research:integration` 启动隔离的 PostgreSQL、Redis 与文件服务，执行全部迁移，再验证真实认证 API 的预览确认、持久化作业执行、暂停恢复、取消后的迟到成功/失败、最终尝试租约丢失恢复、当前成员权限与预算/时间限制、待审 Evidence、结构化 Human Work 校验审核和人工定稿结果包。Specialist 测试仅替换外部模型响应；回调及崩溃测试明确注入延迟或持久化中断状态，API 响应、权限、数据库事务及科研资产写入保持真实。该套件纳入 CI，并由 pre-push 按 Research 运行时代码变更选择执行；pre-commit 保持轻量。
+
+Tool Job 在真正执行前锁定并刷新 Task/Run/Action，重新检查当前执行权限、固定版本 Tool/Executor 范围、人工审批或未过期自动执行授权，以及运行限额。暂停或被阻止的作业保留为待执行，不消耗重试次数。最终尝试中断后不会自动重复可能已计费的模型调用，而是结束该作业、暂停任务并提示执行结果不确定，等待人工核查。取消和终态始终优先于迟到回调。
+
+Specialist 建议在 Evidence 登记与审核 API 中被排除，已有快照也不能绕过；应改为登记其底层科研来源。上下文分配为 Knowledge 保留空间，并优先保留每类最新结果，再加入旧结果。省略或缩短内容的统计计入固定摘要、显示于预览，并告知模型。
+
+两层测试都不证明科学研究成功或生产设备已就绪。完整 CNT/发酵/蛋白纯化/OT-2 端到端合格验证仍需在目标实验室结合实际 Protocol、人员、设备适配器、联锁、数据及科学审核完成。
 
 ## 交付完整性
 

@@ -23,6 +23,7 @@
     "type-check": "pnpm --recursive --parallel type-check",
     "test": "pnpm --recursive --parallel test",
     "research:benchmarks": "uv --directory apps/api run --with pytest python -m pytest tests/test_research_acceptance_benchmarks.py",
+    "research:integration": "bash tests/e2e/scripts/research-integration.sh",
     "e2e": "bash tests/e2e/scripts/run.sh",
     "e2e:test": "playwright test",
     "e2e:headed": "E2E_HEADED=1 bash tests/e2e/scripts/run.sh",

@@ -29,6 +29,8 @@ Use `pnpm e2e:headed` to watch the browser. Set `E2E_KEEP_INFRA=1` when debuggin
 
 ## Coverage and artifacts
 
+Run `pnpm research:integration` for authenticated Research API, persistent-worker and PostgreSQL acceptance without browser response mocks. It uses the same isolated infrastructure and migrations; do not run it concurrently with browser E2E on the same host. The four `research:benchmarks` scenarios remain fast function-level contract tests, not complete physical research demonstrations.
+
 The suite exercises:
 
 - real email/password login for owner and viewer roles;

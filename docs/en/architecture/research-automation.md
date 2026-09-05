@@ -238,7 +238,7 @@ The repository includes a standalone, standard-library-only Gateway runtime and 
 - Research Result Package
 - compatibility with legacy Protocol Workflow
 
-The acceptance benchmark is a CNT-style iterative experiment: Aira selects the next Protocol, a person submits a real Record, the Run resumes and forms a phased conclusion, and execution continues until a terminal result. Its platform-state and governance contract is now part of the executable acceptance suite.
+The target acceptance scenario is a CNT-style iterative experiment: Aira selects the next Protocol, a person submits a real Record, the Run resumes and forms a phased conclusion, and execution continues until a terminal result. The fast benchmark covers selected state contracts, not this complete laboratory scenario.
 
 ### P1: Knowledge and digital automation
 
@@ -246,7 +246,7 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - optional Scholar Literature Provider
 - literature research, Python/R compute, and external tool Actions
 - governed Paper → Suggested Knowledge → Protocol Draft and Record/DataAsset → Suggested Knowledge (delivered)
-- fermentation-style multi-source data integration benchmark (delivered in the executable acceptance suite)
+- fermentation-style multi-source data integration (function-level contract tests available; full scenario qualification pending)
 
 ### P2: operational resources and governance
 
@@ -266,13 +266,19 @@ The acceptance benchmark is a CNT-style iterative experiment: Aira selects the n
 - Aira-planned and manual external-service requests sharing quote, order approval, budget reservation, logistics, chain of custody, fulfilment, and result receipt governance (delivered)
 - evidence-backed, reviewed Protocol improvement proposals and exact new-version lineage (delivered without AI dependency)
 - independent advisory Reviewer Agent, a source-grounded two-to-four-role Specialist Agent panel, formal human-finalized reproduction evaluation, bounded parallel and dependent read-only Tool graphs, and bounded mixed Protocol/structured Human Work/Tool/Resource/Instrument/External Service/Compute/Wait graphs (delivered); bounded Instrument feedback cycles are isolated inside their explicit control-session contract, while arbitrary Action-graph cycles, dependent agent conversations, and unrestricted multi-agent execution remain future work
-- protein-purification method evolution and OT-2 governance benchmarks (delivered in the executable acceptance suite)
+- protein-purification method evolution and OT-2 governance (function-level contract tests available; full scenario qualification pending)
 
 ### Executable acceptance suite
 
-Run `pnpm research:benchmarks` from the repository root to exercise the four stable cross-cutting scenarios defined in `benchmarks/research-automation/scenarios.json`: CNT human-in-the-loop iteration, fermentation multi-source integration, protein-purification method evolution, and OT-2 governed instrument control. The suite checks typed state transitions, real Record boundaries, immutable Action-output Evidence, human-finalized Result Packages, exact Protocol-improvement lineage, bounded device programs, safety interlocks, and fresh review before later high-risk physical steps. It also carries explicit prohibited shortcuts so a future refactor cannot silently turn model output into a Record, auto-apply an AI proposal, bypass a safety check, or retry physical work.
+Verification has two distinct layers. `pnpm research:benchmarks` runs fast function-level contract tests for the four scenarios in `benchmarks/research-automation/scenarios.json`: CNT iteration, fermentation integration, protein-purification method evolution, and OT-2 governance. These fixtures and scenario labels are not proof that the complete scenarios ran through the API, a real Record submission, or physical equipment. A prohibited-shortcut label alone is not a negative integration test.
 
-These are software acceptance benchmarks, not synthetic scientific success claims. They prove Platform orchestration and governance contracts. A real deployment must still qualify its Protocols, operators, device adapters, interlocks, data quality, and scientific conclusions in the target laboratory.
+`pnpm research:integration` starts isolated PostgreSQL, Redis and file storage, applies every migration, and exercises authenticated API preview-confirm operations, actual persistent-job dispatch, pause/resume, late success/failure after cancellation, exhausted-lease recovery, current membership and budget/time gates, pending Evidence review, structured Human Work validation and review, and human-finalized result packages. Specialist tests replace only the external model response; callback and crash tests explicitly inject latency or persisted crash state. API responses, permissions, database transactions and scientific-asset writes remain real. This suite runs in a dedicated CI job and is selected by pre-push for Research runtime changes; pre-commit remains lightweight.
+
+Before dispatch, Tool Jobs lock and refresh their Task/Run/Action context and recheck current execution access, pinned Tool/Executor scope, approval or unexpired automatic grant, and operational limits. A paused or blocked job remains pending without spending a retry attempt. A crashed final attempt is settled without rerunning a possibly charged model call; the Task pauses with an explicit uncertain-outcome message for human inspection. Cancellation and terminal results win over late callbacks.
+
+Specialist advice is excluded from Evidence registration and validation at the API, including existing snapshots. Register the underlying scientific source instead. Context assembly reserves space for Knowledge and prioritizes the newest result from each category before older results; the pinned digest includes coverage counts for omitted or shortened content, visible in preview and disclosed to the model.
+
+Neither test layer proves scientific success or production equipment readiness. Full CNT/fermentation/protein/OT-2 end-to-end qualification still requires the target Protocols, operators, adapters, interlocks, data and scientific review in the laboratory.
 
 ## Definition of complete
 

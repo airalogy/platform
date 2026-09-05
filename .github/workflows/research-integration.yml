@@ -1,0 +1,35 @@
+name: Research Integration
+
+on:
+  pull_request:
+    paths: ["apps/api/**", "tests/e2e/**", "package.json", ".github/workflows/research-integration.yml"]
+  push:
+    branches: [main]
+    paths: ["apps/api/**", "tests/e2e/**", "package.json", ".github/workflows/research-integration.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - name: Install locked API dependencies
+        run: uv --directory apps/api sync --locked
+      - name: Migrate isolated database and run real API/worker acceptance
+        run: bash tests/e2e/scripts/research-integration.sh -q --tb=short
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: research-integration-diagnostics
+          path: tests/e2e/.runtime/api.log
+          retention-days: 7
