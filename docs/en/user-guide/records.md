@@ -14,6 +14,10 @@ Do not put credentials, private keys, or unrelated personal data in a Record. Fo
 
 ## Validation and revisions
 
+The form opens on the field panel, with Aira available separately when enabled. **Save draft** stores unfinished work on this device; it is not a submitted Record. Submission asks you to confirm the destination and Protocol version. After successful submission, **View saved Record** opens that exact report; **Add another** starts a fresh Record.
+
+Validation feedback remains beside the fields. Server validation failures also appear in a persistent summary with links to the affected fields. Your entered values remain available. If a connection times out, check the Record list before retrying: the server may have saved the request even when the confirmation did not arrive.
+
 The form is generated from the Protocol’s structured fields. Validation can detect missing values and incompatible types, but it cannot decide whether an observation is scientifically correct. Review unexpected values before submission.
 
 When edits are allowed, Platform retains revision information according to the active feature and policy. Use annotations or the designated reason field to explain material corrections. Do not overwrite a value merely to make results look cleaner; preserve the original observation and document the correction.

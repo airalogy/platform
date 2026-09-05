@@ -8,6 +8,12 @@ Open a Project to see Protocols owned by that Project. Depending on your role, y
 
 Use a stable, descriptive Protocol ID where the interface requests one. Display names and descriptions can explain the scientific purpose; identifiers are used in routes and integrations and may not be safely changeable later.
 
+## Practice without AI or equipment
+
+In a Project, choose **New protocol → From template → First Record practice**. Give the draft a recognizable name, open it in the editor, and choose **Save**. Check the destination Lab, Project and version before confirming. You need permission to create Protocols; a recorder can ask the Protocol owner to prepare this once for the team.
+
+The bilingual practice template contains two required fields, example values and instructions for saving, submitting and revising a Record. It creates an ordinary editable, versioned Protocol, not a separate demo mode. Its data is explicitly synthetic: keep it in a practice Project and do not treat it as research evidence. No AI service is needed.
+
 ## Edit with intent
 
 Before changing a Protocol that already has Records:

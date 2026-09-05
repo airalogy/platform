@@ -5,7 +5,6 @@
     label-placement="top"
     class="w-full pl-4 text-start"
     :show-require-mark="false"
-    :show-feedback="Boolean(tableAssignerError)"
     :feedback="tableAssignerError"
     :validation-status="tableAssignerError ? 'error' : undefined"
   >
@@ -14,7 +13,7 @@
         <template #header>
           <n-ellipsis v-if="Boolean(model.title || model.label)" class="mr-auto text-4 font-500 capitalize">
             <span> {{ model.title || model.label }} </span>
-            <AimdRequiredMarker v-if="isTableRequired" :label="$t('common.required')" />
+            <aimd-required-marker v-if="isTableRequired" :label="$t('common.required')" />
           </n-ellipsis>
         </template>
 
@@ -123,7 +122,7 @@
             <n-descriptions-item v-for="(key, colIdx) in subvarNames" :key="key">
               <template #label>
                 <span>{{ key }}</span>
-                <AimdRequiredMarker v-if="isTableColumnRequired(key)" :label="$t('common.required')" />
+                <aimd-required-marker v-if="isTableColumnRequired(key)" :label="$t('common.required')" />
               </template>
               <!-- Wrap each cell in n-form-item for cell-level validation -->
               <n-form-item

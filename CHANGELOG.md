@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Added bilingual, executable first-Record practice templates through the existing editable Protocol creation flow, with synthetic example data and instructions for drafts, submission and revision; no AI dependency or automatic practice-data creation.
+
 - Added fast function-level research-automation contract tests and machine-readable scenarios for CNT iteration, fermentation integration, protein-purification method evolution, and OT-2 governance. These fixtures are not complete API, Record-submission, or physical-laboratory acceptance.
 - Added isolated PostgreSQL Research API/worker integration tests and a dedicated CI job, with change-scoped pre-push coverage for pause/resume, cancellation races, exhausted leases, access revocation, budget/deadline stops, AI-disabled human submissions, Evidence review, and final result packages.
 - Added bounded Specialist Agent panels as governed advisory Tool Actions: Aira can propose two to four distinct Literature, Experiment Design, Data, or Research Critic perspectives for one shared question; every call uses the same digest-bound non-Restricted Research context, rejects invented source references, remains approval-gated and budget-metered, and returns structured advice to the ordinary Planner without gaining asset-write, execution, ordering, approval, code, or equipment authority. The manual Tool form now also renders search, DOI, Specialist, and future JSON contracts correctly instead of sending search arguments to every Tool.
@@ -116,6 +118,10 @@ Target initial version: `0.1.0`.
 - Raised the production Web build heap default to 6 GB after the complete application build exceeded the former 4 GB limit.
 
 ### Fixed
+
+- Fixed template metadata escaping and missing Protocol IDs, made template creation await completion, and clarified draft versus published state. Record forms now start with fields, retain validation feedback and linked server errors, and open the exact saved report after confirmation.
+- Fixed local and Docker Protocol execution to honor the configured package directory. The legacy validator now combines AIMD fields with custom model refinements instead of silently skipping AIMD-only constraints; added real subprocess regression coverage.
+- Fixed newly published Protocols committing successfully but returning a serialization error, and moved response preparation before commit. Human Work now generates stable field identifiers for any display language, keeping integration-oriented editing under Advanced settings.
 
 - Fixed human-authored Knowledge, Claims, and Protocol improvement proposals failing provenance constraints; Knowledge revisions now return server-generated timestamps reliably.
 - Improved researcher journeys: tablet/mobile home prioritizes ongoing work, loading does not invent onboarding tasks, My Log is directly reachable, manual Research Task creation separates optional limits/environment from required goals, and AI-disabled Tasks show actionable manual guidance. Record drafts have one save control, exclude empty forms from outstanding work, and report storage failures truthfully; failed Knowledge saves retain text with persistent retry guidance.

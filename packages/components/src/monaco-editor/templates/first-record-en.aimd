@@ -1,0 +1,23 @@
+# My first Record — practice only
+
+> This is an onboarding exercise with synthetic data, not an experiment or scientific evidence. Keep practice Records separate from research data.
+
+## 1. Fill in the observation
+
+Use the example values below to learn how required fields work. You do not need equipment or AI.
+
+Sample label: {{var|sample_label: str, min_length=1, title="Sample label", description="Enter PRACTICE-001. Use a label that identifies this practice sample."}}
+
+Observation count: {{var|observation_count: int, ge=0, le=100, title="Observation count", description="Enter 12. A whole number from 0 to 100 is required."}}
+
+Notes (optional): {{var|notes: str = "", title="Notes", description="For example: Synthetic onboarding observation; not research data."}}
+
+## 2. Save and submit
+
+**Save draft** keeps unfinished work on this device; it does not submit a Record. When ready, choose **Submit**, check the Lab, Project and Protocol version, then confirm.
+
+## 3. Check and correct
+
+Choose **View saved Record** to open the report. To practice a correction, choose **Revise**, change the count to 13 and explain: “Corrected a practice transcription error.” The new revision preserves the original values and the reason for the change.
+
+To adapt this Protocol for real work, edit a copy, replace the practice instructions and constraints, and review it before use.

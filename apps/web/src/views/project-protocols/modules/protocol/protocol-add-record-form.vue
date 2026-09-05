@@ -432,7 +432,7 @@ watch(
 )
 
 const selectedTab = ref<"form-fields" | "ai-assistant" | "workflow" | undefined>(
-  instanceStore.aiEnabled ? "ai-assistant" : "form-fields",
+  "form-fields",
 )
 const docked = ref(false)
 function handleUpdateDocked(val: boolean) {
@@ -441,14 +441,13 @@ function handleUpdateDocked(val: boolean) {
     docked.value = true
   }
   else {
-    if (!isCollapsed.value && instanceStore.aiEnabled) {
-      selectedTab.value = "ai-assistant"
-    }
+    // Chat emits its initial undocked state on mount. It must not replace the
+    // field panel unless the researcher explicitly selects Aira.
     docked.value = false
   }
 }
 
-const shouldScroll = ref(false) // Enable after fields tab is opened
+const shouldScroll = ref(true) // The fields tab is the default entry point.
 const stopWatch = watch(
   selectedTab,
   (val) => {
@@ -466,7 +465,7 @@ watch(
       return
     }
 
-    selectedTab.value = instanceStore.aiEnabled ? "ai-assistant" : "form-fields"
+    selectedTab.value = "form-fields"
   },
 )
 
@@ -1106,7 +1105,7 @@ async function wrappedValidate() {
   }
 }
 
-async function focusFirstInvalidField() {
+async function focusFirstInvalidField(field?: string) {
   selectedTab.value = "form-fields"
   expandedNamesRef.value = [...scopeList.value]
   if (isCollapsed.value) {
@@ -1114,7 +1113,8 @@ async function focusFirstInvalidField() {
     isCollapsed.value = false
   }
   await nextTick()
-  const target = document.querySelector<HTMLElement>(
+  const fieldTarget = field ? document.getElementById(`form-research_variable-${field}`) : null
+  const target = fieldTarget || document.querySelector<HTMLElement>(
     ".record-fields-form .n-form-item--error, .record-fields-form [aria-invalid='true']",
   ) || document.querySelector<HTMLElement>(
     ".record-fields-form input, .record-fields-form textarea, .record-fields-form button, .record-fields-form [tabindex]",

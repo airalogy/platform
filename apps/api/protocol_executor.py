@@ -4,9 +4,12 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import tomllib
+import types
 from datetime import timedelta
+from pathlib import Path
 from typing import get_args, get_origin
 
 from airalogy.assigner import DefaultAssigner
@@ -47,6 +50,25 @@ class NullStream:
 sys.stdout = NullStream()
 
 timedelta_adapter = TypeAdapter(timedelta)
+
+
+def protocol_directory(protocol_name: str) -> Path:
+    root = Path(os.environ.get("PROTOCOL_DIR", "./protocols")).resolve()
+    path = (root / protocol_name).resolve()
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", protocol_name) or path.parent != root:
+        raise ValueError("Invalid Protocol package name")
+    return path
+
+
+def configure_protocol_imports(protocol_name: str):
+    # The storage root may be outside the API checkout. Never fall back to a
+    # similarly named package in the working directory.
+    path = protocol_directory(protocol_name)
+    if not path.is_dir():
+        raise ValueError("Protocol package not found")
+    namespace = types.ModuleType("protocols")
+    namespace.__path__ = [str(path.parent)]
+    sys.modules["protocols"] = namespace
 
 
 def deep_merge(dict1: dict, dict2: dict):
@@ -125,7 +147,7 @@ def import_module(module_name):
 
 def _load_tmp_aimd_model(protocol_name: str):
     """generate AIMD model for the protocol."""
-    protocol_path = f"./protocols/{protocol_name}"
+    protocol_path = protocol_directory(protocol_name)
     if not os.path.isfile(f"{protocol_path}/tmp_aimd_model.py"):
         try:
             with open(f"{protocol_path}/protocol.aimd") as f:
@@ -142,7 +164,7 @@ def _load_tmp_aimd_model(protocol_name: str):
 
 
 def get_protocol_info(protocol_name: str, params: dict):
-    protocol_path = f"./protocols/{protocol_name}"
+    protocol_path = protocol_directory(protocol_name)
     # check protocol.aimd file
     if not os.path.isfile(f"{protocol_path}/protocol.aimd"):
         raise ValueError("protocol.aimd file not found in package")
@@ -340,20 +362,19 @@ def var_assign(protocol_name: str, params: dict) -> dict:
 
 def var_validate(protocol_name: str, vars: dict) -> dict:
     data = {"data": vars}
-    # validate by aimd model
-    # aimd_model = _load_tmp_aimd_model(protocol_name)
-    # try:
-    #     aimd_model.VarModel(**vars)
-    # except ValidationError as exc:
-    #     data["errors"] = exc.errors()
-
-    # validate by model
+    aimd_model = _load_tmp_aimd_model(protocol_name)
     model = import_module(f"protocols.{protocol_name}.model")
+    validator = aimd_model.VarModel
     if model is not None and hasattr(model, "VarModel"):
-        try:
-            model.VarModel(**vars)
-        except ValidationError as exc:
-            data["errors"] = exc.errors()
+        # model.py may refine AIMD fields, but must not remove validation for
+        # fields declared only in AIMD. Preserve custom model validators too.
+        validator = create_model(
+            "ProtocolVarModel", __base__=(model.VarModel, aimd_model.VarModel)
+        )
+    try:
+        validator(**vars)
+    except ValidationError as exc:
+        data["errors"] = json.loads(exc.json(include_url=False))
 
     return data
 
@@ -363,7 +384,7 @@ def import_records(protocol_name: str, params: dict) -> dict:
         if v is not None:
             os.environ[k] = str(v)
 
-    protocol_path = os.path.abspath(f"./protocols/{protocol_name}")
+    protocol_path = str(protocol_directory(protocol_name))
     input_filename = params.get("input_filename")
     if not isinstance(input_filename, str) or input_filename == "":
         raise ValueError("input_filename is required")
@@ -400,7 +421,7 @@ def import_records(protocol_name: str, params: dict) -> dict:
 
 
 def migrate_schema(protocol_name: str, params: dict) -> dict:
-    protocol_path = os.path.abspath(f"./protocols/{protocol_name}")
+    protocol_path = str(protocol_directory(protocol_name))
     manifest = params.get("manifest")
     source_data = params.get("data")
     if not isinstance(manifest, dict) or not isinstance(source_data, dict):
@@ -453,6 +474,7 @@ def main(action: str, protocol_name: str, input_params: str):
         f"action: {action}, protocol_name: {protocol_name}, input_params: {input_params}"
     )
     try:
+        configure_protocol_imports(protocol_name)
         params = json.loads(input_params)
 
         if action == "get_protocol_info":

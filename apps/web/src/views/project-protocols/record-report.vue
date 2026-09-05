@@ -1,6 +1,6 @@
 <template>
   <section class="-mx-8">
-    <header class="h-[70px] w-full flex flex-1 flex-row items-center px-8">
+    <header class="min-h-[70px] w-full flex flex-1 flex-row flex-wrap items-center gap-y-3 px-8 py-2">
       <n-button quaternary class="mr-4 -ml-2" @click="handleRedirect">
         <template #icon>
           <n-icon size="28">
@@ -9,7 +9,7 @@
         </template>
       </n-button>
       <div class="mr-auto w-fit">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <h3 class="text-5 font-500">
             {{ $t("page.protocol.recordReport.title") }}
           </h3>
@@ -81,7 +81,7 @@
         {{ $t("page.protocol.recordReport.exportPdf") }}
       </n-button>
       <n-button type="warning" class="mr-4" @click="handleModify()">
-        {{ $t("common.modify") }}
+        {{ $t("page.protocol.addRecord.reviseAction") }}
       </n-button>
       <n-tooltip v-if="canDeleteByRole" :disabled="!deleteBlockedReason">
         <template #trigger>

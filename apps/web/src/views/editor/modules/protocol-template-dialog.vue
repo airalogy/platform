@@ -1,122 +1,80 @@
 <template>
   <n-modal
-    v-model:show="showModal"
-    preset="card"
-    title="Create Protocol from Template"
-    :bordered="false"
-    size="huge"
-    class="w-160"
-    :mask-closable="false"
+    v-model:show="showModal" preset="card" :title="$t('editor.template.title')"
+    class="max-w-160 w-90vw" content-class="max-h-80vh overflow-y-auto"
+    :mask-closable="false" :closable="!loading" :close-on-esc="!loading"
   >
-    <n-form :model="model" size="large">
-      <n-form-item label="Protocol Name" path="name">
-        <n-input
-          v-model:value="model.name"
-          type="text"
-          maxlength="30"
-          placeholder="Enter protocol name"
-        />
+    <p class="mb-5 text-sm text-gray-600">
+      {{ $t("editor.template.description") }}
+    </p>
+    <n-form :model="model" :disabled="loading" size="large">
+      <n-form-item :label="$t('editor.template.name')" required>
+        <n-input v-model:value="model.name" data-testid="template-name" maxlength="80" :placeholder="$t('editor.template.namePlaceholder')" />
       </n-form-item>
-
-      <n-form-item label="Template" path="templateType">
-        <n-radio-group v-model:value="model.templateType">
-          <n-space>
-            <n-radio value="basic" checked>
-              Basic Template
-              <template #description>
-                <span class="text-xs text-gray-500">
-                  A simple starter template with basic protocol structure
-                </span>
-              </template>
-            </n-radio>
-            <n-radio value="empty">
-              Empty Project
-              <template #description>
-                <span class="text-xs text-gray-500">
-                  Start with a blank project with no template files
-                </span>
-              </template>
-            </n-radio>
+      <n-form-item :label="$t('editor.template.template')">
+        <n-radio-group v-model:value="model.templateType" class="w-full">
+          <n-space vertical :size="16">
+            <div v-for="option in options" :key="option.value">
+              <n-radio :value="option.value" :data-testid="`template-${option.value}`">
+                {{ option.label }}
+              </n-radio>
+              <p class="ml-6 mt-1 text-sm text-gray-500">
+                {{ option.description }}
+              </p>
+            </div>
           </n-space>
         </n-radio-group>
       </n-form-item>
     </n-form>
-
-    <div class="flex items-center justify-end">
-      <n-button
-        size="medium"
-        type="primary"
-        :loading="loading"
-        @click="handleConfirm"
-      >
-        Create Protocol
+    <n-alert v-if="error" role="alert" type="error" class="mb-4">
+      {{ error }}
+    </n-alert>
+    <div class="flex justify-end gap-3">
+      <n-button :disabled="loading" @click="showModal = false">
+        {{ $t("common.cancel") }}
+      </n-button>
+      <n-button type="primary" :loading="loading" :disabled="!model.name.trim()" data-testid="template-create-confirm" @click="handleConfirm">
+        {{ $t("editor.template.create") }}
       </n-button>
     </div>
   </n-modal>
 </template>
 
 <script setup lang="ts">
-import { useClosableMessage } from "@/composables"
-import { NButton, NForm, NFormItem, NInput, NModal, NRadio, NRadioGroup, NSpace } from "naive-ui"
-import { reactive, ref } from "vue"
+import type { ProtocolTemplate } from "@airalogy/components/monaco-editor/store/uploadFileDataStore"
+import { $t } from "@airalogy/shared/locales"
+import { useI18n } from "vue-i18n"
 
 const props = defineProps<{
   show: boolean
-  projectId: string
+  createTemplate: (template: ProtocolTemplate) => Promise<void>
 }>()
-
-const emit = defineEmits<{
-  (e: "update:show", value: boolean): void
-  (e: "create", template: {
-    type: string
-    name: string
-    version: string
-  }): void
-}>()
-
-const showModal = ref(props.show)
+const emit = defineEmits<{ (e: "update:show", value: boolean): void }>()
+const showModal = computed({ get: () => props.show, set: value => emit("update:show", value) })
+const { locale } = useI18n()
 const loading = ref(false)
-const message = useClosableMessage()
+const error = ref("")
+const model = reactive({ name: $t("editor.template.defaultName"), templateType: "first-record" })
+const options = computed(() => [
+  { value: "first-record", label: $t("editor.template.practice"), description: $t("editor.template.practiceDescription") },
+  { value: "basic", label: $t("editor.template.basic"), description: $t("editor.template.basicDescription") },
+  { value: "empty", label: $t("editor.template.empty"), description: $t("editor.template.emptyDescription") },
+])
 
-const model = reactive({
-  name: "Default Protocol",
-  templateType: "basic",
-  version: {
-    major: 0,
-    minor: 1,
-    patch: 0,
-  },
-})
-
-function handleConfirm() {
+async function handleConfirm() {
+  if (loading.value || !model.name.trim())
+    return
   loading.value = true
-
+  error.value = ""
   try {
-    const version = `${model.version.major}.${model.version.minor}.${model.version.patch}`
-
-    emit("create", {
-      type: model.templateType,
-      name: model.name,
-      version,
-    })
-
-    emit("update:show", false)
+    await props.createTemplate({ type: model.templateType, name: model.name.trim(), version: "0.1.0", locale: locale.value })
+    showModal.value = false
   }
-  catch (error) {
-    message.error("Failed to create protocol template")
-    console.error("Failed to create protocol template:", error)
+  catch {
+    error.value = $t("editor.template.failed")
   }
   finally {
     loading.value = false
   }
 }
-
-// Keep internal and external show state in sync
-watch(() => props.show, (val) => {
-  showModal.value = val
-})
-
-watch(() => showModal.value, (val) => {
-  emit("update:show", val)
-})
 </script>

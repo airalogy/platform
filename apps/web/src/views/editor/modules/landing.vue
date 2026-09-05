@@ -164,8 +164,7 @@
     <!-- Protocol Template Dialog -->
     <protocol-template-dialog
       v-model:show="showTemplateDialog"
-      :project-id="projectId"
-      @create="handleCreateTemplate"
+      :create-template="handleCreateTemplate"
     />
 
     <!-- Upload Protocol Zip Modal -->
@@ -507,7 +506,7 @@ function handleContentLoaded(content: UploadContent) {
 }
 
 // Protocol actions
-async function handleCreateTemplate(template: { type: string, name: string, version: string }) {
+async function handleCreateTemplate(template: { type: string, name: string, version: string, locale?: string }) {
   try {
     // Set packageId before creating template
     uploadFileDataStore.packageId = projectId.value
@@ -517,6 +516,7 @@ async function handleCreateTemplate(template: { type: string, name: string, vers
       type: template.type,
       name: template.name,
       version: template.version,
+      locale: template.locale,
     })
 
     // Initialize web container with the new files
@@ -525,11 +525,12 @@ async function handleCreateTemplate(template: { type: string, name: string, vers
     // Navigate to the editor
     await navigateToEditor()
 
-    message.success($t("editor.landing.createSuccess", { name: template.name }))
+    message.success($t("editor.template.draftReady"))
   }
   catch (error) {
     console.error("Error creating protocol:", error)
     message.error($t("editor.landing.createFailed"))
+    throw error
   }
 }
 

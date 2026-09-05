@@ -70,6 +70,24 @@ test("minimal manual Research Task does not require optional infrastructure", as
     await page.getByRole("button", { name: "Start Task", exact: true }).click()
     await expect(page.getByTestId("research-manual-next-step")).toBeVisible()
     await expect(page.getByText("Aira stage", { exact: true })).toHaveCount(0)
+    await page.getByRole("button", { name: "Add Human Work", exact: true }).click()
+    const humanDialog = page.getByRole("dialog")
+    await humanDialog.getByPlaceholder("For example: Inspect sample labels").fill("Synthetic label inspection")
+    await humanDialog.getByPlaceholder("State exactly what the assignee must do and what must not be assumed.").fill("Record a synthetic practice observation, not research evidence.")
+    await page.getByTestId("human-work-field-label").locator("input").fill("观察结果")
+    await expect(page.getByTestId("human-work-field-advanced")).not.toHaveAttribute("open", "")
+    await humanDialog.getByRole("button", { name: "Add field", exact: true }).click()
+    await page.getByTestId("human-work-field-label").nth(1).locator("input").fill("观察结果")
+    const request = page.waitForRequest(request => request.url().endsWith("/human-actions/preview") && request.method() === "POST")
+    await humanDialog.getByRole("button", { name: "Preview Action", exact: true }).click()
+    const fields = (await request).postDataJSON().request.fields
+    expect(fields.map((field: { label: string }) => field.label)).toEqual(["观察结果", "观察结果"])
+    expect(new Set(fields.map((field: { key: string }) => field.key)).size).toBe(2)
+    for (const field of fields)
+      expect(field.key).toMatch(/^[a-z][a-z0-9_]{0,63}$/)
+    await humanDialog.getByRole("button", { name: "Confirm and assign", exact: true }).click()
+    await expect(humanDialog).toHaveCount(0)
+    await expect(page.getByText("Synthetic label inspection", { exact: true }).first()).toBeVisible()
   }
   else {
     // Creating the editable Task manually must not itself start an AI Run.

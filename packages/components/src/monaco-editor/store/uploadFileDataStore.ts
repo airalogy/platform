@@ -4,11 +4,13 @@ import type { AddItemPayload } from "../utils/file-tree"
 import { useClosableMessage } from "@airalogy/composables"
 import { DEFAULT_FILE_ID_NAME_MAP } from "@airalogy/shared"
 import { arrayBufferToString, canEditAsText } from "@airalogy/shared/utils"
-import { nanoid } from "nanoid"
+import { customAlphabet, nanoid } from "nanoid"
 import { defineStore } from "pinia"
 import { parse, stringify } from "smol-toml"
 import { ref, shallowRef } from "vue"
 import { getRootPath } from "../composables/useFileUpload"
+import firstRecordEn from "../templates/first-record-en.aimd?raw"
+import firstRecordZh from "../templates/first-record-zh.aimd?raw"
 import {
   addItem as addItemToTree,
   findByFilename,
@@ -20,6 +22,13 @@ import { DEFAULT_FILE_DATA, getProjectDataFromLocal, isFile, saveProjectData } f
 
 export const PENDING_DIRECTORY = "$PENDING:DIRECTORY$"
 export const PENDING_FILE = "$PENDING:FILE$"
+const createProtocolSuffix = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 10)
+export interface ProtocolTemplate {
+  type: string
+  name: string
+  version: string
+  locale?: string
+}
 export function prepareName(name: string) {
   return name.replaceAll(PENDING_DIRECTORY, "").replaceAll(PENDING_FILE, "")
 }
@@ -54,7 +63,7 @@ export const useUploadFileDataStore = defineStore("uploadFileData", () => {
 
   const downloadProtocolPackage = shallowRef<(id: string) => Promise<(FileSystemItem)[] | null>>(() => Promise.resolve(null))
 
-  async function createInitialFileData(id: string, protocolInfo: ProtocolModels.ProjectProtocolInfo | null = null, template = { type: "basic", name: "Default Protocol", version: "0.1.0" }) {
+  async function createInitialFileData(id: string, protocolInfo: ProtocolModels.ProjectProtocolInfo | null = null, template: ProtocolTemplate = { type: "basic", name: "Default Protocol", version: "0.1.0" }) {
     let newFileData: (FileSystemItem)[] = []
 
     if (template.type === "empty") {
@@ -74,7 +83,14 @@ export const useUploadFileDataStore = defineStore("uploadFileData", () => {
       const tomlFile = filesCopy.find(file => file.id === "airalogy_toml_config")
       if (tomlFile && isFile(tomlFile)) {
         const version = template.version || "0.1.0"
-        tomlFile.content = `[airalogy_protocol]\nversion = "${version}"\nname = "${template.name || "Default Protocol"}"\ndescription = "Protocol description"\n`
+        tomlFile.content = stringify({
+          airalogy_protocol: {
+            id: protocolInfo?.uid || `protocol_${createProtocolSuffix()}`,
+            version,
+            name: template.name.trim() || "Default Protocol",
+            description: template.type === "first-record" ? "Synthetic onboarding practice; not research evidence." : "",
+          },
+        })
       }
 
       // Update protocol.aimd with template name
@@ -85,9 +101,12 @@ export const useUploadFileDataStore = defineStore("uploadFileData", () => {
         }
 
         aimdFile.content = aimdFile.content?.replace("# AIMD Template", `# ${template.name}`) || ""
+        if (template.type === "first-record") {
+          aimdFile.content = template.locale === "zh-CN" ? firstRecordZh : firstRecordEn
+        }
       }
 
-      if (template.type === "basic") {
+      if (template.type === "basic" || template.type === "first-record") {
         // Use all files for basic template
         newFileData = filesCopy
       }
@@ -168,10 +187,10 @@ export const useUploadFileDataStore = defineStore("uploadFileData", () => {
     return hasProtocolToml
   }
 
-  async function createFromTemplate(template: { type: string, name: string, version: string }) {
+  async function createFromTemplate(template: ProtocolTemplate) {
     if (!packageId.value) {
       message.error("Package ID is not set")
-      return
+      throw new Error("Package ID is not set")
     }
 
     const id = packageId.value

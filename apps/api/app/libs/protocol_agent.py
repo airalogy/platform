@@ -478,7 +478,7 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
             "-v",
             f"{os.getcwd()}/protocol_executor.py:/home/deploy/app/protocol_executor.py",
             "-v",
-            f"{os.getcwd()}/protocols/{package_name}/:/home/deploy/app/protocols/{package_name}/",
+            f"{_protocol_path(package_name)}/:/home/deploy/app/protocols/{package_name}/",
             "-v",
             f"{os.getcwd()}/protocol_executor.log:/home/deploy/app/protocol_executor.log",
             config.AIRALOGY_PROTOCOL_EXECUTOR_IMAGE,
@@ -500,6 +500,7 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
     print(f"protocol_exec, cmd: {cmd}")
     process = await asyncio.create_subprocess_exec(
         *cmd,
+        env={**os.environ, "PROTOCOL_DIR": str(config.PROTOCOL_DIR)},
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

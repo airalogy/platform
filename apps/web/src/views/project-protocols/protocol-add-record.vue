@@ -101,6 +101,17 @@
       </template>
     </header>
     <n-divider class="!mb-4 !mt-0" />
+    <n-alert v-if="submissionErrors.length" type="error" role="alert" class="mx-8 mb-4" data-testid="record-submission-errors" :title="$t('page.protocol.addRecord.notSubmitted')">
+      <p>{{ $t("page.protocol.addRecord.fixAndRetry") }}</p>
+      <ul class="mt-2 space-y-1">
+        <li v-for="(issue, index) in submissionErrors" :key="index">
+          <button v-if="issue.field" type="button" class="text-left underline" @click="formRef?.focusFirstInvalidField(issue.field)">
+            {{ issue.message }}
+          </button>
+          <span v-else>{{ issue.message }}</span>
+        </li>
+      </ul>
+    </n-alert>
     <n-alert v-if="researchWorkItem" type="info" class="mx-8 mb-4">
       <template #header>
         {{ $t("page.protocol.addRecord.researchWorkTitle") }} · {{ researchWorkItem.task.title }}
@@ -169,7 +180,7 @@ import { useProtocolWorkflowStore } from "@/store/modules/workflow"
 import { hasRecordDraftContent } from "@/utils/recordDrafts"
 import { useBeforeUnload, useClosableMessage } from "@airalogy/composables"
 import { useThemeStore } from "@airalogy/composables/theme"
-import { formatPydanticErrors, formatValidateErrors, type PydanticError } from "@airalogy/shared/utils/errorFormatter.js"
+import { formatValidateErrors, type PydanticError } from "@airalogy/shared/utils/errorFormatter.js"
 import { get as _get, set as _set } from "lodash-es"
 import { type UploadOnFinish, useDialog } from "naive-ui"
 import { NButton } from "naive-ui/es/button"
@@ -241,7 +252,7 @@ const correctionReason = ref("")
 const formRef = ref<{
   validate: () => any
   requiredCompletion: { filled: number, total: number, percent: number }
-  focusFirstInvalidField: () => Promise<void>
+  focusFirstInvalidField: (field?: string) => Promise<void>
   toggle: () => void
   fieldRecord: ShallowRef<ExtractResult | null>
   fieldModel: FieldRecord
@@ -576,12 +587,35 @@ function confirmRecordSubmission(
 }
 
 const submissionLoading = ref(false)
+const submissionErrors = ref<{ field?: string, message: string }[]>([])
+
+async function showSubmissionErrors(error: unknown) {
+  const detail = (error as { response?: { data?: { detail?: unknown } } } | null)?.response?.data?.detail
+  const candidates = Array.isArray(error) ? error : Array.isArray(detail) ? detail : (detail as { errors?: unknown } | null)?.errors
+  const fieldErrors = Array.isArray(candidates) ? candidates.filter(item => Array.isArray(item?.loc)) : []
+  if (fieldErrors.length) {
+    const schema = protocolInfo.value?.json_schema?.research_variable as { properties?: Record<string, { title?: string }> } | undefined
+    submissionErrors.value = (fieldErrors as PydanticError[]).map((item) => {
+      const field = String(item.loc[0] || "")
+      const label = schema?.properties?.[field]?.title || field
+      const nested = item.loc.slice(1).join(" / ")
+      return { field, message: `${label}${nested ? ` (${nested})` : ""}: ${item.msg}` }
+    })
+  }
+  else {
+    // Network and server failures must leave a persistent, actionable message,
+    // not only a toast that disappears while the researcher checks their data.
+    submissionErrors.value = [{ message: t("page.protocol.addRecord.retrySubmission") }]
+  }
+  await formRef.value?.focusFirstInvalidField(submissionErrors.value[0]?.field)
+}
 
 async function handleConfirm() {
   if (!formRef.value || isReadonly.value) {
     return
   }
   submissionLoading.value = true
+  submissionErrors.value = []
 
   try {
     await formRef.value.validate()
@@ -600,17 +634,7 @@ async function handleConfirm() {
     )
 
     if (validateError) {
-      await formRef.value.focusFirstInvalidField()
-      if (Array.isArray(validateError)) {
-        // Format validation errors for better display
-        const errors = formatPydanticErrors(validateError as PydanticError[])
-
-        message.error(errors.join("\n"))
-      }
-      else {
-        const errMsg = (validateError.response?.data as any)?.detail || validateError.message
-        message.error(errMsg)
-      }
+      await showSubmissionErrors(validateError)
       return
     }
 
@@ -723,18 +747,19 @@ async function handleConfirm() {
         else {
           cleanup()
           unregister(route.fullPath)
-          await routerPushByKey("protocol-records", {
-            params: { protocolUid: uid, labUid: lab.uid, projectUid: project.uid },
+          await routerPushByKey("protocol-record-report", {
+            params: { protocolUid: uid, labUid: lab.uid, projectUid: project.uid, protocolVersion: data.protocol_version, recordId: data.id, recordVersion: String(data.version) },
           })
         }
       }
       hideModal()
     }
     else if (error) {
-      // message.error(error.message)
+      await showSubmissionErrors(error)
     }
   }
   catch (e) {
+    await showSubmissionErrors(e)
     if (e instanceof Error) {
       message.error(e.message, {
         closable: true,
@@ -769,7 +794,7 @@ function confirmRecordNextStep(isRevision: boolean): Promise<boolean> {
         ? "page.protocol.addRecord.revisionSuccessTitle"
         : "page.protocol.addRecord.createSuccess"),
       content: t("page.protocol.addRecord.successNextStep"),
-      positiveText: t("page.protocol.addRecord.viewRecordsAction"),
+      positiveText: t("page.protocol.addRecord.viewSavedRecord"),
       negativeText: isRevision ? undefined : t("page.protocol.addRecord.addAnotherAction"),
       onPositiveClick: () => settle(false),
       onNegativeClick: () => settle(true),

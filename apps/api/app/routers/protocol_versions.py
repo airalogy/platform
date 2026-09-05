@@ -577,16 +577,20 @@ async def upload_package(
         protocol_version.aimd,
     )
 
+    # New Protocols need the same serialization context as existing ones.
+    # Otherwise the write commits, then airalogy_id raises while forming the
+    # response, misleading the author into retrying an already saved package.
+    protocol.lab_uid = lab.uid
+    protocol.project_uid = project.uid
+    response_data = protocol.as_dict(
+        lab_uid=lab.uid,
+        project_uid=project.uid,
+        knowledge_sources=[knowledge_source_payload]
+        if knowledge_source_payload is not None
+        else [],
+    )
     await db_session.commit()
-    return {
-        "data": protocol.as_dict(
-            lab_uid=lab.uid,
-            project_uid=project.uid,
-            knowledge_sources=[knowledge_source_payload]
-            if knowledge_source_payload is not None
-            else [],
-        )
-    }
+    return {"data": response_data}
 
 
 @router.get("/{id}/download_package")

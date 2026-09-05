@@ -119,11 +119,11 @@
   <n-modal
     v-model:show="isShown"
     preset="card"
-    title="Save Protocol"
+    :title="$t('editor.template.saveTitle')"
     :bordered="false"
     size="huge"
-    class="min-w-160 w-70vw"
-    content-class="px-4 max-h-50vh overflow-y-auto mb-4"
+    class="max-w-4xl w-94vw"
+    content-class="px-4 max-h-70vh overflow-y-auto mb-4"
     footer-class="flex items-center justify-end gap-4"
     :mask-closable="false"
   >
@@ -154,7 +154,7 @@
     <protocol-setup ref="protocolSetupRef" mode="reuse" :skip-upload="true" :protocol-info="protocolInfo" :disable-default="false" />
     <template #footer>
       <n-button size="medium" :disabled="loading" @click="hideModal">
-        Cancel
+        {{ $t("common.cancel") }}
       </n-button>
       <n-button
         size="medium"
@@ -163,7 +163,7 @@
         :loading="loading"
         @click="handleApplyProtocol"
       >
-        Save
+        {{ $t("common.save") }}
       </n-button>
     </template>
   </n-modal>
@@ -583,10 +583,10 @@ async function handleApplyProtocol() {
       // message.success(`Apply protocol with version v${latest_version} succeed`)
       hideModal()
       dialog.success({
-        title: "Apply protocol succeed",
-        content: `Redirect to new protocol version v${latest_version} now?`,
-        positiveText: $t("common.confirm"),
-        negativeText: $t("common.cancel"),
+        title: $t("editor.template.savedTitle"),
+        content: $t("editor.template.savedDescription", { version: latest_version, lab: lab_uid || "", project: project_uid || "" }),
+        positiveText: $t("editor.template.openProtocol"),
+        negativeText: $t("editor.template.keepEditing"),
         onPositiveClick: () => routerPushByKey("protocol-detail", {
           params: {
             labUid: lab_uid!,

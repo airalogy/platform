@@ -52,8 +52,12 @@
 
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div class="aira-type-label">{{ $t("page.research.submissionFields") }}</div>
-            <div class="aira-type-meta mt-1">{{ $t("page.research.submissionFieldsHint") }}</div>
+            <div class="aira-type-label">
+              {{ $t("page.research.submissionFields") }}
+            </div>
+            <div class="aira-type-meta mt-1">
+              {{ $t("page.research.submissionFieldsHint") }}
+            </div>
           </div>
           <n-button size="small" secondary :disabled="draft.fields.length >= 20" @click="addField">
             {{ $t("page.research.addField") }}
@@ -69,15 +73,7 @@
             </div>
             <div class="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
               <n-form-item :label="$t('page.research.fieldLabel')" required>
-                <n-input v-model:value="field.label" @blur="fillFieldKey(field)" />
-              </n-form-item>
-              <n-form-item
-                :label="$t('page.research.fieldKey')"
-                required
-                :validation-status="fieldKeyError(field) ? 'error' : undefined"
-                :feedback="fieldKeyError(field)"
-              >
-                <n-input v-model:value="field.key" placeholder="sample_condition" />
+                <n-input v-model:value="field.label" data-testid="human-work-field-label" />
               </n-form-item>
               <n-form-item :label="$t('page.research.fieldType')" required>
                 <n-select v-model:value="field.valueType" :options="fieldTypeOptions" />
@@ -101,6 +97,21 @@
             <n-form-item v-if="field.valueType === 'number'" :label="$t('page.research.unit')">
               <n-input v-model:value="field.unit" placeholder="Cel" />
             </n-form-item>
+            <details :open="Boolean(fieldKeyError(field))" data-testid="human-work-field-advanced">
+              <summary class="cursor-pointer text-sm text-gray-500">
+                {{ $t("page.research.fieldAdvanced") }}
+              </summary>
+              <p class="my-2 text-sm text-gray-500">
+                {{ $t("page.research.fieldKeyAutomatic") }}
+              </p>
+              <n-form-item
+                :label="$t('page.research.fieldKey')" required
+                :validation-status="fieldKeyError(field) ? 'error' : undefined"
+                :feedback="fieldKeyError(field)"
+              >
+                <n-input v-model:value="field.key" placeholder="sample_condition" />
+              </n-form-item>
+            </details>
           </section>
         </div>
 
@@ -124,8 +135,12 @@
         {{ $t("page.research.humanWorkPreviewHint") }}
       </n-alert>
       <section class="human-work-preview mt-4">
-        <div class="aira-type-eyebrow">{{ $t("page.research.saveDestination") }}</div>
-        <h3 class="aira-type-card-title mb-0 mt-1">{{ preview.destination.task.title }}</h3>
+        <div class="aira-type-eyebrow">
+          {{ $t("page.research.saveDestination") }}
+        </div>
+        <h3 class="aira-type-card-title mb-0 mt-1">
+          {{ preview.destination.task.title }}
+        </h3>
         <p class="aira-type-body aira-text-secondary mb-0 mt-2">
           {{ requestPayload.title }}
         </p>
@@ -133,7 +148,9 @@
           {{ $t("page.research.assignedTo") }} · {{ preview.assignee.name || preview.assignee.username }}
         </div>
         <ul class="human-work-effects">
-          <li v-for="effect in preview.effects" :key="effect">{{ effect }}</li>
+          <li v-for="effect in preview.effects" :key="effect">
+            {{ effect }}
+          </li>
         </ul>
       </section>
     </template>
@@ -197,7 +214,7 @@ const eligibleExecutors = ref<ResearchUser[]>([])
 function newField(): EditableField {
   return {
     localId: nanoid(8),
-    key: "",
+    key: `field_${nanoid(16).toLowerCase().replace(/-/g, "_")}`,
     label: "",
     description: "",
     valueType: "text",
@@ -315,17 +332,6 @@ function addField() {
 function removeField(index: number) {
   if (draft.fields.length > 1)
     draft.fields.splice(index, 1)
-}
-
-function fillFieldKey(field: EditableField) {
-  if (field.key)
-    return
-  field.key = field.label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64)
 }
 
 async function open() {

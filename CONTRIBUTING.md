@@ -38,6 +38,9 @@ Do not commit:
 - production credentials
 - deployment-specific endpoints
 - generated caches, logs, or build outputs
+- personal or AI-agent execution journals, workstation-specific troubleshooting notes, and per-run test reports
+
+Keep reusable test scenarios, acceptance criteria and known limitations in the relevant test README. Product changes belong in the changelogs; transient execution details belong in reviewed CI artifacts or private working notes, not permanent public documentation. Use synthetic data for tests and inspect diagnostics before attaching them to public issues or pull requests.
 
 Run this before opening a pull request:
 

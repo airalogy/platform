@@ -9,7 +9,6 @@
         model.scope === 'research_check' || model.type === 'checkbox' || model.type === 'boolean' || model?.raw?.check,
     }"
     :show-require-mark="false"
-    :show-feedback="Boolean(assignerError)"
     :feedback="assignerError"
     :validation-status="assignerError ? 'error' : undefined"
   >
@@ -21,7 +20,7 @@
             class="mr-auto text-4 font-500 capitalize"
           >
             <span> {{ model.title || model.label }} </span>
-            <AimdRequiredMarker v-if="model.required" :label="$t('common.required')" />
+            <aimd-required-marker v-if="model.required" :label="$t('common.required')" />
           </n-ellipsis>
         </template>
         <field-info-display

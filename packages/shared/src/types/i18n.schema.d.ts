@@ -1281,6 +1281,8 @@ declare namespace I18n {
         fieldNumber: string
         fieldLabel: string
         fieldKey: string
+        fieldAdvanced: string
+        fieldKeyAutomatic: string
         fieldKeyInvalid: string
         fieldKeyDuplicate: string
         fieldType: string
@@ -2674,6 +2676,11 @@ declare namespace I18n {
           revisionSuccessTitle: string
           successNextStep: string
           viewRecordsAction: string
+          viewSavedRecord: string
+          reviseAction: string
+          notSubmitted: string
+          fixAndRetry: string
+          retrySubmission: string
           addAnotherAction: string
           noProtocol: string
           uploadPackage: string
@@ -3820,6 +3827,28 @@ declare namespace I18n {
         changed: string
         unavailable: string
         unavailableHint: string
+      }
+      template: {
+        title: string
+        draftReady: string
+        saveTitle: string
+        savedTitle: string
+        savedDescription: string
+        openProtocol: string
+        keepEditing: string
+        description: string
+        name: string
+        namePlaceholder: string
+        template: string
+        defaultName: string
+        practice: string
+        practiceDescription: string
+        basic: string
+        basicDescription: string
+        empty: string
+        emptyDescription: string
+        create: string
+        failed: string
       }
       landing: {
         eyebrow: string

@@ -1,0 +1,87 @@
+import { expect, test } from "@playwright/test"
+
+test("an author publishes a template and a Lab member submits and revises a real Record", async ({ page, context, browser }) => {
+  test.setTimeout(120_000)
+  page.setDefaultTimeout(15_000)
+  await page.addInitScript(() => {
+    localStorage.setItem("lang", JSON.stringify({ data: "en-US", expire: null }))
+  })
+  await page.goto("/labs/dev_lab/projects/quickstart/protocols")
+  await page.getByRole("button", { name: "New protocol", exact: true }).click()
+  await page.getByTestId("protocol-create-template").click()
+  await expect(page.getByRole("dialog")).toContainText("First Record practice")
+  await page.getByTestId("template-name").locator("input").fill("Practice \"first Record\"")
+  await page.getByTestId("template-create-confirm").click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(page.getByRole("dialog")).toContainText("Quickstart Protocol Testing")
+  const publishedResponse = page.waitForResponse(response => new URL(response.url()).pathname === "/api/protocols" && response.request().method() === "POST")
+  await page.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click()
+  const published = await publishedResponse
+  expect(published.ok(), await published.text()).toBeTruthy()
+  const { data: protocol } = await published.json()
+  expect(protocol.airalogy_id).toContain(`.protocol.${protocol.uid}.v.0.1.0`)
+  await page.getByRole("button", { name: "Open Protocol", exact: true }).click()
+  await expect(page).toHaveURL(/\/protocols\/protocol_/)
+  const protocolPath = new URL(page.url()).pathname.replace(/\/protocol$/, "")
+  // The Protocol author and the person recording are different accounts.
+  const memberContext = await browser.newContext({ baseURL: process.env.E2E_WEB_URL || "http://127.0.0.1:3100", storageState: { cookies: [], origins: [] } })
+  page = await memberContext.newPage()
+  page.setDefaultTimeout(15_000)
+  await page.addInitScript(() => localStorage.setItem("lang", JSON.stringify({ data: "en-US", expire: null })))
+  await page.goto("/login")
+  await page.getByTestId("login-email").locator("input").fill("dev.collaborator@airalogy.dev")
+  await page.getByTestId("login-password").locator("input").fill("AiralogyDev123!")
+  const signedIn = page.waitForResponse(response => response.url().endsWith("/api/signin_by_email"))
+  await page.getByTestId("login-submit").click()
+  const { token } = await (await signedIn).json()
+  await expect(page).not.toHaveURL(/\/login/)
+  const invalid = await page.request.post(`/api/protocols/${protocol.id}/records`, {
+    headers: { "Auth-Token": token },
+    data: { var: { observation_count: -1 }, check: {}, step: {}, report: "" },
+  })
+  expect(invalid.status(), await invalid.text()).toBe(400)
+  const viewerLogin = await context.request.post("/api/signin_by_email", { data: { email: "dev.viewer@airalogy.dev", password: "AiralogyDev123!" } })
+  const viewer = await viewerLogin.json()
+  const forbidden = await page.request.post(`/api/protocols/${protocol.id}/records`, {
+    headers: { "Auth-Token": viewer.token },
+    data: { var: { sample_label: "PRACTICE-001", observation_count: 12 }, check: {}, step: {}, report: "" },
+  })
+  expect(forbidden.status(), await forbidden.text()).toBe(400)
+  expect(await forbidden.json()).toMatchObject({ detail: "Permission denied" })
+  await page.goto(`${protocolPath}/add`)
+  await expect(page.getByText("2/2", { exact: true })).toHaveCount(0)
+  await page.locator("#form-research_variable-sample_label textarea, #form-research_variable-sample_label input").fill("PRACTICE-001")
+  await page.locator("#form-research_variable-observation_count input").fill("12")
+  // Inject one server field error to exercise recovery and focus independently
+  // of client validation. Successful writes below still use the real API.
+  const validationUrl = `**/api/protocols/${protocol.id}/records/validate`
+  await page.route(validationUrl, async (route) => {
+    const response = await route.fetch()
+    await route.fulfill({ response, json: { ...await response.json(), errors: [{ loc: ["observation_count"], msg: "Please review this count.", type: "value_error" }] } })
+  })
+  await page.getByRole("button", { name: "Submit", exact: true }).click()
+  await page.getByTestId("record-submission-errors").getByRole("button", { name: "Observation count: Please review this count." }).click()
+  await expect(page.locator("#form-research_variable-observation_count input")).toBeFocused()
+  await expect(page.locator("#form-research_variable-sample_label input")).toHaveValue("PRACTICE-001")
+  await page.unroute(validationUrl)
+  await page.getByRole("button", { name: "Submit", exact: true }).click()
+  await expect(page.getByRole("dialog")).toContainText("Quickstart Protocol Testing")
+  await expect(page.getByRole("dialog")).toContainText("2/2")
+  await page.getByRole("dialog").getByRole("button", { name: "Submit Record", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "View saved Record", exact: true }).click()
+  await expect(page).toHaveURL(/\/record\/[^/]+\/v1$/)
+  const originalReport = page.url()
+  await page.getByRole("button", { name: "Revise", exact: true }).click()
+  await page.locator("#form-research_variable-observation_count input").fill("13")
+  await expect(page.getByRole("button", { name: "Submit", exact: true })).toBeDisabled()
+  await page.getByPlaceholder("Reason for this correction (required)").fill("Corrected a practice transcription error.")
+  await page.getByRole("button", { name: "Submit", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Submit revision", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "View saved Record", exact: true }).click()
+  await expect(page).toHaveURL(/\/record\/[^/]+\/v2$/)
+  await expect(page.locator("#form-research_variable-observation_count input")).toHaveValue("13")
+  await page.goto(originalReport)
+  await expect(page.locator("#form-research_variable-observation_count input")).toHaveValue("12")
+  await memberContext.close()
+})
