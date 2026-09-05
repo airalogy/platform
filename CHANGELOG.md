@@ -122,6 +122,7 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Made release metadata tests follow migration ancestry instead of a stale hard-coded database revision, added competing-head and current-repository coverage, and required these checks before pushing migration, deployment or release changes.
 - Disabled Record revision until the report and its versioned Protocol finish loading, preventing early clicks from silently doing nothing; covered the slow-loading path in the real first-Record browser journey.
 - Localized Knowledge navigation, personal/Lab/Project scopes, editing and publishing controls, and cross-module knowledge references in the Chinese interface; kept English UI labels and API identifiers unchanged.
 - Localized the Chinese Research Log navigation, scope names, and entry actions while preserving the English labels.

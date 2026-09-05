@@ -31,6 +31,12 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "api:test"],
   },
+  releaseMetadata: {
+    id: "release-metadata",
+    label: "release metadata and migration-head checks",
+    command: "corepack",
+    args: ["pnpm", "release:metadata:test"],
+  },
   researchIntegration: {
     id: "research-integration",
     label: "research API and persistent-worker integration",
@@ -110,6 +116,15 @@ function hasPath(files, exactFiles, prefixes = []) {
 
 export function buildCheckPlan(files, fullRequested = false) {
   const plan = [checks.lint, checks.types, checks.apiCompile]
+
+  if (fullRequested || files.some(file =>
+    ["VERSION", ".github/workflows/release.yml", "scripts/check-version.mjs"].includes(file)
+    || file.startsWith("apps/api/migrations/")
+    || file.startsWith("scripts/release-")
+    || file.startsWith("deploy/"),
+  )) {
+    plan.push(checks.releaseMetadata)
+  }
 
   if (files.some(file => file.startsWith("apps/api/"))) {
     plan.push(checks.apiTests)

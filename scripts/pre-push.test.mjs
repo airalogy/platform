@@ -73,7 +73,14 @@ test("E2E infrastructure changes run the full browser suite", () => {
 })
 
 test("the explicit full mode runs the full browser suite", () => {
-  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "research-integration", "full-e2e"])
+  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "release-metadata", "research-integration", "full-e2e"])
+})
+
+test("migration and release changes require release metadata checks", () => {
+  for (const file of ["VERSION", ".github/workflows/release.yml", "scripts/release-metadata.test.mjs", "scripts/release-metadata-lib.mjs", "deploy/single-lab/.env.example"]) {
+    assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "release-metadata"])
+  }
+  assert.deepEqual(checkIds(["apps/api/migrations/versions/new_revision.py"]), ["lint", "types", "api-compile", "release-metadata", "api-tests"])
 })
 
 test("research runtime changes require real database integration", () => {
