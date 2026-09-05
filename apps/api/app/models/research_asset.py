@@ -281,7 +281,7 @@ class ResearchClaim(Base):
     )
     generation_id: Mapped[UUID | None] = mapped_column()
     generation_model: Mapped[str | None] = mapped_column(String(255))
-    generation_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    generation_snapshot: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     generation_receipt_digest: Mapped[str | None] = mapped_column(String(64))
     revision: Mapped[int] = mapped_column(nullable=False, default=1)
     created_by_user_id: Mapped[UUID] = mapped_column(
@@ -455,7 +455,7 @@ class ProtocolImprovementProposal(Base):
     )
     generation_id: Mapped[UUID | None] = mapped_column()
     generation_model: Mapped[str | None] = mapped_column(String(255))
-    generation_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    generation_snapshot: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     generation_receipt_digest: Mapped[str | None] = mapped_column(String(64))
     revision: Mapped[int] = mapped_column(nullable=False, default=1)
     created_by_user_id: Mapped[UUID] = mapped_column(

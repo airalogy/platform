@@ -19,7 +19,7 @@
     </n-alert>
 
     <template v-if="!preview">
-      <n-form label-placement="top" :show-require-mark="true">
+      <n-form label-placement="top">
         <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
           <n-form-item :label="$t('page.research.project')" required>
             <n-select
@@ -31,7 +31,7 @@
               @update:value="handleProjectChange"
             />
           </n-form-item>
-          <n-form-item :label="$t('page.research.autonomy')" required>
+          <n-form-item v-if="instanceStore.aiEnabled" :label="$t('page.research.autonomy')" required>
             <n-select v-model:value="form.autonomy_level" :options="autonomyOptions" />
           </n-form-item>
         </div>
@@ -148,136 +148,152 @@
             :placeholder="$t('page.research.criteriaPlaceholder')"
           />
         </n-form-item>
-        <n-form-item :label="$t('page.research.stopConditions')">
-          <n-input
-            v-model:value="stopText"
-            data-testid="research-task-stop-conditions"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 6 }"
-            :placeholder="$t('page.research.stopPlaceholder')"
-          />
-        </n-form-item>
-        <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
-          <n-form-item
-            :label="$t('page.research.deadline')"
-            :validation-status="deadlineInvalid ? 'error' : undefined"
-            :feedback="deadlineInvalid ? $t('page.research.deadlineFuture') : undefined"
-          >
-            <n-date-picker
-              v-model:value="deadlineAt"
-              type="datetime"
-              clearable
-              class="w-full"
-              :placeholder="$t('page.research.deadlinePlaceholder')"
-              :is-date-disabled="isDeadlineDisabled"
+        <details class="research-task-options mb-5" :open="Boolean(stopText.trim() || deadlineAt || form.budget_limit)">
+          <summary class="aira-type-label cursor-pointer py-3">
+            {{ $t("page.research.optionalLimits") }}
+          </summary>
+          <p class="aira-type-meta mb-4">
+            {{ $t("page.research.optionalLimitsHint") }}
+          </p>
+          <n-form-item :label="$t('page.research.stopConditions')">
+            <n-input
+              v-model:value="stopText"
+              data-testid="research-task-stop-conditions"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 6 }"
+              :placeholder="$t('page.research.stopPlaceholder')"
             />
           </n-form-item>
-          <n-form-item :label="$t('page.research.budgetLimit')">
-            <n-input-group>
-              <n-input
-                v-model:value="form.budget_limit"
-                inputmode="decimal"
-                :placeholder="$t('page.research.budgetLimitPlaceholder')"
+          <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
+            <n-form-item
+              :label="$t('page.research.deadline')"
+              :validation-status="deadlineInvalid ? 'error' : undefined"
+              :feedback="deadlineInvalid ? $t('page.research.deadlineFuture') : undefined"
+            >
+              <n-date-picker
+                v-model:value="deadlineAt"
+                type="datetime"
+                clearable
+                class="w-full"
+                :placeholder="$t('page.research.deadlinePlaceholder')"
+                :is-date-disabled="isDeadlineDisabled"
               />
-              <n-select
-                v-model:value="form.budget_currency"
-                class="w-28"
-                :options="currencyOptions"
-                filterable
-                tag
-              />
-            </n-input-group>
+            </n-form-item>
+            <n-form-item :label="$t('page.research.budgetLimit')">
+              <n-input-group>
+                <n-input
+                  v-model:value="form.budget_limit"
+                  inputmode="decimal"
+                  :placeholder="$t('page.research.budgetLimitPlaceholder')"
+                />
+                <n-select
+                  v-model:value="form.budget_currency"
+                  class="w-28"
+                  :options="currencyOptions"
+                  filterable
+                  tag
+                />
+              </n-input-group>
+            </n-form-item>
+          </div>
+        </details>
+        <details class="research-task-options" :open="Boolean(airaGuidance)" data-testid="research-task-environment">
+          <summary class="aira-type-label cursor-pointer py-3">
+            {{ $t("page.research.optionalEnvironment") }}
+            <span class="aira-type-meta mt-1 block" data-testid="research-task-environment-summary">
+              {{ $t("page.research.environmentSelectionSummary", { methods: form.protocol_ids?.length || 0, tools: form.tool_keys?.length || 0, knowledge: form.knowledge_ids?.length || 0, resources: (form.resource_type_ids?.length || 0) + (form.service_offering_ids?.length || 0) + (form.compute_environment_ids?.length || 0) }) }}
+            </span>
+          </summary>
+          <n-form-item :label="$t('page.research.methods')">
+            <n-select
+              v-model:value="form.protocol_ids"
+              :options="protocolOptions"
+              :loading="protocolsLoading"
+              :disabled="!form.project_id"
+              multiple
+              filterable
+              clearable
+              :placeholder="$t('page.research.methodsPlaceholder')"
+            />
+            <template #feedback>
+              {{ $t("page.research.methodsHint") }}
+            </template>
           </n-form-item>
-        </div>
-        <n-form-item :label="$t('page.research.methods')">
-          <n-select
-            v-model:value="form.protocol_ids"
-            :options="protocolOptions"
-            :loading="protocolsLoading"
-            :disabled="!form.project_id"
-            multiple
-            filterable
-            clearable
-            :placeholder="$t('page.research.methodsPlaceholder')"
-          />
-          <template #feedback>
-            {{ $t("page.research.methodsHint") }}
-          </template>
-        </n-form-item>
-        <n-form-item :label="$t('page.research.digitalCapabilities')">
-          <n-select
-            v-model:value="form.tool_keys"
-            :options="toolOptions"
-            :loading="capabilitiesLoading"
-            :disabled="!form.project_id"
-            multiple
-            clearable
-            :placeholder="$t('page.research.digitalCapabilitiesPlaceholder')"
-          />
-          <template #feedback>
-            {{ $t("page.research.digitalCapabilitiesHint") }}
-          </template>
-        </n-form-item>
-        <n-form-item :label="$t('page.research.resourceRequirements')">
-          <n-select
-            v-model:value="form.resource_type_ids"
-            :options="resourceOptions"
-            :loading="capabilitiesLoading"
-            :disabled="!form.project_id"
-            multiple
-            filterable
-            clearable
-            :placeholder="$t('page.research.resourceRequirementsPlaceholder')"
-          />
-          <template #feedback>
-            {{ $t("page.research.resourceRequirementsHint") }}
-          </template>
-        </n-form-item>
-        <n-form-item :label="$t('page.research.externalServices')">
-          <n-select
-            v-model:value="form.service_offering_ids"
-            :options="serviceOptions"
-            :loading="capabilitiesLoading"
-            :disabled="!form.project_id"
-            multiple
-            filterable
-            clearable
-            :placeholder="$t('page.research.externalServicesPlaceholder')"
-          />
-          <template #feedback>
-            {{ $t("page.research.externalServicesHint") }}
-          </template>
-        </n-form-item>
-        <n-form-item :label="$t('page.research.computeEnvironments')">
-          <n-select
-            v-model:value="form.compute_environment_ids"
-            :options="computeOptions"
-            :loading="capabilitiesLoading"
-            :disabled="!form.project_id"
-            multiple
-            filterable
-            clearable
-            :placeholder="$t('page.research.computeEnvironmentsPlaceholder')"
-          />
-          <template #feedback>
-            {{ $t("page.research.computeEnvironmentsHint") }}
-          </template>
-        </n-form-item>
-        <n-form-item :label="$t('page.research.knowledgeContext')">
-          <n-select
-            v-model:value="form.knowledge_ids"
-            :options="knowledgeOptions"
-            :loading="knowledgeLoading"
-            :disabled="!form.project_id"
-            multiple
-            filterable
-            clearable
-            :placeholder="$t('page.research.knowledgePlaceholder')"
-          />
-          <template #feedback>
-            {{ $t("page.research.knowledgeHint") }}
-          </template>
-        </n-form-item>
+          <n-form-item :label="$t('page.research.digitalCapabilities')">
+            <n-select
+              v-model:value="form.tool_keys"
+              :options="toolOptions"
+              :loading="capabilitiesLoading"
+              :disabled="!form.project_id"
+              multiple
+              clearable
+              :placeholder="$t('page.research.digitalCapabilitiesPlaceholder')"
+            />
+            <template #feedback>
+              {{ $t("page.research.digitalCapabilitiesHint") }}
+            </template>
+          </n-form-item>
+          <n-form-item :label="$t('page.research.resourceRequirements')">
+            <n-select
+              v-model:value="form.resource_type_ids"
+              :options="resourceOptions"
+              :loading="capabilitiesLoading"
+              :disabled="!form.project_id"
+              multiple
+              filterable
+              clearable
+              :placeholder="$t('page.research.resourceRequirementsPlaceholder')"
+            />
+            <template #feedback>
+              {{ $t("page.research.resourceRequirementsHint") }}
+            </template>
+          </n-form-item>
+          <n-form-item :label="$t('page.research.externalServices')">
+            <n-select
+              v-model:value="form.service_offering_ids"
+              :options="serviceOptions"
+              :loading="capabilitiesLoading"
+              :disabled="!form.project_id"
+              multiple
+              filterable
+              clearable
+              :placeholder="$t('page.research.externalServicesPlaceholder')"
+            />
+            <template #feedback>
+              {{ $t("page.research.externalServicesHint") }}
+            </template>
+          </n-form-item>
+          <n-form-item :label="$t('page.research.computeEnvironments')">
+            <n-select
+              v-model:value="form.compute_environment_ids"
+              :options="computeOptions"
+              :loading="capabilitiesLoading"
+              :disabled="!form.project_id"
+              multiple
+              filterable
+              clearable
+              :placeholder="$t('page.research.computeEnvironmentsPlaceholder')"
+            />
+            <template #feedback>
+              {{ $t("page.research.computeEnvironmentsHint") }}
+            </template>
+          </n-form-item>
+          <n-form-item :label="$t('page.research.knowledgeContext')">
+            <n-select
+              v-model:value="form.knowledge_ids"
+              :options="knowledgeOptions"
+              :loading="knowledgeLoading"
+              :disabled="!form.project_id"
+              multiple
+              filterable
+              clearable
+              :placeholder="$t('page.research.knowledgePlaceholder')"
+            />
+            <template #feedback>
+              {{ $t("page.research.knowledgeHint") }}
+            </template>
+          </n-form-item>
+        </details>
       </n-form>
     </template>
 

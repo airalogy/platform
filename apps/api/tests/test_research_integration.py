@@ -169,6 +169,47 @@ def runtime():
         runtime.run(sessionmanager._engine.dispose())
 
 
+def test_manual_knowledge_and_claim_creation_without_generation_metadata(runtime):
+    async def exercise():
+        task = await runtime.task()
+        knowledge = await runtime.confirm(
+            "/knowledge/items",
+            {
+                "scope_type": "personal",
+                "visibility": "private",
+                "kind": "note",
+                "title": "Synthetic manual researcher note",
+                "body": "An observation to verify, not a scientific conclusion.",
+            },
+        )
+        assert knowledge["generated_by"] == "human"
+        assert knowledge["generation_snapshot"] is None
+        updated = await runtime.json(
+            "PATCH",
+            f"/knowledge/items/{knowledge['id']}",
+            {
+                "expected_revision": knowledge["revision"],
+                "body": "Revised synthetic note with uncertainty preserved.",
+                "change_summary": "Clarify uncertainty",
+            },
+        )
+        assert updated["revision"] == 2 and updated["updated_at"]
+        claim = await runtime.confirm(
+            "/research-assets/claims",
+            {
+                "task_id": task["id"],
+                "statement": "Synthetic unverified claim for interface testing",
+                "uncertainty": "No scientific validation has been performed.",
+                "evidence": [],
+            },
+        )
+        assert claim["state"] == "draft"
+        assert claim["generated_by"] == "human"
+        assert claim["generation_snapshot"] is None
+
+    runtime.run(exercise())
+
+
 def test_ai_disabled_tool_pause_resume_evidence_and_final_package(runtime):
     async def exercise():
         assert not config.effective_ai_enabled

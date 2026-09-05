@@ -12,6 +12,20 @@ export interface RecordDraft<T = Partial<IRecordData>> {
 type StoredRecordDraft<T = Partial<IRecordData>> = Omit<RecordDraft<T>, "protocolId">
 type DraftStorage = Record<string, Record<string, StoredRecordDraft<any>>>
 
+/** Empty form initialization is not outstanding work; keep 0 and false as data. */
+export function hasRecordDraftContent(value: unknown): boolean {
+  if (value === null || value === undefined)
+    return false
+  if (typeof value === "string")
+    return Boolean(value.trim())
+  if (Array.isArray(value))
+    return value.some(hasRecordDraftContent)
+  if (typeof value === "object") {
+    return Object.values(value).some(hasRecordDraftContent)
+  }
+  return true
+}
+
 function normalizeUserDraft(raw: unknown): Record<string, StoredRecordDraft> {
   if (!raw || typeof raw !== "object") {
     return {}
@@ -60,6 +74,7 @@ export function listRecordDrafts(userId: string | number): RecordDraft[] {
   const { storage } = readDraftStorage()
   const drafts = storage[String(userId)] || {}
   return Object.entries(drafts)
+    .filter(([, draft]) => draft && hasRecordDraftContent(draft.data))
     .map(([protocolId, draft]) => ({ protocolId, ...draft }))
     .sort((a, b) => b.timestamp - a.timestamp)
 }

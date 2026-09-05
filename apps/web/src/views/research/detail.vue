@@ -143,11 +143,14 @@
                   <span class="aira-type-meta">{{ $t("page.research.pendingApprovals") }}</span>
                   <strong class="aira-type-metric">{{ task.pending_approvals }}</strong>
                 </div>
-                <div class="research-metric">
+                <div v-if="instanceStore.aiEnabled" class="research-metric">
                   <span class="aira-type-meta">{{ $t("page.research.airaStage") }}</span>
                   <strong class="aira-type-label break-words">{{ airaStage }}</strong>
                 </div>
               </div>
+              <n-alert v-if="!instanceStore.aiEnabled && task.status === 'active'" class="mt-4" type="info" data-testid="research-manual-next-step">
+                {{ $t("page.research.manualNextStep") }}
+              </n-alert>
             </section>
 
             <section v-if="task.runs.length > 1" class="research-panel">

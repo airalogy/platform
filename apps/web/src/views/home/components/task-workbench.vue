@@ -1,5 +1,5 @@
 <template>
-  <section class="rounded-3 border border-gray-200 bg-white p-5 shadow-sm">
+  <section data-testid="task-workbench" class="border border-gray-200 rounded-3 bg-white p-5 shadow-sm">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div>
         <div class="aira-type-eyebrow">
@@ -28,10 +28,14 @@
       </n-button>
     </n-alert>
 
-    <n-spin v-else :show="loading" class="mt-5 min-h-44">
+    <div v-else-if="loading" class="mt-5 space-y-4" role="status" :aria-label="$t('common.loading')" data-testid="workbench-loading">
+      <n-skeleton height="180px" :sharp="false" />
+      <n-skeleton text :repeat="2" />
+    </div>
+    <div v-else class="mt-5 min-h-44">
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)]">
         <div
-          class="rounded-3 border border-primary/25 from-primary/8 to-sky-50 bg-gradient-to-br p-5"
+          class="border border-primary/25 rounded-3 from-primary/8 to-sky-50 bg-gradient-to-br p-5"
         >
           <template v-if="assignedWorkItem">
             <div class="aira-type-eyebrow aira-type-eyebrow--accent">
@@ -44,7 +48,7 @@
               {{ assignedWorkItem.lab.name }} / {{ assignedWorkItem.project.name }} /
               {{ assignedWorkItem.task.title }}
             </p>
-            <p class="aira-type-meta mb-0 mt-2 line-clamp-2">
+            <p class="aira-type-meta line-clamp-2 mb-0 mt-2">
               {{ assignedWorkItem.instructions || assignedWorkItem.task.goal }}
             </p>
             <div class="mt-5 flex flex-wrap gap-2">
@@ -68,7 +72,7 @@
               {{ pendingApproval.lab.name }} / {{ pendingApproval.project.name }} /
               {{ pendingApproval.task.title }}
             </p>
-            <p class="aira-type-meta mb-0 mt-2 line-clamp-2">
+            <p class="aira-type-meta line-clamp-2 mb-0 mt-2">
               {{ pendingApproval.action.description || pendingApproval.reason }}
             </p>
             <div class="mt-5 flex flex-wrap gap-2">
@@ -93,7 +97,7 @@
             <p class="aira-type-body aira-text-secondary mb-0 mt-2">
               {{ attentionTask.lab.name }} / {{ attentionTask.project.name }}
             </p>
-            <p class="aira-type-meta mb-0 mt-2 line-clamp-2">
+            <p class="aira-type-meta line-clamp-2 mb-0 mt-2">
               {{ attentionTask.goal }}
             </p>
             <n-button class="mt-5" type="primary" @click="openResearchTask(attentionTask.id)">
@@ -202,7 +206,7 @@
           </template>
         </div>
 
-        <div class="rounded-3 border border-gray-200 bg-gray-50 p-5">
+        <div class="border border-gray-200 rounded-3 bg-gray-50 p-5">
           <div class="aira-type-eyebrow">
             {{ $t("page.home.workbench.attentionLabel") }}
           </div>
@@ -316,7 +320,7 @@
           </button>
         </div>
       </div>
-    </n-spin>
+    </div>
   </section>
 </template>
 

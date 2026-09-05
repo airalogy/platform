@@ -37,7 +37,10 @@ The suite exercises:
 - Lab-visible versus restricted resource access;
 - resource creation and Schema validation;
 - inventory receipt, over-consumption rollback, valid consumption and audit;
-- old Record rendering with explicit cross-version projection/migration entry.
+- old Record rendering with explicit cross-version projection/migration entry;
+- private Paper → Knowledge, manual Research Tasks, My Log, responsive workbench, immediate Record draft persistence and storage/network failure recovery.
+
+Run `AI_ENABLED=false pnpm e2e researcher-journey.spec.ts` for the core researcher journeys with the backend AI disabled.
 
 Failures retain screenshots, video and traces in `test-results/`. The HTML report is written to `playwright-report/`. CI uploads both directories, plus the API log.
 

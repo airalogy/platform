@@ -117,6 +117,9 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Fixed human-authored Knowledge, Claims, and Protocol improvement proposals failing provenance constraints; Knowledge revisions now return server-generated timestamps reliably.
+- Improved researcher journeys: tablet/mobile home prioritizes ongoing work, loading does not invent onboarding tasks, My Log is directly reachable, manual Research Task creation separates optional limits/environment from required goals, and AI-disabled Tasks show actionable manual guidance. Record drafts have one save control, exclude empty forms from outstanding work, and report storage failures truthfully; failed Knowledge saves retain text with persistent retry guidance.
+- Preserve Record field input immediately while batching only dependent calculations, so saving or leaving immediately after typing cannot omit the last edit.
 - Recheck Task/Run state, current Research execution access, pinned Tool/Executor scope, approvals or unexpired autonomy grants, and budget/deadline limits immediately before Tool dispatch. Deferred work preserves its retry allowance; crashed final attempts settle into an explicit uncertain-outcome pause without repeating model calls; late callbacks cannot overwrite terminal states.
 - Explicit resume restores the existing dependency frontier and wakes pending jobs without creating a competing Planner generation; completed parents cannot release downstream work while paused.
 - Fetch server-generated Research update timestamps during async writes so successful Task/Action/Work Item transitions return valid responses; fix Knowledge Tool search to use the actual reviewed-state model and explicit Lab/Project scope.

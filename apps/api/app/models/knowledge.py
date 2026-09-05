@@ -356,6 +356,7 @@ class PaperFileLink(Base):
 
 class KnowledgeItem(Base):
     __tablename__ = "knowledge_items"
+    __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         CheckConstraint(SCOPE_CHECK, name="ck_knowledge_items_scope"),
         CheckConstraint(
@@ -400,7 +401,8 @@ class KnowledgeItem(Base):
     )
     generation_id: Mapped[UUID | None] = mapped_column()
     generation_model: Mapped[str | None] = mapped_column(String(255))
-    generation_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    # Human-authored assets have no generation provenance (SQL NULL, not JSON null).
+    generation_snapshot: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     generation_receipt_digest: Mapped[str | None] = mapped_column(String(64))
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

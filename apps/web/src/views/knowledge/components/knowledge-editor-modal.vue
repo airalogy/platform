@@ -14,7 +14,10 @@
     :mask-closable="false"
   >
     <n-alert type="info" class="mb-4">
-      {{ props.scopeLabel }} · {{ $t("page.knowledge.reviewHint") }}
+      {{ props.scopeLabel }} · {{ $t(props.scope.scope_type === 'personal' ? "page.knowledge.personalDraftHint" : "page.knowledge.reviewHint") }}
+    </n-alert>
+    <n-alert v-if="saveError" type="error" class="mb-4" role="alert" data-testid="knowledge-save-error">
+      {{ $t("page.knowledge.saveFailedHint") }}
     </n-alert>
     <n-form label-placement="top">
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -122,6 +125,7 @@ const emit = defineEmits<{ saved: [item: KnowledgeItem] }>()
 
 const visible = ref(false)
 const saving = ref(false)
+const saveError = ref(false)
 const editing = ref<KnowledgeItem | null>(null)
 const linkedPaperId = ref("")
 const linkedPaperTitle = ref("")
@@ -158,6 +162,7 @@ watch(() => props.scope, () => {
 }, { deep: true })
 
 function reset() {
+  saveError.value = false
   editing.value = null
   linkedPaperId.value = ""
   linkedPaperTitle.value = ""
@@ -203,6 +208,7 @@ async function save() {
   if (!isValid.value)
     return
   saving.value = true
+  saveError.value = false
   try {
     let item: KnowledgeItem
     if (editing.value) {
@@ -238,6 +244,9 @@ async function save() {
     )
     emit("saved", item)
     visible.value = false
+  }
+  catch {
+    saveError.value = true
   }
   finally {
     saving.value = false

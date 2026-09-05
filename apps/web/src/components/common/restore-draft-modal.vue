@@ -11,17 +11,6 @@
   >
     {{ $t("page.protocol.draft.restoreButton") }}
   </n-button>
-  <n-button
-    size="medium"
-    type="primary"
-    :disabled="loading"
-    :loading="loading"
-    class="mr-4 px-4"
-    ghost
-    @click="handleSaveDraft"
-  >
-    {{ $t("page.protocol.draft.saveButton") }}
-  </n-button>
   <n-modal
     v-model:show="isShown"
     :title="$t('page.protocol.draft.title')"
@@ -106,6 +95,7 @@ interface IProps {
   protocolId: string
   fieldModel: FieldRecord
   protocol: ProtocolModels.ProtocolInfo | null
+  savedAt?: number
 }
 
 const props = defineProps<IProps>()
@@ -124,9 +114,12 @@ const message = useClosableMessage()
 
 const data = useVModel(props, "data", emit)
 
-const { getDraft, saveDraft, deleteDraft: handleDeleteDraft, prepareRestoreDraft, formatLastModified } = useDraftManagement(props.protocol, data)
+const { getDraft, deleteDraft: handleDeleteDraft, prepareRestoreDraft, formatLastModified } = useDraftManagement(() => props.protocol, data)
 
 const draft = ref<IDraftData | null>(getDraft(props.protocolId))
+watch(() => [props.protocolId, props.savedAt], () => {
+  draft.value = getDraft(props.protocolId)
+})
 
 const lastModified = computed(() => formatLastModified(draft.value))
 const draftViewTab = ref<"preview" | "json">("preview")
@@ -167,12 +160,6 @@ const draftJson = computed(() => {
 
 const deleteDraft = ref(false)
 const mergeDraft = ref(false)
-
-function handleSaveDraft() {
-  saveDraft(props.protocolId, props.data)
-  draft.value = getDraft(props.protocolId)
-  draftViewTab.value = "preview"
-}
 
 function handleRestoreDraft() {
   if (!draft.value)

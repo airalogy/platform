@@ -1,41 +1,42 @@
 <template>
-  <n-layout has-sider class="my-12.5 overflow-visible" :content-class="isMobile ? '!flex-col' : ''">
+  <n-layout data-testid="home-workspace" has-sider class="my-6 overflow-visible lg:my-10" :content-class="isCompact ? '!flex-col' : ''">
     <n-layout-sider
-      :class="{ 'order-2 mt-6': isMobile }"
-      :content-class="['!overflow-visible', isMobile ? 'items-center' : ''].join(' ')"
-      :width="isMobile ? '100%' : 398"
+      data-testid="home-resources"
+      :class="{ 'order-2 mt-6': isCompact }"
+      :content-class="['!overflow-visible', isCompact ? 'items-center' : ''].join(' ')"
+      :width="isCompact ? '100%' : 300"
     >
       <div class="n-card n-card--bordered rounded-2 pt-6">
         <sider-list
           :title="$t('page.home.labs')"
           type="lab"
-          :width="isMobile ? width - 100 : 300"
+          :width="isCompact ? width - 120 : 210"
           :pinned-map="pinnedMap"
           :pinning-keys="pinningKeys"
-          @togglePin="handleTogglePin"
+          @toggle-pin="handleTogglePin"
         />
         <n-divider style="margin: 1rem 0 !important" />
         <sider-list
           :title="$t('page.home.projects')"
           type="project"
-          :width="isMobile ? width - 100 : 300"
+          :width="isCompact ? width - 120 : 210"
           :pinned-map="pinnedMap"
           :pinning-keys="pinningKeys"
-          @togglePin="handleTogglePin"
+          @toggle-pin="handleTogglePin"
         />
         <n-divider style="margin: 1rem 0 !important" />
         <sider-list
           :title="$t('page.home.recentProtocols')"
           type="protocol"
-          :width="isMobile ? width - 100 : 300"
+          :width="isCompact ? width - 120 : 210"
           :pinned-map="pinnedMap"
           :pinning-keys="pinningKeys"
-          @togglePin="handleTogglePin"
+          @toggle-pin="handleTogglePin"
         />
       </div>
     </n-layout-sider>
-    <n-layout :class="{ 'order-1': isMobile }">
-      <n-layout-content class="!overflow-visible" :content-class="isMobile ? 'px-4' : 'ml-6'">
+    <n-layout data-testid="home-work" :class="{ 'order-1': isCompact }">
+      <n-layout-content class="!overflow-visible" :content-class="isCompact ? '' : 'ml-6'">
         <task-workbench class="mb-6" />
         <pinned-items
           class="mb-6"
@@ -43,8 +44,8 @@
           :loading="pinnedLoading"
           :pinning-keys="pinningKeys"
           :max-count="maxPinnedCount"
-          @togglePin="handleTogglePin"
-          @reorderPinned="handleReorderPinned"
+          @toggle-pin="handleTogglePin"
+          @reorder-pinned="handleReorderPinned"
         />
       </n-layout-content>
       <n-layout-header v-if="totalCount > 0 || !loading">
@@ -58,7 +59,7 @@
         "
         class="!overflow-visible"
       >
-        <n-spin :show="loading" class="min-h-40" :content-class="isMobile ? 'px-4' : 'ml-6'">
+        <n-spin :show="loading" class="min-h-40" :content-class="isCompact ? '' : 'ml-6'">
           <template v-if="loading || totalCount > 0">
             <activity-card
               v-for="item in activityList"
@@ -173,7 +174,8 @@ const totalCount = computed(() =>
 const currentPage = ref(1)
 const pageSize = ref(5)
 const hasMore = ref(true)
-const { isMobile, breakpoints } = useBasicLayout()
+const { breakpoints } = useBasicLayout()
+const isCompact = breakpoints.smaller("lg")
 const { width } = useWindowSize()
 
 const maxPinnedCount = 10

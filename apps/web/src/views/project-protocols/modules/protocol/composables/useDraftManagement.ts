@@ -48,14 +48,14 @@ export function useDraftManagement(
    * @param protocolId - Protocol identifier
    * @param data - Data to be saved
    */
-  function saveDraft<T = any>(protocolId: string | number, data: T, options: SaveDraftOptions = {}): void {
+  function saveDraft<T = any>(protocolId: string | number, data: T, options: SaveDraftOptions = {}): boolean {
     const userId = authStore.userInfo.id
     const shouldNotify = !options.silent
     if (!userId || !protocolId) {
       if (shouldNotify) {
         message.error("Failed to save draft: missing user or protocol info.")
       }
-      return
+      return false
     }
 
     try {
@@ -63,12 +63,14 @@ export function useDraftManagement(
       if (shouldNotify) {
         message.success("Draft saved.")
       }
+      return true
     }
     catch (error) {
       console.error("Failed to save draft:", error)
       if (shouldNotify) {
         message.error("Failed to save draft data.")
       }
+      return false
     }
   }
 

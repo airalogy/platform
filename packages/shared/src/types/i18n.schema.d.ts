@@ -842,6 +842,8 @@ declare namespace I18n {
         updated: string
         review: string
         reviewHint: string
+        personalDraftHint: string
+        saveFailedHint: string
         evidenceProvenance: string
         evidenceProvenanceHint: string
         reviewed: string
@@ -910,6 +912,11 @@ declare namespace I18n {
         stopPlaceholder: string
         project: string
         autonomy: string
+        optionalLimits: string
+        optionalLimitsHint: string
+        optionalEnvironment: string
+        environmentSelectionSummary: string
+        manualNextStep: string
         autonomyAssisted: string
         autonomyBounded: string
         autonomyPolicy: string
@@ -2657,6 +2664,7 @@ declare namespace I18n {
           draftSavedOnDevice: string
           draftAutosaveReady: string
           draftSavedConfirmation: string
+          draftSaveFailed: string
           draftResumed: string
           confirmSubmitTitle: string
           confirmRevisionTitle: string

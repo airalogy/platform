@@ -165,11 +165,6 @@ export function useFieldEventBus(
       const currentBatch = changeQueue.splice(0)
       const batchId = nanoid()
 
-      // First, apply field value updates immediately
-      for (const change of currentBatch) {
-        await updateField(fieldModel, change as IFieldChangePayload)
-      }
-
       // Collect all dependent assigners that need to be triggered
       const dependentAssigners: IFieldBatchPayload["list"] = []
 
@@ -618,6 +613,9 @@ export function useFieldEventBus(
       }
 
       if (event === "preview-field-change") {
+        // Preserve the user's input immediately. Only dependent calculations
+        // are debounced; Save draft or navigation must not miss the last edit.
+        await updateField(fieldModel, payload)
         // Add change to queue for batched processing with debounce
         enqueueFieldChange({
           scope: payload.scope,

@@ -62,7 +62,10 @@
             :status="formRef.requiredCompletion.percent === 100 ? 'success' : 'default'"
           />
         </div>
-        <n-tag v-if="autosaveState.hasPendingChanges" size="small" type="warning" round>
+        <n-tag v-if="autosaveState.saveFailed" size="small" type="error" round role="alert">
+          {{ $t("page.protocol.addRecord.draftSaveFailed") }}
+        </n-tag>
+        <n-tag v-else-if="autosaveState.hasPendingChanges" size="small" type="warning" round>
           {{ $t("page.protocol.addRecord.draftSaving") }}
         </n-tag>
         <n-tag v-else-if="autosaveState.lastSavedAt" size="small" type="success" round>
@@ -83,9 +86,10 @@
           v-if="protocolId && formRef?.fieldModel" v-model:data="recordData" :field-model="formRef.fieldModel"
           :protocol-id="protocolId"
           :protocol="protocol"
+          :saved-at="autosaveState.lastSavedAt"
           @restore:draft="handleRestoreDraft"
         />
-        <n-button size="medium" secondary :disabled="loading || submissionLoading" @click="handleManualSave">
+        <n-button data-testid="record-save-draft" size="medium" secondary :disabled="loading || submissionLoading" @click="handleManualSave">
           {{ $t("page.protocol.draft.saveButton") }}
         </n-button>
         <n-button
@@ -162,6 +166,7 @@ import { baseURL } from "@/service/request"
 import { useAuthStore } from "@/store/modules/auth"
 import { useRouteStore } from "@/store/modules/route"
 import { useProtocolWorkflowStore } from "@/store/modules/workflow"
+import { hasRecordDraftContent } from "@/utils/recordDrafts"
 import { useBeforeUnload, useClosableMessage } from "@airalogy/composables"
 import { useThemeStore } from "@airalogy/composables/theme"
 import { formatPydanticErrors, formatValidateErrors, type PydanticError } from "@airalogy/shared/utils/errorFormatter.js"
@@ -277,6 +282,7 @@ const autosaveState = reactive({
   lastSignature: "",
   hasPendingChanges: false,
   lastSavedAt: 0,
+  saveFailed: false,
 })
 
 const globalBeforeUnloadRegistry = useGlobalBeforeUnload()
@@ -312,6 +318,7 @@ function cancelAutosave() {
 function resetAutosaveBaseline(data: Partial<IRecordData> = recordData.value) {
   autosaveState.lastSignature = getDraftSignature(data)
   autosaveState.hasPendingChanges = false
+  autosaveState.saveFailed = false
   cancelAutosave()
 }
 
@@ -324,12 +331,16 @@ function markAutosavePending() {
 }
 
 function flushAutosave(reason: AutosaveReason, force = false) {
-  void reason
-  if (!canAutosave()) {
+  if (!protocolId.value || !canAutosave()) {
     return
   }
 
-  if (!autosaveState.hasPendingChanges && !force) {
+  if (!autosaveState.hasPendingChanges && reason !== "manual") {
+    return
+  }
+
+  if (reason !== "manual" && !hasRecordDraftContent(recordData.value) && !getDraft(protocolId.value)) {
+    resetAutosaveBaseline()
     return
   }
 
@@ -339,19 +350,26 @@ function flushAutosave(reason: AutosaveReason, force = false) {
     return
   }
 
-  if (!protocolId.value) {
-    return
+  const saved = saveDraft(protocolId.value, recordData.value, { silent: true })
+  if (!saved) {
+    autosaveState.saveFailed = true
+    autosaveState.hasPendingChanges = true
+    return false
   }
-
-  saveDraft(protocolId.value, recordData.value, { silent: true })
+  autosaveState.saveFailed = false
   autosaveState.lastSignature = signature
   autosaveState.hasPendingChanges = false
   autosaveState.lastSavedAt = Date.now()
+  return true
 }
 
 function handleManualSave() {
-  flushAutosave("manual", true)
-  message.success(t("page.protocol.addRecord.draftSavedConfirmation"))
+  if (flushAutosave("manual", true)) {
+    message.success(t("page.protocol.addRecord.draftSavedConfirmation"))
+  }
+  else {
+    message.error(t("page.protocol.addRecord.draftSaveFailed"))
+  }
 }
 
 function clearDraftAfterSubmit() {

@@ -41,6 +41,7 @@ import type { ButtonProps } from "naive-ui"
 
 import { useBoolean } from "@/composables"
 import { useRouterPush } from "@/composables/useRouterPush"
+import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import { buttonThemeOverrides } from "../global-header/constants"
@@ -77,10 +78,12 @@ const { bool: isShow, setFalse: hideDropdown, setTrue: showDropdown } = useBoole
 const labelText = computed(() => props.label || $t("common.my"))
 
 const instanceStore = useInstanceStore()
+const authStore = useAuthStore()
 const menuItems = computed<MenuItem[]>(() => ([
   ...(!instanceStore.isSingleLab ? [{ name: "labs-my" as const, label: $t("common.labsLabel") }] : []),
   { name: "project-dashboard", label: $t("common.projectsLabel") },
   { name: "knowledge-home", label: $t("page.knowledge.title") },
+  { name: "profile-records", label: $t("page.recordDiary.scope.personal") },
   { name: "research-tasks", label: $t("page.research.title") },
   { name: "protocols-my", label: $t("common.protocolsLabel") },
 ]))
@@ -88,7 +91,12 @@ const menuItems = computed<MenuItem[]>(() => ([
 const { routerPushByKey } = useRouterPush()
 
 function handleNavigate(name: App.Global.RouteNameKey) {
-  routerPushByKey(name)
+  if (name === "profile-records") {
+    routerPushByKey(name, { params: { username: authStore.userInfo.username } })
+  }
+  else {
+    routerPushByKey(name)
+  }
   hideDropdown()
 }
 
