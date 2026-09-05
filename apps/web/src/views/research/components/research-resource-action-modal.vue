@@ -7,9 +7,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 44rem"
     v-model:show="visible"
     preset="card"
-    class="research-resource-modal"
+    class="aira-dialog research-resource-modal"
     :title="$t('page.research.reserveResource')"
     :mask-closable="false"
     @after-leave="reset"
@@ -355,10 +356,6 @@ function reset() {
 </script>
 
 <style scoped>
-.research-resource-modal {
-  width: min(44rem, calc(100vw - 2rem));
-}
-
 .research-resource-preview {
   border: 1px solid rgb(229 231 235);
   border-radius: 0.75rem;

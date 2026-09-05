@@ -14,7 +14,7 @@
         </div>
       </div>
     </template>
-    <n-spin :show="props.loading" class="min-h-20">
+    <n-spin :show="props.loading"  :class="{ 'min-h-20': props.loading }">
       <div v-if="displayItems.length > 0" ref="listRef" class="pinned-list">
         <div
           v-for="{ item, meta } in displayItems"
@@ -109,7 +109,7 @@
           </n-tooltip>
         </div>
       </div>
-      <div v-else-if="!props.loading" class="pinned-empty">
+      <div v-else-if="!props.loading" class="pinned-empty" data-testid="pinned-empty">
         <div class="aira-type-meta">
           {{ $t("page.home.pinnedEmptyTitle") }}
         </div>
@@ -420,8 +420,8 @@ function handleToggle(item: PinnedItem, event: MouseEvent) {
   color: #9CA3AF
 
 .pinned-empty
-  padding: 20px 16px 24px
-  text-align: center
+  padding: 0 20px 16px
+  text-align: left
   display: flex
   flex-direction: column
   gap: 6px

@@ -33,7 +33,7 @@
       <n-skeleton text :repeat="2" />
     </div>
     <div v-else class="mt-5 min-h-44">
-      <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)]">
+      <div class="grid grid-cols-1 gap-4" :class="{ 'xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)]': attentionCount > 0 }">
         <div
           class="border border-primary/25 rounded-3 from-primary/8 to-sky-50 bg-gradient-to-br p-5"
         >
@@ -206,7 +206,7 @@
           </template>
         </div>
 
-        <div class="border border-gray-200 rounded-3 bg-gray-50 p-5">
+        <div v-if="attentionCount > 0" class="border border-gray-200 rounded-3 bg-gray-50 p-5" data-testid="workbench-attention">
           <div class="aira-type-eyebrow">
             {{ $t("page.home.workbench.attentionLabel") }}
           </div>
@@ -222,6 +222,7 @@
         </div>
       </div>
 
+      <p v-if="attentionCount === 0" class="aira-type-meta mb-0 mt-3" data-testid="workbench-clear">{{ attentionSummary }}</p>
       <div class="mt-5">
         <h2 class="aira-type-card-title mb-3">
           {{ $t("page.home.workbench.quickActions") }}
@@ -236,7 +237,7 @@
             <span class="aira-type-meta task-action__description">{{ $t("page.home.workbench.researchDescription") }}</span>
           </button>
           <button
-            v-if="recentProtocol"
+            v-if="recentProtocol && !primaryIsRecord"
             type="button"
             class="task-action"
             @click="startRecord(recentProtocol)"
@@ -384,6 +385,7 @@ const attentionTask = computed(() =>
   || researchTasks.value.find(task => ["active", "paused", "failed"].includes(task.status))
   || null,
 )
+const primaryIsRecord = computed(() => !assignedWorkItem.value && !pendingApproval.value && !attentionTask.value && !latestDraft.value && Boolean(recentProtocol.value))
 const attentionCount = computed(() =>
   validDrafts.value.length
   + researchWorkItems.value.length

@@ -12,8 +12,8 @@
       <div class="mb-4 flex flex-col gap-3">
         <div v-if="showUnifiedLog" class="research-log-heading">
           <div>
-            <div class="aira-type-eyebrow">{{ logScopeLabel }}</div>
-            <h1 class="aira-type-page-title mb-0 mt-1">{{ $t("page.recordDiary.title") }}</h1>
+            <div v-if="logScope && logScope.scope_type !== 'personal'" class="aira-type-eyebrow">{{ logScopeLabel }}</div>
+            <h1 class="aira-type-page-title mb-0 mt-1">{{ logPageTitle }}</h1>
             <p class="aira-type-body aira-text-secondary mb-0 mt-1">
               {{ $t("page.recordDiary.description") }}
             </p>
@@ -400,6 +400,13 @@ const isOwnProfile = computed(() =>
   isProfileScope.value && Boolean(targetUserId.value) && targetUserId.value === authStore.userInfo.id,
 )
 const showUnifiedLog = computed(() => isLabScope.value || isProjectScope.value || isOwnProfile.value)
+const logPageTitle = computed(() => {
+  if (isProjectScope.value || (isLabScope.value && effectiveProjectUid.value))
+    return $t("page.recordDiary.scope.project")
+  if (isLabScope.value)
+    return $t("page.recordDiary.scope.lab")
+  return $t("page.recordDiary.scope.personal")
+})
 const logScope = computed<ResearchLogScopeParams | null>(() => {
   if (isProjectScope.value && projectInfo.value?.id) {
     return {

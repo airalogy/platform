@@ -1,0 +1,58 @@
+/* Opt-in product dialogs. Global selectors also reach Naive UI's teleported cards. */
+.n-card.aira-dialog {
+  width: min(var(--aira-dialog-width, 48rem), calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: 1rem auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.aira-dialog > .n-card-header,
+.aira-dialog > .n-card__footer,
+.aira-dialog > .n-card__action {
+  flex-shrink: 0;
+}
+.aira-dialog > .n-card__content {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+.aira-dialog > .n-card__footer {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 1rem;
+}
+.aira-dialog .n-form-item {
+  min-width: 0;
+}
+.aira-disclosure {
+  border-top: 1px solid #e5e7eb;
+}
+.aira-disclosure > summary {
+  cursor: pointer;
+  padding: 0.875rem 0;
+  font-weight: 600;
+}
+.aira-disclosure > summary:focus-visible {
+  outline: 2px solid #0084e2;
+  outline-offset: 2px;
+}
+@media (max-width: 639px) {
+  .aira-content-shell {
+    padding-inline: 1rem;
+  }
+  .n-card.aira-dialog {
+    --n-padding-left: 1rem;
+    --n-padding-right: 1rem;
+  }
+  .aira-dialog > .n-card-header {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+  .aira-dialog > .n-card__footer {
+    padding-bottom: 1rem;
+  }
+  .aira-dialog .n-button__content {
+    white-space: normal;
+  }
+}

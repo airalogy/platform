@@ -7,9 +7,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 48rem"
     v-model:show="visible"
     preset="card"
-    class="knowledge-editor-modal"
+    class="aira-dialog knowledge-editor-modal"
     :title="editing ? $t('page.knowledge.editKnowledge') : $t('page.knowledge.createKnowledge')"
     :mask-closable="false"
   >
@@ -257,7 +258,5 @@ defineExpose({ open })
 </script>
 
 <style scoped>
-.knowledge-editor-modal {
-  width: min(48rem, calc(100vw - 2rem));
-}
+
 </style>

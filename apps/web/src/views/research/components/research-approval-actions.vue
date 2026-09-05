@@ -22,9 +22,10 @@
   </span>
 
   <n-modal
+    style="--aira-dialog-width: 36rem"
     v-model:show="rejectVisible"
     preset="card"
-    class="research-approval-modal"
+    class="aira-dialog research-approval-modal"
     :title="$t('page.research.rejectAction')"
     :mask-closable="false"
   >
@@ -133,7 +134,5 @@ async function submitRejection() {
 </script>
 
 <style scoped>
-.research-approval-modal {
-  width: min(36rem, calc(100vw - 2rem));
-}
+
 </style>

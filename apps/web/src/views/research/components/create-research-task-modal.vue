@@ -7,19 +7,23 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 48rem"
     v-model:show="visible"
     preset="card"
-    class="research-task-modal"
+    class="aira-dialog research-task-modal"
     :title="$t('page.research.createTitle')"
     :mask-closable="false"
+    :closable="!submitting && !airaDrafting"
+    :close-on-esc="!submitting && !airaDrafting"
     @after-leave="resetPreview"
   >
     <n-alert v-if="!instanceStore.aiEnabled" type="info" class="mb-5">
       {{ $t("page.research.aiOffHint") }}
     </n-alert>
 
+    <operation-feedback v-if="saveError" class="mb-4" :uncertain="confirmFailed" data-testid="research-task-save-error" />
     <template v-if="!preview">
-      <n-form label-placement="top">
+      <n-form label-placement="top" :disabled="submitting || airaDrafting">
         <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">
           <n-form-item :label="$t('page.research.project')" required>
             <n-select
@@ -458,13 +462,13 @@
 
     <template #footer>
       <div class="flex flex-wrap items-center justify-end gap-2">
-        <n-button @click="preview ? resetPreview() : closeModal()">
+        <n-button :disabled="submitting || airaDrafting" @click="preview ? resetPreview() : closeModal()">
           {{ preview ? $t("page.research.backToEdit") : $t("common.cancel") }}
         </n-button>
         <n-button
           v-if="!preview"
           type="primary"
-          :disabled="!isValid"
+          :disabled="!isValid || airaDrafting"
           :loading="submitting"
           @click="handlePreview"
         >
@@ -524,6 +528,8 @@ const protocolsLoading = ref(false)
 const knowledgeLoading = ref(false)
 const capabilitiesLoading = ref(false)
 const submitting = ref(false)
+const saveError = ref(false)
+const confirmFailed = ref(false)
 const airaDrafting = ref(false)
 const projects = ref<Api.Project.MyProjectInfo[]>([])
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
@@ -846,15 +852,22 @@ function closeModal() {
 }
 
 function resetPreview() {
+  saveError.value = false
+  confirmFailed.value = false
   preview.value = null
 }
 
 async function handlePreview() {
-  if (!isValid.value)
+  if (submitting.value || airaDrafting.value || !isValid.value)
     return
+  saveError.value = false
+  confirmFailed.value = false
   submitting.value = true
   try {
     preview.value = await previewResearchTask(payload())
+  }
+  catch {
+    saveError.value = true
   }
   finally {
     submitting.value = false
@@ -862,8 +875,9 @@ async function handlePreview() {
 }
 
 async function handleCreate() {
-  if (!preview.value)
+  if (submitting.value || !preview.value)
     return
+  saveError.value = false
   submitting.value = true
   try {
     const task = await createResearchTask({
@@ -874,6 +888,10 @@ async function handleCreate() {
     visible.value = false
     emit("created", task)
   }
+  catch {
+    saveError.value = true
+    confirmFailed.value = true
+  }
   finally {
     submitting.value = false
   }
@@ -881,10 +899,6 @@ async function handleCreate() {
 </script>
 
 <style scoped>
-.research-task-modal {
-  width: min(48rem, calc(100vw - 2rem));
-}
-
 .research-preview-card {
   border: 1px solid rgb(229 231 235);
   border-radius: 0.75rem;

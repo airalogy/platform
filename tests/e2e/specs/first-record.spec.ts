@@ -69,10 +69,31 @@ test("an author publishes a template and a Lab member submits and revises a real
   await expect(page.getByRole("dialog")).toContainText("Quickstart Protocol Testing")
   await expect(page.getByRole("dialog")).toContainText("2/2")
   await page.getByRole("dialog").getByRole("button", { name: "Submit Record", exact: true }).click()
+  // Hold the real report response to verify that Revise cannot silently lose an
+  // early click while its Record and versioned Protocol are still loading.
+  let releaseReport!: () => void
+  const reportGate = new Promise<void>((resolve) => {
+    releaseReport = resolve
+  })
+  const reportUrl = new RegExp(`/api/protocols/${protocol.id}/records/[^/?]+\\?version=1$`)
+  await page.route(reportUrl, async (route) => {
+    await reportGate
+    await route.continue()
+  }, { times: 1 })
+  const reportRequested = page.waitForRequest(request => reportUrl.test(request.url()))
   await page.getByRole("dialog").getByRole("button", { name: "View saved Record", exact: true }).click()
   await expect(page).toHaveURL(/\/record\/[^/]+\/v1$/)
   const originalReport = page.url()
-  await page.getByRole("button", { name: "Revise", exact: true }).click()
+  const revise = page.getByRole("button", { name: "Revise", exact: true })
+  try {
+    await reportRequested
+    await expect(revise).toBeDisabled()
+  }
+  finally {
+    releaseReport()
+  }
+  await revise.click()
+  await expect(page).toHaveURL(/\/add\?record=/)
   await page.locator("#form-research_variable-observation_count input").fill("13")
   await expect(page.getByRole("button", { name: "Submit", exact: true })).toBeDisabled()
   await page.getByPlaceholder("Reason for this correction (required)").fill("Corrected a practice transcription error.")

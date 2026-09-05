@@ -21,9 +21,10 @@
   </div>
 
   <n-modal
+    style="--aira-dialog-width: 34rem"
     v-model:show="releaseVisible"
     preset="card"
-    class="research-release-modal"
+    class="aira-dialog research-release-modal"
     :title="$t('page.research.releaseReservation')"
     :mask-closable="false"
     @after-leave="reset"
@@ -147,7 +148,5 @@ function reset() {
 </script>
 
 <style scoped>
-.research-release-modal {
-  width: min(34rem, calc(100vw - 2rem));
-}
+
 </style>

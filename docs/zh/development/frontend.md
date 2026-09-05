@@ -52,3 +52,9 @@ platform/
 ```
 
 面向用户展示的文案应放在 `packages/shared/src/locales/langs/` 下的 i18n 语言文件中。
+
+## 共享 UI 约定
+
+产品字体、布局和交互规范见 `apps/web/src/styles/README.md`。卡片式弹窗使用 `aira-dialog`，需要特定宽度时通过内联 `--aira-dialog-width` 设置；长内容在内部滚动，标题和底部确认区保持可见。可选字段使用可键盘操作的折叠区；失败时保留输入并显示持久错误提示。确认过程中连接中断，不等于写入一定失败。
+
+桌面导航与紧凑屏幕的当前模块菜单使用同一份目标定义。权限由 API 校验，不能由导航是否可见代替。修改相关交互时扩展 `tests/e2e/specs/workspace-interactions.spec.ts`，同时覆盖窄屏和 AI 关闭路径。

@@ -283,9 +283,10 @@
     </n-spin>
 
     <n-modal
+      style="--aira-dialog-width: 42rem"
       v-model:show="modalVisible"
       preset="card"
-      class="research-asset-modal"
+      class="aira-dialog research-asset-modal"
       :title="modalTitle"
       :mask-closable="false"
       @after-leave="resetModal"
@@ -1219,10 +1220,6 @@ watch(() => props.taskId, () => {
   border-radius: 0.75rem;
   background: rgb(248 250 252 / 75%);
   padding: 0.75rem;
-}
-
-.research-asset-modal {
-  width: min(42rem, calc(100vw - 2rem));
 }
 
 .action-output-json {

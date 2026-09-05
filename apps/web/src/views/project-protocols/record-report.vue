@@ -80,7 +80,7 @@
       <n-button v-if="recordData" type="primary" class="mr-4" @click="handleExportPdf()">
         {{ $t("page.protocol.recordReport.exportPdf") }}
       </n-button>
-      <n-button type="warning" class="mr-4" @click="handleModify()">
+      <n-button type="warning" class="mr-4" :disabled="!isRevisionReady" @click="handleModify()">
         {{ $t("page.protocol.addRecord.reviseAction") }}
       </n-button>
       <n-tooltip v-if="canDeleteByRole" :disabled="!deleteBlockedReason">
@@ -300,6 +300,7 @@ const { endLoading, loading, startLoading } = useLoading()
 const { fetchProtocolInfoByUid, protocolInfo, protocolId } = useProvideProtocolInfoStore(null)
 
 const recordData = ref<Partial<IRecordData>>({} as IRecordData)
+const isRevisionReady = computed(() => !loading.value && !!protocolInfo.value && !!record.value && !!protocol.value)
 const { projectInfo, fetchProjectInfoById } = useOrProvideProjectInfoStore(null)
 const { canDeleteOthersRecords, canDeleteOwnRecords } = useProjectPermissions(projectInfo)
 
@@ -774,7 +775,7 @@ const user = asyncComputed(async () => {
 })
 
 function handleModify() {
-  if (!protocolInfo.value) {
+  if (!isRevisionReady.value) {
     return
   }
 

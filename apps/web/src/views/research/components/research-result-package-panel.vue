@@ -34,9 +34,10 @@
   </section>
 
   <n-modal
+    style="--aira-dialog-width: 52rem"
     v-model:show="visible"
     preset="card"
-    class="research-result-package-modal"
+    class="aira-dialog research-result-package-modal"
     :title="$t('page.research.resultPackage')"
     :mask-closable="false"
   >
@@ -258,10 +259,6 @@ watch(() => props.taskId, () => {
 </script>
 
 <style scoped>
-.research-result-package-modal {
-  width: min(52rem, calc(100vw - 2rem));
-}
-
 .research-result-meta {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);

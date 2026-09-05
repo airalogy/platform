@@ -86,7 +86,7 @@
           contentClass,
           leftGapClass,
           isContentScroll ? 'overflow-y-auto' : 'overflow-y-hidden',
-          isContainer ? 'container' : '',
+          isContainer ? 'container aira-content-shell' : '',
         ]"
       >
         <slot />

@@ -7,9 +7,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 46rem"
     v-model:show="visible"
     preset="card"
-    class="research-service-modal"
+    class="aira-dialog research-service-modal"
     :title="$t('page.research.requestExternalService')"
     :mask-closable="false"
     @after-leave="reset"
@@ -180,7 +181,6 @@ function reset() {
 </script>
 
 <style scoped>
-.research-service-modal { width: min(46rem, calc(100vw - 2rem)); }
 .service-preview { border: 1px solid rgb(226 232 240); border-radius: 1rem; padding: 1rem; }
 pre { overflow: auto; max-height: 18rem; border-radius: 0.75rem; background: rgb(248 250 252); padding: 0.75rem; font-size: 0.75rem; }
 </style>

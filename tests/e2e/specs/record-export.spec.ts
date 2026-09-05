@@ -8,7 +8,8 @@ test("Lab Owner can create and download a background Record export", async ({ pa
 
   await page.getByTestId("record-export-trigger").click()
   await expect(page.getByTestId("record-export-modal")).toBeVisible()
-  await expect(page.getByText(/1\s*(条记录|Records?)/i).first()).toBeVisible()
+  // Earlier journeys may have added valid Records to the same isolated Lab.
+  await expect(page.getByTestId("record-export-modal").getByText(/[1-9]\d*\s*(条记录|Records?)/i).first()).toBeVisible()
   await expect(page.getByTestId("record-export-revisions")).toHaveAttribute("aria-checked", "false")
   await expect(page.getByTestId("record-export-attachments")).toHaveAttribute("aria-checked", "true")
 

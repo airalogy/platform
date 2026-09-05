@@ -5,7 +5,7 @@
   >
     <n-button
       :theme-overrides="buttonThemeOverrides"
-      class="ml-5 h-[36px] rounded-2 px-3"
+      class="ml-2 h-[36px] rounded-2 px-3"
       icon-placement="right"
       :aria-label="$t('common.new')"
       :title="$t('common.new')"

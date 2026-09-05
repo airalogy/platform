@@ -5,9 +5,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 58rem"
     v-model:show="visible"
     preset="card"
-    class="human-executor-modal"
+    class="aira-dialog human-executor-modal"
     :title="$t('page.research.humanExecutorProfiles')"
     :mask-closable="false"
     @after-leave="resetEditor"
@@ -432,10 +433,6 @@ function handleBack() {
 </script>
 
 <style scoped>
-.human-executor-modal {
-  width: min(58rem, calc(100vw - 2rem));
-}
-
 .human-executor-card,
 .human-executor-preview,
 .human-executor-skill {

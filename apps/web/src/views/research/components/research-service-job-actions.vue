@@ -57,9 +57,10 @@
   </div>
 
   <n-modal
+    style="--aira-dialog-width: 48rem"
     v-model:show="visible"
     preset="card"
-    class="research-service-operation-modal"
+    class="aira-dialog research-service-operation-modal"
     :title="modalTitle"
     :mask-closable="false"
     @after-leave="reset"
@@ -367,7 +368,7 @@ function reset() {
 
 <style scoped>
 .research-service-job { border: 1px solid rgb(226 232 240); border-radius: 0.875rem; background: rgb(248 250 252); padding: 0.875rem; }
-.research-service-operation-modal { width: min(48rem, calc(100vw - 2rem)); }
+
 .service-operation-preview { border: 1px solid rgb(226 232 240); border-radius: 1rem; padding: 1rem; }
 pre { overflow: auto; max-height: 20rem; border-radius: 0.75rem; background: rgb(241 245 249); padding: 0.75rem; font-size: 0.75rem; }
 </style>

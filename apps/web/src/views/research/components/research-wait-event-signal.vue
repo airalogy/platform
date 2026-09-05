@@ -4,9 +4,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 38rem"
     v-model:show="visible"
     preset="card"
-    class="research-signal-modal"
+    class="aira-dialog research-signal-modal"
     :title="$t('page.research.provideExternalResult')"
     :mask-closable="false"
     @after-leave="reset"
@@ -271,9 +272,5 @@ async function confirmSignal() {
   font-size: 0.75rem;
   line-height: 1.55;
   padding: 0.75rem;
-}
-
-:global(.research-signal-modal) {
-  width: min(38rem, calc(100vw - 2rem));
 }
 </style>

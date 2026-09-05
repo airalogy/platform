@@ -7,9 +7,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 52rem"
     v-model:show="visible"
     preset="card"
-    class="research-compute-modal"
+    class="aira-dialog research-compute-modal"
     :title="$t('page.research.computeAction')"
     :mask-closable="false"
     @after-leave="reset"
@@ -488,7 +489,6 @@ function reset() {
 </script>
 
 <style scoped>
-.research-compute-modal { width: min(52rem, calc(100vw - 2rem)); }
 .compute-preview,
 .compute-input-list,
 .compute-output-list { border: 1px solid rgb(226 232 240); border-radius: 1rem; padding: 1rem; }

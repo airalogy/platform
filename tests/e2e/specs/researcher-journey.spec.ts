@@ -70,6 +70,7 @@ test("minimal manual Research Task does not require optional infrastructure", as
     await page.getByRole("button", { name: "Start Task", exact: true }).click()
     await expect(page.getByTestId("research-manual-next-step")).toBeVisible()
     await expect(page.getByText("Aira stage", { exact: true })).toHaveCount(0)
+    await page.getByTestId("research-add-actions").locator("summary").click()
     await page.getByRole("button", { name: "Add Human Work", exact: true }).click()
     const humanDialog = page.getByRole("dialog")
     await humanDialog.getByPlaceholder("For example: Inspect sample labels").fill("Synthetic label inspection")
@@ -98,8 +99,8 @@ test("minimal manual Research Task does not require optional infrastructure", as
 test("My Log is reachable and a progress entry survives reloading", async ({ page }) => {
   const title = `Journey progress ${Date.now()}`
   await page.goto("/home")
-  await page.getByRole("button", { name: "My", exact: true }).click()
-  await page.getByRole("button", { name: "My Log", exact: true }).click()
+  await page.getByRole("link", { name: "Log", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "My Log", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "New Log entry", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("textbox").nth(1).fill(title)

@@ -7,9 +7,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 40rem"
     v-model:show="visible"
     preset="card"
-    class="research-run-modal"
+    class="aira-dialog research-run-modal"
     :title="$t('page.research.createRunTitle')"
     :mask-closable="false"
     @after-leave="reset"
@@ -198,10 +199,6 @@ async function handleCreate() {
 </script>
 
 <style scoped>
-.research-run-modal {
-  width: min(40rem, calc(100vw - 2rem));
-}
-
 .research-run-preview {
   border: 1px solid rgb(226 232 240);
   border-radius: 0.75rem;

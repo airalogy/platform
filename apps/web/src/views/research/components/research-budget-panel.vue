@@ -107,9 +107,10 @@
   </section>
 
   <n-modal
+    style="--aira-dialog-width: 36rem"
     v-model:show="entryVisible"
     preset="card"
-    class="research-budget-modal"
+    class="aira-dialog research-budget-modal"
     :title="$t('page.research.recordBudgetEntry')"
     :mask-closable="false"
     @after-leave="reset"
@@ -169,9 +170,10 @@
   </n-modal>
 
   <n-modal
+    style="--aira-dialog-width: 36rem"
     v-model:show="amendmentVisible"
     preset="card"
-    class="research-budget-modal"
+    class="aira-dialog research-budget-modal"
     :title="$t('page.research.amendOperationalLimits')"
     :mask-closable="false"
     @after-leave="resetAmendment"
@@ -594,9 +596,5 @@ watch(() => props.taskId, () => void loadBudget(), { immediate: true })
   border-radius: 0.75rem;
   background: rgb(248 250 252 / 75%);
   padding: 0.75rem;
-}
-
-.research-budget-modal {
-  width: min(36rem, calc(100vw - 2rem));
 }
 </style>

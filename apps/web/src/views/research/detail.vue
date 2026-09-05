@@ -42,48 +42,13 @@
             </p>
           </div>
           <div class="flex shrink-0 flex-wrap items-center gap-2">
-            <n-button v-if="task.status === 'draft'" type="primary" :loading="mutating" @click="startTask">
+            <n-button v-if="task.permissions.can_run && task.status === 'draft'" type="primary" :loading="mutating" @click="startTask">
               {{ task.ai_available && hasAiraCapabilities ? $t("page.research.startWithAira") : $t("page.research.startTask") }}
             </n-button>
-            <n-button v-if="canAddAction" secondary @click="openActionModal">
-              {{ $t("page.research.addProtocolWork") }}
-            </n-button>
-            <research-human-work-action-modal
-              v-if="canAddAction"
-              :task-id="task.id"
-              :project-id="task.project_id"
-              :owner="task.owner"
-              @created="() => loadTask(true)"
-            />
-            <research-digital-action-modal
-              v-if="canAddDigitalAction"
-              :task-id="task.id"
-              :ai-available="task.ai_available"
-              @created="() => loadTask(true)"
-            />
-            <research-resource-action-modal
-              v-if="canAddDigitalAction && task.resources.length"
-              :task-id="task.id"
-              :lab-id="task.lab_id"
-              :requirements="task.resources"
-              @created="() => loadTask(true)"
-            />
-            <research-service-action-modal
-              v-if="canAddServiceAction"
-              :task-id="task.id"
-              :services="task.services"
-              @created="() => loadTask(true)"
-            />
-            <research-compute-action-modal
-              v-if="canAddComputeAction"
-              :task-id="task.id"
-              :has-environments="task.compute.some(item => item.available)"
-              @created="() => loadTask(true)"
-            />
-            <n-button v-if="task.status === 'active'" :loading="mutating" @click="pauseTask">
+            <n-button v-if="task.permissions.can_run && task.status === 'active'" :loading="mutating" @click="pauseTask">
               {{ $t("page.research.pause") }}
             </n-button>
-            <n-button v-if="task.status === 'paused' || task.status === 'failed'" type="primary" :loading="mutating" @click="resumeTask">
+            <n-button v-if="task.permissions.can_run && (task.status === 'paused' || task.status === 'failed')" type="primary" :loading="mutating" @click="resumeTask">
               {{ $t("page.research.resume") }}
             </n-button>
             <n-button v-if="canReview" type="primary" :loading="mutating" @click="openReviewModal">
@@ -96,9 +61,12 @@
               :runs="task.runs"
               @created="() => loadTask(true)"
             />
-            <n-button v-if="canCancel" type="error" tertiary :loading="mutating" @click="cancelTask">
-              {{ $t("page.research.cancelTask") }}
-            </n-button>
+            <n-popover v-if="canCancel" trigger="click" placement="bottom-end">
+              <template #trigger><n-button quaternary>{{ $t("common.more") }}</n-button></template>
+              <n-button v-if="canCancel" type="error" tertiary :loading="mutating" @click="cancelTask">
+                {{ $t("page.research.cancelTask") }}
+              </n-button>
+            </n-popover>
           </div>
         </header>
 
@@ -116,7 +84,7 @@
 
         <div class="grid grid-cols-1 mt-6 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           <div class="space-y-5">
-            <section class="research-panel">
+            <section class="research-panel" data-testid="research-current-status">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div class="aira-type-eyebrow">
@@ -130,7 +98,7 @@
                   {{ runStatusLabel(latestRun.status) }}
                 </n-tag>
               </div>
-              <div v-if="latestRun" class="grid grid-cols-1 mt-4 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div v-if="latestRun" class="grid grid-cols-2 mt-4 gap-3 xl:grid-cols-4">
                 <div class="research-metric">
                   <span class="aira-type-meta">{{ $t("page.research.planVersion") }}</span>
                   <strong class="aira-type-metric">v{{ latestRun.plan_version }}</strong>
@@ -148,12 +116,58 @@
                   <strong class="aira-type-label break-words">{{ airaStage }}</strong>
                 </div>
               </div>
-              <n-alert v-if="!instanceStore.aiEnabled && task.status === 'active'" class="mt-4" type="info" data-testid="research-manual-next-step">
-                {{ $t("page.research.manualNextStep") }}
-              </n-alert>
+              <div class="mt-4 rounded-2 bg-blue-50 p-4" data-testid="research-next-step">
+                <div class="aira-type-label">{{ $t("page.research.nextStep") }}</div>
+                <p class="aira-type-body mb-0 mt-1" :data-testid="!task.ai_available && task.status === 'active' ? 'research-manual-next-step' : undefined">{{ nextStepHint }}</p>
+                <n-button v-if="nextStepTarget" class="mt-3" secondary @click="focusNextStep">{{ $t("page.research.openNextStep") }}</n-button>
+              </div>
             </section>
 
-            <section v-if="task.runs.length > 1" class="research-panel">
+            <details v-if="canAddAction" ref="actionToolsRef" class="aira-disclosure research-panel mt-4" data-testid="research-add-actions">
+              <summary>{{ $t("page.research.addAction") }}</summary>
+              <p class="aira-type-meta mb-4">{{ $t("page.research.addActionHint") }}</p>
+              <div class="flex flex-wrap gap-2">
+                <n-button v-if="canAddAction" secondary @click="openActionModal">
+                  {{ $t("page.research.addProtocolWork") }}
+                </n-button>
+                <research-human-work-action-modal
+                  v-if="canAddAction"
+                  :task-id="task.id"
+                  :project-id="task.project_id"
+                  :owner="task.owner"
+                  @created="() => loadTask(true)"
+                />
+                <research-digital-action-modal
+                  v-if="canAddDigitalAction"
+                  :task-id="task.id"
+                  :ai-available="task.ai_available"
+                  @created="() => loadTask(true)"
+                />
+                <research-resource-action-modal
+                  v-if="canAddDigitalAction && task.resources.length"
+                  :task-id="task.id"
+                  :lab-id="task.lab_id"
+                  :requirements="task.resources"
+                  @created="() => loadTask(true)"
+                />
+                <research-service-action-modal
+                  v-if="canAddServiceAction"
+                  :task-id="task.id"
+                  :services="task.services"
+                  @created="() => loadTask(true)"
+                />
+                <research-compute-action-modal
+                  v-if="canAddComputeAction"
+                  :task-id="task.id"
+                  :has-environments="task.compute.some(item => item.available)"
+                  @created="() => loadTask(true)"
+                />
+
+              </div>
+            </details>
+
+            <details v-if="task.runs.length > 1" class="research-panel aira-disclosure">
+              <summary>{{ $t("page.research.runHistory") }} · {{ task.runs.length }}</summary>
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.runHistory") }}
               </div>
@@ -209,9 +223,9 @@
                   </div>
                 </article>
               </div>
-            </section>
+            </details>
 
-            <section v-if="pendingApprovalActions.length" class="research-panel research-panel--attention">
+            <section v-if="pendingApprovalActions.length" id="research-approvals" tabindex="-1" class="research-panel research-panel--attention">
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.approvalGate") }}
               </div>
@@ -265,7 +279,7 @@
               </div>
             </section>
 
-            <section v-if="openActions.length" class="research-panel">
+            <section v-if="openActions.length" id="research-human-work" tabindex="-1" class="research-panel">
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.needsAction") }}
               </div>
@@ -312,7 +326,7 @@
               <h2 class="aira-type-section-title mb-0 mt-1">
                 {{ $t("page.research.actions") }}
               </h2>
-              <n-empty v-if="!task.actions.length" class="py-8" :description="$t('page.research.noActions')" />
+              <p v-if="!task.actions.length" class="aira-type-meta my-3">{{ $t("page.research.noActions") }}</p>
               <div v-else class="mt-4 divide-y divide-gray-100">
                 <div v-for="action in task.actions" :key="action.id" class="flex gap-3 py-4 first:pt-0 last:pb-0">
                   <div class="research-sequence">
@@ -762,7 +776,9 @@
               </template>
             </section>
 
-            <section class="research-panel">
+            <details class="research-panel aira-disclosure" data-testid="research-environment-details">
+              <summary>{{ $t("page.research.researchEnvironment") }}</summary>
+              <p class="aira-type-meta">{{ $t("page.research.environmentSelectionSummary", { methods: task.protocols.length, tools: pinnedTools.length, knowledge: task.knowledge.length, resources: task.resources.length + task.services.length + task.compute.length }) }}</p>
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.researchEnvironment") }}
               </div>
@@ -887,9 +903,10 @@
               <div class="aira-type-meta mt-3">
                 {{ $t("page.research.autonomy") }} · {{ autonomyLabel(task.autonomy_level) }}
               </div>
-            </section>
+            </details>
 
-            <section class="research-panel">
+            <details class="research-panel aira-disclosure">
+              <summary>{{ $t("page.research.timeline") }}</summary>
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.provenance") }}
               </div>
@@ -910,16 +927,17 @@
                   </div>
                 </div>
               </div>
-            </section>
+            </details>
           </aside>
         </div>
       </template>
     </n-spin>
 
     <n-modal
+      style="--aira-dialog-width: 44rem"
       v-model:show="actionModalVisible"
       preset="card"
-      class="research-modal"
+      class="aira-dialog research-modal"
       :title="$t('page.research.addProtocolWork')"
       :mask-closable="false"
       @after-leave="resetActionDraft"
@@ -984,8 +1002,9 @@
 
     <n-modal
       v-model:show="reviewModalVisible"
+      style="--aira-dialog-width: 64rem"
       preset="card"
-      class="research-modal research-review-modal"
+      class="aira-dialog research-modal research-review-modal"
       content-style="max-height: calc(100vh - 12rem); overflow-y: auto"
       :title="$t('page.research.reviewResult')"
       :mask-closable="false"
@@ -1218,8 +1237,8 @@ const hasAiraCapabilities = computed(() => Boolean(
   || task.value?.resources.some(item => item.available)
   || task.value?.services.some(item => item.available),
 ))
-const canAddAction = computed(() => ["active", "paused"].includes(task.value?.status || ""))
-const canAddDigitalAction = computed(() => task.value?.status === "active")
+const canAddAction = computed(() => task.value?.permissions.can_run && ["active", "paused"].includes(task.value?.status || ""))
+const canAddDigitalAction = computed(() => task.value?.permissions.can_run && task.value?.status === "active")
 const canAddServiceAction = computed(() => Boolean(
   task.value?.status === "active"
   && task.value.permissions.can_use_services
@@ -1230,9 +1249,10 @@ const canAddComputeAction = computed(() => Boolean(
   && task.value.permissions.can_use_compute
   && task.value.compute.some(item => item.available),
 ))
-const canCancel = computed(() => !["completed", "cancelled", "archived"].includes(task.value?.status || ""))
+const canCancel = computed(() => task.value?.permissions.can_run && !["completed", "cancelled", "archived"].includes(task.value?.status || ""))
 const canReview = computed(() => Boolean(
   task.value
+  && (String(task.value.owner_user_id) === String(authStore.userInfo.id) || task.value.permissions.can_approve)
   && task.value.status !== "completed"
   && task.value.status !== "cancelled"
   && task.value.open_work_items === 0
@@ -1289,6 +1309,52 @@ const openActions = computed(() => (task.value?.actions || []).filter(action =>
 const pendingApprovalActions = computed(() => (task.value?.actions || []).filter(action =>
   action.approval?.status === "pending" && action.status === "proposed",
 ))
+const actionToolsRef = ref<HTMLDetailsElement | null>(null)
+const nextStepTarget = computed(() => {
+  if (!task.value || !["active", "review_required"].includes(task.value.status))
+    return ""
+  if (pendingApprovalActions.value.length)
+    return "research-approvals"
+  if (openActions.value.length)
+    return "research-human-work"
+  if (!task.value.ai_available && canAddAction.value && task.value.status === "active")
+    return "add"
+  return ""
+})
+const nextStepHint = computed(() => {
+  const current = task.value
+  if (!current)
+    return ""
+  if (current.status === "draft")
+    return $t("page.research.nextDraft")
+  if (current.status === "paused" || current.status === "failed")
+    return $t("page.research.nextPaused")
+  if (["completed", "cancelled", "archived"].includes(current.status))
+    return $t("page.research.nextFinished")
+  if (pendingApprovalActions.value.length)
+    return $t("page.research.nextApproval")
+  if (openActions.value.some(canExecuteAction))
+    return $t("page.research.nextHumanWork")
+  if (openActions.value.length)
+    return $t("page.research.nextOtherWork")
+  if (current.status === "review_required")
+    return $t("page.research.nextReview")
+  if (!current.ai_available)
+    return $t("page.research.manualNextStep")
+  return $t("page.research.nextRunning")
+})
+function focusNextStep() {
+  if (nextStepTarget.value === "add" && actionToolsRef.value) {
+    actionToolsRef.value.open = true
+    actionToolsRef.value.querySelector("summary")?.focus()
+    actionToolsRef.value.scrollIntoView({ block: "center" })
+    return
+  }
+  const target = document.getElementById(nextStepTarget.value)
+  target?.focus()
+  target?.scrollIntoView({ block: "start" })
+}
+
 const resultConclusion = computed(() => task.value?.result_package.reviewed_conclusion
   || task.value?.conclusion
   || task.value?.result_package.narrative_conclusion
@@ -2106,14 +2172,6 @@ onUnmounted(() => {
   background: rgb(var(--primary-color));
   box-shadow: 0 0 0 2px rgb(var(--primary-color) / 18%);
   margin-top: 0.3rem;
-}
-
-.research-modal {
-  width: min(44rem, calc(100vw - 2rem));
-}
-
-.research-review-modal {
-  width: min(64rem, calc(100vw - 2rem));
 }
 
 .reviewer-panel {

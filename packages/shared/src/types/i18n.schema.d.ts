@@ -7,6 +7,11 @@ declare namespace I18n {
       title: string
     }
     common: {
+      workspace: string
+      workspaceNavigation: string
+      operationFailed: string
+      inputPreserved: string
+      checkBeforeRetry: string
       tip: string
       add: string
       addMember: string
@@ -737,6 +742,9 @@ declare namespace I18n {
         }
       }
       knowledge: {
+        editMetadata: string
+        invalidDoi: string
+        metadataHint: string
         title: string
         myKnowledge: string
         labKnowledge: string
@@ -866,6 +874,18 @@ declare namespace I18n {
         scopeProject: string
       }
       research: {
+        addAction: string
+        addActionHint: string
+        nextStep: string
+        openNextStep: string
+        nextDraft: string
+        nextPaused: string
+        nextFinished: string
+        nextApproval: string
+        nextHumanWork: string
+        nextOtherWork: string
+        nextReview: string
+        nextRunning: string
         title: string
         taskDetail: string
         workItemDetail: string

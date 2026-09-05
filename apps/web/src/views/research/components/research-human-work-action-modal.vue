@@ -4,9 +4,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 50rem"
     v-model:show="visible"
     preset="card"
-    class="human-work-modal"
+    class="aira-dialog human-work-modal"
     :title="$t('page.research.addHumanWork')"
     :mask-closable="false"
     @after-leave="reset"
@@ -401,10 +402,6 @@ function reset() {
 </script>
 
 <style scoped>
-.human-work-modal {
-  width: min(50rem, calc(100vw - 2rem));
-}
-
 .human-field-card,
 .human-work-preview {
   border: 1px solid rgb(229 231 235);

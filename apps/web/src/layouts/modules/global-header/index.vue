@@ -5,39 +5,23 @@
     :class="isContainer ? 'container' : ''"
     :style="containerStyle"
   >
-    <global-logo class="shrink-0 text-white" :class="isMobile ? 'mx-4' : 'mr-18'" monochrome :compact="isMobile" />
+    <global-logo class="mr-3 shrink-0 text-white lg:mr-5" monochrome :compact="isMobile" />
     <template v-if="authStore.isLogin">
       <global-menu />
       <global-add-new />
       <n-button
-        v-if="!isMobile && !instanceStore.isSingleLab"
-        :theme-overrides="buttonThemeOverrides"
-        class="ml-4 h-[36px] rounded-2 px-3"
-        @click="routerPushByKey('hub')"
-      >
-        {{ $t("common.hub") }}
-      </n-button>
-      <n-button
         v-if="!isMobile && instanceStore.aiEnabled"
         :theme-overrides="buttonThemeOverrides"
-        class="ml-4 h-[36px] rounded-2 px-3"
+        class="ml-2 h-[36px] rounded-2 px-3"
         @click="routerPushByKey('global-chat')"
       >
         {{ $t("common.chat") }}
       </n-button>
-      <n-button
-        v-if="!isMobile"
-        :theme-overrides="buttonThemeOverrides"
-        class="ml-4 h-[36px] rounded-2 px-3"
-        @click="handleToHelp"
-      >
-        <span class="flex items-center gap-1">
-          {{ $t("page.help.title") }}
-          <n-icon :size="14">
-            <icon-ion-help-circle-outline />
-          </n-icon>
-        </span>
-      </n-button>
+      <n-dropdown v-if="!isMobile" trigger="click" :options="discoveryOptions" @select="handleSelect">
+        <n-button :theme-overrides="buttonThemeOverrides" class="ml-2 h-9 rounded-2 px-3">
+          {{ $t("common.more") }}
+        </n-button>
+      </n-dropdown>
     </template>
     <!-- <global-search
       class="my-5 ml-auto w-full border-0 sm:max-w-[400px]"
@@ -73,17 +57,18 @@
       </n-button>
     </n-dropdown>
     <template v-else>
-      <n-dropdown :options="localeDropdownOptions" @select="handleLocaleSelect">
+      <n-dropdown trigger="click" :options="localeDropdownOptions" @select="handleLocaleSelect">
         <n-button
           :theme-overrides="buttonThemeOverrides"
           class="ml-auto mr-2 h-[36px] rounded-2 px-3"
+          :aria-label="currentLocaleLabel"
         >
           <template #icon>
             <n-icon>
               <icon-ion-language />
             </n-icon>
           </template>
-          <span v-if="!isMobile">{{ currentLocaleLabel }}</span>
+          <span v-if="!compactHeader">{{ currentLocaleLabel }}</span>
         </n-button>
       </n-dropdown>
       <template v-if="authStore.isLogin">
@@ -121,6 +106,7 @@ import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
+import { useMediaQuery } from "@vueuse/core"
 import UserAvatar from "./components/user-avatar.vue"
 import { buttonThemeOverrides } from "./constants"
 
@@ -133,6 +119,7 @@ const props = withDefaults(defineProps<IProps>(), {
 })
 
 const { isMobile } = useBasicLayout()
+const compactHeader = useMediaQuery("(max-width: 1535px)")
 interface IProps {
   showLogo?: boolean
   showMenu?: boolean
@@ -155,6 +142,10 @@ const { routerPushByKey } = useRouterPush()
 async function handleToHelp() {
   await routerPushByKey("help-center")
 }
+const discoveryOptions = computed<DropdownOption[]>(() => [
+  ...(!instanceStore.isSingleLab ? [{ label: $t("common.hub"), key: "hub" }] : []),
+  { label: $t("page.help.title"), key: "help" },
+])
 const menuOptions = computed<DropdownOption[]>(() => {
   if (!authStore.isLogin) {
     return [
@@ -167,7 +158,7 @@ const menuOptions = computed<DropdownOption[]>(() => {
 
   return [
     ...(instanceStore.aiEnabled ? [{ label: $t("common.chat"), key: "chat" }] : []),
-    { label: $t("page.help.title"), key: "help" },
+    ...discoveryOptions.value,
     { label: $t("common.profile"), key: "profile" },
     ...(authStore.userInfo.roles?.some(role => role === "R_ADMIN" || role === "R_SUPER")
       ? [{ label: $t("common.adminDashboard"), key: "admin-dashboard" }]
@@ -182,6 +173,9 @@ async function handleSelect(key: string | number) {
     case "login":
     case "sign-up":
       await routerPushByKey(key)
+      break
+    case "hub":
+      await routerPushByKey("hub")
       break
     case "chat":
       await routerPushByKey("global-chat")

@@ -224,7 +224,7 @@ test("AI-disabled Knowledge keeps the manual Paper path and hides Aira", async (
   await page.getByRole("button", { name: /A bounded assay result/ }).click()
 
   await expect(page.getByTestId("paper-aira-knowledge-draft")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "从论文创建 Knowledge" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "从论文创建知识条目" })).toBeVisible()
 })
 
 test("Aira requires confirmation for an authorized Restricted PDF source", async ({ page }) => {
@@ -304,7 +304,7 @@ test("Aira requires confirmation for an authorized Restricted PDF source", async
   await page.getByTestId("paper-aira-knowledge-draft").click()
 
   const dialog = page.locator(".n-dialog")
-  await expect(dialog.getByText("确认用 Aira 处理 Restricted 内容？")).toBeVisible()
+  await expect(dialog.getByText("确认用 Aira 处理仅限指定人员可见的内容？")).toBeVisible()
   await dialog.getByRole("button", { name: "确认" }).click()
 
   await expect.poll(() => confirmedRestrictedProcessing).toBe(true)

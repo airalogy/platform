@@ -7,10 +7,11 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 68rem"
     v-model:show="visible"
     preset="card"
     :title="$t('page.research.researchPolicy')"
-    class="research-policy-modal"
+    class="aira-dialog research-policy-modal"
     :mask-closable="!submitting"
   >
     <n-spin :show="loading">
@@ -365,6 +366,7 @@
   </n-modal>
 
   <n-modal
+    style="--aira-dialog-width: 42rem"
     v-model:show="grantVisible"
     preset="card"
     :title="
@@ -372,7 +374,7 @@
         ? $t('page.research.revokeAutonomyGrant')
         : $t('page.research.configureAutonomyGrant')
     "
-    class="research-grant-modal"
+    class="aira-dialog research-grant-modal"
     :mask-closable="!submitting"
   >
     <template v-if="selectedTarget">
@@ -856,14 +858,6 @@ function closeOrBackGrant() {
 </script>
 
 <style scoped>
-.research-policy-modal {
-  width: min(68rem, calc(100vw - 2rem));
-}
-
-.research-grant-modal {
-  width: min(42rem, calc(100vw - 2rem));
-}
-
 .policy-level,
 .policy-audit,
 .autonomy-grant-card {

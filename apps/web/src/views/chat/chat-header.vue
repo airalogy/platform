@@ -1,6 +1,6 @@
 <template>
   <section class="mx-auto h-[70px] flex items-center justify-end" :class="isContainer ? 'container' : ''">
-    <global-menu v-if="authStore.isLogin" :button-theme-overrides="{}" label="More" class="mr-3" />
+    <global-menu v-if="authStore.isLogin" compact :button-theme-overrides="{}" :label="$t('common.workspace')" class="mr-3" />
     <!-- <n-dropdown v-if="isMobile" :options="options" @select="handleSelect" /> -->
     <n-dropdown v-if="isMobile" :options="options" @select="handleSelect">
       <n-button quaternary>

@@ -21,9 +21,10 @@
   </div>
 
   <n-modal
+    style="--aira-dialog-width: 38rem"
     v-model:show="visible"
     preset="card"
-    class="research-instrument-control-decision-modal"
+    class="aira-dialog research-instrument-control-decision-modal"
     :title="mode === 'resume' ? $t('page.research.reviewAndResumeControl') : $t('page.research.stopControlSession')"
     :mask-closable="false"
     @after-leave="reset"
@@ -223,9 +224,5 @@ function reset() {
   margin-top: 0.25rem;
   overflow-wrap: anywhere;
   font-weight: 600;
-}
-
-:global(.research-instrument-control-decision-modal) {
-  width: min(38rem, calc(100vw - 2rem));
 }
 </style>

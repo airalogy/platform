@@ -4,9 +4,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 54rem"
     v-model:show="visible"
     preset="card"
-    class="research-digital-modal"
+    class="aira-dialog research-digital-modal"
     :title="$t('page.research.addDigitalAction')"
     :mask-closable="false"
     @after-leave="reset"
@@ -1380,9 +1381,5 @@ watch(controlMode, (value) => {
   .control-condition {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-:global(.research-digital-modal) {
-  width: min(54rem, calc(100vw - 2rem));
 }
 </style>

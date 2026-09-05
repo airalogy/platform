@@ -5,13 +5,17 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 52rem"
     v-model:show="visible"
     preset="card"
-    class="research-log-modal"
+    class="aira-dialog research-log-modal"
     :title="editing ? $t('page.recordDiary.editLog') : $t('page.recordDiary.newLog')"
     :mask-closable="false"
+    :closable="!saving"
+    :close-on-esc="!saving"
     @after-leave="reset"
   >
+    <operation-feedback v-if="saveError" class="mb-4" uncertain data-testid="log-save-error" />
     <template v-if="!previewing">
       <n-form label-placement="top">
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -87,7 +91,7 @@
 
     <template #footer>
       <div class="flex justify-end gap-2">
-        <n-button @click="previewing ? previewing = false : (visible = false)">
+        <n-button :disabled="saving" @click="previewing ? previewing = false : (visible = false)">
           {{ previewing ? $t("page.research.backToEdit") : $t("common.cancel") }}
         </n-button>
         <n-button v-if="!previewing" type="primary" :disabled="!isValid" @click="previewing = true">
@@ -121,6 +125,7 @@ const emit = defineEmits<{ saved: [entry: ResearchLogManualEntry] }>()
 const visible = ref(false)
 const previewing = ref(false)
 const saving = ref(false)
+const saveError = ref(false)
 const editing = ref<ResearchLogManualEntry | null>(null)
 const completedText = ref("")
 const evidenceText = ref("")
@@ -171,6 +176,7 @@ function lines(value: string) {
 }
 
 function reset() {
+  saveError.value = false
   previewing.value = false
   editing.value = null
   Object.assign(form, { kind: "progress", title: "", body: "", goal: "" })
@@ -221,8 +227,9 @@ function addAssetLink() {
 }
 
 async function save() {
-  if (!isValid.value)
+  if (saving.value || !isValid.value)
     return
+  saveError.value = false
   saving.value = true
   try {
     const entry = editing.value
@@ -236,6 +243,9 @@ async function save() {
     visible.value = false
     emit("saved", entry)
   }
+  catch {
+    saveError.value = true
+  }
   finally {
     saving.value = false
   }
@@ -245,10 +255,6 @@ defineExpose({ open })
 </script>
 
 <style scoped>
-.research-log-modal {
-  width: min(52rem, calc(100vw - 2rem));
-}
-
 .research-log-preview {
   border: 1px solid rgb(229 231 235);
   border-radius: 0.75rem;

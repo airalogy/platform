@@ -7,17 +7,15 @@
     :options="options"
     @select="handleDropdown"
   >
-    <div class="flex-center cursor-pointer">
+    <button type="button" class="flex-center cursor-pointer border-0 bg-transparent p-0" :aria-label="$t('common.profile')" :aria-expanded="isDropdownShow">
       <n-avatar
         round
         size="large"
         :src="authStore.userInfo.avatar_url || '/images/avatar_default.svg'"
         color="white"
       />
-      <n-button quaternary :theme-overrides="props.buttonThemeOverrides">
-        <dropdown-icon :expended="isDropdownShow" />
-      </n-button>
-    </div>
+      <dropdown-icon class="mx-2" :style="{ color: props.buttonThemeOverrides.textColor }" :expended="isDropdownShow" />
+    </button>
   </n-dropdown>
   <template v-else>
     <n-button
@@ -102,10 +100,6 @@ const baseOptions = computed<DropdownOption[]>(() => ([
   {
     label: $t("common.profile"),
     key: "user-profile",
-  },
-  {
-    label: $t("common.projects"),
-    key: "project-dashboard",
   },
   {
     label: $t("common.logout"),

@@ -52,3 +52,9 @@ platform/
 ```
 
 User-facing strings should live in the i18n locale files under `packages/shared/src/locales/langs/`.
+
+## Shared UI contracts
+
+Product typography, layout and interaction rules are documented in `apps/web/src/styles/README.md`. Use the opt-in `aira-dialog` class for card modals, with an inline `--aira-dialog-width` when needed: headers and confirmation footers remain visible while long content scrolls. Optional fields use keyboard-operable disclosures; errors remain visible and preserve input. An interrupted confirmation must not be reported as a definitely failed write.
+
+Core navigation uses one set of destinations for desktop links and the compact current-module menu. APIs, not navigation visibility, enforce access. Extend `tests/e2e/specs/workspace-interactions.spec.ts` when changing these contracts; test small screens and the AI-disabled path as well as desktop.

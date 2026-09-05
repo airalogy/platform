@@ -10,9 +10,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 36rem"
     v-model:show="visible"
     preset="card"
-    class="research-instrument-stop-modal"
+    class="aira-dialog research-instrument-stop-modal"
     :title="$t('page.research.requestInstrumentStop')"
     :mask-closable="false"
     @after-leave="reset"
@@ -135,9 +136,5 @@ function reset() {
   border-radius: 0.875rem;
   background: rgb(254 242 242);
   padding: 1rem;
-}
-
-:global(.research-instrument-stop-modal) {
-  width: min(36rem, calc(100vw - 2rem));
 }
 </style>

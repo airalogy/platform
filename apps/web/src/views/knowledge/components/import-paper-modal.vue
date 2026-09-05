@@ -7,15 +7,22 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 50rem"
     v-model:show="visible"
     preset="card"
-    class="knowledge-modal"
+    class="aira-dialog knowledge-modal"
+    :closable="!submitting"
+    :close-on-esc="!submitting"
     :title="$t('page.knowledge.importPaper')"
     :mask-closable="false"
     @after-leave="reset"
   >
+    <div class="aira-type-meta mb-4" data-testid="paper-destination">
+      {{ $t("page.knowledge.importDestination") }} · {{ props.scopeLabel }} · {{ visibilityLabel(visibility) }}
+    </div>
+    <operation-feedback v-if="importError" class="mb-4" :message="importError" :uncertain="confirmFailed" data-testid="paper-import-error" />
     <template v-if="!preview">
-      <n-form label-placement="top">
+      <n-form label-placement="top" :disabled="submitting">
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <n-form-item :label="$t('page.knowledge.sourceType')" required>
             <n-select v-model:value="sourceType" :options="sourceOptions" />
@@ -55,45 +62,50 @@
         >
           <n-input
             v-model:value="source"
-            :type="sourceType === 'bibtex' || sourceType === 'ris' ? 'textarea' : 'text'"
-            :autosize="{ minRows: 4, maxRows: 10 }"
+            :type="multilineSource ? 'textarea' : 'text'"
+            :autosize="multilineSource ? { minRows: 4, maxRows: 10 } : false"
+            :input-props="{ 'aria-label': $t('page.knowledge.source') }"
+            :placeholder="sourceType === 'doi' ? '10.1234/example' : undefined"
+            data-testid="paper-import-source"
           />
         </n-form-item>
 
-        <n-form-item
-          :label="$t('page.knowledge.paperTitle')"
-          :required="sourceType === 'manual' || sourceType === 'pdf' || sourceType === 'url'"
-        >
-          <n-input v-model:value="metadata.title" :placeholder="$t('page.knowledge.paperTitlePlaceholder')" />
-          <template v-if="sourceType === 'doi'" #feedback>
-            {{ $t("page.knowledge.providerUnavailable") }}
-          </template>
-        </n-form-item>
+        <details class="aira-disclosure" :open="metadataExpanded || sourceType === 'manual' || sourceType === 'url' || sourceType === 'pdf'" data-testid="paper-metadata">
+          <summary>{{ $t("page.knowledge.editMetadata") }}</summary>
+          <p class="aira-type-meta mb-4">{{ $t("page.knowledge.metadataHint") }}</p>
+          <n-form-item
+            :label="$t('page.knowledge.paperTitle')"
+            :required="sourceType === 'manual' || sourceType === 'pdf' || sourceType === 'url'"
+          >
+            <n-input v-model:value="metadata.title" :placeholder="$t('page.knowledge.paperTitlePlaceholder')" />
 
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <n-form-item :label="$t('page.knowledge.doi')">
-            <n-input v-model:value="metadata.doi" :disabled="sourceType === 'doi'" />
           </n-form-item>
-          <n-form-item :label="$t('page.knowledge.year')">
-            <n-input-number v-model:value="metadata.publicationYear" class="w-full" :min="1000" :max="9999" />
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <n-form-item v-if="sourceType !== 'doi'" :label="$t('page.knowledge.doi')">
+              <n-input v-model:value="metadata.doi" />
+            </n-form-item>
+            <n-form-item :label="$t('page.knowledge.year')">
+              <n-input-number v-model:value="metadata.publicationYear" class="w-full" :min="1000" :max="9999" />
+            </n-form-item>
+          </div>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <n-form-item :label="$t('page.knowledge.authors')">
+              <n-input
+                v-model:value="metadata.authors"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 5 }"
+                :placeholder="$t('page.knowledge.authorsPlaceholder')"
+              />
+            </n-form-item>
+            <n-form-item :label="$t('page.knowledge.venue')">
+              <n-input v-model:value="metadata.venue" />
+            </n-form-item>
+          </div>
+          <n-form-item :label="$t('page.knowledge.abstract')">
+            <n-input v-model:value="metadata.abstract" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" />
           </n-form-item>
-        </div>
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <n-form-item :label="$t('page.knowledge.authors')">
-            <n-input
-              v-model:value="metadata.authors"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 5 }"
-              :placeholder="$t('page.knowledge.authorsPlaceholder')"
-            />
-          </n-form-item>
-          <n-form-item :label="$t('page.knowledge.venue')">
-            <n-input v-model:value="metadata.venue" />
-          </n-form-item>
-        </div>
-        <n-form-item :label="$t('page.knowledge.abstract')">
-          <n-input v-model:value="metadata.abstract" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" />
-        </n-form-item>
+        </details>
       </n-form>
     </template>
 
@@ -124,6 +136,11 @@
             DOI · {{ preview.paper.doi }}
           </p>
         </section>
+        <details class="aira-disclosure">
+          <summary>{{ $t("page.knowledge.metadata") }}</summary>
+          <p class="aira-type-body">{{ preview.paper.authors.join("; ") }}</p>
+          <p class="aira-type-body whitespace-pre-wrap">{{ preview.paper.abstract || "—" }}</p>
+        </details>
         <n-alert
           :type="preview.duplicate.kind === 'none' ? 'success' : 'warning'"
           :title="$t('page.knowledge.duplicateCheck')"
@@ -132,7 +149,7 @@
         </n-alert>
 
         <template v-if="preview.duplicate.kind === 'candidate_conflict'">
-          <n-radio-group v-model:value="duplicateChoice" class="w-full">
+          <n-radio-group v-model:value="duplicateChoice" class="w-full" :disabled="submitting">
             <n-space vertical>
               <n-radio value="existing">
                 {{ $t("page.knowledge.useExisting") }}
@@ -140,6 +157,7 @@
               <n-select
                 v-if="duplicateChoice === 'existing'"
                 v-model:value="existingPaperId"
+                :disabled="submitting"
                 class="ml-6 w-[min(32rem,calc(100vw-6rem))]"
                 :options="candidateOptions"
               />
@@ -154,7 +172,7 @@
 
     <template #footer>
       <div class="flex flex-wrap justify-end gap-2">
-        <n-button @click="preview ? clearPreview() : closeModal()">
+        <n-button :disabled="submitting" @click="preview ? backToEdit() : closeModal()">
           {{ preview ? $t("page.knowledge.backToEdit") : $t("common.cancel") }}
         </n-button>
         <n-button
@@ -204,7 +222,11 @@ type ImportSource = PaperImportSource | "pdf"
 
 const visible = ref(false)
 const submitting = ref(false)
+const importError = ref("")
+const confirmFailed = ref(false)
+const metadataExpanded = ref(false)
 const sourceType = ref<ImportSource>("doi")
+const multilineSource = computed(() => sourceType.value === "bibtex" || sourceType.value === "ris")
 const visibility = ref<KnowledgeVisibility>(props.scope.visibility)
 const source = ref("")
 const selectedFile = ref<File | null>(null)
@@ -271,6 +293,8 @@ watch(() => props.scope, (scope) => {
 
 watch(sourceType, () => {
   clearPreview()
+  importError.value = ""
+  metadataExpanded.value = false
   selectedFile.value = null
   source.value = ""
 })
@@ -322,7 +346,21 @@ function clearPreview() {
   existingPaperId.value = null
 }
 
+function backToEdit() {
+  if (preview.value) {
+    const paper = preview.value.paper
+    Object.assign(metadata, { title: paper.title, doi: paper.doi || "", authors: paper.authors.join("\n"), publicationYear: paper.publication_year || null, venue: paper.venue, abstract: paper.abstract })
+  }
+  metadataExpanded.value = true
+  importError.value = ""
+  confirmFailed.value = false
+  clearPreview()
+}
+
 function reset() {
+  importError.value = ""
+  confirmFailed.value = false
+  metadataExpanded.value = false
   clearPreview()
   sourceType.value = "doi"
   source.value = ""
@@ -338,9 +376,11 @@ function reset() {
 }
 
 async function handlePreview() {
-  if (!canPreview.value)
+  if (submitting.value || !canPreview.value)
     return
   submitting.value = true
+  importError.value = ""
+  confirmFailed.value = false
   try {
     if (sourceType.value === "pdf" && selectedFile.value) {
       preview.value = await previewPdfImport({
@@ -366,15 +406,31 @@ async function handlePreview() {
     }
     existingPaperId.value = preview.value?.duplicate.candidate_ids[0] || null
   }
+  catch (error) {
+    const response = (error as { response?: { status?: number, data?: { detail?: unknown } } }).response
+    const detail = response?.data?.detail
+    const needsMetadata = sourceType.value === "doi" && !metadata.title.trim() && (
+      [404, 502, 503].includes(response?.status || 0)
+      || detail === "DOI import requires metadata when no LiteratureProvider is configured"
+    )
+    metadataExpanded.value = true
+    importError.value = $t(needsMetadata
+      ? "page.knowledge.providerUnavailable"
+      : detail === "Invalid DOI"
+        ? "page.knowledge.invalidDoi"
+        : "common.inputPreserved")
+  }
   finally {
     submitting.value = false
   }
 }
 
 async function handleConfirm() {
-  if (!preview.value || !canConfirm.value)
+  if (submitting.value || !preview.value || !canConfirm.value)
     return
   submitting.value = true
+  importError.value = ""
+  confirmFailed.value = false
   try {
     const exactDoi = preview.value.duplicate.kind === "exact_doi"
     const useExisting = exactDoi || (
@@ -390,6 +446,10 @@ async function handleConfirm() {
     emit("imported", entry)
     visible.value = false
   }
+  catch {
+    confirmFailed.value = true
+    importError.value = $t("common.inputPreserved")
+  }
   finally {
     submitting.value = false
   }
@@ -397,10 +457,6 @@ async function handleConfirm() {
 </script>
 
 <style scoped>
-.knowledge-modal {
-  width: min(50rem, calc(100vw - 2rem));
-}
-
 .knowledge-preview-card {
   border: 1px solid rgb(229 231 235);
   border-radius: 0.75rem;

@@ -10,9 +10,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 36rem"
     v-model:show="visible"
     preset="card"
-    class="research-compute-cancel-modal"
+    class="aira-dialog research-compute-cancel-modal"
     :title="$t('page.research.cancelCompute')"
     :mask-closable="false"
     @after-leave="reset"
@@ -128,9 +129,5 @@ function reset() {
   border-radius: 0.875rem;
   background: rgb(254 242 242);
   padding: 1rem;
-}
-
-:global(.research-compute-cancel-modal) {
-  width: min(36rem, calc(100vw - 2rem));
 }
 </style>

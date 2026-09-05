@@ -360,7 +360,8 @@
       </n-drawer-content>
     </n-drawer>
 
-    <n-modal v-model:show="collectionModalVisible" preset="card" class="small-modal" :title="$t('page.knowledge.newCollection')">
+    <n-modal
+      style="--aira-dialog-width: 32rem" v-model:show="collectionModalVisible" preset="card" class="aira-dialog small-modal" :title="$t('page.knowledge.newCollection')">
       <n-form label-placement="top">
         <n-form-item :label="$t('page.knowledge.collectionName')" required>
           <n-input v-model:value="collectionForm.name" />
@@ -381,7 +382,8 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="publishModalVisible" preset="card" class="knowledge-modal" :title="$t('page.knowledge.publish')">
+    <n-modal
+      style="--aira-dialog-width: 42rem" v-model:show="publishModalVisible" preset="card" class="aira-dialog knowledge-modal" :title="$t('page.knowledge.publish')">
       <template v-if="publishingItem">
         <n-alert type="info" class="mb-4">
           {{ $t("page.knowledge.publishImpact") }}
@@ -419,9 +421,10 @@
     </n-modal>
 
     <n-modal
+      style="--aira-dialog-width: 42rem"
       v-model:show="protocolDraftModalVisible"
       preset="card"
-      class="knowledge-modal"
+      class="aira-dialog knowledge-modal"
       :title="$t('page.knowledge.createProtocolDraft')"
     >
       <template v-if="protocolDraftItem">
@@ -1158,14 +1161,6 @@ button.knowledge-card:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.knowledge-modal {
-  width: min(42rem, calc(100vw - 2rem));
-}
-
-.small-modal {
-  width: min(32rem, calc(100vw - 2rem));
 }
 
 .knowledge-preview-card {

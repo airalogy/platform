@@ -98,6 +98,9 @@ Target initial version: `0.1.0`.
 
 ### Changed
 
+- Simplified the primary navigation to “Log”, while personal, Project and Lab pages retain scope-specific titles and ownership context.
+- Unified responsive card-dialog sizing, scrolling and persistent failure feedback across Knowledge, Research and Log; repaired single-line DOI input sizing and added optional metadata editing with a manual fallback. Core workspace navigation now exposes the current module, Research Tasks prioritize the next step over action tools and reference details, and the home workbench uses compact empty states without duplicate primary Record actions.
+
 - Unified top-level Platform pages on a shared semantic layout-width system: navigation and operational workspaces now use the same bounded 1920px canvas, while focused and reading surfaces can opt into narrower standard widths without page-specific shell CSS.
 - Centralized Platform UI typography into shared semantic roles for titles, body copy, labels, metadata, status, metrics, and code; the browser, Naive UI, and UnoCSS now use one Chinese/English font stack, with core Home, Lab, Project, Protocol, and Record surfaces migrated to the shared system.
 - Reworked the home page into a role- and work-state-aware task workbench that resumes real local Record drafts, starts the most recent Protocol directly, inherits recent Project context for Protocol creation, exposes management shortcuts only from actual memberships, and uses the shared bounded workspace canvas.
@@ -119,6 +122,9 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Disabled Record revision until the report and its versioned Protocol finish loading, preventing early clicks from silently doing nothing; covered the slow-loading path in the real first-Record browser journey.
+- Localized Knowledge navigation, personal/Lab/Project scopes, editing and publishing controls, and cross-module knowledge references in the Chinese interface; kept English UI labels and API identifiers unchanged.
+- Localized the Chinese Research Log navigation, scope names, and entry actions while preserving the English labels.
 - Fixed template metadata escaping and missing Protocol IDs, made template creation await completion, and clarified draft versus published state. Record forms now start with fields, retain validation feedback and linked server errors, and open the exact saved report after confirmation.
 - Fixed local and Docker Protocol execution to honor the configured package directory. The legacy validator now combines AIMD fields with custom model refinements instead of silently skipping AIMD-only constraints; added real subprocess regression coverage.
 - Fixed newly published Protocols committing successfully but returning a serialization error, and moved response preparation before commit. Human Work now generates stable field identifiers for any display language, keeping integration-oriented editing under Advanced settings.

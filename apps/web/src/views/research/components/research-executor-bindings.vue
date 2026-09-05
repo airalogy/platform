@@ -5,9 +5,10 @@
   </n-button>
 
   <n-modal
+    style="--aira-dialog-width: 52rem"
     v-model:show="visible"
     preset="card"
-    class="executor-binding-modal"
+    class="aira-dialog executor-binding-modal"
     :title="$t('page.research.executorBindings')"
     :mask-closable="false"
     @after-leave="resetEditor"
@@ -620,10 +621,6 @@ async function confirmChange() {
 </script>
 
 <style scoped>
-.executor-binding-modal {
-  width: min(52rem, calc(100vw - 2rem));
-}
-
 .executor-binding-card,
 .executor-binding-preview {
   border: 1px solid rgb(229 231 235);
