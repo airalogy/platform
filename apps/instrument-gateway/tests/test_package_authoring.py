@@ -330,6 +330,10 @@ class AuthoringTests(unittest.TestCase):
                 pass
 
             def do_POST(self):
+                # Consume the request before closing a response with a large body.
+                # Unread request bytes can cause a TCP reset/truncated response and
+                # make this response-limit assertion depend on socket timing.
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
                 received.append((self.path, dict(self.headers)))
                 if self.path.endswith("/turns"):
                     self.send_response(302)
