@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .credentials import read_credentials
+
 
 def _as_bool(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
@@ -40,8 +42,10 @@ class GatewayConfig:
                 "Instrument Gateway requires HTTPS outside loopback; "
                 "set AIRALOGY_GATEWAY_ALLOW_INSECURE_HTTP only for an isolated test network"
             )
-        if parsed.query or parsed.fragment:
-            raise ValueError("AIRALOGY_PLATFORM_URL cannot contain a query or fragment")
+        if parsed.query or parsed.fragment or parsed.username or parsed.password:
+            raise ValueError(
+                "AIRALOGY_PLATFORM_URL cannot contain credentials, a query or fragment"
+            )
         if not self.gateway_token.startswith("aigw_") or len(self.gateway_token) < 40:
             raise ValueError("AIRALOGY_GATEWAY_TOKEN is missing or invalid")
         if not self.adapter_name.strip():
@@ -67,9 +71,22 @@ class GatewayConfig:
     @classmethod
     def from_env(cls) -> GatewayConfig:
         adapter_config = os.environ.get("AIRALOGY_GATEWAY_ADAPTER_CONFIG", "").strip()
+        credential_file = os.environ.get("AIRALOGY_GATEWAY_CREDENTIAL_FILE", "").strip()
+        platform_url = os.environ.get("AIRALOGY_PLATFORM_URL", "").strip()
+        token = os.environ.get("AIRALOGY_GATEWAY_TOKEN", "").strip()
+        if credential_file:
+            if token:
+                raise ValueError("Use either a credential file or a token, not both")
+            content = read_credentials(Path(credential_file))
+            if platform_url and platform_url.rstrip("/") != content[
+                "platform_url"
+            ].rstrip("/"):
+                raise ValueError("Platform URL does not match the paired destination")
+            platform_url = content["platform_url"]
+            token = content["gateway_token"]
         return cls(
-            platform_url=os.environ.get("AIRALOGY_PLATFORM_URL", "").strip(),
-            gateway_token=os.environ.get("AIRALOGY_GATEWAY_TOKEN", "").strip(),
+            platform_url=platform_url,
+            gateway_token=token,
             adapter_name=os.environ.get("AIRALOGY_GATEWAY_ADAPTER", "").strip(),
             adapter_config=Path(adapter_config) if adapter_config else None,
             state_file=Path(

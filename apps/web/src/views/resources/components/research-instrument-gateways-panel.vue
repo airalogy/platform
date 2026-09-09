@@ -87,6 +87,8 @@
       />
     </section>
 
+    <instrument-pairing-panel v-if="selectedGateway" :key="`pair-${selectedGateway.id}`" :gateway="selectedGateway" @updated="loadGateways" />
+
     <instrument-integration-panel
       v-if="selectedGateway"
       :key="selectedGateway.id"
@@ -385,6 +387,7 @@ import {
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NSpace, NTag } from "naive-ui"
 import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
+import InstrumentPairingPanel from "./instrument-pairing-panel.vue"
 
 const props = defineProps<{
   labId: string
@@ -868,7 +871,13 @@ watch(() => props.labId, loadGateways, { immediate: true })
 <style scoped>
 .instrument-gateways {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+}
+
+.instrument-gateways > * {
+  min-width: 0;
 }
 
 .panel-heading {
@@ -890,7 +899,7 @@ watch(() => props.labId, loadGateways, { immediate: true })
 
 .gateway-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 12px;
 }
 
@@ -910,6 +919,8 @@ watch(() => props.labId, loadGateways, { immediate: true })
 
 .gateway-card__main {
   display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: 6px;
   padding: 0;
   border: 0;
@@ -933,6 +944,7 @@ watch(() => props.labId, loadGateways, { immediate: true })
 
 .command-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: 8px;
   padding-top: 20px;

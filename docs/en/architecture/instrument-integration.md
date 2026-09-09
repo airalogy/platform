@@ -1,6 +1,6 @@
 # Equipment software integration
 
-This delivers the **GUI draft/rehearsal slice** of [RFC #5](https://github.com/airalogy/platform/issues/5), not the complete equipment-integration product.
+This delivers **GUI drafts/rehearsal and local installation pairing** from [RFC #5](https://github.com/airalogy/platform/issues/5), not the complete equipment-integration product.
 
 ## Goal and authority
 
@@ -42,6 +42,26 @@ This operates only the bundled synthetic reader through real browser controls: f
 
 ## Contract and remaining delivery
 
+### Local installation pairing
+
+In the Gateway panel, a Lab Owner/Manager first disables the Gateway and finishes or safely stops active jobs, then previews and creates a pairing code. It expires after ten minutes, is shown once and cancels earlier pending pairings. The current credential is not changed yet.
+
+On the authorized workstation, create a service-account-owned private directory (`0700`) and run:
+
+```bash
+pnpm gateway:pair --credential-file /private/service-directory/gateway.json --platform-url https://lab.example.edu/api --lab-id <Lab-UUID> --gateway-id <Gateway-UUID> --client-name "Local station"
+```
+
+Replace every placeholder. An installed Gateway package can instead use `python -m airalogy_instrument_gateway.pairing_cli`. Verify the Platform URL and scope before entering the code at the hidden prompt; never put the code in shell arguments, chat or an issue.
+
+The assistant creates an exclusive `0600` credential file before contacting the selected Platform. It does not load adapters or poll jobs. Refresh Platform's pairing list, compare the full fingerprint on both sides, preview and confirm. Confirmation invalidates the old credential, records an audit event and **leaves the Gateway disabled**. A client label is a declaration, not hardware attestation. Existing allowlists and approvals are neither expanded nor bypassed.
+
+After a lost network response, use `--credential-file <same-file> --resume` to retry the same claim, or `--credential-file <same-file> --status <pairing-UUID>` to recover confirmation status. An expired/cancelled attempt needs a fresh pairing code; never overwrite an existing identity file. Configure the runtime with `AIRALOGY_GATEWAY_CREDENTIAL_FILE` instead of `AIRALOGY_GATEWAY_TOKEN`. It inherits the paired destination and rejects conflicting URL overrides. Non-loopback addresses require HTTPS and redirects are rejected.
+
+Private directory/file permissions, symbolic/hard links, exclusive creation and destination binding are checked. This is POSIX software acceptance only: Windows ACL storage/service installation is not implemented and unsupported credential storage is refused. Legacy service-manager secret configuration remains usable. Pairing neither installs an Adapter Package nor establishes equipment qualification.
+
+### Support matrix
+
 `airalogy.gui-rehearsal.v1` supports `observe`, `read`, `invoke`, `set_value` as **step descriptions compared with observations**, literal scalars, up to 10 commands, 40 steps per command and 20 scenarios. No shell, code, URL fetching, coordinates, implicit retries or physical stop claims. One authored Python contract in Gateway generates the API copy; CI checks equality.
 
 | Capability | Status |
@@ -52,10 +72,11 @@ This operates only the bundled synthetic reader through real browser controls: f
 | Autonomous instrument software discovery/launch/exploration | Not implemented |
 | Native accessibility and visual control backends | Not implemented; target software/OS required |
 | Sandboxed driver generation and trusted package distribution | Not implemented |
-| One-time pairing, installation receipts, binding qualification | Not implemented |
+| Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
+| Installation receipts, adapter/equipment qualification binding | Not implemented |
 | Instrument raw-file ingestion and draft DataAsset mapping | Not implemented by this slice |
 | Real equipment, OS installation and safety acceptance | Awaiting authorized pilot and operator |
 
 Existing Gateway signing, allowlists, bookings, approvals, heartbeat and safe-stop contracts are unchanged. No pilot model/software/OS is specified. Do not close RFC #5 or mark P0-A/P0-B acceptance complete based on this slice.
 
-Migration `0048_instrument_integration_drafts` adds the draft table. Upgrade through the normal backed-up deployment workflow before using the UI. Test migrations on disposable data; downgrade deletes drafts but does not reverse physical actions or uninstall adapters.
+Migration `0048_instrument_integration_drafts` adds drafts and `0049_instrument_pairings` adds enrollment records. Upgrade through the normal backed-up deployment workflow before using the UI. Test migrations on disposable data; downgrade deletes these records but does not undo confirmed credential rotation, reverse physical actions or uninstall adapters.

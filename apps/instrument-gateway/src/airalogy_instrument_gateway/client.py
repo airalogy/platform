@@ -94,6 +94,12 @@ class PlatformClient:
     def lease(self) -> dict[str, Any]:
         return self._request("POST", "/instrument-gateway/v1/jobs/lease")
 
+    def claim_pairing(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/instrument-pairings/claim", payload=payload)
+
+    def pairing_status(self, pairing_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/instrument-pairings/{pairing_id}/status")
+
     def start(
         self,
         job_id: str,

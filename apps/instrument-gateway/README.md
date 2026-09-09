@@ -20,7 +20,19 @@ The last command operates the bundled synthetic reader in an isolated browser wi
 
 The contract is authored in `src/airalogy_instrument_gateway/integration_contract.py`. After editing it, run `node scripts/sync-instrument-contract.mjs` from the repository root to generate the API copy for its independent Docker build context. CI checks equality. See the [support matrix](../../docs/en/architecture/instrument-integration.md).
 
-### Gateway runtime installation
+## Gateway runtime installation
+
+### Local pairing
+
+Instead of copying a long-lived token through the browser, a Lab administrator can create a ten-minute code for a **disabled** Gateway. The local assistant generates its credential in an exclusive private file, claims the code and displays an identity fingerprint. Only after comparing that fingerprint does the administrator approve replacement of the old credential. The Gateway remains disabled; pairing does not load adapters, poll jobs or qualify hardware.
+
+```bash
+pnpm gateway:pair --credential-file /private/service-directory/gateway.json --platform-url https://lab.example.edu/api --lab-id <Lab-UUID> --gateway-id <Gateway-UUID> --client-name "Local station"
+```
+
+Replace all placeholders; create the service-account-owned parent directory with mode `0700` first. Enter the code at the hidden interactive prompt, never in command arguments. Installed packages can use `python -m airalogy_instrument_gateway.pairing_cli` with the same arguments. Runtime configuration accepts `AIRALOGY_GATEWAY_CREDENTIAL_FILE` **instead of** `AIRALOGY_GATEWAY_TOKEN` and inherits the paired Platform URL. Credential files are POSIX-only for now; unsupported ACL storage fails closed. See [pairing, recovery and support boundaries](../../docs/en/architecture/instrument-integration.md#local-installation-pairing).
+
+### Supervised runtime
 
 Use a dedicated operating-system account on the equipment network:
 

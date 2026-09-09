@@ -1,6 +1,6 @@
 # 仪器软件接入
 
-本次交付是 [RFC #5](https://github.com/airalogy/platform/issues/5) 的 **GUI 草稿与重放验证部分**，不是整个设备接入产品已经完成。
+本次交付涵盖 [RFC #5](https://github.com/airalogy/platform/issues/5) 的 **GUI 草稿/重放验证与本地安装配对**，不是整个设备接入产品已经完成。
 
 ## 目标与权限边界
 
@@ -42,6 +42,26 @@ pnpm gateway:gui-demo
 
 ## 契约与剩余交付
 
+### 本地安装配对
+
+实验室管理员在网关面板先停用网关，完成或安全停止执行中的任务，再预览并创建配对码。配对码十分钟有效，仅显示一次；新建会取消之前未完成的配对，不立即更换现有凭据。
+
+在获授权的本地工作站创建服务账户专用目录（权限 `0700`），运行：
+
+```bash
+pnpm gateway:pair --credential-file /private/service-directory/gateway.json --platform-url https://lab.example.edu/api --lab-id <Lab-UUID> --gateway-id <Gateway-UUID> --client-name "Local station"
+```
+
+请替换示例中的目录、平台地址和 UUID。已安装 Gateway 包时也可使用 `python -m airalogy_instrument_gateway.pairing_cli`。核对地址和范围后，在隐藏输入提示中输入配对码，不要将配对码写到命令参数、聊天或 Issue。
+
+本地先独占创建 `0600` 凭据文件，然后向所选平台提交身份摘要。不启动适配器、不领取任务。管理员刷新页面，核对两端完整指纹，预览并确认；确认使旧凭据失效并记录审计，**网关仍保持停用**。客户端名称是声明，不是实机证明。已有指令白名单和审批不会因配对而新增或放宽。
+
+网络响应丢失后可用 `--credential-file <原文件> --resume` 重试同一身份；确认结果可用 `--credential-file <原文件> --status <配对 UUID>` 查询。取消/过期需重新创建配对码，不覆盖旧凭据文件。运行服务时使用 `AIRALOGY_GATEWAY_CREDENTIAL_FILE` 代替 `AIRALOGY_GATEWAY_TOKEN`；平台地址继承自配对文件，冲突覆盖会拒绝。非回环地址仅支持 HTTPS，拒绝跳转。
+
+私有目录、文件权限、符号链接、硬链接、覆盖和目标地址均有检查。这是 POSIX 软件验收范围；Windows ACL 及服务安装未实现，工具会明确拒绝不支持的凭据存储。旧的服务管理器密钥配置仍可使用。配对完成不代表已安装适配包或完成设备验收。
+
+### 状态矩阵
+
 `airalogy.gui-rehearsal.v1` 支持 `observe`、`read`、`invoke`、`set_value` 四种**与观察比对的步骤描述**，参数仅为字面标量，最多 10 条命令、每条 40 步、20 个场景。不包含 shell、代码、自动获取 URL、坐标、隐式重试或物理停止声明。在 Gateway 维护一份 Python 源码并生成 API 副本，CI 检查一致。
 
 | 能力                                   | 状态                             |
@@ -52,10 +72,11 @@ pnpm gateway:gui-demo
 | 自主发现、启动和探索仪器软件           | 尚未实现                         |
 | 原生可访问性及视觉控制后端             | 尚未实现，需明确目标软件/OS      |
 | 沙箱驱动生成、可信包分发               | 尚未实现                         |
-| 单次配对、安装回执、绑定资格           | 尚未实现                         |
+| 双端核对、单次配对、私有凭据存储       | 已实现，POSIX 软件验收范围       |
+| 安装回执、适配包与设备资格绑定         | 尚未实现                         |
 | 仪器原始文件接收和草稿 DataAsset 映射  | 本部分尚未实现                   |
 | 真实设备、OS 安装及安全验收            | 等待获授权试点和操作人员         |
 
 已有 Gateway 签名、白名单、预约、审批、心跳和安全停止契约不变。目前没有试点型号、软件和 OS；不能关闭 RFC #5 或将本部分标为 P0-A/P0-B 整体验收完成。
 
-迁移 `0048_instrument_integration_drafts` 新增草稿表；使用新界面前须按正常备份部署流程升级数据库。迁移测试用可销毁数据；降级删除草稿，不逆转物理操作或卸载适配器。
+迁移 `0048_instrument_integration_drafts` 新增草稿表，`0049_instrument_pairings` 新增配对记录。使用新界面前须按正常备份部署流程升级数据库。迁移测试用可销毁数据；降级删除相应记录，不撤销已确认的凭据轮换、不逆转物理操作或卸载适配器。

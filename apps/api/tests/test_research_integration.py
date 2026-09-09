@@ -169,6 +169,182 @@ def runtime():
         runtime.run(sessionmanager._engine.dispose())
 
 
+def test_instrument_pairing_single_use_scope_expiry_and_confirmation(runtime):
+    from app.models.instrument_pairing import InstrumentPairing
+    from app.models.research_execution import (
+        ResearchInstrumentGateway,
+        ResearchInstrumentGatewayAudit,
+    )
+    from app.services.research_instruments import (
+        gateway_token_digest,
+        generate_gateway_token,
+    )
+
+    async def exercise():
+        original = await runtime.confirm(
+            "/research-instrument-gateways",
+            {
+                "lab_id": runtime.seed["lab"]["id"],
+                "name": "Pairing " + uuid4().hex,
+                "enabled": False,
+            },
+        )
+        gateway = original["gateway"]
+        draft = {
+            "gateway_id": gateway["id"],
+            "expected_revision": gateway["revision"],
+            "reason": "Synthetic local installation",
+        }
+        issued = await runtime.confirm("/instrument-pairings", draft)
+        pair_id = issued["pairing"]["id"]
+        token = generate_gateway_token()
+        claim = {
+            "code": issued["code"],
+            "gateway_id": gateway["id"],
+            "lab_id": gateway["lab_id"],
+            "client_name": "Synthetic local station",
+            "credential_digest": gateway_token_digest(token),
+            "credential_hint": token[-8:],
+        }
+        # No user cookie/session at the equipment station; possession of the short-lived code only.
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as local:
+            assert (
+                await local.post(
+                    "/instrument-pairings/claim", json={**claim, "lab_id": str(uuid4())}
+                )
+            ).status_code == 404
+            competing = {**claim, "credential_digest": "d" * 64}
+            responses = await asyncio.gather(
+                local.post("/instrument-pairings/claim", json=claim),
+                local.post("/instrument-pairings/claim", json=competing),
+            )
+            assert sorted(response.status_code for response in responses) == [200, 409]
+            # Determine the winner without silently replacing its identity.
+            accepted = next(
+                response.json() for response in responses if response.status_code == 200
+            )
+            winner = claim if responses[0].status_code == 200 else competing
+            retry = await local.post("/instrument-pairings/claim", json=winner)
+            assert retry.status_code == 200
+            assert retry.json()["fingerprint"] == accepted["fingerprint"]
+            async with sessionmanager.session() as db:
+                saved_gateway = await db.get(
+                    ResearchInstrumentGateway, UUID(gateway["id"])
+                )
+                assert saved_gateway.token_digest == gateway_token_digest(
+                    original["credential"]
+                )
+            preview = await runtime.json(
+                "POST", f"/instrument-pairings/{pair_id}/preview"
+            )
+            assert preview["pairing"]["fingerprint"] == accepted["fingerprint"]
+            await runtime.json(
+                "POST",
+                f"/instrument-pairings/{pair_id}/confirm",
+                {"preview_digest": "0" * 64},
+                status=409,
+            )
+            confirmed = await runtime.json(
+                "POST",
+                f"/instrument-pairings/{pair_id}/confirm",
+                {"preview_digest": preview["preview_digest"]},
+            )
+            assert confirmed["gateway"]["enabled"] is False
+            assert confirmed["pairing"]["state"] == "confirmed"
+            assert (
+                await local.post("/instrument-pairings/claim", json=winner)
+            ).status_code == 409
+            assert (
+                await local.post(f"/instrument-pairings/{pair_id}/status")
+            ).status_code == 404
+            # A second confirmed enrollment tests a known local credential and lost-response recovery.
+            draft["expected_revision"] = confirmed["gateway"]["revision"]
+            issued2 = await runtime.confirm("/instrument-pairings", draft)
+            claim["code"] = issued2["code"]
+            assert (
+                await local.post("/instrument-pairings/claim", json=claim)
+            ).status_code == 200
+            pair2 = issued2["pairing"]["id"]
+            preview2 = await runtime.json(
+                "POST", f"/instrument-pairings/{pair2}/preview"
+            )
+            await runtime.json(
+                "POST",
+                f"/instrument-pairings/{pair2}/confirm",
+                {"preview_digest": preview2["preview_digest"]},
+            )
+            status = await local.post(
+                f"/instrument-pairings/{pair2}/status",
+                headers={"X-Airalogy-Gateway-Token": token},
+            )
+            assert status.json()["state"] == "confirmed"
+            commands = await runtime.json(
+                "GET", f"/research-instrument-gateways/{gateway['id']}/commands"
+            )
+            assert commands["items"] == []
+            draft["expected_revision"] += 1
+            expired = await runtime.confirm("/instrument-pairings", draft)
+            async with sessionmanager.session() as db:
+                row = await db.get(InstrumentPairing, UUID(expired["pairing"]["id"]))
+                row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+                await db.commit()
+            assert (
+                await local.post(
+                    "/instrument-pairings/claim",
+                    json={**claim, "code": expired["code"]},
+                )
+            ).status_code == 409
+            cancelled = await runtime.confirm("/instrument-pairings", draft)
+            await runtime.json(
+                "POST", f"/instrument-pairings/{cancelled['pairing']['id']}/cancel"
+            )
+            assert (
+                await local.post(
+                    "/instrument-pairings/claim",
+                    json={**claim, "code": cancelled["code"]},
+                )
+            ).status_code == 409
+        async with sessionmanager.session() as db:
+            audits = (
+                await db.scalars(
+                    select(ResearchInstrumentGatewayAudit).where(
+                        ResearchInstrumentGatewayAudit.gateway_id == UUID(gateway["id"])
+                    )
+                )
+            ).all()
+            for audit in audits:
+                assert "credential_digest" not in str(audit.snapshot)
+                assert issued["code"] not in str(audit.snapshot)
+        original_auth = runtime.client.headers["Auth-Token"]
+        viewer = next(
+            account
+            for account in runtime.seed["accounts"]
+            if account["key"] == "viewer"
+        )
+        auth = await runtime.json(
+            "POST",
+            "/signin_by_email",
+            {"email": viewer["email"], "password": viewer["password"]},
+        )
+        try:
+            runtime.client.headers["Auth-Token"] = auth["token"]
+            await runtime.json(
+                "GET", f"/instrument-pairings?gateway_id={gateway['id']}", status=403
+            )
+            await runtime.json(
+                "POST", "/instrument-pairings/preview", draft, status=403
+            )
+            await runtime.json(
+                "POST", f"/instrument-pairings/{pair_id}/preview", status=403
+            )
+        finally:
+            runtime.client.headers["Auth-Token"] = original_auth
+
+    runtime.run(exercise())
+
+
 def test_instrument_integration_revisions_permissions_and_no_execution(
     runtime, monkeypatch
 ):

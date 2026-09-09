@@ -26,6 +26,7 @@ declare namespace I18n {
       cancel: string
       undo: string
       retry: string
+      refresh: string
       required: string
       pleaseCheckValue: string
       action: string
@@ -3169,6 +3170,27 @@ declare namespace I18n {
         events: string
         types: string
         instrumentGateways: string
+        pairingTitle: string
+        pairingHint: string
+        pairingCreate: string
+        pairingImpact: string
+        pairingSecretHint: string
+        pairingExpiry: string
+        pairingWaiting: string
+        pairingReview: string
+        pairingConfirmImpact: string
+        pairingMatch: string
+        pairingDone: string
+        pairingRetry: string
+        pairingState: {
+          pending: string
+          claimed: string
+          confirmed: string
+          cancelled: string
+          expired: string
+          stale: string
+          superseded: string
+        }
         externalServices: string
         externalServicesHint: string
         serviceGovernanceHint: string

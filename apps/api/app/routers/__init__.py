@@ -68,6 +68,7 @@ from .research_executor_bindings import router as research_executor_bindings_rou
 from .research_human_executors import router as research_human_executors_router
 from .research_instrument_gateways import router as research_instrument_gateways_router
 from .instrument_integrations import router as instrument_integrations_router
+from .instrument_pairings import router as instrument_pairings_router
 from .research_instrument_jobs import (
     gateway_router as research_instrument_runtime_router,
 )
@@ -308,6 +309,7 @@ app.include_router(research_executor_bindings_router)
 app.include_router(research_human_executors_router)
 app.include_router(research_instrument_gateways_router)
 app.include_router(instrument_integrations_router)
+app.include_router(instrument_pairings_router)
 app.include_router(research_instrument_jobs_router)
 app.include_router(research_instrument_runtime_router)
 app.include_router(research_actions_router)
