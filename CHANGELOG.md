@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add Lab-private Adapter Package import with byte-bound previews, immutable version deduplication, protected ResearchFile downloads and independently confirmed source approval/revocation history. The bilingual resource workbench distinguishes source review from installation or hardware qualification; no driver execution, installation or Gateway activation occurs during import or review.
+
 - Add immutable, source-included Instrument Adapter Packages with exact payload/wheel integrity checks, offline inspection and a deterministic reference builder. Test drivers in a digest-pinned, network-disabled Docker sandbox with no host or device mounts, bounded resources and verified timeout cleanup. Package tests do not establish source trust, installation approval or hardware qualification.
 
 - Guard Instrument Gateway startup and adapter installation with an exclusive local process lock. Preserve unconfirmed physical stops across restarts, and require a confirmed safe stop after execution exceptions before clearing failure receipts or allowing updates.

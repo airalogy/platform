@@ -192,6 +192,11 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     pairing_revision = import_module("migrations.versions.0049_instrument_pairings")
     assert pairing_revision.down_revision == "0048_instrument_integration_drafts"
     later_tables.update(pairing_revision.TABLE_NAMES)
+    package_revision = import_module(
+        "migrations.versions.0050_instrument_adapter_packages"
+    )
+    assert package_revision.down_revision == "0049_instrument_pairings"
+    later_tables.update(package_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

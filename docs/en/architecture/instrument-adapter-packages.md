@@ -50,6 +50,18 @@ Reports bind archive, manifest, SDK and image digests and always mark `simulatio
 
 ## Remaining lifecycle
 
-Lab-private publication and source approval, installation plans/receipts, exact equipment/Gateway/package/configuration binding, independent qualification, rollback/revocation and instrument-file return still need their governed workflows. Real software exploration and real hardware acceptance need an authorized pilot. See the [integration support matrix](./instrument-integration.md#support-matrix).
+### Private import and source review
+
+In **Lab → resource library → Instrument Gateways → Lab adapter packages**, an Owner/Manager can select the locally tested ZIP, preview its commands/provenance/file hashes and confirm the exact content and Lab destination. The API performs no imports, builds or driver execution. Files are Lab-visible to members, not public; never package credentials, workstation configuration secrets or unapproved customer material.
+
+The preview binds the authenticated actor, Lab, import identity and archive/manifest hashes. Confirmation repeats inspection and permissions. Concurrent imports of the same Lab/package/version reuse one immutable release and logical ResearchFile; different content requires a new version. A lost-response retry does not duplicate quota or revive a revoked version. Package lists are paginated.
+
+Download the exact archive for independent code, origin, license and dependency review. Downloads reuse short-lived ResearchFile tokens, fresh authorization and access audit. Approval requires an explicit acknowledgement, reason, preview and confirmation; concurrent/stale reviews fail. An append-only review history retains each decision. Source approval is an organizational assertion, not a cryptographic signature or proof of honest package-authored tests. Revocation is terminal for that version, but does not uninstall local software or stop a running instrument; coordinate those actions separately. There is no public catalog or runtime credential access to this management API.
+
+Migration `0050_instrument_adapter_packages` adds release and review records. Use normal backed-up deployment procedures; software acceptance uses only disposable databases. Downgrade removes catalog/history, not the stored ResearchFile archive and not any locally installed software.
+
+### Not yet delivered
+
+Installation plans/receipts, exact equipment/Gateway/package/configuration binding, independent qualification, installed-version rollback/revocation and instrument-file return still need their governed workflows. Real software exploration and real hardware acceptance need an authorized pilot. See the [integration support matrix](./instrument-integration.md#support-matrix).
 
 The standard-library contract is authored in `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` and generated into the API. Run `pnpm gateway:contract:check` to check parity. CI builds the SDK and runs the synthetic, adversarial isolation and timeout tests with an exact container image; this does not certify equipment.

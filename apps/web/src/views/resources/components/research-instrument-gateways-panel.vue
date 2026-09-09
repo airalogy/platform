@@ -14,6 +14,8 @@
       {{ $t("page.resourceLibrary.instrumentGatewaySecurityHint") }}
     </n-alert>
 
+    <instrument-packages-panel :key="labId" :lab-id="labId" />
+
     <div v-if="gateways.length" class="gateway-grid">
       <article
         v-for="gateway in gateways"
@@ -387,6 +389,7 @@ import {
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NSpace, NTag } from "naive-ui"
 import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
+import InstrumentPackagesPanel from "./instrument-packages-panel.vue"
 import InstrumentPairingPanel from "./instrument-pairing-panel.vue"
 
 const props = defineProps<{

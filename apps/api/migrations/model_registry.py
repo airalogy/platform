@@ -15,6 +15,7 @@ MODEL_MODULES = [
     "app.models.knowledge",
     "app.models.instrument_integration",
     "app.models.instrument_pairing",
+    "app.models.instrument_package",
     "app.models.model_usage",
     "app.models.oauth",
     "app.models.pinned_item",

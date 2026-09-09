@@ -142,7 +142,7 @@ class Runtime:
                 await defer_job(
                     db, job=claimed, worker_id="integration", reason=str(error)
                 )
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - mirror worker failure accounting for injected faults
                 job_id = claimed.id
                 await db.rollback()
                 claimed = await db.get(PersistentJob, job_id)
@@ -167,6 +167,193 @@ def runtime():
         yield runtime
         runtime.run(runtime.client.aclose())
         runtime.run(sessionmanager._engine.dispose())
+
+
+def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
+    runtime, monkeypatch
+):
+    import json
+    from pathlib import Path
+
+    from app.models.instrument_package import InstrumentAdapterRelease
+    from app.models.knowledge import ResearchFile, ResearchFileAccessAudit
+
+    repository = Path(__file__).resolve().parents[3]
+    gateway = repository / "apps/instrument-gateway"
+    monkeypatch.syspath_prepend(str(gateway / "src"))
+    from airalogy_instrument_gateway.package_builder import build_package
+
+    example = gateway / "examples/adapter-package"
+    manifest = json.loads((example / "manifest.json").read_text())
+    manifest["id"] = "synthetic." + uuid4().hex
+    payloads = {
+        name: (example / name).read_bytes()
+        for name in [
+            "source/synthetic_reader.py",
+            "tests/test_reader.py",
+            "licenses/LICENSE.txt",
+        ]
+    }
+    raw, _inspection = build_package(
+        manifest, factory="synthetic_reader:create_adapter", payloads=payloads
+    )
+
+    async def upload(path, data, request_id, digest=None, status=200):
+        headers = {"Content-Type": "application/zip"}
+        if digest:
+            headers["X-Airalogy-Preview-Digest"] = digest
+        response = await runtime.client.post(
+            "/instrument-adapter-packages" + path,
+            params={"lab_id": runtime.seed["lab"]["id"], "request_id": request_id},
+            headers=headers,
+            content=data,
+        )
+        assert response.status_code == status, response.text
+        return response.json()
+
+    async def exercise():
+        request_id = str(uuid4())
+        preview = await upload("/preview", raw, request_id)
+        assert (
+            not preview["hardware_authorized"]
+            and not preview["installation_authorized"]
+        )
+        await upload("", raw, request_id, "a" * 64, status=409)
+        saved = await upload("", raw, request_id, preview["preview_digest"])
+        assert saved["state"] == "imported" and saved["id"] == request_id
+        assert (await upload("", raw, request_id, preview["preview_digest"]))[
+            "id"
+        ] == request_id
+        modified = {
+            **manifest,
+            "limitations": ["Different content for the same version"],
+        }
+        other, _ = build_package(
+            modified, factory="synthetic_reader:create_adapter", payloads=payloads
+        )
+        await upload("/preview", other, str(uuid4()), status=409)
+        review = {
+            "expected_revision": 1,
+            "operation": "approve_source",
+            "reason": "Synthetic source reviewed independently",
+            "source_reviewed": True,
+        }
+        review_url = f"/instrument-adapter-packages/{request_id}/review"
+        reviewed = await runtime.confirm(review_url, review)
+        assert reviewed["state"] == "approved" and reviewed["revision"] == 2
+        await runtime.json("POST", review_url + "/preview", review, status=409)
+        token = await runtime.json(
+            "POST",
+            f"/knowledge/files/{saved['research_file_id']}/token",
+            {"mode": "download"},
+        )
+        response = await runtime.client.get(token["url"])
+        assert response.status_code == 200, response.text
+        assert response.content == raw
+        assert "attachment" in response.headers["content-disposition"]
+        revoked = await runtime.confirm(
+            review_url,
+            {
+                **review,
+                "expected_revision": 2,
+                "operation": "revoke",
+                "reason": "Synthetic version retired",
+            },
+        )
+        assert revoked["state"] == "revoked"
+        # Neither a lost import response nor re-import revives a revoked release.
+        assert (await upload("", raw, request_id, preview["preview_digest"]))[
+            "state"
+        ] == "revoked"
+        await runtime.json(
+            "POST",
+            review_url + "/preview",
+            {**review, "expected_revision": 3},
+            status=409,
+        )
+        history = await runtime.json(
+            "GET", f"/instrument-adapter-packages/{request_id}/history"
+        )
+        assert [item["action"] for item in history["items"]] == [
+            "imported",
+            "approved",
+            "revoked",
+        ]
+        assert all(
+            not item["snapshot"]["hardware_authorized"] for item in history["items"]
+        )
+        async with sessionmanager.session() as db:
+            file = await db.get(ResearchFile, UUID(saved["research_file_id"]))
+            assert file.scope_type == "lab" and file.visibility == "lab"
+            assert (
+                await db.scalars(
+                    select(ResearchFileAccessAudit).where(
+                        ResearchFileAccessAudit.research_file_id == file.id
+                    )
+                )
+            ).all()
+        # First-import race: one immutable identity and one logical file are retained.
+        race_raw, _ = build_package(
+            {**manifest, "version": "1.0.1"},
+            factory="synthetic_reader:create_adapter",
+            payloads=payloads,
+        )
+        race_ids = [str(uuid4()), str(uuid4())]
+        previews = await asyncio.gather(
+            *(upload("/preview", race_raw, rid) for rid in race_ids)
+        )
+        results = await asyncio.gather(
+            *(
+                upload("", race_raw, rid, p["preview_digest"])
+                for rid, p in zip(race_ids, previews, strict=True)
+            )
+        )
+        assert results[0]["id"] == results[1]["id"]
+        async with sessionmanager.session() as db:
+            releases = (
+                await db.scalars(
+                    select(InstrumentAdapterRelease).where(
+                        InstrumentAdapterRelease.package_key == manifest["id"]
+                    )
+                )
+            ).all()
+            assert len(releases) == 2
+        original_auth = runtime.client.headers["Auth-Token"]
+        viewer = next(
+            account
+            for account in runtime.seed["accounts"]
+            if account["key"] == "viewer"
+        )
+        auth = await runtime.json(
+            "POST",
+            "/signin_by_email",
+            {"email": viewer["email"], "password": viewer["password"]},
+        )
+        try:
+            runtime.client.headers["Auth-Token"] = auth["token"]
+            await runtime.json(
+                "GET",
+                f"/instrument-adapter-packages?lab_id={runtime.seed['lab']['id']}",
+                status=403,
+            )
+            await upload("/preview", raw, str(uuid4()), status=403)
+            await runtime.json("POST", review_url + "/preview", review, status=403)
+            await runtime.json(
+                "GET", f"/instrument-adapter-packages/{request_id}/history", status=403
+            )
+        finally:
+            runtime.client.headers["Auth-Token"] = original_auth
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as anonymous:
+            assert (
+                await anonymous.get(
+                    f"/instrument-adapter-packages?lab_id={runtime.seed['lab']['id']}"
+                )
+            ).status_code == 401
+            assert (await anonymous.get(token["url"])).status_code == 401
+
+    runtime.run(exercise())
 
 
 def test_instrument_pairing_single_use_scope_expiry_and_confirmation(runtime):

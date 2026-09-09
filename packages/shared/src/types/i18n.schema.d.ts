@@ -3170,6 +3170,32 @@ declare namespace I18n {
         events: string
         types: string
         instrumentGateways: string
+        adapterPackagesTitle: string
+        adapterPackagesHint: string
+        adapterImport: string
+        adapterEmpty: string
+        adapterFileLimit: string
+        adapterImportImpact: string
+        adapterDuplicate: string
+        adapterSaved: string
+        adapterInspect: string
+        adapterMore: string
+        adapterDownload: string
+        adapterManifest: string
+        adapterHistory: string
+        adapterApprove: string
+        adapterRevoke: string
+        adapterSourceReviewed: string
+        adapterAuthorityHint: string
+        adapterApproveImpact: string
+        adapterRevokeImpact: string
+        adapterReviewSaved: string
+        adapterRetry: string
+        adapterState: {
+          imported: string
+          approved: string
+          revoked: string
+        }
         pairingTitle: string
         pairingHint: string
         pairingCreate: string

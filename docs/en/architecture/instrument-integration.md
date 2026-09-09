@@ -74,7 +74,8 @@ Actual Python drivers can now be built, inspected without execution and tested i
 | Autonomous instrument software discovery/launch/exploration | Not implemented |
 | Native accessibility and visual control backends | Not implemented; target software/OS required |
 | Source-included package build, integrity inspection, isolated tests | Implemented; package tests are not hardware evidence |
-| Autonomous driver generation and trusted package distribution | Not implemented |
+| Private package import, source review/revocation, protected download | Implemented; not installation or qualification |
+| Autonomous driver generation, signed distribution and installation | Not implemented |
 | Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
 | Installation receipts, adapter/equipment qualification binding | Not implemented |
 | Instrument raw-file ingestion and draft DataAsset mapping | Not implemented by this slice |
