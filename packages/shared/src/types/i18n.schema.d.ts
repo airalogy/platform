@@ -3125,6 +3125,37 @@ declare namespace I18n {
           excludeLabel: string
         }
       }
+      instrumentIntegration: {
+        title: string
+        subtitle: string
+        newDraft: string
+        boundary: string
+        empty: string
+        export: string
+        history: string
+        equipment: string
+        goal: string
+        bundle: string
+        example: string
+        import: string
+        bundleHint: string
+        reason: string
+        notes: string
+        consent: string
+        aira: string
+        simulated: string
+        needsReview: string
+        saveHint: string
+        matched: string
+        uncovered: string
+        preview: string
+        confirm: string
+        historyHint: string
+        required: string
+        invalidBundle: string
+        failed: string
+        saved: string
+      }
       resourceLibrary: {
         labWorkspace: string
         title: string

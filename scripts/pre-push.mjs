@@ -105,7 +105,11 @@ const AI_E2E_PREFIXES = [
   "apps/web/src/views/editor/",
 ]
 
-const GATEWAY_FILES = new Set([".github/workflows/instrument-gateway.yml"])
+const GATEWAY_FILES = new Set([
+  ".github/workflows/instrument-gateway.yml",
+  "apps/api/app/services/instrument_adapter_contract.py",
+  "scripts/sync-instrument-contract.mjs",
+])
 const COMPUTE_RUNNER_FILES = new Set([".github/workflows/compute-runner.yml"])
 
 function hasPath(files, exactFiles, prefixes = []) {
@@ -131,6 +135,7 @@ export function buildCheckPlan(files, fullRequested = false) {
   }
   if (fullRequested || files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
+    || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
     || [
       "apps/api/app/services/persistent_jobs.py",
       "apps/api/app/services/resource_job_worker.py",

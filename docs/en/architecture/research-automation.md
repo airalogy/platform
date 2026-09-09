@@ -1,5 +1,7 @@
 # AI Research Automation Architecture
 
+See [equipment software integration](./instrument-integration.md) for the GUI rehearsal implementation and explicit remaining delivery boundaries.
+
 ## Status
 
 This document is the architecture contract for research automation in Airalogy Platform. Implementations must preserve its object, authorization, and compatibility boundaries. Unimplemented capabilities must remain explicit and must not be simulated by a chat transcript or static UI.

@@ -169,6 +169,200 @@ def runtime():
         runtime.run(sessionmanager._engine.dispose())
 
 
+def test_instrument_integration_revisions_permissions_and_no_execution(
+    runtime, monkeypatch
+):
+    """Real authorization and PostgreSQL writes; synthetic observations only."""
+    import copy
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from app.routers import instrument_integrations as integration_router
+    from app.services.instrument_adapter_contract import example_bundle
+
+    async def exercise():
+        suffix = uuid4().hex
+        base = f"/labs/{runtime.seed['lab']['id']}/resource-library"
+        definitions = await runtime.json("GET", base + "/definition-versions")
+        definition = next(
+            item
+            for item in definitions["items"]
+            if item["protocol_uid"] == "plasmid_resource_definition_en"
+        )
+        # Reuse a synthetic resource-definition fixture, not a vendor device schema.
+        resource_type = await runtime.json(
+            "POST",
+            base + "/types",
+            {
+                "protocol_version_id": definition["id"],
+                "code": f"integration_{suffix}",
+                "name": "Synthetic equipment",
+                "capabilities": {"booking": True},
+                "booking_policy": "approval",
+            },
+        )
+        resource = await runtime.json(
+            "POST",
+            base + "/resources",
+            {
+                "resource_type_id": resource_type["id"],
+                "name": "Synthetic GUI reader",
+                "code": f"GUI-{suffix}",
+                "visibility": "lab",
+                "data": {
+                    "construct_name": "Synthetic fixture",
+                    "aliases": None,
+                    "backbone": None,
+                    "sequence": None,
+                    "sequence_file": None,
+                    "resistance_markers": None,
+                    "host_species": None,
+                    "copy_number": None,
+                    "external_source": None,
+                    "features": [],
+                },
+            },
+        )
+        gateway = (
+            await runtime.confirm(
+                "/research-instrument-gateways",
+                {
+                    "lab_id": runtime.seed["lab"]["id"],
+                    "name": f"GUI rehearsal {suffix}",
+                    "enabled": False,
+                },
+            )
+        )["gateway"]
+        draft = {
+            "id": str(uuid4()),
+            "gateway_id": gateway["id"],
+            "resource_id": resource["id"],
+            "expected_revision": 0,
+            "goal": "Read synthetic GUI result",
+            "reason": "Initial integration",
+            "bundle": example_bundle(),
+        }
+        preview = await runtime.json("POST", "/instrument-integrations/preview", draft)
+        assert preview["report"]["passed"] is True
+        responses = await asyncio.gather(
+            *[
+                runtime.client.post(
+                    "/instrument-integrations",
+                    json={**draft, "preview_digest": preview["preview_digest"]},
+                )
+                for _ in range(2)
+            ]
+        )
+        assert sorted(response.status_code for response in responses) == [200, 409]
+        saved = next(
+            response.json() for response in responses if response.status_code == 200
+        )
+        assert saved["revision"] == 1
+        assert saved["report"]["hardware_authorized"] is False
+        changed = {
+            **draft,
+            "expected_revision": 1,
+            "goal": "Review a changed observation",
+        }
+        pending = await runtime.json(
+            "POST", "/instrument-integrations/preview", changed
+        )
+        await runtime.json(
+            "POST",
+            "/instrument-integrations",
+            {
+                **changed,
+                "goal": "Unpreviewed change",
+                "preview_digest": pending["preview_digest"],
+            },
+            status=409,
+        )
+        updated = await runtime.json(
+            "POST",
+            "/instrument-integrations",
+            {**changed, "preview_digest": pending["preview_digest"]},
+        )
+        assert updated["revision"] == 2
+        history = await runtime.json(
+            "GET", f"/instrument-integrations/{saved['id']}/history"
+        )
+        assert [item["revision"] for item in history["items"]] == [2, 1]
+        assert history["items"][1]["snapshot"]["goal"] == draft["goal"]
+        commands = await runtime.json(
+            "GET", f"/research-instrument-gateways/{gateway['id']}/commands"
+        )
+        assert commands["items"] == []
+        await runtime.json(
+            "POST",
+            "/instrument-integrations/draft-with-aira",
+            {**draft, "expected_revision": 2, "model_processing_consent": True},
+            status=409,
+        )
+        # Inject only the external model response; exercise actual HTTP parsing,
+        # authorization and transaction release/recheck against PostgreSQL.
+        generated = copy.deepcopy(draft["bundle"]["package"])
+        generated["source"]["kind"] = "aira"
+        with monkeypatch.context() as model_patch:
+            model_patch.setattr(
+                integration_router,
+                "config",
+                SimpleNamespace(
+                    effective_ai_enabled=True, CHAT_MODEL_FAST="synthetic-provider"
+                ),
+            )
+            provider = AsyncMock(return_value=generated)
+            model_patch.setattr(
+                integration_router, "aira_structured_proposal", provider
+            )
+            proposed = await runtime.json(
+                "POST",
+                "/instrument-integrations/draft-with-aira",
+                {
+                    **draft,
+                    "expected_revision": 2,
+                    "model_processing_consent": True,
+                },
+            )
+            assert proposed["package"] == generated
+            assert proposed["hardware_authorized"] is False
+            provider.assert_awaited_once()
+        unchanged = await runtime.json(
+            "GET", f"/instrument-integrations/{saved['id']}/history"
+        )
+        assert len(unchanged["items"]) == 2
+        original_token = runtime.client.headers["Auth-Token"]
+        viewer = next(
+            account
+            for account in runtime.seed["accounts"]
+            if account["key"] == "viewer"
+        )
+        auth = await runtime.json(
+            "POST",
+            "/signin_by_email",
+            {"email": viewer["email"], "password": viewer["password"]},
+        )
+        try:
+            runtime.client.headers["Auth-Token"] = auth["token"]
+            await runtime.json(
+                "GET",
+                f"/instrument-integrations?gateway_id={gateway['id']}",
+                status=403,
+            )
+            await runtime.json(
+                "GET", f"/instrument-integrations/{saved['id']}/history", status=403
+            )
+            await runtime.json(
+                "POST",
+                "/instrument-integrations/preview",
+                {**draft, "expected_revision": 2},
+                status=403,
+            )
+        finally:
+            runtime.client.headers["Auth-Token"] = original_token
+
+    runtime.run(exercise())
+
+
 def test_manual_knowledge_and_claim_creation_without_generation_metadata(runtime):
     async def exercise():
         task = await runtime.task()

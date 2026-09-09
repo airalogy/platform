@@ -87,6 +87,14 @@
       />
     </section>
 
+    <instrument-integration-panel
+      v-if="selectedGateway"
+      :key="selectedGateway.id"
+      :gateway-id="selectedGateway.id"
+      :gateway-name="selectedGateway.name"
+      :equipment-options="equipmentOptions"
+    />
+
     <n-modal
       v-model:show="gatewayModalVisible"
       preset="dialog"
@@ -376,6 +384,7 @@ import {
 } from "@/service/api/research-instruments"
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NSpace, NTag } from "naive-ui"
+import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
 
 const props = defineProps<{
   labId: string

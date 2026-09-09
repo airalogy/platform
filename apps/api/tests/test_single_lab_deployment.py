@@ -184,6 +184,11 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
         "0046_research_reproduction_assessments"
     )
     later_tables.update(instrument_control_revision.TABLE_NAMES)
+    integration_revision = import_module(
+        "migrations.versions.0048_instrument_integration_drafts"
+    )
+    assert integration_revision.down_revision == "0047_instrument_control_sessions"
+    later_tables.update(integration_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

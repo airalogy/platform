@@ -437,8 +437,8 @@
           type="primary"
           :loading="saving"
           :disabled="!sampleLineageDraft.parent_resource_id || !sampleLineageDraft.reason.trim()"
-          @click="sampleLineagePreview ? confirmSampleLineageWrite() : previewSampleLineageWrite()"
           data-testid="sample-lineage-submit"
+          @click="sampleLineagePreview ? confirmSampleLineageWrite() : previewSampleLineageWrite()"
         >
           {{ sampleLineagePreview ? $t("common.confirm") : $t("common.preview") }}
         </n-button>
@@ -1087,6 +1087,7 @@ import {
 import { useLabInfoStore } from "@/views/labs/hooks/useLabsInfoStore"
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NTag } from "naive-ui"
+import ResearchInstrumentGatewaysPanel from "./components/research-instrument-gateways-panel.vue"
 
 defineOptions({ name: "LabResourceLibrary" })
 

@@ -6,6 +6,22 @@ It intentionally has no remote shell, script evaluation, or Platform-delivered a
 
 ## Install
 
+### Integration rehearsal (no hardware)
+
+The equipment workbench stores versioned `airalogy.gui-rehearsal.v1` bundles: observations and bounded literal steps, **not executable Adapter Packages**. They never enter Instrument Jobs or grant device authority. From the repository root:
+
+```bash
+pnpm gateway:rehearse --example
+pnpm gateway:rehearse /absolute/path/to/rehearsal.json
+pnpm gateway:gui-demo
+```
+
+The last command operates the bundled synthetic reader in an isolated browser with all network requests denied, checks an independently fixed expected output, and prints an importable bundle. It needs Playwright Chromium; `--headed` shows the software. The Python CLI needs no model, credentials, browser or network.
+
+The contract is authored in `src/airalogy_instrument_gateway/integration_contract.py`. After editing it, run `node scripts/sync-instrument-contract.mjs` from the repository root to generate the API copy for its independent Docker build context. CI checks equality. See the [support matrix](../../docs/en/architecture/instrument-integration.md).
+
+### Gateway runtime installation
+
 Use a dedicated operating-system account on the equipment network:
 
 ```bash

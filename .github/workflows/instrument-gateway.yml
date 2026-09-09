@@ -4,10 +4,14 @@ on:
   push:
     paths:
       - "apps/instrument-gateway/**"
+      - "apps/api/app/services/instrument_adapter_contract.py"
+      - "scripts/sync-instrument-contract.mjs"
       - ".github/workflows/instrument-gateway.yml"
   pull_request:
     paths:
       - "apps/instrument-gateway/**"
+      - "apps/api/app/services/instrument_adapter_contract.py"
+      - "scripts/sync-instrument-contract.mjs"
       - ".github/workflows/instrument-gateway.yml"
 
 concurrency:

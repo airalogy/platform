@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a Lab/equipment-scoped GUI integration rehearsal workbench with manual JSON import/export, optional consent-gated Aira drafts, deterministic preview/confirmation, revision audit snapshots and an offline rehearsal CLI. Include a browser-driven synthetic reader and fail-closed observation checks. Rehearsal never installs drivers, opens real equipment software or grants physical control; native/visual Computer Use, device pairing, installation and hardware qualification remain open in RFC #5.
+
 - Added bilingual, executable first-Record practice templates through the existing editable Protocol creation flow, with synthetic example data and instructions for drafts, submission and revision; no AI dependency or automatic practice-data creation.
 
 - Added fast function-level research-automation contract tests and machine-readable scenarios for CNT iteration, fermentation integration, protein-purification method evolution, and OT-2 governance. These fixtures are not complete API, Record-submission, or physical-laboratory acceptance.

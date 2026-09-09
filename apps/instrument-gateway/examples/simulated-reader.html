@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Airalogy Simulated Reader — no hardware</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 1.5rem; color: #263447; }
+  h1 { line-height: 1.2; } label { display: block; margin-top: 1rem; }
+  input, button { font: inherit; padding: .6rem; } button { margin: 1rem 0; }
+  aside { background: #fff6de; padding: 1rem; border-radius: .5rem; }
+  output { display: block; font-weight: 600; } [hidden] { display: none; }
+</style>
+<h1>Airalogy Simulated Reader</h1>
+<aside>This software is synthetic. It has no device, network or file access. A successful demonstration is not hardware qualification.</aside>
+<main data-state="ready" data-session="interactive" data-owner="gateway">
+  <label for="sample-count">Synthetic sample count</label>
+  <input id="sample-count" data-control="sample.count" type="number" min="1" max="8" value="1">
+  <button type="button" data-control="measurement.start">Run simulation</button>
+  <output data-control="result.value" aria-label="Synthetic result">0</output>
+  <p id="status" role="status">Ready</p>
+  <div role="alertdialog" hidden>Unexpected dialog: manual review required.</div>
+</main>
+<script>
+  const main = document.querySelector("main")
+  const count = document.querySelector("input")
+  const start = document.querySelector("button")
+  start.addEventListener("click", () => {
+    if (!count.checkValidity()) {
+      document.querySelector('[role="alertdialog"]').hidden = false
+      return
+    }
+    document.querySelector("output").textContent = String(Number(count.value) * 0.42)
+    main.dataset.state = "completed"
+    document.querySelector("#status").textContent = "Simulation complete"
+  })
+</script>
+</html>

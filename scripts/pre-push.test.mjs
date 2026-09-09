@@ -84,7 +84,12 @@ test("migration and release changes require release metadata checks", () => {
 })
 
 test("research runtime changes require real database integration", () => {
-  for (const file of ["apps/api/app/services/research_tools.py", "apps/api/app/services/persistent_jobs.py", "apps/api/tests/test_research_integration.py"]) {
+  for (const file of ["apps/api/app/services/research_tools.py", "apps/api/app/services/persistent_jobs.py", "apps/api/tests/test_research_integration.py", "apps/api/app/routers/instrument_integrations.py"]) {
     assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "api-tests", "research-integration"])
   }
+})
+
+test("generated instrument contract changes run both API and Gateway tests", () => {
+  assert.deepEqual(checkIds(["apps/api/app/services/instrument_adapter_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])
+  assert.deepEqual(checkIds(["scripts/sync-instrument-contract.mjs"]), ["lint", "types", "api-compile", "gateway-tests"])
 })

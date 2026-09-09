@@ -13,6 +13,7 @@ MODEL_MODULES = [
     "app.models.lab",
     "app.models.lab_force_delete_job",
     "app.models.knowledge",
+    "app.models.instrument_integration",
     "app.models.model_usage",
     "app.models.oauth",
     "app.models.pinned_item",
