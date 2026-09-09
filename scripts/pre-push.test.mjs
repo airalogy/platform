@@ -73,7 +73,14 @@ test("E2E infrastructure changes run the full browser suite", () => {
 })
 
 test("the explicit full mode runs the full browser suite", () => {
-  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "release-metadata", "research-integration", "full-e2e"])
+  assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "release-metadata", "research-integration", "interface-tests", "full-e2e"])
+})
+
+test("interface runtime, demo and pinned browser dependencies select actual browser checks", () => {
+  for (const file of ["apps/instrument-interface/src/browser-session.mjs", ".github/workflows/instrument-interface.yml", "scripts/instrument-gui-demo.mjs", "scripts/instrument-interface-example.mjs"])
+    assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "interface-tests"])
+  for (const file of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"])
+    assert.ok(checkIds([file]).includes("interface-tests"))
 })
 
 test("migration and release changes require release metadata checks", () => {

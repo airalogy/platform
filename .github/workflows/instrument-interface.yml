@@ -1,0 +1,60 @@
+name: Instrument Interface
+
+on:
+  push:
+    paths:
+      - "apps/instrument-interface/**"
+      - "apps/instrument-gateway/examples/simulated-reader.html"
+      - "scripts/instrument-interface-example.mjs"
+      - "scripts/instrument-gui-demo.mjs"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/instrument-interface.yml"
+  pull_request:
+    paths:
+      - "apps/instrument-interface/**"
+      - "apps/instrument-gateway/examples/simulated-reader.html"
+      - "scripts/instrument-interface-example.mjs"
+      - "scripts/instrument-gui-demo.mjs"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/instrument-interface.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instrument-interface-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-browser:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Install pinned dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Verify versions, syntax and lint
+        run: |
+          pnpm version:check
+          pnpm --filter @airalogy/instrument-interface lint
+          node --check apps/instrument-interface/src/cli.mjs
+      - name: Test bounded browser sessions and CLI
+        run: pnpm gateway:interface-test
+      - name: Verify existing rehearsal compatibility
+        run: pnpm gateway:gui-demo
+      - name: Build installable package
+        run: pnpm --filter @airalogy/instrument-interface pack --pack-destination "$RUNNER_TEMP"
+      # Local evidence is intentionally not uploaded; CI fixtures are synthetic too.

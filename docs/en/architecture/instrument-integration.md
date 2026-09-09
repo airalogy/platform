@@ -1,6 +1,6 @@
 # Equipment software integration
 
-This delivers **GUI drafts/rehearsal, local installation pairing and sandboxed Adapter Packages** from [RFC #5](https://github.com/airalogy/platform/issues/5), not the complete equipment-integration product.
+This delivers **GUI drafts/rehearsal, a bounded browser development backend, local installation pairing and sandboxed Adapter Packages** from [RFC #5](https://github.com/airalogy/platform/issues/5), not the complete equipment-integration product.
 
 ## Goal and authority
 
@@ -44,7 +44,7 @@ With repository Node dependencies and Playwright Chromium installed:
 pnpm gateway:gui-demo
 ```
 
-This operates only the bundled synthetic reader through real browser controls: fill sample count, click simulation, read result. Network requests are denied. The expected result is fixed independently of observations. It prints a bundle for import. It is not a generic browser controller or native Windows backend.
+This operates only the bundled synthetic reader through the shared [browser interface backend](./instrument-browser-interface.md): fill sample count, click simulation, read result. Network requests are denied. The expected result is fixed independently of observations. It prints a bundle for import and saves private local evidence. The separate `gateway:interface` CLI supports selected, digest-confirmed simulation HTML and observation-only URL targets; it is not a native Windows backend or production instrument controller.
 
 ## Contract and remaining delivery
 
@@ -76,6 +76,7 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | --- | --- |
 | Private draft/history, import/export, preview confirmation | Implemented |
 | Offline replay and synthetic browser demonstration | Implemented; not hardware evidence |
+| Selected browser application observation and bounded simulation replay | Implemented through the local [browser interface backend](./instrument-browser-interface.md); no model-driven exploration or live URL writes |
 | Optional Aira editing within supplied target/controls/states | Implemented; provider success needs deployment configuration |
 | Autonomous instrument software discovery/launch/exploration | Not implemented |
 | Native accessibility and visual control backends | Not implemented; target software/OS required |

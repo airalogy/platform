@@ -49,6 +49,12 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "gateway:test"],
   },
+  interfaceTests: {
+    id: "interface-tests",
+    label: "bounded browser interface and private evidence tests",
+    command: "corepack",
+    args: ["pnpm", "gateway:interface-test"],
+  },
   computeRunnerTests: {
     id: "compute-runner-tests",
     label: "Compute Runner tests",
@@ -159,6 +165,18 @@ export function buildCheckPlan(files, fullRequested = false) {
 
   if (hasPath(files, GATEWAY_FILES, ["apps/instrument-gateway/"])) {
     plan.push(checks.gatewayTests)
+  }
+
+  if (fullRequested || hasPath(files, new Set([
+    ".github/workflows/instrument-interface.yml",
+    "scripts/instrument-gui-demo.mjs",
+    "scripts/instrument-interface-example.mjs",
+    "apps/instrument-gateway/examples/simulated-reader.html",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+  ]), ["apps/instrument-interface/"])) {
+    plan.push(checks.interfaceTests)
   }
 
   if (hasPath(files, COMPUTE_RUNNER_FILES, ["apps/compute-runner/"])) {

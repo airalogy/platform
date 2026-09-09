@@ -13,11 +13,12 @@
 <h1>Airalogy Simulated Reader</h1>
 <aside>This software is synthetic. It has no device, network or file access. A successful demonstration is not hardware qualification.</aside>
 <main data-state="ready" data-session="interactive" data-owner="gateway">
+  <p data-testid="software-version">Airalogy Simulated Reader 1.0 (simulation)</p>
   <label for="sample-count">Synthetic sample count</label>
   <input id="sample-count" data-control="sample.count" type="number" min="1" max="8" value="1">
   <button type="button" data-control="measurement.start">Run simulation</button>
   <output data-control="result.value" aria-label="Synthetic result">0</output>
-  <p id="status" role="status">Ready</p>
+  <p id="status" data-testid="reader-status" role="status">Ready</p>
   <div role="alertdialog" hidden>Unexpected dialog: manual review required.</div>
 </main>
 <script>

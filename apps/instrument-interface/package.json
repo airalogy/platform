@@ -1,0 +1,29 @@
+{
+  "name": "@airalogy/instrument-interface",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Locally selected, bounded browser interface observation and supervised replay",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/browser-session.mjs",
+    "./contract": "./src/contract.mjs"
+  },
+  "bin": {
+    "airalogy-instrument-interface": "./src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "lint": "eslint src tests --quiet",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "RUN_INTERFACE_BROWSER_TESTS=1 node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "catalog:"
+  }
+}

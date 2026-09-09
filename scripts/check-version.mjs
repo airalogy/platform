@@ -9,7 +9,7 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
   throw new Error(`VERSION is not a valid semantic version: ${version}`)
 }
 
-for (const packageFile of ["package.json", "apps/web/package.json"]) {
+for (const packageFile of ["package.json", "apps/web/package.json", "apps/instrument-interface/package.json"]) {
   const packageJson = await readJson(packageFile)
   if (packageJson.version !== version) {
     throw new Error(`${packageFile} has version ${packageJson.version}; expected ${version}`)

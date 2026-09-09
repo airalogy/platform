@@ -18,6 +18,8 @@ node scripts/instrument-authoring-example.mjs /absolute/private/synthetic-spec.j
 
 准备前请检查机密、个人数据、分发许可及模型处理权限。已知 Platform 凭证格式会被拒绝，但没有任何此类扫描能够保证所有秘密都已清除。
 
+可以先用独立确认的[浏览器界面后端](./instrument-browser-interface.md)取得文字观察，在本地审核后明确加入 `materials`。这是人工、显式的资料转移；源码助手不会因此获得浏览器控制权，界面内容也不会自动发送给模型。
+
 ```bash
 pnpm gateway:author prepare \
   --workspace /absolute/private/development \

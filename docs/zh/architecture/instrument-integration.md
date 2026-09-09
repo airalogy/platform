@@ -1,6 +1,6 @@
 # 仪器软件接入
 
-本次交付涵盖 [RFC #5](https://github.com/airalogy/platform/issues/5) 的 **GUI 草稿/重放验证、本地安装配对及沙箱适配包**，不是整个设备接入产品已经完成。
+本次交付涵盖 [RFC #5](https://github.com/airalogy/platform/issues/5) 的 **GUI 草稿/重放验证、有界浏览器开发后端、本地安装配对及沙箱适配包**，不是整个设备接入产品已经完成。
 
 ## 目标与权限边界
 
@@ -44,7 +44,7 @@ pnpm gateway:rehearse /absolute/path/to/rehearsal.json
 pnpm gateway:gui-demo
 ```
 
-演示只操作内置合成读数软件，通过真实浏览器控件填写样本数、点击模拟、读取结果，拒绝所有网络请求。预期结果独立固定，不从观察反推；输出可导入工作台。它不是通用浏览器控制器或原生 Windows 后端。
+演示只通过共享的[浏览器界面后端](./instrument-browser-interface.md)操作内置合成读数软件：填写样本数、点击模拟、读取结果，拒绝所有网络请求。预期结果独立固定，不从观察反推；输出可导入工作台，并保存本地私有证据。独立的 `gateway:interface` 命令支持显式选择、按摘要确认的模拟 HTML，以及仅观察的 URL 目标；不是原生 Windows 后端或生产仪器控制器。
 
 ## 契约与剩余交付
 
@@ -76,6 +76,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | --- | --- |
 | 私有草稿/修订、导入导出、预览确认 | 已实现 |
 | 离线重放和合成软件浏览器演示 | 已实现，不代表实机证据 |
+| 选定浏览器应用观察及有界模拟操作 | 已实现本地[浏览器界面后端](./instrument-browser-interface.md)，不提供模型自主探索或真实 URL 写操作 |
 | 限于已有目标/控件/状态的可选 Aira 编辑 | 已实现，真实模型调用依赖部署配置 |
 | 自主发现、启动和探索仪器软件 | 尚未实现 |
 | 原生可访问性及视觉控制后端 | 尚未实现，需明确目标软件/OS |

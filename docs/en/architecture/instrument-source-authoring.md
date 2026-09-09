@@ -18,6 +18,8 @@ A real specification is a JSON object with exactly `goal`, `manifest`, `factory`
 
 No secret detector is comprehensive. Review confidential information, personal data and redistribution/model-processing rights before preparing a request. Known Platform credential patterns are rejected, but this is not a guarantee that all secrets have been removed.
 
+Selected text observations from the separately confirmed [browser interface backend](./instrument-browser-interface.md) can be reviewed locally and added to `materials`. This is a manual, explicit transfer; the source author does not gain browser control and no UI capture is automatically sent to the model.
+
 ```bash
 pnpm gateway:author prepare \
   --workspace /absolute/private/development \

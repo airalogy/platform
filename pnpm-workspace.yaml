@@ -11,6 +11,8 @@ packages:
   - '!**/.temp/**'
 
 catalog:
+  '@playwright/test': 1.62.0
+  playwright: 1.62.0
   '@antfu/eslint-config': ^3.7.3
   '@arms/rum-browser': ^0.0.37
   '@codingame/esbuild-import-meta-url-plugin': ^1.0.3
