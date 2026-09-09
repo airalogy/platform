@@ -115,7 +115,34 @@ class InstallationGuardTests(unittest.TestCase):
             self.assertTrue(runtime.run_once())
             self.assertEqual(len(adapter.stop_calls), 1)
             self.assertEqual(client.calls[-1][0], "fail")
+            self.assertEqual(client.failure_confirmations, [True])
             self.assertIsNone(store.load())
+
+    def test_nonterminal_failure_receipt_cannot_clear_local_hold(self):
+        class HoldingClient(FakeClient):
+            def fail(self, *args, **kwargs):
+                return {"status": "stop_requested"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory) / "state.json")
+            raw = envelope()
+            store.save(
+                GatewayState(
+                    phase="stop_unconfirmed",
+                    envelope=raw,
+                    signature=expected_job_signature(raw, TOKEN),
+                    lease_token="aijl_" + "b" * 48,
+                    error="connection lost",
+                )
+            )
+            runtime = GatewayRuntime(
+                config(store.path), HoldingClient(), BlockingAdapter(), store
+            )
+            with self.assertRaisesRegex(GatewayHaltError, "not acknowledged"):
+                runtime.run_once()
+            self.assertEqual(store.load().phase, "failure_pending")
+            with self.assertRaises(ValueError):
+                store.assert_installable()
 
     def test_legacy_failure_receipt_does_not_prove_physical_stop(self):
         with tempfile.TemporaryDirectory() as directory:

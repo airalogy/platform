@@ -169,6 +169,234 @@ def runtime():
         runtime.run(sessionmanager._engine.dispose())
 
 
+def test_instrument_uncertain_stop_holds_equipment_across_gateways(runtime):
+    """Inject persisted synthetic jobs, then exercise real API/locking/recovery."""
+    from app.models.research import ResearchRun
+    from app.models.research_execution import (
+        ResearchInstrumentCommand,
+        ResearchInstrumentJob,
+    )
+    from app.models.resource import EquipmentBooking, Resource, ResourceRevision
+
+    async def exercise():
+        base = f"/labs/{runtime.seed['lab']['id']}/resource-library"
+        definitions = await runtime.json("GET", base + "/definition-versions")
+        definition = next(
+            item
+            for item in definitions["items"]
+            if item["protocol_uid"] == "plasmid_resource_definition_en"
+        )
+        resource_type = await runtime.json(
+            "POST",
+            base + "/types",
+            {
+                "protocol_version_id": definition["id"],
+                "code": "safety_" + uuid4().hex,
+                "name": "Synthetic safety fixture",
+                "capabilities": {"booking": True},
+                "booking_policy": "approval",
+            },
+        )
+        resource = await runtime.json(
+            "POST",
+            base + "/resources",
+            {
+                "resource_type_id": resource_type["id"],
+                "name": "Synthetic equipment",
+                "code": "SAFE-" + uuid4().hex,
+                "visibility": "lab",
+                "data": {
+                    "construct_name": "Synthetic",
+                    "features": [],
+                    **dict.fromkeys(
+                        [
+                            "aliases",
+                            "backbone",
+                            "sequence",
+                            "sequence_file",
+                            "resistance_markers",
+                            "host_species",
+                            "copy_number",
+                            "external_source",
+                        ]
+                    ),
+                },
+            },
+        )
+        stations, jobs = [], []
+        for station_index in range(2):
+            station = await runtime.confirm(
+                "/research-instrument-gateways",
+                {
+                    "lab_id": runtime.seed["lab"]["id"],
+                    "name": "Safety " + uuid4().hex,
+                    "enabled": True,
+                },
+            )
+            stations.append(station)
+            task_json = await runtime.task()
+            async with sessionmanager.session() as db:
+                task = await db.get(ResearchTask, UUID(task_json["id"]))
+                run = await db.scalar(
+                    select(ResearchRun).where(ResearchRun.task_id == task.id)
+                )
+                run.status = "waiting_for_instrument"
+                task.status = "active"
+                equipment = await db.get(Resource, UUID(resource["id"]))
+                equipment_revision = await db.get(
+                    ResourceRevision, equipment.current_revision_id
+                )
+                pins = {
+                    "resource_id": equipment.id,
+                    "resource_revision_id": equipment.current_revision_id,
+                    "resource_revision": equipment_revision.revision,
+                }
+                booking = EquipmentBooking(
+                    lab_id=task.lab_id,
+                    resource_id=equipment.id,
+                    user_id=task.created_by_user_id,
+                    starts_at=datetime.now(UTC)
+                    + timedelta(minutes=station_index * 120 - 1),
+                    ends_at=datetime.now(UTC) + timedelta(hours=1 + station_index * 2),
+                    status="approved" if station_index == 0 else "pending",
+                    approval_policy="approval",
+                    idempotency_key=uuid4().hex,
+                )
+                command = ResearchInstrumentCommand(
+                    gateway_id=UUID(station["gateway"]["id"]),
+                    lab_id=task.lab_id,
+                    **pins,
+                    command_key="synthetic.read",
+                    command_version="1.0.0",
+                    name="Synthetic read",
+                    risk="read_only",
+                    device_confirmation_required=False,
+                    created_by_user_id=task.created_by_user_id,
+                    updated_by_user_id=task.created_by_user_id,
+                )
+                action = ResearchAction(
+                    run_id=run.id,
+                    sequence=900,
+                    plan_version=1,
+                    kind="instrument",
+                    status="queued",
+                    title="Synthetic safety acceptance",
+                    executor_type="instrument_gateway",
+                    preview_digest="a" * 64,
+                    idempotency_key=uuid4().hex,
+                )
+                db.add_all([booking, command, action])
+                await db.flush()
+                job = ResearchInstrumentJob(
+                    action_id=action.id,
+                    gateway_id=command.gateway_id,
+                    command_id=command.id,
+                    equipment_booking_id=booking.id,
+                    **pins,
+                    command_key=command.command_key,
+                    command_version=command.command_version,
+                    command_revision=1,
+                    risk="read_only",
+                    device_confirmation_required=False,
+                    timeout_seconds=60,
+                )
+                db.add(job)
+                await db.flush()
+                jobs.append(str(job.id))
+                await db.commit()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as local:
+            headers = [{"X-Airalogy-Gateway-Token": s["credential"]} for s in stations]
+            # Concurrent requests on one Gateway cannot both receive a job.
+            receipts = await asyncio.gather(
+                *[
+                    local.post("/instrument-gateway/v1/jobs/lease", headers=headers[0])
+                    for _ in range(2)
+                ]
+            )
+            assert all(r.status_code == 200 for r in receipts), [
+                r.text for r in receipts
+            ]
+            leases = [r.json() for r in receipts if r.json()["job"]]
+            assert len(leases) == 1
+            lease = leases[0]
+            headers[0]["X-Airalogy-Instrument-Lease"] = lease["lease_token"]
+            root = f"/instrument-gateway/v1/jobs/{jobs[0]}"
+            started = await local.post(root + "/start", headers=headers[0], json={})
+            assert started.status_code == 200, started.text
+            for _ in range(2):
+                failed = await local.post(
+                    root + "/fail",
+                    headers=headers[0],
+                    json={"error": "Synthetic controller disconnect"},
+                )
+                assert (
+                    failed.status_code == 200
+                    and failed.json()["status"] == "stop_requested"
+                ), failed.text
+            # A later valid booking on a different Gateway cannot bypass the hold.
+            async with sessionmanager.session() as db:
+                job = await db.get(ResearchInstrumentJob, UUID(jobs[0]))
+                assert job.completed_at is None and job.lease_token_digest
+                booking = await db.get(EquipmentBooking, job.equipment_booking_id)
+                booking.ends_at = datetime.now(UTC) - timedelta(seconds=1)
+                await db.flush()
+                later_job = await db.get(ResearchInstrumentJob, UUID(jobs[1]))
+                later_booking = await db.get(
+                    EquipmentBooking, later_job.equipment_booking_id
+                )
+                later_booking.starts_at = datetime.now(UTC)
+                later_booking.status = "approved"
+                await db.commit()
+            held = await local.post(
+                "/instrument-gateway/v1/jobs/lease", headers=headers[1]
+            )
+            assert held.status_code == 200 and held.json()["job"] is None, held.text
+            gateway = stations[0]["gateway"]
+            rotate = {
+                "expected_revision": gateway["revision"],
+                "reason": "Synthetic rotation check",
+            }
+            url = f"/research-instrument-gateways/{gateway['id']}/rotate"
+            preview = await runtime.json("POST", url + "/preview", rotate)
+            await runtime.json(
+                "POST",
+                url,
+                {**rotate, "preview_digest": preview["preview_digest"]},
+                status=409,
+            )
+            # Only an explicit bounded safe-stop confirmation releases the held equipment.
+            recovered = await local.post(
+                root + "/fail",
+                headers=headers[0],
+                json={
+                    "error": "Synthetic controller disconnect",
+                    "safe_stop_confirmed": True,
+                },
+            )
+            assert (
+                recovered.status_code == 200 and recovered.json()["status"] == "failed"
+            ), recovered.text
+            later = await local.post(
+                "/instrument-gateway/v1/jobs/lease", headers=headers[1]
+            )
+            assert (
+                later.status_code == 200 and later.json()["job"]["job_id"] == jobs[1]
+            ), later.text
+            headers[1]["X-Airalogy-Instrument-Lease"] = later.json()["lease_token"]
+            cancelled = await local.post(
+                f"/instrument-gateway/v1/jobs/{jobs[1]}/fail",
+                headers=headers[1],
+                json={"error": "Synthetic fixture complete before start"},
+            )
+            assert (
+                cancelled.status_code == 200 and cancelled.json()["status"] == "failed"
+            )
+
+    runtime.run(exercise())
+
+
 def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
     runtime, monkeypatch
 ):

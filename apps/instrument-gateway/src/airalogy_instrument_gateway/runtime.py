@@ -108,7 +108,14 @@ class GatewayRuntime:
                 ) from stop_error
             state.metadata["safe_for_new_work"] = True
         self._save_pending(state, "failure_pending", error=error)
-        self.client.fail(job.job_id, state.lease_token, error)
+        receipt = self.client.fail(
+            job.job_id,
+            state.lease_token,
+            error,
+            safe_stop_confirmed=True,
+        )
+        if receipt.get("status") != "failed":
+            raise GatewayHaltError("Platform has not acknowledged a safely failed job")
         self.state_store.clear()
 
     def _stop_and_acknowledge(
@@ -172,7 +179,16 @@ class GatewayRuntime:
                     ) from error
                 state.metadata["safe_for_new_work"] = True
                 self._save_pending(state, "failure_pending", error=state.error)
-            self.client.fail(job.job_id, state.lease_token, state.error)
+            receipt = self.client.fail(
+                job.job_id,
+                state.lease_token,
+                state.error,
+                safe_stop_confirmed=True,
+            )
+            if receipt.get("status") != "failed":
+                raise GatewayHaltError(
+                    "Platform has not acknowledged a safely failed job"
+                )
             self.state_store.clear()
             return True
         if state.phase == "stop_ack_pending" and state.stop_reason:

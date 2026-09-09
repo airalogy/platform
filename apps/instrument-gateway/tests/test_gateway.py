@@ -81,6 +81,7 @@ class FakeClient:
         self.calls: list[tuple[str, Any]] = []
         self.heartbeats: list[dict[str, Any]] = []
         self.heartbeat_error: GatewayAPIError | None = None
+        self.failure_confirmations: list[bool] = []
 
     def lease(self) -> dict[str, Any]:
         self.calls.append(("lease", None))
@@ -115,9 +116,10 @@ class FakeClient:
         self.calls.append(("complete", result))
         return {"status": "completed"}
 
-    def fail(self, job_id, lease_token, error):
+    def fail(self, job_id, lease_token, error, *, safe_stop_confirmed=False):
         self.calls.append(("fail", error))
-        return {"status": "failed"}
+        self.failure_confirmations.append(safe_stop_confirmed)
+        return {"status": "failed" if safe_stop_confirmed else "stop_requested"}
 
     def stopped(self, job_id, lease_token, reason):
         self.calls.append(("stopped", reason))

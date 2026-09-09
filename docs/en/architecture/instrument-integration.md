@@ -21,6 +21,12 @@ In **Lab → resource library → Instrument Gateways**, select a Gateway and us
 
 AI-disabled deployments retain steps 1–2 and 4–6. No real documents/screenshots are automatically collected or sent to a model. Treat exports as private laboratory material until separately reviewed for sharing.
 
+## Stop uncertainty and equipment ownership
+
+An execution error is not a physical-stop confirmation. After a job has started, a failure callback without the strict boolean `safe_stop_confirmed: true` keeps it in `stop_requested`, pauses the research run and retains its lease identity for recovery. The Gateway sends confirmation only after bounded safe-stop reconciliation. Lost responses are replayed without repeating the physical command; local recovery state is retained until the Platform acknowledges a terminal failure.
+
+Equipment is serialized across all Gateways, not just within one controller or booking. A leased, running or stop-requested job prevents another Gateway from taking the same Resource, even after the original booking expires. Credential rotation/pairing also remains blocked by the original unresolved job. This is a software guard, not an emergency-stop circuit or independent evidence that vendor hardware is safe. Upgrade both API and Gateway together; older clients without the explicit confirmation fail closed after started-job errors and require reconciliation with an updated Gateway. Historical terminal failures from before this guard are not retroactively certified safe: inspect and reconcile any previously uncertain equipment before enabling it.
+
 ## Local tools
 
 From a source checkout with Python 3.11+:

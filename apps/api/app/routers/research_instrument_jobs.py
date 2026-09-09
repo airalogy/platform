@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 from sqlalchemy import func, select
 
 from app.config import config
@@ -293,6 +293,7 @@ class GatewayFail(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     error: str = Field(min_length=1, max_length=20_000)
+    safe_stop_confirmed: StrictBool = False
 
     @model_validator(mode="after")
     def normalize(self):
@@ -1794,12 +1795,16 @@ async def _authenticate_gateway(
             status_code=401, detail="Invalid Instrument Gateway credential"
         )
     digest = gateway_token_digest(token)
-    gateway = await ResearchInstrumentGateway.find_by(
-        db_session,
-        [
+    # Serialize leases with credential rotation and pairing. A skipped active-job
+    # row must never look like an idle Gateway to a concurrent lease request.
+    gateway = await db_session.scalar(
+        select(ResearchInstrumentGateway)
+        .where(
             ResearchInstrumentGateway.token_digest == digest,
             ResearchInstrumentGateway.revoked_at.is_(None),
-        ],
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if gateway is None or not hmac.compare_digest(gateway.token_digest, digest):
         raise HTTPException(
@@ -1807,6 +1812,33 @@ async def _authenticate_gateway(
         )
     gateway.last_seen_at = utcnow()
     return gateway
+
+
+async def _lock_idle_equipment(
+    db_session: DBSession, job: ResearchInstrumentJob
+) -> bool:
+    """Serialize delivery across Gateways, independent of booking expiry.
+
+    Do not lock competing jobs: their callbacks may already hold those locks.
+    SKIP LOCKED on the equipment fails closed rather than creating a lock cycle.
+    """
+    resource_id = await db_session.scalar(
+        select(Resource.id)
+        .where(Resource.id == job.resource_id)
+        .with_for_update(skip_locked=True)
+    )
+    if resource_id is None:
+        return False
+    competing = await db_session.scalar(
+        select(ResearchInstrumentJob.id)
+        .where(
+            ResearchInstrumentJob.resource_id == job.resource_id,
+            ResearchInstrumentJob.id != job.id,
+            ResearchInstrumentJob.status.in_({"leased", "running", "stop_requested"}),
+        )
+        .limit(1)
+    )
+    return competing is None
 
 
 async def _gateway_job_context(
@@ -1901,7 +1933,9 @@ async def lease_instrument_job(
                         }
                     ),
                 )
-                .with_for_update(skip_locked=True)
+                # User stop/reconciliation paths also lock jobs; skipping such a
+                # row would incorrectly advertise an idle controller.
+                .with_for_update()
             )
         ).all()
     )
@@ -1948,6 +1982,9 @@ async def lease_instrument_job(
     if job is None:
         await db_session.commit()
         return {"job": None, "retry_after_seconds": 15}
+    if not await _lock_idle_equipment(db_session, job):
+        await db_session.commit()
+        return {"job": None, "retry_after_seconds": 10}
     action = await db_session.get(ResearchAction, job.action_id)
     run = await db_session.get(ResearchRun, action.run_id) if action else None
     task = await db_session.get(ResearchTask, run.task_id) if run else None
@@ -2109,6 +2146,10 @@ async def start_instrument_job(
     ):
         raise HTTPException(status_code=409, detail="Research Run is not ready")
     _ensure_live_lease(job)
+    if not gateway.enabled or not await _lock_idle_equipment(db_session, job):
+        raise HTTPException(
+            status_code=409, detail="Gateway disabled or equipment has unresolved work"
+        )
     booking = await db_session.get(EquipmentBooking, job.equipment_booking_id)
     resource = await db_session.get(Resource, job.resource_id)
     now = utcnow()
@@ -2466,6 +2507,44 @@ async def fail_instrument_job(
         ResearchInstrumentJobStatus.STOP_REQUESTED.value,
     }:
         raise HTTPException(status_code=409, detail="Instrument Job is not active")
+    if job.started_at is not None and not params.safe_stop_confirmed:
+        # Error reporting is not evidence of a stopped physical process. Retain
+        # the same lease for recovery and keep equipment, pairing and updates held.
+        if job.status != "stop_requested" or job.error != params.error:
+            now = utcnow()
+            job.status = ResearchInstrumentJobStatus.STOP_REQUESTED.value
+            job.error = params.error
+            job.stop_reason = "Safe stop unconfirmed: " + params.error
+            job.stop_requested_at = job.stop_requested_at or now
+            job.revision += 1
+            action.status = ResearchActionStatus.WAITING.value
+            action.error = job.stop_reason
+            action.revision += 1
+            if task.status != ResearchTaskStatus.CANCELLED.value:
+                run.status = ResearchRunStatus.PAUSED.value
+                run.last_error = job.stop_reason
+                task.status = ResearchTaskStatus.PAUSED.value
+                task.revision += 1
+            await mark_control_session_stopping(
+                db_session,
+                job=job,
+                task=task,
+                run=run,
+                reason=job.stop_reason,
+                stopped=False,
+            )
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                action_id=action.id,
+                kind="instrument_job.stop_unconfirmed",
+                actor_user_id=None,
+                payload={"instrument_job_id": str(job.id), "error": params.error},
+                idempotency_key=f"instrument-job:{job.id}:stop-unconfirmed:{job.revision}",
+            )
+        await db_session.commit()
+        return {"status": job.status}
     await _pause_for_instrument_failure(
         db_session=db_session,
         job=job,
@@ -2481,7 +2560,11 @@ async def fail_instrument_job(
         action_id=action.id,
         kind="instrument_job.failed",
         actor_user_id=None,
-        payload={"instrument_job_id": str(job.id), "error": params.error},
+        payload={
+            "instrument_job_id": str(job.id),
+            "error": params.error,
+            "safe_stop_confirmed": params.safe_stop_confirmed,
+        },
         idempotency_key=f"instrument-job:{job.id}:failed:{job.revision}",
     )
     await db_session.commit()

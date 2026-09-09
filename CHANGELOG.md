@@ -131,6 +131,8 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Keep started Instrument Jobs in `stop_requested` when failure receipts do not explicitly confirm a safe stop. Serialize Gateway leases with credential changes and serialize equipment delivery across Gateways, so expired bookings or a different controller cannot bypass unresolved physical work; local journals clear only after a terminal receipt.
+
 - Made release metadata tests follow migration ancestry instead of a stale hard-coded database revision, added competing-head and current-repository coverage, and required these checks before pushing migration, deployment or release changes.
 - Disabled Record revision until the report and its versioned Protocol finish loading, preventing early clicks from silently doing nothing; covered the slow-loading path in the real first-Record browser journey.
 - Localized Knowledge navigation, personal/Lab/Project scopes, editing and publishing controls, and cross-module knowledge references in the Chinese interface; kept English UI labels and API identifiers unchanged.

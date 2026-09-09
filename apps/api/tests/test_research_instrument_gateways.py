@@ -998,3 +998,78 @@ def test_terminal_gateway_callbacks_are_idempotent_and_conflict_safe(monkeypatch
     )
     assert result == {"status": "stopped"}
     assert db_session.commit.await_count == 3
+
+
+def test_failure_does_not_release_equipment_until_stop_is_confirmed(monkeypatch):
+    routes = import_module("app.routers.research_instrument_jobs")
+    job = SimpleNamespace(
+        id=uuid4(),
+        status="running",
+        started_at=datetime.now(UTC),
+        revision=1,
+        error=None,
+        stop_reason=None,
+        stop_requested_at=None,
+        lease_token_digest="a" * 64,
+        completed_at=None,
+    )
+    action = SimpleNamespace(id=uuid4(), status="running", revision=1)
+    run = SimpleNamespace(id=uuid4(), status="waiting_for_instrument")
+    task = SimpleNamespace(id=uuid4(), status="active", revision=1)
+    db = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(routes, "_authenticate_gateway", AsyncMock())
+    monkeypatch.setattr(
+        routes, "_gateway_job_context", AsyncMock(return_value=(job, action, run, task))
+    )
+    stop = AsyncMock()
+    event = AsyncMock()
+    terminal = AsyncMock()
+    monkeypatch.setattr(routes, "mark_control_session_stopping", stop)
+    monkeypatch.setattr(routes, "emit_research_event", event)
+    monkeypatch.setattr(routes, "_pause_for_instrument_failure", terminal)
+    params = routes.GatewayFail(error="controller unreachable")
+    for _ in range(2):
+        assert asyncio.run(
+            routes.fail_instrument_job(job.id, params, "token", "lease", db)
+        ) == {"status": "stop_requested"}
+    assert job.completed_at is None and job.lease_token_digest == "a" * 64
+    assert task.status == "paused" and action.status == "waiting"
+    assert stop.await_count == 1 and event.await_count == 1
+    terminal.assert_not_awaited()
+    asyncio.run(
+        routes.fail_instrument_job(
+            job.id,
+            routes.GatewayFail(error=params.error, safe_stop_confirmed=True),
+            "token",
+            "lease",
+            db,
+        )
+    )
+    terminal.assert_awaited_once()
+    for invalid in ["true", 1, None]:
+        with pytest.raises(ValidationError):
+            routes.GatewayFail(error="unsafe", safe_stop_confirmed=invalid)
+
+
+def test_equipment_gate_is_cross_gateway_and_fails_closed_on_lock_contention():
+    routes = import_module("app.routers.research_instrument_jobs")
+    job = SimpleNamespace(id=uuid4(), resource_id=uuid4())
+    for results, expected in [
+        ([None], False),
+        ([job.resource_id, uuid4()], False),
+        ([job.resource_id, None], True),
+    ]:
+        db = SimpleNamespace(scalar=AsyncMock(side_effect=results))
+        assert asyncio.run(routes._lock_idle_equipment(db, job)) is expected
+        sql = str(
+            db.scalar.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
+        )
+        assert "FOR UPDATE SKIP LOCKED" in sql
+        if len(results) == 2:
+            statement = db.scalar.call_args_list[1].args[0]
+            sql = str(
+                statement.compile(
+                    dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+                )
+            )
+            assert "stop_requested" in sql and "gateway_id" not in sql

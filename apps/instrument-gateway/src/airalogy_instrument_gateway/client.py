@@ -137,12 +137,19 @@ class PlatformClient:
             payload={"result": result},
         )
 
-    def fail(self, job_id: str, lease_token: str, error: str) -> dict[str, Any]:
+    def fail(
+        self,
+        job_id: str,
+        lease_token: str,
+        error: str,
+        *,
+        safe_stop_confirmed: bool = False,
+    ) -> dict[str, Any]:
         return self._request(
             "POST",
             f"/instrument-gateway/v1/jobs/{job_id}/fail",
             lease_token=lease_token,
-            payload={"error": error},
+            payload={"error": error, "safe_stop_confirmed": safe_stop_confirmed},
         )
 
     def stopped(self, job_id: str, lease_token: str, reason: str) -> dict[str, Any]:
