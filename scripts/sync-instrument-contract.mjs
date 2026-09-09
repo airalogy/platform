@@ -32,3 +32,13 @@ if (process.argv.includes("--check")) {
 else {
   writeFileSync(fileURLToPath(explorationTarget), explorationSchema)
 }
+
+const surveySchema = readFileSync(new URL("apps/instrument-interface/src/survey.schema.json", root), "utf8")
+const surveyTarget = new URL("apps/api/app/services/instrument_survey.schema.json", root)
+if (process.argv.includes("--check")) {
+  if (readFileSync(surveyTarget, "utf8") !== surveySchema)
+    throw new Error("Interface survey schema is out of sync")
+}
+else {
+  writeFileSync(fileURLToPath(surveyTarget), surveySchema)
+}

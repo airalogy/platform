@@ -1,0 +1,328 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "airalogy.interface-survey-contract.v1",
+  "definitions": {
+    "locator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "test_id"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "required": ["kind", "name"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "role"
+            },
+            "role": {
+              "enum": [
+                "main",
+                "region",
+                "heading",
+                "button",
+                "link",
+                "textbox",
+                "spinbutton",
+                "combobox",
+                "checkbox",
+                "radio",
+                "switch",
+                "status",
+                "alert",
+                "alertdialog",
+                "dialog",
+                "tab",
+                "tabpanel",
+                "menuitem",
+                "table",
+                "cell",
+                "row",
+                "list",
+                "listitem",
+                "group",
+                "generic"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 512
+            }
+          },
+          "required": ["kind", "role", "name"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "control": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/locator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "read": {
+          "enum": ["text", "value", "checked", null]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 4096
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "label", "role", "locator", "read", "value", "enabled"],
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "airalogy.interface-survey.v1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        },
+        "preview_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "application": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "locale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "enum": ["file", "url"]
+            }
+          },
+          "required": ["application", "version", "title", "locale", "kind"],
+          "additionalProperties": false
+        },
+        "capture_values": {
+          "type": "boolean"
+        },
+        "controls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/control"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "omitted_private": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "minItems": 1,
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "preview_digest",
+        "target",
+        "capture_values",
+        "controls",
+        "omitted_private",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "control_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96,
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+              },
+              "interpretation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "basis": {
+                "enum": ["observed", "inferred"]
+              },
+              "risk": {
+                "enum": ["read_only", "state_change", "unknown"]
+              }
+            },
+            "required": ["control_id", "interpretation", "basis", "risk"],
+            "additionalProperties": false
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "read_controls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96,
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+          },
+          "minItems": 0,
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "identity_control": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 96,
+              "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "route": {
+          "enum": ["browser", "api_or_sdk", "manual", "unknown"]
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "minItems": 1,
+          "maxItems": 20
+        },
+        "missing_information": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "minItems": 0,
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "summary",
+        "features",
+        "read_controls",
+        "identity_control",
+        "route",
+        "limitations",
+        "missing_information"
+      ],
+      "additionalProperties": false
+    },
+    "export": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "airalogy.survey-analysis-export.v1"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        },
+        "turn_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        },
+        "capture_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "analysis": {
+          "$ref": "#/definitions/analysis"
+        }
+      },
+      "required": ["schema", "session_id", "turn_id", "capture_digest", "analysis"],
+      "additionalProperties": false
+    }
+  }
+}

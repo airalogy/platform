@@ -2,7 +2,8 @@ import { defineConfig } from "vitepress"
 
 function normalizeBase(value: string | undefined) {
   const trimmed = value?.trim()
-  if (!trimmed) return "/docs/"
+  if (!trimmed)
+    return "/docs/"
 
   return `/${trimmed.replace(/^\/+|\/+$/g, "")}/`
 }
@@ -47,6 +48,8 @@ const englishSidebar = [
       { text: "Frontend development", link: "/en/development/frontend" },
       { text: "AI research automation", link: "/en/architecture/research-automation" },
       { text: "File Storage Bridge", link: "/en/architecture/file-storage-bridge" },
+      { text: "Instrument integration", link: "/en/architecture/instrument-integration" },
+      { text: "Selected-application survey", link: "/en/architecture/instrument-interface-survey" },
     ],
   },
 ]
@@ -88,6 +91,8 @@ const chineseSidebar = [
       { text: "前端开发", link: "/zh/development/frontend" },
       { text: "AI 科研自动化", link: "/zh/architecture/research-automation" },
       { text: "文件存储桥接", link: "/zh/architecture/file-storage-bridge" },
+      { text: "仪器接入", link: "/zh/architecture/instrument-integration" },
+      { text: "选定应用勘察", link: "/zh/architecture/instrument-interface-survey" },
     ],
   },
 ]

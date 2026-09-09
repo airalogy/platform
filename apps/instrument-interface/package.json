@@ -13,7 +13,8 @@
   },
   "bin": {
     "airalogy-instrument-interface": "./src/cli.mjs",
-    "airalogy-interface-exploration": "./src/exploration-cli.mjs"
+    "airalogy-interface-exploration": "./src/exploration-cli.mjs",
+    "airalogy-interface-survey": "./src/survey-cli.mjs"
   },
   "files": [
     "src",

@@ -102,4 +102,8 @@ test("runtime and repository browser-test engines resolve to the same pinned rel
   const local = createRequire(import.meta.url)
   const repository = createRequire(new URL("../../../package.json", import.meta.url))
   assert.equal(local("playwright/package.json").version, repository("@playwright/test/package.json").version)
+  const catalog = await readFile(new URL("../../../pnpm-workspace.yaml", import.meta.url), "utf8")
+  assert.ok(catalog.includes(`\n  ajv: ${local("ajv/package.json").version}\n`))
+  const selected = await fixture()
+  assert.equal((await previewInterface(selected.definition, plan)).engine.ajv, local("ajv/package.json").version)
 })

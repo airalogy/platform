@@ -79,21 +79,8 @@ export function exactUrl(value) {
   return url
 }
 
-export function validateDefinition(value) {
-  if (Buffer.byteLength(canonical(value)) > MAX_BYTES)
-    throw new Error("Interface definition exceeds 128 KiB")
-  object(value, ["schema", "id", "target", "network", "controls", "states", "blocked", "privacy", "limits"])
-  if (value.schema !== SCHEMA)
-    throw new Error("Unknown interface schema")
-  key(value.id)
+export function validateBrowserEnvironment(value) {
   const target = value.target
-  object(target, ["application", "version", "title", "locale", "scope", "source", "identity"])
-  for (const name of ["application", "version", "title", "locale"])
-    text(target[name])
-  validateLocator(target.scope)
-  object(target.identity, ["locator", "text"])
-  validateLocator(target.identity.locator)
-  text(target.identity.text)
   if (target.source?.kind === "file") {
     object(target.source, ["kind", "path", "sha256"])
     text(target.source.path, 4096)
@@ -117,6 +104,37 @@ export function validateDefinition(value) {
   }
   if (target.source.kind === "url" && !requests.has(`GET ${target.source.url}`))
     throw new Error("Explicitly authorize the selected application's initial GET")
+  list(value.blocked, 16).forEach(validateLocator)
+  object(value.privacy, ["redact", "screenshot"])
+  list(value.privacy.redact, 16).forEach(validateLocator)
+  if (typeof value.privacy.screenshot !== "boolean")
+    throw new Error("Screenshot consent must be explicit")
+  object(value.limits, ["duration_seconds", "max_steps", "step_timeout_ms", "viewport"])
+  integer(value.limits.duration_seconds, 1, 900)
+  integer(value.limits.max_steps, 1, 40)
+  integer(value.limits.step_timeout_ms, 100, 10000)
+  object(value.limits.viewport, ["width", "height"])
+  integer(value.limits.viewport.width, 320, 1920)
+  integer(value.limits.viewport.height, 240, 1080)
+  return value
+}
+
+export function validateDefinition(value) {
+  if (Buffer.byteLength(canonical(value)) > MAX_BYTES)
+    throw new Error("Interface definition exceeds 128 KiB")
+  object(value, ["schema", "id", "target", "network", "controls", "states", "blocked", "privacy", "limits"])
+  if (value.schema !== SCHEMA)
+    throw new Error("Unknown interface schema")
+  key(value.id)
+  const target = value.target
+  object(target, ["application", "version", "title", "locale", "scope", "source", "identity"])
+  for (const name of ["application", "version", "title", "locale"])
+    text(target[name])
+  validateLocator(target.scope)
+  object(target.identity, ["locator", "text"])
+  validateLocator(target.identity.locator)
+  text(target.identity.text)
+  validateBrowserEnvironment(value)
   const controls = new Map()
   const locators = new Set()
   for (const control of list(value.controls, 64, 1)) {
@@ -146,18 +164,6 @@ export function validateDefinition(value) {
       scalar(check.equals)
     }
   }
-  list(value.blocked, 16).forEach(validateLocator)
-  object(value.privacy, ["redact", "screenshot"])
-  list(value.privacy.redact, 16).forEach(validateLocator)
-  if (typeof value.privacy.screenshot !== "boolean")
-    throw new Error("Screenshot consent must be explicit")
-  object(value.limits, ["duration_seconds", "max_steps", "step_timeout_ms", "viewport"])
-  integer(value.limits.duration_seconds, 1, 900)
-  integer(value.limits.max_steps, 1, 40)
-  integer(value.limits.step_timeout_ms, 100, 10000)
-  object(value.limits.viewport, ["width", "height"])
-  integer(value.limits.viewport.width, 320, 1920)
-  integer(value.limits.viewport.height, 240, 1080)
   return value
 }
 
@@ -192,3 +198,5 @@ export function validatePlan(value, definition) {
   }
   return value
 }
+
+export { integer as checkInteger, key as checkKey, list as checkList, object as checkObject, text as checkText }

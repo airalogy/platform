@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - "apps/instrument-interface/**"
+      - "apps/api/app/services/instrument_survey.schema.json"
+      - "apps/api/app/services/instrument_exploration.schema.json"
+      - "scripts/sync-instrument-contract.mjs"
       - "apps/instrument-gateway/examples/simulated-reader.html"
       - "scripts/instrument-interface-example.mjs"
       - "scripts/instrument-gui-demo.mjs"
@@ -14,6 +17,9 @@ on:
   pull_request:
     paths:
       - "apps/instrument-interface/**"
+      - "apps/api/app/services/instrument_survey.schema.json"
+      - "apps/api/app/services/instrument_exploration.schema.json"
+      - "scripts/sync-instrument-contract.mjs"
       - "apps/instrument-gateway/examples/simulated-reader.html"
       - "scripts/instrument-interface-example.mjs"
       - "scripts/instrument-gui-demo.mjs"
@@ -49,6 +55,7 @@ jobs:
       - name: Verify versions, syntax and lint
         run: |
           pnpm version:check
+          pnpm gateway:contract:check
           pnpm --filter @airalogy/instrument-interface lint
           node --check apps/instrument-interface/src/cli.mjs
       - name: Test bounded browser sessions and CLI

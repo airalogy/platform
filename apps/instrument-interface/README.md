@@ -2,6 +2,8 @@
 
 Local, bounded Chromium observation and supervised **synthetic HTML** replay for instrument-adapter development. This is a development tool, not a remote equipment controller or hardware qualification.
 
+`pnpm gateway:survey` (installed: `airalogy-interface-survey`) adds `prepare`, digest-confirmed single-use `run`, and `assemble` for a selected application with no handwritten control/state map. It discovers bounded, browser-verified semantic control hints, defaults to no input values or screenshots, and produces an editable **read-only** definition after review. Follow the bilingual **Selected-application interface survey** guide. No model is called by this local flow; survey evidence is not hardware attestation or action approval.
+
 - Dedicated nonpersistent browser; never attaches to an existing browser/profile.
 - Explicit file-byte/target/plan/engine digest confirmation before launch.
 - Exact accessible roles/names or test IDs, unique visible controls, known states and readback.

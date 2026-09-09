@@ -76,7 +76,7 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | --- | --- |
 | Private draft/history, import/export, preview confirmation | Implemented |
 | Offline replay and synthetic browser demonstration | Implemented; not hardware evidence |
-| Selected browser application observation and bounded simulation exploration | Implemented through the local [browser interface backend](./instrument-browser-interface.md) and independently authorized [Aira action selection](./instrument-interface-exploration.md); no unknown-app discovery or live URL writes |
+| Selected browser application observation and bounded simulation exploration | [Local survey](./instrument-interface-survey.md) discovers visible control hints in the selected scope; the [browser backend](./instrument-browser-interface.md) and independently authorized [Aira action selection](./instrument-interface-exploration.md) use reviewed definitions/policies. No installed-app discovery or live URL writes |
 | Optional Aira editing within supplied target/controls/states | Implemented; provider success needs deployment configuration |
 | Autonomous instrument software discovery/launch/exploration | Not implemented |
 | Native accessibility and visual control backends | Not implemented; target software/OS required |
