@@ -38,7 +38,7 @@ test("API changes add unit tests before focused browser coverage", () => {
 test("Instrument Gateway changes add its isolated runtime tests", () => {
   assert.deepEqual(
     checkIds(["apps/instrument-gateway/src/airalogy_instrument_gateway/runtime.py"]),
-    ["lint", "types", "api-compile", "gateway-tests"],
+    ["lint", "types", "api-compile", "research-integration", "gateway-tests"],
   )
   assert.deepEqual(checkIds([".github/workflows/instrument-gateway.yml"]), [
     "lint",

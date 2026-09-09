@@ -13,6 +13,14 @@ from .adapters import InstrumentAdapter
 from .client import GatewayAPIError, PlatformClient
 from .config import GatewayConfig
 from .models import InstrumentJobEnvelope, validate_safety_attestation
+from .output_contract import digest
+from .output_delivery import (
+    OutputDelivery,
+    authorize_source,
+    bundle,
+    completed_result,
+    receipt_only,
+)
 from .security import verify_job_signature
 from .state import GatewayState, StateStore
 
@@ -28,7 +36,7 @@ class GatewayRuntime:
         self,
         config: GatewayConfig,
         client: PlatformClient,
-        adapter: InstrumentAdapter,
+        adapter: InstrumentAdapter | None,
         state_store: StateStore,
     ):
         self.config = config
@@ -38,6 +46,7 @@ class GatewayRuntime:
         self.shutdown_event = threading.Event()
         self._active_worker: threading.Thread | None = None
         self._stop_worker: threading.Thread | None = None
+        self._capture_worker: threading.Thread | None = None
 
     def _confirm_safe_stop(self, job, reason):
         """A stalled vendor stop method must not erase the uncertain state."""
@@ -118,6 +127,85 @@ class GatewayRuntime:
             raise GatewayHaltError("Platform has not acknowledged a safely failed job")
         self.state_store.clear()
 
+    def _capture(self, delivery, job, state):
+        if state.phase == "outputs_pending":
+            return delivery.capture()
+        outcomes = queue.Queue(maxsize=1)
+
+        def capture():
+            try:
+                outcomes.put((True, delivery.capture()))
+            except Exception as error:  # noqa: BLE001 - local I/O worker boundary
+                outcomes.put((False, error))
+
+        self._capture_worker = threading.Thread(
+            target=capture, daemon=True, name="instrument-file-capture"
+        )
+        self._capture_worker.start()
+        while True:
+            try:
+                passed, value = outcomes.get(
+                    timeout=self.config.heartbeat_interval_seconds
+                )
+                if not passed:
+                    raise value
+                return value
+            except queue.Empty:
+                if self.shutdown_event.is_set():
+                    raise GatewayHaltError(
+                        "Acquisition finished; preserve its journal and snapshot for receipt recovery"
+                    )
+                try:
+                    heartbeat = self.client.heartbeat(job.job_id, state.lease_token)
+                except GatewayAPIError as error:
+                    raise GatewayHaltError(
+                        "Connection lost during capture; reconcile completed acquisition without repeating it"
+                    ) from error
+                if heartbeat.get("stop_requested") is True:
+                    raise GatewayHaltError(
+                        "Platform requested reconciliation during capture; do not repeat the completed acquisition"
+                    )
+
+    def _complete(self, job, state):
+        delivery = (
+            OutputDelivery(self.config, self.client, self.state_store, state, job)
+            if bundle(job)
+            else None
+        )
+        if state.phase == "outputs_pending" and delivery is None:
+            raise GatewayHaltError(
+                "Pending file delivery lost its signed receiving plan"
+            )
+        # Capture before releasing equipment occupancy. A future run may reuse
+        # a vendor filename; neither recovery nor retries may repin those bytes.
+        capture = None
+        if (
+            delivery
+            and state.phase == "completion_pending"
+            and not state.metadata.get("output_capture_digest")
+        ):
+            capture = self._capture(delivery, job, state)
+            state.metadata["output_capture_digest"] = digest(capture)
+            self.state_store.save(state)
+        if state.phase == "completion_pending":
+            receipt = self.client.complete(job.job_id, state.lease_token, state.result)
+            if receipt.get("status") != "completed" or (
+                delivery and type(receipt.get("files_pending")) is not bool
+            ):
+                raise GatewayHaltError(
+                    "Platform has not acknowledged completed acquisition"
+                )
+            if delivery:
+                self._save_pending(state, "outputs_pending", result=state.result)
+        if delivery:
+            capture = capture if capture is not None else delivery.capture()
+            if digest(capture) != state.metadata.get("output_capture_digest"):
+                raise GatewayHaltError(
+                    "Captured files differ from the durable acquisition manifest"
+                )
+            delivery.deliver(capture)
+        self.state_store.clear()
+
     def _stop_and_acknowledge(
         self,
         job: InstrumentJobEnvelope,
@@ -151,7 +239,7 @@ class GatewayRuntime:
     def recover_pending(self) -> bool:
         if any(
             worker is not None and worker.is_alive()
-            for worker in [self._active_worker, self._stop_worker]
+            for worker in [self._active_worker, self._stop_worker, self._capture_worker]
         ):
             raise GatewayHaltError(
                 "An earlier adapter worker is still alive; do not reconcile or accept new work"
@@ -161,13 +249,23 @@ class GatewayRuntime:
             return False
         verify_job_signature(state.envelope, state.signature, self.config.gateway_token)
         job = InstrumentJobEnvelope.parse(state.envelope)
-        if not self.adapter.supports(job):
+        if state.phase == "completion_unresolved":
+            raise GatewayHaltError(
+                "Acquisition returned an invalid completion record; reconcile without repeating the instrument command"
+            )
+        if receipt_only(state):
+            if state.result is None:
+                raise GatewayHaltError(
+                    "Receipt recovery has lost its acquisition result"
+                )
+            self._complete(job, state)
+            return True
+        if self.adapter is None or not self.adapter.supports(job):
             raise GatewayHaltError(
                 "Pending job has no matching local adapter; do not accept new work"
             )
         if state.phase == "completion_pending" and state.result is not None:
-            self.client.complete(job.job_id, state.lease_token, state.result)
-            self.state_store.clear()
+            self._complete(job, state)
             return True
         if state.phase in {"failure_pending", "stop_unconfirmed"} and state.error:
             if not state.metadata.get("safe_for_new_work"):
@@ -218,6 +316,8 @@ class GatewayRuntime:
     def run_once(self) -> bool:
         if self.state_store.load() is not None:
             return self.recover_pending()
+        if self.adapter is None:
+            raise GatewayHaltError("Receipt-only recovery cannot lease or execute work")
         leased = self.client.lease()
         raw_job = leased.get("job")
         if raw_job is None:
@@ -248,6 +348,21 @@ class GatewayRuntime:
                 job,
                 state,
                 f"No local adapter allows {job.command_key}@{job.command_version}",
+            )
+            return True
+        try:
+            if bundle(job):
+                if self.config.output_root is None:
+                    raise ValueError(
+                        "File-producing jobs require an explicitly authorized output root"
+                    )
+                state.metadata["output_root"] = authorize_source(
+                    self.config.output_root, self.state_store.path
+                )
+                self.state_store.save(state)
+        except (ValueError, TypeError, OSError) as error:
+            self._report_failure(
+                job, state, f"Local file receiving preflight failed: {error}"
             )
             return True
         confirmation_reference = self.adapter.confirm(job) or ""
@@ -293,8 +408,6 @@ class GatewayRuntime:
         def execute() -> None:
             try:
                 result = self.adapter.execute(job, stop_event)
-                if not isinstance(result, dict):
-                    raise TypeError("Instrument adapter result must be a JSON object")
                 outcomes.put(("completed", result))
             except Exception as error:  # noqa: BLE001 - worker must report adapter faults
                 outcomes.put(("failed", error))
@@ -336,9 +449,20 @@ class GatewayRuntime:
                     self.state_store.save(state)
                 continue
             if outcome == "completed":
-                self._save_pending(state, "completion_pending", result=value)
-                self.client.complete(job.job_id, lease_token, value)
-                self.state_store.clear()
+                try:
+                    result, files = completed_result(job, value)
+                except Exception as error:
+                    self._save_pending(
+                        state,
+                        "completion_unresolved",
+                        error=f"Invalid acquisition completion: {error}"[:2000],
+                    )
+                    raise GatewayHaltError(
+                        "Acquisition completion needs reconciliation; physical work will not be repeated"
+                    ) from error
+                state.metadata["output_sources"] = files
+                self._save_pending(state, "completion_pending", result=result)
+                self._complete(job, state)
                 return True
             error = f"Local instrument execution failed: {value}"
             self._report_failure(job, state, error)

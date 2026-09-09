@@ -3,7 +3,7 @@
 from .adapters import InstrumentAdapter, MockAdapter, load_adapter
 from .client import GatewayAPIError, PlatformClient
 from .config import GatewayConfig
-from .models import InstrumentJobEnvelope
+from .models import InstrumentJobEnvelope, InstrumentResult
 from .runtime import GatewayRuntime
 from .security import verify_job_signature
 from .state import GatewayState, StateStore
@@ -15,6 +15,7 @@ __all__ = [
     "GatewayState",
     "InstrumentAdapter",
     "InstrumentJobEnvelope",
+    "InstrumentResult",
     "MockAdapter",
     "PlatformClient",
     "StateStore",

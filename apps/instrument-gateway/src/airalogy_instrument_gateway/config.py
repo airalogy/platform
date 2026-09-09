@@ -41,6 +41,7 @@ class GatewayConfig:
     request_timeout_seconds: float = 10.0
     stop_timeout_seconds: float = 30.0
     allow_insecure_http: bool = False
+    output_root: Path | None = None
 
     def __post_init__(self) -> None:
         normalized_url = validate_platform_url(
@@ -67,10 +68,17 @@ class GatewayConfig:
             object.__setattr__(
                 self, "adapter_config", self.adapter_config.expanduser().resolve()
             )
+        if self.output_root is not None:
+            root = Path(self.output_root)
+            if not root.is_absolute() or ".." in root.parts or str(root) == "/":
+                raise ValueError("Select an absolute non-root output directory")
+            # Do not resolve aliases or require the original to survive delivery recovery.
+            object.__setattr__(self, "output_root", root)
 
     @classmethod
     def from_env(cls) -> GatewayConfig:
         adapter_config = os.environ.get("AIRALOGY_GATEWAY_ADAPTER_CONFIG", "").strip()
+        output_root = os.environ.get("AIRALOGY_GATEWAY_OUTPUT_ROOT", "").strip()
         credential_file = os.environ.get("AIRALOGY_GATEWAY_CREDENTIAL_FILE", "").strip()
         platform_url = os.environ.get("AIRALOGY_PLATFORM_URL", "").strip()
         token = os.environ.get("AIRALOGY_GATEWAY_TOKEN", "").strip()
@@ -89,6 +97,7 @@ class GatewayConfig:
             gateway_token=token,
             adapter_name=os.environ.get("AIRALOGY_GATEWAY_ADAPTER", "").strip(),
             adapter_config=Path(adapter_config) if adapter_config else None,
+            output_root=Path(output_root) if output_root else None,
             state_file=Path(
                 os.environ.get(
                     "AIRALOGY_GATEWAY_STATE_FILE",

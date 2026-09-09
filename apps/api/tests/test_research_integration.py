@@ -190,6 +190,16 @@ def test_file_declaring_activation_waits_for_scoped_intake(
     )
 
 
+def test_sdk_file_delivery_recovers_against_real_scoped_api(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.activation_acceptance import exercise_managed_activation
+
+    exercise_managed_activation(
+        runtime, tmp_path, monkeypatch, file_outputs=True, sdk_delivery=True
+    )
+
+
 def test_instrument_uncertain_stop_holds_equipment_across_gateways(runtime):
     """Inject persisted synthetic jobs, then exercise real API/locking/recovery."""
     from app.models.research import ResearchRun

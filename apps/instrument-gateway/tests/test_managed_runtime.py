@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from airalogy_instrument_gateway.activation_cli import launch_command, main
 from airalogy_instrument_gateway.activation_contract import SCHEMA, activation_digest
+from airalogy_instrument_gateway.client import GatewayAPIError
 from airalogy_instrument_gateway.credentials import write_credentials
 from airalogy_instrument_gateway.installation_contract import receipt_summary
 from airalogy_instrument_gateway.installation_manager import apply, prepare
@@ -28,6 +29,7 @@ from airalogy_instrument_gateway.state import GatewayState, StateStore
 from managed_fixture import TARGET, package
 from test_gateway import envelope
 from test_installation_manager import FakePlatform
+from test_output_delivery import ReceivingClient, file_job
 from test_package_installation import sdk
 
 
@@ -50,10 +52,12 @@ class ManagedRuntimeTests(unittest.TestCase):
             def do_POST(self):
                 self.respond()
 
+            def do_PUT(self):
+                self.respond()
+
             def respond(self):
-                payload = json.loads(
-                    self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}"
-                )
+                data = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                payload = json.loads(data or b"{}") if self.command != "PUT" else {}
                 test.calls.append((self.path, payload))
                 if (
                     self.headers.get("X-Airalogy-Gateway-Token")
@@ -61,7 +65,37 @@ class ManagedRuntimeTests(unittest.TestCase):
                 ):
                     self.send_error(401)
                     return
-                if self.path.endswith("/activation"):
+                if "/outputs/" in self.path:
+                    try:
+                        if self.path.endswith("/capture"):
+                            value = test.receiving.report_capture(
+                                test.raw["job_id"], "unused", payload["capture"]
+                            )
+                        elif self.path.endswith("/finalize"):
+                            value = test.receiving.finalize_outputs(
+                                test.raw["job_id"], "unused", payload["capture"]
+                            )
+                        else:
+                            capture = test.receiving.capture["files"][0]
+                            if (
+                                self.headers.get("X-Airalogy-Content-SHA256")
+                                != capture["sha256"]
+                                or self.headers.get("Content-Type")
+                                != capture["media_type"]
+                            ):
+                                self.send_error(409)
+                                return
+                            value = test.receiving.upload_output(
+                                test.raw["job_id"],
+                                "unused",
+                                self.path.rsplit("/", 1)[1],
+                                capture,
+                                io.BytesIO(data),
+                            )
+                    except GatewayAPIError:
+                        self.send_error(503, "Synthetic lost upload acknowledgment")
+                        return
+                elif self.path.endswith("/activation"):
                     value = {"activation": None} if test.revoked else test.response
                 elif self.path.endswith("/lease"):
                     if test.raw is None:
@@ -77,6 +111,8 @@ class ManagedRuntimeTests(unittest.TestCase):
                 elif self.path.endswith("/complete"):
                     test.result = payload
                     value = {"status": "completed"}
+                    if getattr(test, "output_mode", False):
+                        value["files_pending"] = test.receiving.finalized is None
                 else:
                     value = {"status": "running"}
                 body = json.dumps(value).encode()
@@ -91,11 +127,20 @@ class ManagedRuntimeTests(unittest.TestCase):
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
-        raw, wheel = package(), sdk()
+        output_mode = getattr(self, "output_mode", False)
+        self.output_root = self.root / "synthetic-exports" if output_mode else None
+        if self.output_root:
+            self.output_root.mkdir(mode=0o700)
+        raw, wheel = package(file_outputs=output_mode), sdk()
         for name, content in (
             ("package.zip", raw),
             ("sdk.whl", wheel),
-            ("config.json", b"{}"),
+            (
+                "config.json",
+                json.dumps({"output_root": str(self.output_root)}).encode()
+                if output_mode
+                else b"{}",
+            ),
         ):
             (self.root / name).write_bytes(content)
         self.path, self.credential_path = (
@@ -138,6 +183,24 @@ class ManagedRuntimeTests(unittest.TestCase):
             "target_digest": activation_digest(TARGET),
         }
         self.raw["activation"] = pin
+        if output_mode:
+            receiving = file_job()["file_outputs"]
+            receiving["plan"].update(
+                job_id=self.raw["job_id"],
+                outputs=[
+                    {
+                        "name": "synthetic.csv",
+                        "media_type": "text/csv",
+                        "max_bytes": 4096,
+                        "required": True,
+                    }
+                ],
+            )
+            receiving["destination"].update(
+                activation_id=self.id, task_id=self.raw["task_id"]
+            )
+            self.raw["file_outputs"] = receiving
+            self.receiving = ReceivingClient(self.raw)
         command = {
             key: value
             for key, value in self.raw["command"].items()
@@ -167,7 +230,13 @@ class ManagedRuntimeTests(unittest.TestCase):
         }
 
     def preview(self, **kwargs):
-        return inspect_start(self.path, self.credential_path, self.id, **kwargs)
+        return inspect_start(
+            self.path,
+            self.credential_path,
+            self.id,
+            output_root=self.output_root,
+            **kwargs,
+        )
 
     def run_child(self, *, recover=False):
         preview, _, local, _ = self.preview(recover=recover)
@@ -184,6 +253,8 @@ class ManagedRuntimeTests(unittest.TestCase):
         ]
         if recover:
             args.append("--recover")
+        if self.output_root is not None:
+            args.extend(["--output-root", str(self.output_root)])
         return subprocess.run(
             launch_command(local, args),
             capture_output=True,
@@ -232,6 +303,34 @@ class ManagedRuntimeTests(unittest.TestCase):
                 confirm_digest=self.preview()[0]["preview_digest"],
                 once=True,
             )
+
+    def test_installed_file_producer_and_receipt_only_child_recovery(self):
+        self.output_mode = True
+        self.setUp()
+        self.receiving.lose = "upload"
+        with self.assertRaisesRegex(ValueError, "output-root"):
+            inspect_start(self.path, self.credential_path, self.id)
+        first = self.run_child()
+        self.assertEqual(first.returncode, 2, first.stderr)
+        store = StateStore(self.root / "state.json")
+        self.assertEqual(store.load().phase, "outputs_pending")
+        self.assertTrue((self.root / "synthetic-driver-initialized").is_file())
+        (self.output_root / "synthetic.csv").unlink()
+        self.output_root.rmdir()
+        self.revoked = True
+        self.assertFalse(
+            self.preview(recover=True)[0]["startup_may_initialize_equipment"]
+        )
+        second = self.run_child(recover=True)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIsNone(store.load())
+        self.assertIsNotNone(self.receiving.finalized)
+        self.assertEqual(sum(path.endswith("/start") for path, _ in self.calls), 1)
+        self.assertEqual(sum(call[0] == "upload" for call in self.receiving.calls), 1)
+        lease = next(payload for path, payload in self.calls if path.endswith("/lease"))
+        self.assertEqual(
+            lease["file_delivery_version"], "airalogy.instrument-output-plan.v1"
+        )
 
     def test_revocation_blocks_new_start_but_saved_result_recovery_still_works(self):
         _, response, _, saved = self.preview()

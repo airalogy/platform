@@ -97,6 +97,13 @@ def _absolute_directory(path, *, private=False, create=False):
         os.close(fd)
 
 
+def source_root_identity(path):
+    """Observe only the explicitly selected directory, never discover its files."""
+    _check_platform()
+    with _absolute_directory(path) as fd:
+        return _stamp(os.fstat(fd))[:2]
+
+
 @contextmanager
 def _source(root_fd, path):
     fd = os.dup(root_fd)
@@ -277,10 +284,29 @@ class CaptureStore:
         if additional > disk.f_bavail * disk.f_frsize:
             raise ValueError("Insufficient local space for the selected outputs")
 
-    def prepare(self, plan, source_root, sources):
+    def prepare(
+        self,
+        plan,
+        source_root,
+        sources,
+        *,
+        expected_hashes=None,
+        expected_root_identity=None,
+    ):
         """Pin explicitly finished source files. Retrying never selects new bytes."""
         plan = validate_plan(plan)
         sources = validate_sources(plan, sources)
+        if expected_hashes is not None and (
+            not isinstance(expected_hashes, dict)
+            or set(expected_hashes) != {item["name"] for item in sources}
+            or any(
+                not isinstance(value, str) or not SHA256.fullmatch(value)
+                for value in expected_hashes.values()
+            )
+        ):
+            raise ValueError(
+                "Acquisition digests must match exactly the selected files"
+            )
         deadline = time.monotonic() + self.timeout_seconds
         source_root = Path(source_root)
         if (
@@ -307,9 +333,23 @@ class CaptureStore:
                     # Recover only a complete private temporary journal. Never
                     # repin today's source bytes after losing yesterday's intent.
                     existing = self._request(job, plan, journal=journal)
+                    if (
+                        expected_root_identity is not None
+                        and existing["source_identity"] != expected_root_identity
+                    ):
+                        raise ValueError(
+                            "Pinned source directory identity differs from its authorization"
+                        )
                     if any(existing[key] != value for key, value in selection.items()):
                         raise ValueError(
                             "A different file selection is already pinned to this job"
+                        )
+                    if (
+                        expected_hashes is not None
+                        and existing["source_hashes"] != expected_hashes
+                    ):
+                        raise ValueError(
+                            "Pinned files differ from the original acquisition digests"
                         )
                     if not committed:
                         _write_json(job, "request.json", existing)
@@ -320,6 +360,13 @@ class CaptureStore:
             source_hashes = {}
             with _absolute_directory(source_root) as source:
                 identity = _stamp(os.fstat(source))[:2]
+                if (
+                    expected_root_identity is not None
+                    and identity != expected_root_identity
+                ):
+                    raise ValueError(
+                        "Source directory identity changed before capture preparation"
+                    )
                 for item in sources:
                     with _source(source, item["path"]) as fd:
                         info = os.fstat(fd)
@@ -340,6 +387,13 @@ class CaptureStore:
                                 "Selected output changed during preparation"
                             )
                         source_hashes[item["name"]] = checksum
+                        if (
+                            expected_hashes is not None
+                            and checksum != expected_hashes[item["name"]]
+                        ):
+                            raise ValueError(
+                                "Original acquisition bytes changed before capture"
+                            )
                     with _source(source, item["path"]) as current:
                         if _stamp(os.fstat(current)) != stamps[item["name"]]:
                             raise ValueError(

@@ -7,6 +7,7 @@ import logging
 from .adapters import load_adapter
 from .client import PlatformClient
 from .config import GatewayConfig
+from .output_delivery import receipt_only
 from .runtime import GatewayRuntime
 from .state import StateStore
 
@@ -19,11 +20,16 @@ def main() -> None:
     config = GatewayConfig.from_env()
     state_store = StateStore(config.state_file)
     with state_store.exclusive():
-        adapter = load_adapter(config.adapter_name, config.adapter_config)
+        adapter = (
+            None
+            if receipt_only(state_store.load())
+            else load_adapter(config.adapter_name, config.adapter_config)
+        )
         client = PlatformClient(
             config.platform_url,
             config.gateway_token,
             timeout_seconds=config.request_timeout_seconds,
+            file_delivery_enabled=config.output_root is not None,
         )
         GatewayRuntime(config, client, adapter, state_store).run_forever()
 

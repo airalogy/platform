@@ -18,7 +18,13 @@ from app.services.research_instruments import (
 
 
 def exercise_managed_activation(
-    runtime, tmp_path, monkeypatch, *, file_outputs=False, cancel_before_finalize=False
+    runtime,
+    tmp_path,
+    monkeypatch,
+    *,
+    file_outputs=False,
+    cancel_before_finalize=False,
+    sdk_delivery=False,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -300,6 +306,13 @@ def exercise_managed_activation(
 
             created = await queue()
             job = created["instrument_job"]
+            if sdk_delivery:
+                from tests.instrument_output_acceptance import exercise_sdk_delivery
+
+                await exercise_sdk_delivery(
+                    runtime, local, root, snapshot["activation"], token, job
+                )
+                return
             if file_outputs:
                 old = await local.post(
                     "/instrument-gateway/v1/jobs/lease",

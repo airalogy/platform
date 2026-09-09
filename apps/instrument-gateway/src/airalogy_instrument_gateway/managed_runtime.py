@@ -16,8 +16,10 @@ from .config import GatewayConfig
 from .credentials import read_credentials, read_private_json, write_credentials
 from .installation_contract import descriptor_from_preview, receipt_summary
 from .installation_manager import _inputs, read_request
+from .output_contract import declarations
+from .output_delivery import authorize_source, bundle, receipt_only
 from .package_cli import read_selected
-from .package_contract import sha256
+from .package_contract import inspect_package, sha256
 from .package_installation import _contents, installation_preview, verify_installation
 from .runtime import GatewayHaltError, GatewayRuntime
 from .security import verify_job_signature
@@ -116,8 +118,12 @@ def validate_selection(response, request, credentials, descriptor, receipt):
 
 
 class ManagedClient(PlatformClient):
-    def __init__(self, credentials, activation):
-        super().__init__(credentials["platform_url"], credentials["gateway_token"])
+    def __init__(self, credentials, activation, *, file_delivery_enabled=False):
+        super().__init__(
+            credentials["platform_url"],
+            credentials["gateway_token"],
+            file_delivery_enabled=file_delivery_enabled,
+        )
         self.activation = activation
 
     def lease(self):
@@ -132,7 +138,7 @@ class ManagedClient(PlatformClient):
         return self._request(
             "POST",
             "/instrument-gateway/v1/jobs/lease",
-            payload={"activation": self.activation["pin"]},
+            payload={"activation": self.activation["pin"], **self.lease_capabilities()},
         )
 
     def start(self, job_id, lease_token, **parameters):
@@ -145,10 +151,11 @@ class ManagedClient(PlatformClient):
 
 
 class ManagedAdapter(InstrumentAdapter):
-    def __init__(self, driver, activation, verify_inputs):
+    def __init__(self, driver, activation, verify_inputs, *, file_contracts=None):
         self.driver = driver
         self.activation = activation
         self.verify_inputs = verify_inputs
+        self.file_contracts = file_contracts or {}
         self.commands = {
             (item["key"], item["version"]): item for item in activation["commands"]
         }
@@ -174,6 +181,15 @@ class ManagedAdapter(InstrumentAdapter):
             "safety_contract",
             "timeout_seconds",
         )
+        try:
+            receiving = bundle(job)
+            actual = receiving["plan"]["outputs"] if receiving else []
+            if actual != declarations(
+                self.file_contracts.get((job.command_key, job.command_version), [])
+            ):
+                return False
+        except (ValueError, TypeError, KeyError):
+            return False
         return all(
             job.raw["command"].get(key) == expected[key] for key in keys
         ) and self.driver.supports(job)
@@ -226,8 +242,22 @@ class ManagedAdapter(InstrumentAdapter):
         return self.driver.safe_stop(job, reason)
 
 
+def file_contracts(request):
+    manifest = inspect_package(read_selected(Path(request["package"])))["manifest"]
+    return {
+        (item["key"], item["version"]): item.get("outputs", [])
+        for item in manifest["commands"]
+    }
+
+
 def inspect_start(
-    request_path, credential_path, activation_id, *, recover=False, client=None
+    request_path,
+    credential_path,
+    activation_id,
+    *,
+    recover=False,
+    client=None,
+    output_root=None,
 ):
     request, credentials, inputs, descriptor, receipt = local_installation(
         request_path, credential_path
@@ -235,6 +265,7 @@ def inspect_start(
     activation_id = str(UUID(activation_id))
     store = StateStore(inputs["root"] / "state.json")
     saved = inputs["root"] / f"activation-{activation_id}.json"
+    state = None
     if recover:
         state = store.load()
         if (
@@ -245,6 +276,9 @@ def inspect_start(
                 "Recovery requires an unresolved job on this exact active version"
             )
         response = read_private_json(saved, max_bytes=4 * 1024 * 1024)
+        verify_job_signature(
+            state.envelope, state.signature, credentials["gateway_token"]
+        )
     else:
         store.assert_installable()
         client = client or PlatformClient(
@@ -254,10 +288,34 @@ def inspect_start(
     activation = validate_selection(response, request, credentials, descriptor, receipt)
     if activation["pin"]["id"] != activation_id:
         raise ValueError("The selected active version is no longer current")
+    if recover and state.envelope.get("activation") != activation["pin"]:
+        raise ValueError(
+            "Recovery job differs from the original installed active version"
+        )
     if not recover and datetime.fromisoformat(activation["expires_at"]) <= datetime.now(
         UTC
     ):
         raise ValueError("The active version has expired")
+    contracts = file_contracts(request)
+    needs_files = any(
+        contracts.get((item["key"], item["version"])) for item in activation["commands"]
+    )
+    receipt_recovery = recover and receipt_only(state)
+    source = None
+    if output_root is not None:
+        output_root = Path(output_root)
+        if receipt_recovery:
+            source = state.metadata.get("output_root")
+            if not isinstance(source, dict) or source.get("path") != str(output_root):
+                raise ValueError(
+                    "Recovery requires the originally authorized output root"
+                )
+        else:
+            source = authorize_source(output_root, store.path)
+    elif needs_files and not (state and state.phase == "completion_unresolved"):
+        raise ValueError(
+            "File-producing active commands require an explicit --output-root"
+        )
     preview = {
         "operation": "recover_managed_instrument"
         if recover
@@ -265,7 +323,8 @@ def inspect_start(
         "activation": activation,
         "local_destination": str(inputs["root"] / descriptor["installation_id"]),
         "journal": str(inputs["root"] / "state.json"),
-        "startup_may_initialize_equipment": True,
+        "startup_may_initialize_equipment": not receipt_recovery,
+        "output_root": source,
     }
     return (
         {**preview, "preview_digest": activation_digest(preview)},
@@ -283,13 +342,18 @@ def run_installed(
     confirm_digest,
     once=False,
     recover=False,
+    output_root=None,
 ):
     # Called only inside the verified installed SDK, under a clean interpreter.
     request = read_request(request_path)
     store = StateStore(Path(request["root"]) / "state.json")
     with store.exclusive():
         preview, response, local, saved = inspect_start(
-            request_path, credential_path, activation_id, recover=recover
+            request_path,
+            credential_path,
+            activation_id,
+            recover=recover,
+            output_root=output_root,
         )
         if preview["preview_digest"] != confirm_digest:
             raise ValueError("Local startup preview changed; inspect and confirm again")
@@ -315,6 +379,7 @@ def run_installed(
             adapter_name=descriptor["entry_point"],
             adapter_config=Path(request["config"]),
             state_file=store.path,
+            output_root=Path(output_root) if output_root is not None else None,
         )
 
         def verify_inputs():
@@ -325,10 +390,24 @@ def run_installed(
             ):
                 raise ValueError("Local installed bytes changed")
 
-        driver = load_adapter(config.adapter_name, config.adapter_config)
-        adapter = ManagedAdapter(driver, activation, verify_inputs)
+        adapter = None
+        if preview["startup_may_initialize_equipment"]:
+            driver = load_adapter(config.adapter_name, config.adapter_config)
+            adapter = ManagedAdapter(
+                driver,
+                activation,
+                verify_inputs,
+                file_contracts=file_contracts(request),
+            )
         runtime = GatewayRuntime(
-            config, ManagedClient(credentials, activation), adapter, store
+            config,
+            ManagedClient(
+                credentials,
+                activation,
+                file_delivery_enabled=config.output_root is not None,
+            ),
+            adapter,
+            store,
         )
         if recover:
             runtime.recover_pending()
@@ -346,6 +425,7 @@ def main():
     parser.add_argument("--confirm-digest", required=True)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--recover", action="store_true")
+    parser.add_argument("--output-root", type=Path)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     try:
@@ -356,6 +436,7 @@ def main():
             confirm_digest=args.confirm_digest,
             once=args.once,
             recover=args.recover,
+            output_root=args.output_root,
         )
     except (ValueError, TypeError, KeyError, OSError, RuntimeError) as error:
         print(f"Managed runtime stopped: {error}", file=sys.stderr)

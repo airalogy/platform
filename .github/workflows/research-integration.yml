@@ -2,10 +2,26 @@ name: Research Integration
 
 on:
   pull_request:
-    paths: ["apps/api/**", "tests/e2e/**", "package.json", ".github/workflows/research-integration.yml"]
+    paths:
+      [
+        "apps/api/**",
+        "apps/instrument-gateway/src/**",
+        "apps/instrument-gateway/tests/**",
+        "tests/e2e/**",
+        "package.json",
+        ".github/workflows/research-integration.yml",
+      ]
   push:
     branches: [main]
-    paths: ["apps/api/**", "tests/e2e/**", "package.json", ".github/workflows/research-integration.yml"]
+    paths:
+      [
+        "apps/api/**",
+        "apps/instrument-gateway/src/**",
+        "apps/instrument-gateway/tests/**",
+        "tests/e2e/**",
+        "package.json",
+        ".github/workflows/research-integration.yml",
+      ]
   workflow_dispatch:
 
 permissions:

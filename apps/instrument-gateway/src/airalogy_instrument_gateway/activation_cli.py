@@ -33,12 +33,17 @@ def main(argv=None):
     parser.add_argument("--startup-authorized", action="store_true")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--recover", action="store_true")
+    parser.add_argument("--output-root", type=Path)
     args = parser.parse_args(argv)
     try:
         request = read_request(args.request)
         with StateStore(Path(request["root"]) / "state.json").exclusive():
             preview, _response, local, _saved = inspect_start(
-                args.request, args.credentials, args.activation, recover=args.recover
+                args.request,
+                args.credentials,
+                args.activation,
+                recover=args.recover,
+                output_root=args.output_root,
             )
             if args.operation == "preview":
                 print(json.dumps(preview, ensure_ascii=True, indent=2))
@@ -64,6 +69,8 @@ def main(argv=None):
                 arguments.append("--once")
             if args.recover:
                 arguments.append("--recover")
+            if args.output_root is not None:
+                arguments.extend(["--output-root", str(args.output_root)])
             command = launch_command(local, arguments)
         # The child reacquires the same lock and verifies all bytes/authority
         # before driver import. A concurrent install/start in this gap fails

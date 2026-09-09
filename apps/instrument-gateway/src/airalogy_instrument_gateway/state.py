@@ -63,6 +63,14 @@ class StateStore:
     def __init__(self, path: Path):
         self.path = path
 
+    def _sync_directory(self):
+        if os.name == "posix":
+            fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+
     @contextmanager
     def exclusive(self):
         """Runtime and installation manager share one persistent lock inode.
@@ -141,6 +149,7 @@ class StateStore:
                 os.fsync(handle.fileno())
             os.replace(temporary_name, self.path)
             os.chmod(self.path, 0o600)
+            self._sync_directory()
         except Exception:
             try:
                 os.unlink(temporary_name)
@@ -153,3 +162,5 @@ class StateStore:
             self.path.unlink()
         except FileNotFoundError:
             pass
+        else:
+            self._sync_directory()

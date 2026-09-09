@@ -168,13 +168,13 @@ pnpm gateway:activation run \
 
 ### 尚未交付
 
-仪器原始文件回传、有边界的自主驱动生成、经授权的原生/视觉 Computer Use、受支持操作系统的服务安装仍需实现。真实软件探索、设备安全验收及第二台复用验证需要获授权试点。当前受管执行仅完成 POSIX/纯 Python 软件验证，不等于通用厂商驱动或硬件认证。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
+仪器文件审核界面、有边界的自主驱动生成、经授权的原生/视觉 Computer Use、受支持操作系统的服务安装仍需实现。真实软件探索、设备安全验收及第二台复用验证需要获授权试点。当前受管执行仅完成 POSIX/纯 Python 软件验证，不等于通用厂商驱动或硬件认证。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
 
 标准库契约以 `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` 为唯一源，生成 API 副本，使用 `pnpm gateway:contract:check` 检查一致性。CI 构建 SDK，并在固定镜像中测试合成驱动、对抗性隔离及超时清理，不将其视为设备认证。
 
 ### 本地原始文件接收基础
 
-SDK 新增 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。这是本地库，**尚未接通运行时自动上传**；库本身不发现适配器、不调用仪器方法、不请求网络、不提交 Record，也不创建 DataAsset。Platform 已另行提供下述接收契约。仅返回结构化结果的现有指令保留原流程，停止/结果核对入口仍保留。
+SDK 提供 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。本地接收库本身不发现适配器、不调用仪器方法、不请求网络、不提交 Record，也不创建 DataAsset；运行时现已将其私有快照接入下述接收契约。仅返回结构化结果的现有指令保留原流程，停止/结果核对入口仍保留。
 
 调用方提供规范任务 UUID、获批上下文摘要，以及准确的输出文件名、类型、大小上限和必需标记，再显式选择绝对本地目录及其相对文件。每项必须包含带时区的实际采集时间、上报的原始单位、转换规则说明和经独立审核的文件写入完成依据。转换规则只作为来源说明，不执行代码。文件名采用跨平台安全格式，拒绝仅大小写不同的冲突，不允许静默遗漏必需文件。本地路径只写入私有日志，不进入可传输的接收清单。
 
@@ -190,7 +190,7 @@ SDK 新增 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。
 
 手工/控制会话预览包含准确的 Project 保存位置、文件名与上限、项目成员可见性、草稿资产状态及待确认 Record 关联。Aira 提议必须确认。创建任务时固定获批指令、安装包、配置和设备来源；调用方不能把上传目标改到其他 Lab/Project。接收授权归属预约用户，须持续具备科研执行及 Knowledge 创建权限。
 
-只有支持文件交付的 Gateway 才能在领取时声明 `file_delivery_version: airalogy.instrument-output-plan.v1`；签名任务随后携带 `file_outputs.plan` 与 `file_outputs.destination`。未声明能力时，在领取或开始物理执行前拒绝；不能给旧客户端简单加此字段绕过限制。仓库内运行时尚未实现自动交付。
+只有支持文件交付的 Gateway 才能在领取时声明 `file_delivery_version: airalogy.instrument-output-plan.v1`；签名任务随后携带 `file_outputs.plan` 与 `file_outputs.destination`。未声明能力时，在领取或开始物理执行前拒绝；不能给旧客户端简单加此字段绕过限制。新版运行时仅在明确配置输出目录后声明此能力。
 
 物理完成后，`/complete` 返回 `files_pending: true`。Instrument Job 已完成，但 Action 保持等待，控制会话及依赖动作不前进。接收入口为 `/instrument-gateway/v1/jobs/{job_id}/outputs`：
 
@@ -203,4 +203,16 @@ SDK 新增 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。
 
 有权用户通过 `GET /research-instrument-jobs/{job_id}/outputs` 查看交付及关联状态。各文件的 `POST /{output_id}/associations/preview` 与确认接口 `/associations` 将预览摘要绑定同一 Project 中的准确 Record 版本/摘要、样品引用及上一关联身份。过期并发操作会冲突，重试不会恢复旧关联；读取时再次检查 Record 权限，受限关联不泄露内容。Record 数据保持原样。
 
-后续仍需接通 SDK 自动收集、字节固定的传输及重启恢复、友好的文件审核/Record 选择界面，并完成真实工作站验收。模拟 API/存储测试不等于完整仪器文件产品或实机验收。
+后续仍需接通友好的文件审核/Record 选择界面，并完成真实工作站验收。模拟 API/存储测试不等于完整仪器文件产品或实机验收。
+
+### 自动交付与恢复
+
+经独立审核的文件输出适配器，在受管启动的**预览和运行两条命令**中同时增加 `--output-root /absolute/owned/instrument-exports`。真实目录及其本地身份进入确认摘要；不能与 `state.json` 旁的私有 `instrument-output-outbox` 重叠。已安装命令的文件声明必须与签名接收计划完全一致。通用运行时支持 `AIRALOGY_GATEWAY_OUTPUT_ROOT`，但不能借此绕过受管安装授权。
+
+文件命令的 `execute` 返回 `InstrumentResult(result=<普通 JSON 对象>, files=[...])`。每个文件包含上述明确选择字段，以及经审核驱动在**采集过程中、返回前**对已关闭原件计算的小写 `sha256`。运行时不扫描目录猜测文件；可选文件须明确省略，必需文件不能省略。驱动仍负责确认真实完成及原始单位；摘要只证明字节身份，不证明科学有效性。不声明文件的命令仍可返回普通字典。
+
+运行时先持久化结果、原始摘要和文件选择，保持租约并复制原件，再确认物理执行完成。只向固定、鉴权的接收接口传输已落盘且重新校验的快照，不跟随服务端提供的 URL。接收位置、声明、确定性输出 ID、字节/来源及 ResearchFile/DataAsset ID 全部核对后才接受回执。文件仍为草稿科研资产，不自动编辑或提交 Record。
+
+完成、上传或最终确认回执丢失后，使用原活动版本、安装请求、凭证及相同 `--output-root`，通过 `--recover` 继续原交付。完整快照存在后不依赖原件；原目录消失或厂商软件复用同名文件也不会替换快照。该模式**不导入或初始化驱动**，不取得新授权、不领取新任务，仍核对原安装包/SDK/配置。接收权限撤销时保留本地待交付状态，只能在合法恢复权限后继续。无效完成元数据、未保存前原件变化、完成确认前授权已过期、接收快照期间收到停止请求，均须显式核对；删除恢复日志或重做实验不是恢复方法。
+
+只有平台确认所有文件及最终交付后，运行时才清除活动日志。本地原始快照即使已成功交付也不会自动删除，保留策略须另行审核。验证使用临时文件、真实二进制 HTTP、安装后独立进程，以及实际范围权限 API/数据库/对象存储；没有操作厂商软件、仪器或实验室私有文件。

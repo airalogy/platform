@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -24,6 +25,115 @@ from app.models.record import Record
 from app.models.research import ResearchAction
 from app.models.research_asset import DataAsset, DataAssetVersion
 from app.models.user import User
+
+
+async def exercise_sdk_delivery(runtime, local, root, activation, token, job):
+    """Real SDK state machine + actual ASGI/PG/Minio, synthetic acquisition only."""
+    from airalogy_instrument_gateway import (
+        GatewayConfig,
+        GatewayRuntime,
+        InstrumentResult,
+        StateStore,
+    )
+    from airalogy_instrument_gateway.client import GatewayAPIError, _file_body
+    from airalogy_instrument_gateway.installation_manager import read_request
+    from airalogy_instrument_gateway.managed_runtime import (
+        ManagedAdapter,
+        ManagedClient,
+        file_contracts,
+    )
+    from test_output_delivery import FileAdapter
+
+    loop = asyncio.get_running_loop()
+    paths = []
+    lose_upload = [True]
+
+    async def request(method, path, payload, lease_token, binary):
+        paths.append(path)
+        headers = {"X-Airalogy-Gateway-Token": token}
+        if lease_token:
+            headers["X-Airalogy-Instrument-Lease"] = lease_token
+        if binary:
+            stream, size, media_type, checksum = binary
+            content = b"".join(_file_body(stream, size, checksum))
+            headers.update(
+                {
+                    "Content-Length": str(size),
+                    "Content-Type": media_type,
+                    "X-Airalogy-Content-SHA256": checksum,
+                }
+            )
+        else:
+            content = json.dumps(payload or {}).encode()
+            headers["Content-Type"] = "application/json"
+        response = await local.request(method, path, headers=headers, content=content)
+        assert response.status_code == 200, response.text
+        if method == "PUT" and lose_upload[0]:
+            lose_upload[0] = False
+            raise GatewayAPIError("Synthetic connection lost after actual asset commit")
+        return response.json()
+
+    class Client(ManagedClient):
+        def _request(
+            self, method, path, *, payload=None, lease_token=None, binary=None
+        ):
+            return asyncio.run_coroutine_threadsafe(
+                request(method, path, payload, lease_token, binary), loop
+            ).result(timeout=30)
+
+    source = root / "runtime-source"
+    source.mkdir(mode=0o700)
+    store = StateStore(root / "state.json")
+    config = GatewayConfig(
+        platform_url="http://127.0.0.1",
+        gateway_token=token,
+        adapter_name="synthetic",
+        adapter_config=None,
+        state_file=store.path,
+        output_root=source,
+    )
+    driver = FileAdapter(source)
+    driver.identity = lambda: activation["target"]
+    driver.transform = lambda value: InstrumentResult(
+        {"value": 0.84, "unit": "synthetic_unit", "simulation_only": True},
+        [{**value.files[0], "name": "synthetic.csv"}],
+    )
+    adapter = ManagedAdapter(
+        driver,
+        activation,
+        lambda: None,
+        file_contracts=file_contracts(read_request(root / "private.json")),
+    )
+    client = Client(
+        {"platform_url": "http://127.0.0.1", "gateway_token": token},
+        activation,
+        file_delivery_enabled=True,
+    )
+    controller = GatewayRuntime(config, client, adapter, store)
+    try:
+        await asyncio.to_thread(controller.run_once)
+    except GatewayAPIError as error:
+        assert "actual asset commit" in str(error)
+    else:
+        raise AssertionError("Lost upload response was not exercised")
+    assert store.load().phase == "outputs_pending"
+    before = await runtime.json("GET", f"/research-instrument-jobs/{job['id']}/outputs")
+    assert (
+        before["state"] == "awaiting_files"
+        and before["items"][0]["state"] == "registered"
+    )
+    (source / "export/result.csv").unlink()
+    (source / "export").rmdir()
+    source.rmdir()
+    await asyncio.to_thread(GatewayRuntime(config, client, None, store).recover_pending)
+    after = await runtime.json("GET", f"/research-instrument-jobs/{job['id']}/outputs")
+    assert after["state"] == "delivered" and after["items"] == before["items"]
+    assert store.load() is None and driver.executions == 1 and driver.stops == 0
+    assert sum(path.endswith("/start") for path in paths) == 1
+    assert sum(path.endswith("/lease") for path in paths) == 1
+    async with sessionmanager.session() as db:
+        asset = await db.get(DataAsset, UUID(after["items"][0]["data_asset_id"]))
+        assert asset.status == "draft"
 
 
 async def exercise_outputs(

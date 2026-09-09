@@ -46,6 +46,41 @@ def package(*, physical_policy=False, file_outputs=False):
         source[: source.index("def create_adapter(config_path):")]
         + "def create_adapter(config_path):\n    return SyntheticReader()\n"
     )
+    if file_outputs:
+        source = (
+            source[: source.index("def create_adapter(config_path):")]
+            + """
+import hashlib
+import json
+from pathlib import Path
+from airalogy_instrument_gateway import InstrumentResult
+
+class SyntheticFileReader(SyntheticReader):
+    def __init__(self, root):
+        self.root = root
+
+    def execute(self, job, stop_event):
+        result = super().execute(job, stop_event)
+        content = b"sample,signal\\nsynthetic,0.84\\n"
+        (self.root / "synthetic.csv").write_bytes(content)
+        return InstrumentResult(result, [{
+            "name": "synthetic.csv", "path": "synthetic.csv",
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "write_complete_confirmed": True,
+            "captured_at": "2026-09-09T12:34:56+08:00",
+            "original_units": ["signal: synthetic_unit"], "conversion_rules": [],
+            "completion_reference": "Synthetic closed file, no equipment",
+        }])
+
+def create_adapter(config_path):
+    root = Path(json.loads(config_path.read_text())["output_root"])
+    marker = root.parent / "synthetic-driver-initialized"
+    # A second initialization would fail the recovery acceptance test.
+    with marker.open("x") as handle:
+        handle.write("Synthetic fixture; no equipment")
+    return SyntheticFileReader(root)
+"""
+        )
     payloads = {
         name: (EXAMPLE / name).read_bytes()
         for name in ("tests/test_reader.py", "licenses/LICENSE.txt")

@@ -10,6 +10,19 @@ from typing import Any
 INTERLOCK_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 
 
+@dataclass(frozen=True)
+class InstrumentResult:
+    """Completed acquisition and explicitly selected original files.
+
+    Each file carries the capture source fields plus its acquisition-time sha256.
+    The reviewed driver must observe completion and hash the closed original
+    before returning. A digest establishes byte identity, not scientific validity.
+    """
+
+    result: dict[str, Any]
+    files: list[dict[str, Any]]
+
+
 def _mapping(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"Instrument Job {name} must be an object")

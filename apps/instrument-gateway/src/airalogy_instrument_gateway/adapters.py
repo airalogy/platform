@@ -11,7 +11,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
-from .models import InstrumentJobEnvelope
+from .models import InstrumentJobEnvelope, InstrumentResult
 
 
 class InstrumentAdapter(ABC):
@@ -46,7 +46,9 @@ class InstrumentAdapter(ABC):
         return {}
 
     @abstractmethod
-    def execute(self, job: InstrumentJobEnvelope, stop_event: Event) -> dict[str, Any]:
+    def execute(
+        self, job: InstrumentJobEnvelope, stop_event: Event
+    ) -> dict[str, Any] | InstrumentResult:
         """Execute one command and return a JSON object result."""
 
     @abstractmethod
