@@ -96,7 +96,7 @@ def _snapshot(row, *, invalid_reason=None):
         "invalid_reason": invalid_reason,
         "hardware_authorized": False,
         "activation_performed": False,
-        "qualification_state": "not_qualified",
+        "execution_state": "inactive",
     }
 
 

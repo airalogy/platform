@@ -202,6 +202,11 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     )
     assert installation_revision.down_revision == "0050_instrument_adapter_packages"
     later_tables.update(installation_revision.TABLE_NAMES)
+    qualification_revision = import_module(
+        "migrations.versions.0052_instrument_qualifications"
+    )
+    assert qualification_revision.down_revision == "0051_instrument_device_bindings"
+    later_tables.update(qualification_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

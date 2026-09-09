@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add immutable, scope-limited Instrument qualification reports with independent observations, exact installation/command pins, expiry, permission-checked evidence references and preview-confirm revocation. The bilingual workbench separates simulation from real-equipment acceptance and reports invalidation without deleting history. Qualification records do not activate hardware; managed active-version execution remains pending.
+
 - Add independent, short-lived Instrument installation grants pinned to paired Gateway, equipment revision, reviewed package, SDK, configuration and Python identity. The local installation manager uses a separate credential, keeps the runtime journal locked and reconciles durable inactive receipts without driver execution. API permissions, exact private downloads, expiry/revocation, audit history and bilingual preview-confirm controls remain separate from hardware qualification and activation.
 
 - Add digest-bound, inactive POSIX installation snapshots for independently reviewed pure-Python Adapter Packages. Offline installation executes no driver or build scripts, preserves existing versions, shares the runtime journal lock and verifies retries against original wheel bytes. Local receipts do not grant Platform installation authorization, equipment qualification or activation.

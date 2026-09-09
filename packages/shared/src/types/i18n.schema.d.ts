@@ -1217,7 +1217,6 @@ declare namespace I18n {
         reservationKind: string
         inventoryContainer: string
         quantity: string
-        unit: string
         reservationExpiry: string
         bookingStarts: string
         bookingEnds: string
@@ -1288,14 +1287,6 @@ declare namespace I18n {
         humanWorkTitlePlaceholder: string
         humanWorkInstructionsPlaceholder: string
         completionCriteria: string
-        evidenceKind: string
-        evidenceKindValue: {
-          observation: string
-          measurement: string
-          analysis: string
-          citation: string
-          validation: string
-        }
         submissionFields: string
         submissionFieldsHint: string
         addField: string
@@ -1312,6 +1303,7 @@ declare namespace I18n {
         choiceOptions: string
         choiceOptionsPlaceholder: string
         choiceOptionsInvalid: string
+        unit: string
         humanFieldType: {
           text: string
           long_text: string
@@ -1755,6 +1747,7 @@ declare namespace I18n {
         assetKind: string
         externalUri: string
         mediaType: string
+        evidenceKind: string
         evidenceSource: string
         dataAsset: string
         actionOutput: string
@@ -1832,6 +1825,13 @@ declare namespace I18n {
           pending: string
           validated: string
           rejected: string
+        }
+        evidenceKindValue: {
+          observation: string
+          measurement: string
+          analysis: string
+          citation: string
+          validation: string
         }
         artifactType: {
           record: string
@@ -3222,6 +3222,71 @@ declare namespace I18n {
         installImpact: string
         installRevoke: string
         installRevokeImpact: string
+        qualification: {
+          title: string
+          hint: string
+          create: string
+          empty: string
+          retry: string
+          saved: string
+          scopeLabel: string
+          originLabel: string
+          scope: {
+            simulation: string
+            read_only: string
+            controlled: string
+          }
+          origin: {
+            manual_observation: string
+            independent_test: string
+            package_self_test: string
+          }
+          target: {
+            identity_reference: string
+            firmware: string
+            application: string
+            application_version: string
+            driver_version: string
+            os_version: string
+          }
+          assessedAt: string
+          expiresAt: string
+          commands: string
+          check: {
+            identity: string
+            output: string
+            completion: string
+            parameter_readback: string
+            safe_stop: string
+            manual_takeover: string
+            interlocks: string
+          }
+          method: string
+          expected: string
+          observed: string
+          passed: string
+          reviewed: string
+          authorized: string
+          impact: string
+          details: string
+          redacted: string
+          revoke: string
+          revokeHint: string
+          state: {
+            qualified: string
+            simulation_only: string
+            failed: string
+            expired: string
+            revoked: string
+            installation_not_current: string
+            installation_changed: string
+            gateway_identity_changed: string
+            equipment_changed: string
+            source_changed: string
+            source_unavailable: string
+            evidence_unavailable: string
+          }
+        }
         installState: {
           authorized: string
           installing: string

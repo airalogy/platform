@@ -592,7 +592,7 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
     from pathlib import Path
 
     from app.models.instrument_installation import InstrumentDeviceBinding
-    from app.models.knowledge import ResearchFileAccessAudit
+    from app.models.knowledge import ResearchFile, ResearchFileAccessAudit
     from app.models.research_execution import (
         ResearchInstrumentCommand,
         ResearchInstrumentGateway,
@@ -887,7 +887,143 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
                     "GET", f"/instrument-installations?gateway_id={gateway['id']}"
                 )
             )["items"][0]
-            assert binding["qualification_state"] == "not_qualified"
+            assert binding["execution_state"] == "inactive"
+            # Independent observations are immutable acceptance records, not commands.
+            from tests.test_instrument_qualifications import (
+                report as qualification_report,
+            )
+
+            qualification_url = url + "/qualifications"
+            qdraft = qualification_report()
+            qdraft["commands"][0]["key"] = "reader.measure"
+            qpreview = await runtime.json(
+                "POST", qualification_url + "/preview", qdraft
+            )
+            assert qpreview["pins"]["descriptor"] == public["descriptor"]
+            assert qpreview["hardware_authorized"] is False
+            await runtime.json(
+                "POST",
+                qualification_url,
+                {
+                    **qdraft,
+                    "reason": "Modified before first confirmation",
+                    "preview_digest": qpreview["preview_digest"],
+                },
+                status=409,
+            )
+            qualified = await runtime.json(
+                "POST",
+                qualification_url,
+                {**qdraft, "preview_digest": qpreview["preview_digest"]},
+            )
+            assert qualified["effective_state"] == "simulation_only"
+            assert (
+                not qualified["hardware_authorized"]
+                and not qualified["activation_performed"]
+            )
+            repeated = await runtime.json(
+                "POST",
+                qualification_url,
+                {**qdraft, "preview_digest": qpreview["preview_digest"]},
+            )
+            assert repeated["id"] == qualified["id"]
+            await runtime.json(
+                "POST",
+                qualification_url,
+                {
+                    **qdraft,
+                    "reason": "Changed after preview",
+                    "preview_digest": qpreview["preview_digest"],
+                },
+                status=409,
+            )
+            await runtime.json(
+                "POST",
+                qualification_url + "/preview",
+                {
+                    **qdraft,
+                    "scope": "read_only",
+                    "independent_review_confirmed": True,
+                    "physical_tests_authorized": True,
+                },
+                status=422,
+            )
+            failed_draft = qualification_report()
+            failed_draft["commands"][0]["key"] = "reader.measure"
+            failed_draft["commands"][0]["checks"][0]["passed"] = False
+            failed_qualification = await runtime.confirm(
+                qualification_url, failed_draft
+            )
+            assert failed_qualification["effective_state"] == "failed"
+            listed = await runtime.json("GET", qualification_url)
+            assert len(listed["items"]) == 2
+            # A separately scoped evidence reference never grants bytes/access.
+            async with sessionmanager.session() as db:
+                source_file = await db.get(
+                    ResearchFile, UUID(saved.json()["research_file_id"])
+                )
+                evidence_file = ResearchFile(
+                    blob_id=source_file.blob_id,
+                    filename="synthetic-acceptance-evidence.zip",
+                    scope_type="lab",
+                    lab_id=source_file.lab_id,
+                    visibility="lab",
+                    uploaded_by_user_id=source_file.uploaded_by_user_id,
+                )
+                db.add(evidence_file)
+                await db.flush()
+                evidence_id = str(evidence_file.id)
+                await db.commit()
+            evidence_draft = {
+                **qdraft,
+                "id": str(uuid4()),
+                "evidence_file_ids": [evidence_id],
+            }
+            await runtime.json(
+                "POST",
+                qualification_url + "/preview",
+                {**evidence_draft, "evidence_file_ids": [str(uuid4())]},
+                status=404,
+            )
+            evidence_record = await runtime.confirm(qualification_url, evidence_draft)
+            assert (
+                evidence_record["evidence_files"][0]["sha256"]
+                == public["descriptor"]["archive_digest"]
+            )
+            async with sessionmanager.session() as db:
+                evidence_file = await db.get(ResearchFile, UUID(evidence_id))
+                evidence_file.archived_at = datetime.now(UTC)
+                await db.commit()
+            evidence_list = await runtime.json("GET", qualification_url)
+            hidden = next(
+                item
+                for item in evidence_list["items"]
+                if item["id"] == evidence_record["id"]
+            )
+            assert (
+                hidden["effective_state"] == "evidence_unavailable"
+                and hidden["details_redacted"]
+            )
+            assert "report" not in hidden and "pins" not in hidden
+            await runtime.confirm(
+                qualification_url + f"/{evidence_record['id']}/revoke",
+                {"expected_revision": 1, "reason": "Withdraw after evidence archive"},
+            )
+            revoke_q_url = qualification_url + f"/{failed_qualification['id']}/revoke"
+            revoke_q = {
+                "expected_revision": 1,
+                "reason": "Keep failed synthetic evidence, withdraw acceptance",
+            }
+            revoke_q_preview = await runtime.json(
+                "POST", revoke_q_url + "/preview", revoke_q
+            )
+            for _ in range(2):
+                revoked = await runtime.json(
+                    "POST",
+                    revoke_q_url,
+                    {**revoke_q, "preview_digest": revoke_q_preview["preview_digest"]},
+                )
+                assert revoked["effective_state"] == "revoked"
             # A receipt must not reopen the old manual enablement path.
             await runtime.json(
                 "PUT",
@@ -984,6 +1120,10 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
             )
             try:
                 runtime.client.headers["Auth-Token"] = auth["token"]
+                await runtime.json("GET", qualification_url, status=403)
+                await runtime.json(
+                    "POST", qualification_url + "/preview", qdraft, status=403
+                )
                 await runtime.json("GET", url + "/history", status=403)
                 await runtime.json(
                     "GET",
@@ -1011,6 +1151,12 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
                     "reason": "Retire synthetic installation",
                 },
             )
+            invalidated = await runtime.json("GET", qualification_url)
+            saved_qualification = next(
+                item for item in invalidated["items"] if item["id"] == qualified["id"]
+            )
+            assert saved_qualification["effective_state"] == "installation_not_current"
+            assert saved_qualification["report"] == qualified["report"]
             async with sessionmanager.session() as db:
                 # Revocation/identity rotation must not remove a claimed-history gate.
                 assert await managed_execution_block_reason(db, UUID(gateway["id"]))

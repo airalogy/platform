@@ -4,6 +4,7 @@ import type { AdapterRelease } from "@/service/api/instrument-packages"
 import { confirmInstallation, confirmInstallationRevocation, fetchInstallationHistory, fetchInstallations, previewInstallation, previewInstallationRevocation } from "@/service/api/instrument-installations"
 import { fetchAdapterPackages } from "@/service/api/instrument-packages"
 import { $t } from "@airalogy/shared/locales"
+import InstrumentQualificationsPanel from "./instrument-qualifications-panel.vue"
 
 const props = defineProps<{ labId: string, gatewayId: string, equipmentOptions: Array<{ label: string, value: string }> }>()
 const busy = ref(false)
@@ -198,6 +199,7 @@ onMounted(() => guarded(() => refresh()))
         <p v-for="entry in history" :key="entry.revision" class="mb-2 break-words">
           #{{ entry.revision }} · {{ $t(`page.resourceLibrary.installEvent.${entry.action}`) }} · {{ new Date(entry.created_at).toLocaleString() }}<br>{{ entry.reason }}
         </p>
+        <instrument-qualifications-panel :key="selected.id" :binding-id="selected.id" :installed="selected.state === 'installed'" />
         <template v-if="selected.state !== 'revoked'">
           <n-form-item :label="$t('page.resourceLibrary.changeReason')" required>
             <n-input v-model:value="revokeReason" :disabled="busy || !!revokeDigest" :maxlength="2000" type="textarea" />
