@@ -593,6 +593,12 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
 
     from app.models.instrument_installation import InstrumentDeviceBinding
     from app.models.knowledge import ResearchFileAccessAudit
+    from app.models.research_execution import (
+        ResearchInstrumentCommand,
+        ResearchInstrumentGateway,
+    )
+    from app.services.instrument_installations import managed_execution_block_reason
+    from app.services.research_capabilities import instrument_command_capability_rows
     from app.services.research_instruments import (
         gateway_token_digest,
         generate_gateway_token,
@@ -882,6 +888,60 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
                 )
             )["items"][0]
             assert binding["qualification_state"] == "not_qualified"
+            # A receipt must not reopen the old manual enablement path.
+            await runtime.json(
+                "PUT",
+                f"/research-instrument-gateways/{gateway['id']}",
+                {**update, "preview_digest": update_preview["preview_digest"]},
+                status=409,
+            )
+            alternate = await runtime.confirm(
+                "/research-instrument-gateways",
+                {
+                    "lab_id": lab,
+                    "name": "Alternate synthetic installation " + uuid4().hex,
+                    "enabled": True,
+                },
+            )
+            command_draft = {
+                "gateway_id": alternate["gateway"]["id"],
+                "resource_id": resource["id"],
+                "command_key": "synthetic.read",
+                "command_version": "1.0.0",
+                "name": "Synthetic read",
+                "timeout_seconds": 30,
+                "input_schema": {"type": "object", "additionalProperties": False},
+                "output_schema": {"type": "object", "additionalProperties": False},
+                "risk": "read_only",
+                "device_confirmation_required": False,
+                "enabled": True,
+            }
+            await runtime.json(
+                "POST",
+                "/research-instrument-gateways/commands/preview",
+                command_draft,
+                status=409,
+            )
+            # Disabled definitions may still be prepared for later qualification.
+            disabled = await runtime.confirm(
+                "/research-instrument-gateways/commands",
+                {**command_draft, "enabled": False},
+            )
+            enable_command = {
+                key: value
+                for key, value in command_draft.items()
+                if key
+                not in {"gateway_id", "resource_id", "command_key", "command_version"}
+            }
+            enable_command.update(
+                expected_revision=disabled["revision"], reason="Must not bypass"
+            )
+            await runtime.json(
+                "POST",
+                f"/research-instrument-gateways/commands/{disabled['id']}/preview",
+                enable_command,
+                status=409,
+            )
             receipt = binding["receipt"]
             assert str(root) not in json.dumps(receipt)
             assert (
@@ -951,6 +1011,43 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
                     "reason": "Retire synthetic installation",
                 },
             )
+            async with sessionmanager.session() as db:
+                # Revocation/identity rotation must not remove a claimed-history gate.
+                assert await managed_execution_block_reason(db, UUID(gateway["id"]))
+                assert await managed_execution_block_reason(
+                    db, UUID(alternate["gateway"]["id"]), UUID(resource["id"])
+                )
+                assert (
+                    await managed_execution_block_reason(
+                        db, UUID(alternate["gateway"]["id"]), uuid4()
+                    )
+                    is None
+                )
+                station = await db.get(ResearchInstrumentGateway, UUID(gateway["id"]))
+                # Fault injection only: even an older enabled DB row cannot lease.
+                station.enabled = True
+                manual_command = await db.get(
+                    ResearchInstrumentCommand, UUID(disabled["id"])
+                )
+                manual_command.enabled = True
+                await db.flush()
+                assert all(
+                    str(command.id) != disabled["id"]
+                    for command, _, _ in await instrument_command_capability_rows(
+                        db, lab_id=UUID(lab)
+                    )
+                )
+                await db.commit()
+            guarded_lease = await local.post(
+                "/instrument-gateway/v1/jobs/lease",
+                headers={"X-Airalogy-Gateway-Token": runtime_token},
+            )
+            assert guarded_lease.status_code == 409, guarded_lease.text
+            assert "qualification" in guarded_lease.text
+            async with sessionmanager.session() as db:
+                station = await db.get(ResearchInstrumentGateway, UUID(gateway["id"]))
+                station.enabled = False
+                await db.commit()
             assert (
                 await local.post(url + "/receipt", json={"receipt": receipt})
             ).status_code == 409

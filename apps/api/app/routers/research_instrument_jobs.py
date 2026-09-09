@@ -42,6 +42,10 @@ from app.models.resource import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
+from app.services.instrument_installations import (
+    assert_manual_execution_allowed,
+    managed_execution_block_reason,
+)
 from app.services.model_usage import create_usage_context
 from app.services.research_budget import reached_operational_limit
 from app.services.research_executor_bindings import (
@@ -457,6 +461,7 @@ async def _command_context(
     )
     if not access.allows("equipment.book"):
         raise HTTPException(status_code=403, detail="Equipment execution access denied")
+    await assert_manual_execution_allowed(db_session, gateway.id, resource.id)
     booking_statement = select(EquipmentBooking).where(
         EquipmentBooking.id == booking_id
     )
@@ -1918,6 +1923,7 @@ async def lease_instrument_job(
     gateway = await _authenticate_gateway(db_session, gateway_token)
     if not gateway.enabled:
         raise HTTPException(status_code=403, detail="Instrument Gateway is disabled")
+    await assert_manual_execution_allowed(db_session, gateway.id)
     now = utcnow()
     active_jobs = list(
         (
@@ -2010,6 +2016,10 @@ async def lease_instrument_job(
         ResearchInstrumentControlStatus.RUNNING.value,
     }:
         invalid_reason = "Instrument Control Session is not executable"
+    if invalid_reason is None:
+        invalid_reason = await managed_execution_block_reason(
+            db_session, gateway.id, job.resource_id
+        )
     if task is not None and task.status != ResearchTaskStatus.ACTIVE.value:
         await db_session.commit()
         return {"job": None, "retry_after_seconds": 15}
@@ -2150,6 +2160,7 @@ async def start_instrument_job(
         raise HTTPException(
             status_code=409, detail="Gateway disabled or equipment has unresolved work"
         )
+    await assert_manual_execution_allowed(db_session, gateway.id, job.resource_id)
     booking = await db_session.get(EquipmentBooking, job.equipment_booking_id)
     resource = await db_session.get(Resource, job.resource_id)
     now = utcnow()

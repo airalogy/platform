@@ -35,6 +35,7 @@ from app.models.resource import (
     ResourceStatus,
 )
 from app.services.access_control import resolve_resource_access
+from app.services.instrument_installations import managed_execution_block_reason
 from app.services.research_executor_bindings import (
     enforce_environment_binding_action_limit,
 )
@@ -337,6 +338,9 @@ async def queue_control_step(
         raise ValueError("Instrument Control command is disabled")
     if not gateway.enabled or gateway.revoked_at is not None:
         raise ValueError("Instrument Control Gateway is disabled")
+    blocked = await managed_execution_block_reason(db_session, gateway.id, resource.id)
+    if blocked:
+        raise ValueError(blocked)
     if (
         resource.archived_at is not None
         or resource.status != ResourceStatus.ACTIVE.value

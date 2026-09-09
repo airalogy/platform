@@ -27,6 +27,7 @@ from app.models.resource import (
     ResourceType,
     ResourceTypeRevision,
 )
+from app.services.instrument_installations import managed_instrument_scope
 from app.services.research_compute import (
     compute_environment_snapshot,
     latest_compute_environment_rows,
@@ -255,6 +256,10 @@ async def instrument_command_capability_rows(
                     ResearchInstrumentCommand.archived_at.is_(None),
                     ResearchInstrumentGateway.enabled.is_(True),
                     ResearchInstrumentGateway.revoked_at.is_(None),
+                    ~managed_instrument_scope(
+                        ResearchInstrumentGateway.id,
+                        ResearchInstrumentCommand.resource_id,
+                    ),
                     Resource.archived_at.is_(None),
                     Resource.status == ResourceStatus.ACTIVE.value,
                     Resource.current_revision_id

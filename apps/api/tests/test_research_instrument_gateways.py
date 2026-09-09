@@ -195,6 +195,20 @@ def test_instrument_gateway_management_routes_are_registered():
     ) in routes
 
 
+def test_command_preview_is_not_shadowed_by_gateway_id_route():
+    from starlette.routing import Match
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/research-instrument-gateways/commands/preview",
+    }
+    matched = next(
+        route for route in app.routes if route.matches(scope)[0] == Match.FULL
+    )
+    assert matched.name == "preview_instrument_command"
+
+
 def test_instrument_command_projects_an_exact_gateway_executor_capability():
     gateway_id = uuid4()
     resource_id = uuid4()

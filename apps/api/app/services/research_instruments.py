@@ -37,6 +37,7 @@ from app.models.resource import (
     ResourceStatus,
 )
 from app.services.access_control import resolve_resource_access
+from app.services.instrument_installations import managed_instrument_scope
 
 COMMAND_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,127}$")
 INTERLOCK_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -356,6 +357,10 @@ async def available_instrument_command_options(
                     ResearchInstrumentCommand.archived_at.is_(None),
                     ResearchInstrumentGateway.enabled.is_(True),
                     ResearchInstrumentGateway.revoked_at.is_(None),
+                    ~managed_instrument_scope(
+                        ResearchInstrumentGateway.id,
+                        ResearchInstrumentCommand.resource_id,
+                    ),
                 )
                 .order_by(
                     ResearchInstrumentCommand.name,

@@ -135,6 +135,9 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Prevent claimed Instrument installations from bypassing qualification through legacy Gateway/command enablement, another Gateway for the same equipment, task queueing or runtime lease/start endpoints. Revocation does not restore manual execution; unclaimed cancellation/expiry remains recoverable. Preserve stop/result reconciliation and explicitly disclose that managed qualification/activation is not yet available.
+- Fix Instrument command creation previews being shadowed by the Gateway-ID route, with actual API and route-matching regression coverage.
+
 - Keep started Instrument Jobs in `stop_requested` when failure receipts do not explicitly confirm a safe stop. Serialize Gateway leases with credential changes and serialize equipment delivery across Gateways, so expired bookings or a different controller cannot bypass unresolved physical work; local journals clear only after a terminal receipt.
 
 - Made release metadata tests follow migration ancestry instead of a stale hard-coded database revision, added competing-head and current-repository coverage, and required these checks before pushing migration, deployment or release changes.

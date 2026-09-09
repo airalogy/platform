@@ -116,8 +116,16 @@ The immutable local snapshot and receipt are durable before delivery. On a lost 
 
 Refresh the UI to see **Installed, not qualified** and its audit history. Explicit revocation is preview/revision guarded and remains available after source withdrawal. It removes future installation access, not already downloaded files; it does not uninstall, stop equipment or certify a safe stop. Review such local copies separately. No active version, command registration, booking, Executor Binding or hardware permission is created by this workflow.
 
+### Execution boundary after installation
+
+A pending installation blocks manual execution for both its Gateway and equipment. **Claiming** the grant opts those targets into managed qualification: an installed receipt, grant revocation, credential rotation or a different Gateway must not restore the old manual-command path. The API enforces this at manual Gateway/command enablement, available-command lookup, task creation, control-step queueing, lease delivery and start. Disabled command definitions may still be prepared. Stop, failure and result receipts remain accessible for safe reconciliation; blocking new execution is not proof of a safe physical stop.
+
+Cancelling or expiring a grant **before claim** leaves no permanent execution restriction, provided no other pending/claimed installation covers the targets. Already claimed history is retained; do not delete bindings or downgrade away the enforcement to bypass it. Existing unmanaged equipment keeps its manual path.
+
+The managed qualification/active-version runtime is **not yet delivered**. Consequently, this installation workflow currently prepares inactive software only; it is not a production-control enablement workflow. The confirmation screen states this limitation before authorization. Software acceptance uses synthetic equipment and tests that claimed/revoked installations cannot be re-enabled through legacy endpoints.
+
 ### Not yet delivered
 
-Independent equipment qualification, enforced active-version switching/rollback and instrument-file return still need their governed workflows. Installation grants do not yet replace the existing manually configured runtime or command-registration path. Autonomous driver generation and native/visual Computer Use also remain open. Real software exploration and hardware acceptance need an authorized pilot. See the [integration support matrix](./instrument-integration.md#support-matrix).
+Independent equipment qualification, enforced active-version switching/rollback and instrument-file return still need their governed workflows. Claimed managed installations are blocked from the legacy manual execution path until that lifecycle is implemented and accepted; they do not yet have an enabled replacement runtime. Autonomous driver generation and native/visual Computer Use also remain open. Real software exploration and hardware acceptance need an authorized pilot. See the [integration support matrix](./instrument-integration.md#support-matrix).
 
 The standard-library contract is authored in `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` and generated into the API. Run `pnpm gateway:contract:check` to check parity. CI builds the SDK and runs the synthetic, adversarial isolation and timeout tests with an exact container image; this does not certify equipment.

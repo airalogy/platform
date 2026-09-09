@@ -27,7 +27,10 @@ from app.models.resource import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
-from app.services.instrument_installations import assert_no_pending_installation
+from app.services.instrument_installations import (
+    assert_manual_execution_allowed,
+    assert_no_pending_installation,
+)
 from app.services.research_instruments import (
     COMMAND_KEY_RE,
     command_snapshot,
@@ -467,7 +470,7 @@ async def create_instrument_gateway(
     return {"gateway": gateway_snapshot(gateway), "credential": credential}
 
 
-@router.post("/{gateway_id}/preview")
+@router.post("/{gateway_id:uuid}/preview")
 async def preview_instrument_gateway_update(
     gateway_id: UUID,
     params: GatewayUpdateDraft,
@@ -520,6 +523,7 @@ async def update_instrument_gateway(
     gateway.description = params.description
     if params.enabled:
         await assert_no_pending_installation(db_session, gateway.id)
+        await assert_manual_execution_allowed(db_session, gateway.id)
     gateway.enabled = params.enabled
     gateway.revision += 1
     gateway.updated_by_user_id = current_user.id
@@ -660,6 +664,8 @@ async def preview_instrument_command(
         resource_id=params.resource_id,
     )
     command = _instrument_command(params, resource_revision=revision)
+    if params.enabled:
+        await assert_manual_execution_allowed(db_session, gateway.id, resource.id)
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
@@ -697,6 +703,10 @@ async def create_instrument_command(
     if canonical_digest(command_data) != params.preview_digest:
         raise HTTPException(
             status_code=409, detail="Instrument command preview changed"
+        )
+    if params.enabled:
+        await assert_manual_execution_allowed(
+            db_session, gateway.id, params.resource_id
         )
     if await ResearchInstrumentCommand.exists(
         db_session,
@@ -781,6 +791,10 @@ async def preview_instrument_command_update(
     if command.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Instrument command changed")
     command_data = _instrument_update_command(command, params)
+    if params.enabled:
+        await assert_manual_execution_allowed(
+            db_session, gateway.id, command.resource_id
+        )
     return {
         "preview_digest": canonical_digest(command_data),
         "command": command_data,
@@ -812,6 +826,10 @@ async def update_instrument_command(
             status_code=409, detail="Instrument command preview changed"
         )
     command.name = params.name
+    if params.enabled:
+        await assert_manual_execution_allowed(
+            db_session, gateway.id, command.resource_id
+        )
     command.description = params.description
     command.input_schema = params.input_schema
     command.output_schema = params.output_schema

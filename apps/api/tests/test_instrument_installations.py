@@ -18,6 +18,68 @@ from app.services.instrument_installation_contract import (
     validate_descriptor,
     validate_receipt,
 )
+from app.services.instrument_installations import (
+    assert_manual_execution_allowed,
+    managed_instrument_scope,
+)
+
+
+def test_managed_execution_query_keeps_claimed_revocations_and_both_scopes():
+    from sqlalchemy.dialects import postgresql
+
+    gateway, resource = uuid4(), uuid4()
+    sql = str(
+        managed_instrument_scope(gateway, resource).compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert str(gateway) in sql and str(resource) in sql
+    assert "started_at IS NOT NULL" in sql
+    assert "state IN ('installing', 'installed')" in sql
+    assert "expires_at >" in sql
+
+
+@pytest.mark.parametrize("managed", [True, False])
+def test_only_unmanaged_execution_passes(managed):
+    db = SimpleNamespace(scalar=AsyncMock(return_value=managed))
+    if managed:
+        with pytest.raises(HTTPException, match="qualification"):
+            asyncio.run(assert_manual_execution_allowed(db, uuid4(), uuid4()))
+    else:
+        asyncio.run(assert_manual_execution_allowed(db, uuid4(), uuid4()))
+
+
+@pytest.mark.parametrize("operation", ["lease", "start"])
+def test_runtime_cannot_bypass_managed_qualification(monkeypatch, operation):
+    from app.routers import research_instrument_jobs as jobs
+
+    gateway = SimpleNamespace(id=uuid4(), enabled=True)
+    db = SimpleNamespace(scalar=AsyncMock(return_value=True), commit=AsyncMock())
+    monkeypatch.setattr(jobs, "_authenticate_gateway", AsyncMock(return_value=gateway))
+    if operation == "lease":
+        call = jobs.lease_instrument_job("runtime-credential", db)
+    else:
+        job = SimpleNamespace(status="leased", resource_id=uuid4())
+        monkeypatch.setattr(
+            jobs,
+            "_gateway_job_context",
+            AsyncMock(
+                return_value=(
+                    job,
+                    SimpleNamespace(status="queued"),
+                    SimpleNamespace(status="waiting_for_instrument"),
+                    SimpleNamespace(status="active"),
+                )
+            ),
+        )
+        monkeypatch.setattr(jobs, "_ensure_live_lease", lambda _: None)
+        monkeypatch.setattr(jobs, "_lock_idle_equipment", AsyncMock(return_value=True))
+        call = jobs.start_instrument_job(
+            uuid4(), jobs.GatewayStart(), "runtime", "lease", db
+        )
+    with pytest.raises(HTTPException, match="qualification"):
+        asyncio.run(call)
+    db.commit.assert_not_awaited()
 
 
 def descriptor():

@@ -69,7 +69,8 @@ test("installation UI confirms exact identity, rejects private files and preserv
     await modal.getByRole("checkbox").check()
     await modal.getByRole("button", { name: "Preview", exact: true }).click()
     await expect(modal).toContainText(publicRequest.descriptor.archive_digest)
-    await expect(modal).toContainText("It cannot issue instrument commands or enable hardware")
+    await expect(modal).toContainText("revoking the grant does not restore manual execution")
+    await expect(modal).toContainText("That activation stage is not yet available")
     expect((await modal.boundingBox())!.width).toBeLessThanOrEqual(358)
     await modal.getByRole("button", { name: "Confirm", exact: true }).click()
     await expect(panel).toContainText("Authorized, awaiting local claim")
@@ -85,7 +86,16 @@ test("installation UI confirms exact identity, rejects private files and preserv
     await expect(panel).toContainText("Authorization revoked")
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     const gateways = await call(`/research-instrument-gateways?lab_id=${fixtures.lab.id}`, undefined, "GET")
-    expect(gateways.items.find((item: { id: string }) => item.id === gateway.id).enabled).toBe(false)
+    const current = gateways.items.find((item: { id: string }) => item.id === gateway.id)
+    expect(current.enabled).toBe(false)
+    // Cancellation before local claim does not permanently opt into managed execution.
+    const update = { expected_revision: current.revision, name: current.name, description: current.description, enabled: true, reason: "Unclaimed synthetic grant was cancelled" }
+    const enabledPreview = await call(`/research-instrument-gateways/${current.id}/preview`, update)
+    const enabled = await call(`/research-instrument-gateways/${current.id}`, { ...update, preview_digest: enabledPreview.preview_digest }, "PUT")
+    expect(enabled.enabled).toBe(true)
+    const stop = { ...update, expected_revision: enabled.revision, enabled: false }
+    const stopPreview = await call(`/research-instrument-gateways/${current.id}/preview`, stop)
+    await call(`/research-instrument-gateways/${current.id}`, { ...stop, preview_digest: stopPreview.preview_digest }, "PUT")
   }
   finally {
     await rm(directory, { recursive: true, force: true })

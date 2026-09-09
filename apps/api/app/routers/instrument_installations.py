@@ -237,6 +237,7 @@ async def _preview(db, user, params, *, lock=False):
             )
     command = {
         "operation": "authorize_instrument_installation",
+        "execution_policy": "managed_qualification_required",
         "actor_user_id": str(user.id),
         "request": request,
         "resource_id": str(equipment.id),
