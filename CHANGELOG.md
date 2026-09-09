@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Guard Instrument Gateway startup and adapter installation with an exclusive local process lock. Preserve unconfirmed physical stops across restarts, and require a confirmed safe stop after execution exceptions before clearing failure receipts or allowing updates.
+
 - Add single-use, ten-minute Instrument Gateway pairing with local credential generation, two-sided identity fingerprint review, preview-bound administrator confirmation, cancellation, recovery/status and scoped audit records. POSIX private credential files bind the runtime to the paired Platform; pairing never enables the Gateway or authorizes hardware. Windows ACL enrollment, package installation and equipment qualification remain separate work.
 - Add a Lab/equipment-scoped GUI integration rehearsal workbench with manual JSON import/export, optional consent-gated Aira drafts, deterministic preview/confirmation, revision audit snapshots and an offline rehearsal CLI. Include a browser-driven synthetic reader and fail-closed observation checks. Rehearsal never installs drivers, opens real equipment software or grants physical control; native/visual Computer Use, installation and hardware qualification remain open in RFC #5.
 

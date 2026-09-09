@@ -36,6 +36,34 @@ class GatewayRuntime:
         self.adapter = adapter
         self.state_store = state_store
         self.shutdown_event = threading.Event()
+        self._active_worker: threading.Thread | None = None
+        self._stop_worker: threading.Thread | None = None
+
+    def _confirm_safe_stop(self, job, reason):
+        """A stalled vendor stop method must not erase the uncertain state."""
+        outcome = queue.Queue(maxsize=1)
+
+        def stop():
+            try:
+                self.adapter.safe_stop(job, reason)
+                outcome.put(None)
+            except Exception as error:  # noqa: BLE001 - adapter isolation boundary
+                outcome.put(error)
+
+        self._stop_worker = threading.Thread(
+            target=stop, daemon=True, name=f"instrument-stop-{job.job_id}"
+        )
+        self._stop_worker.start()
+        self._stop_worker.join(self.config.stop_timeout_seconds)
+        if self._stop_worker.is_alive():
+            raise GatewayHaltError(
+                "Adapter safe-stop exceeded its local timeout; physical stop remains unconfirmed"
+            )
+        error = outcome.get_nowait()
+        if error is not None:
+            raise GatewayHaltError(
+                f"Adapter could not confirm physical stop: {error}"
+            ) from error
 
     def request_shutdown(self) -> None:
         self.shutdown_event.set()
@@ -67,6 +95,18 @@ class GatewayRuntime:
     def _report_failure(
         self, job: InstrumentJobEnvelope, state: GatewayState, error: str
     ) -> None:
+        if state.phase == "leased":
+            state.metadata["safe_for_new_work"] = True
+        if not state.metadata.get("safe_for_new_work"):
+            # An exception does not establish that a physical process has stopped.
+            self._save_pending(state, "stop_unconfirmed", error=error)
+            try:
+                self._confirm_safe_stop(job, error)
+            except Exception as stop_error:
+                raise GatewayHaltError(
+                    f"Execution failed and safe stop is unconfirmed: {stop_error}"
+                ) from stop_error
+            state.metadata["safe_for_new_work"] = True
         self._save_pending(state, "failure_pending", error=error)
         self.client.fail(job.job_id, state.lease_token, error)
         self.state_store.clear()
@@ -81,10 +121,10 @@ class GatewayRuntime:
     ) -> None:
         stop_event.set()
         try:
-            self.adapter.safe_stop(job, reason)
+            self._confirm_safe_stop(job, reason)
         except Exception as error:  # noqa: BLE001 - adapter is an isolation boundary
             message = f"Local safe-stop failed: {error}"
-            self._save_pending(state, "failure_pending", error=message)
+            self._save_pending(state, "stop_unconfirmed", error=message)
             try:
                 self.client.fail(job.job_id, state.lease_token, message)
             finally:
@@ -92,7 +132,7 @@ class GatewayRuntime:
         worker.join(self.config.stop_timeout_seconds)
         if worker.is_alive():
             message = "Adapter did not stop within the configured local stop timeout"
-            self._save_pending(state, "failure_pending", error=message)
+            self._save_pending(state, "stop_unconfirmed", error=message)
             try:
                 self.client.fail(job.job_id, state.lease_token, message)
             finally:
@@ -102,6 +142,13 @@ class GatewayRuntime:
         self.state_store.clear()
 
     def recover_pending(self) -> bool:
+        if any(
+            worker is not None and worker.is_alive()
+            for worker in [self._active_worker, self._stop_worker]
+        ):
+            raise GatewayHaltError(
+                "An earlier adapter worker is still alive; do not reconcile or accept new work"
+            )
         state = self.state_store.load()
         if state is None:
             return False
@@ -115,7 +162,16 @@ class GatewayRuntime:
             self.client.complete(job.job_id, state.lease_token, state.result)
             self.state_store.clear()
             return True
-        if state.phase == "failure_pending" and state.error:
+        if state.phase in {"failure_pending", "stop_unconfirmed"} and state.error:
+            if not state.metadata.get("safe_for_new_work"):
+                try:
+                    self._confirm_safe_stop(job, state.error)
+                except Exception as error:
+                    raise GatewayHaltError(
+                        f"Recovery safe-stop remains unconfirmed: {error}"
+                    ) from error
+                state.metadata["safe_for_new_work"] = True
+                self._save_pending(state, "failure_pending", error=state.error)
             self.client.fail(job.job_id, state.lease_token, state.error)
             self.state_store.clear()
             return True
@@ -133,7 +189,7 @@ class GatewayRuntime:
 
         reason = "Gateway restarted while a physical operation might still be active"
         try:
-            self.adapter.safe_stop(job, reason)
+            self._confirm_safe_stop(job, reason)
         except Exception as error:
             raise GatewayHaltError(
                 f"Restart recovery safe-stop failed: {error}"
@@ -227,6 +283,7 @@ class GatewayRuntime:
             name=f"instrument-job-{job.job_id}",
             daemon=True,
         )
+        self._active_worker = worker
         worker.start()
         while True:
             try:

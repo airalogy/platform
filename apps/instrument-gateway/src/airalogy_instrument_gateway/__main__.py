@@ -17,18 +17,15 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     config = GatewayConfig.from_env()
-    adapter = load_adapter(config.adapter_name, config.adapter_config)
-    client = PlatformClient(
-        config.platform_url,
-        config.gateway_token,
-        timeout_seconds=config.request_timeout_seconds,
-    )
-    GatewayRuntime(
-        config,
-        client,
-        adapter,
-        StateStore(config.state_file),
-    ).run_forever()
+    state_store = StateStore(config.state_file)
+    with state_store.exclusive():
+        adapter = load_adapter(config.adapter_name, config.adapter_config)
+        client = PlatformClient(
+            config.platform_url,
+            config.gateway_token,
+            timeout_seconds=config.request_timeout_seconds,
+        )
+        GatewayRuntime(config, client, adapter, state_store).run_forever()
 
 
 if __name__ == "__main__":
