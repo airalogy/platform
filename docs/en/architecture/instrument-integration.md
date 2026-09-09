@@ -89,7 +89,7 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | Enforced active-version selection, rollback and local target drift checks | Implemented, POSIX/pure-Python; reviewed driver observations, not hardware attestation |
 | Prevent manual execution bypass after installation claim | Implemented; exact managed grant required, stop/result reconciliation preserved |
 | Local raw-file snapshot, provenance and crash recovery | Implemented as a POSIX local SDK library; not connected to runtime uploads |
-| Instrument scoped upload and draft DataAsset/Record mapping | Not implemented; managed file-output commands fail closed until connected |
+| Instrument scoped upload and draft DataAsset/Record mapping | Receiving and association APIs implemented; automatic SDK transfer and dedicated review UI pending. Older Gateways cannot lease file-producing jobs |
 | Real equipment, OS installation and safety acceptance | Awaiting authorized pilot and operator |
 
 Existing Gateway signing, allowlists, bookings, approvals, heartbeat and safe-stop contracts are unchanged. No pilot model/software/OS is specified. Do not close RFC #5 or mark P0-A/P0-B acceptance complete based on this slice.

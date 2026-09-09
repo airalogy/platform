@@ -89,7 +89,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 强制活动版本选择、回退与本地设备变化检测 | 已实现 POSIX/纯 Python；依赖已审核驱动的观察，不是硬件认证 |
 | 阻止已领取安装绕过验收走手工执行 | 已实现；要求准确受管授权，保留停止/结果核对 |
 | 本地原始文件快照、来源信息与中断恢复 | 已实现 POSIX 本地 SDK 库，尚未接入运行时上传 |
-| 仪器限范围上传及草稿 DataAsset/Record 映射 | 尚未实现；接通之前，声明文件的受管指令拒绝执行 |
+| 仪器限范围上传及草稿 DataAsset/Record 映射 | 接收及关联 API 已实现；SDK 自动传输、专用审核界面待接通。旧版 Gateway 不能领取文件任务 |
 | 真实设备、OS 安装及安全验收 | 等待获授权试点和操作人员 |
 
 已有 Gateway 签名、白名单、预约、审批、心跳和安全停止契约不变。目前没有试点型号、软件和 OS；不能关闭 RFC #5 或将本部分标为 P0-A/P0-B 整体验收完成。

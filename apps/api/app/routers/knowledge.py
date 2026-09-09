@@ -26,6 +26,7 @@ from app.libs.file_storage import (
     get_file_with_stream,
     upload_file,
 )
+from app.models.instrument_output import InstrumentOutput
 from app.models.knowledge import (
     ImportDraftStatus,
     KnowledgeAccessGrant,
@@ -2331,6 +2332,11 @@ async def access_research_file(
     blob = await db_session.get(ResearchFileBlob, research_file.blob_id)
     if blob is None:
         raise HTTPException(status_code=404, detail="File content not found")
+    instrument_output = await db_session.scalar(
+        select(InstrumentOutput.id)
+        .where(InstrumentOutput.research_file_id == research_file.id)
+        .limit(1)
+    )
     db_session.add(
         ResearchFileAccessAudit(
             research_file_id=file_id,
@@ -2347,6 +2353,7 @@ async def access_research_file(
     disposition = (
         "inline"
         if token_row.mode == ResearchFileAccessMode.PREVIEW.value
+        and instrument_output is None
         else "attachment"
     )
     filename = safe_download_filename(research_file.filename)
@@ -2355,12 +2362,15 @@ async def access_research_file(
     )
     return StreamingResponse(
         get_file_with_stream(blob.storage_object_key, backend=blob.storage_backend),
-        media_type=blob.content_type,
+        media_type="application/octet-stream"
+        if instrument_output is not None
+        else blob.content_type,
         headers={
+            "X-Content-Type-Options": "nosniff",
             "Content-Disposition": (
                 f'{disposition}; filename="{ascii_filename}"; '
                 f"filename*=UTF-8''{quote(filename)}"
-            )
+            ),
         },
     )
 

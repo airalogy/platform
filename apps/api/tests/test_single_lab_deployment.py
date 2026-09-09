@@ -210,6 +210,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     activation_revision = import_module("migrations.versions.0053_instrument_activations")
     assert activation_revision.down_revision == "0052_instrument_qualifications"
     later_tables.update(activation_revision.TABLE_NAMES)
+    output_revision = import_module("migrations.versions.0054_instrument_outputs")
+    assert output_revision.down_revision == "0053_instrument_activations"
+    later_tables.update(output_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

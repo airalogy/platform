@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from jsonschema import Draft202012Validator, SchemaError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,8 +37,10 @@ from app.models.resource import (
     ResourceRevision,
     ResourceStatus,
 )
+from app.models.user import User
 from app.services.access_control import resolve_resource_access
 from app.services.instrument_activations import execution_block_reason
+from app.services.instrument_outputs import authorize_intake, receiving_policy
 
 COMMAND_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,127}$")
 INTERLOCK_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -369,7 +372,9 @@ async def available_instrument_command_options(
     now = datetime.now(UTC)
     items: list[dict[str, Any]] = []
     for command, gateway in rows:
-        if await execution_block_reason(db_session, gateway.id, command.resource_id, command):
+        if await execution_block_reason(
+            db_session, gateway.id, command.resource_id, command
+        ):
             continue
         resource = await db_session.get(Resource, command.resource_id)
         revision = await db_session.get(ResourceRevision, command.resource_revision_id)
@@ -437,9 +442,18 @@ async def available_instrument_command_options(
                 )
             except ValueError:
                 continue
+        file_receiving = await receiving_policy(db_session, task, command)
+        if file_receiving:
+            try:
+                await authorize_intake(
+                    db_session, await db_session.get(User, user_id), task
+                )
+            except HTTPException:
+                continue
         items.append(
             {
                 **command_snapshot(command),
+                **({"file_receiving": file_receiving} if file_receiving else {}),
                 "available": True,
                 "gateway": {"id": str(gateway.id), "name": gateway.name},
                 "resource": {

@@ -55,6 +55,11 @@ from app.services.instrument_activations import (
 from app.services.instrument_installations import (
     managed_execution_block_reason,
 )
+from app.services.instrument_outputs import (
+    authorize_intake,
+    output_batch,
+    receiving_policy,
+)
 from app.services.model_usage import create_usage_context
 from app.services.research_budget import reached_operational_limit
 from app.services.research_executor_bindings import (
@@ -109,6 +114,9 @@ gateway_router = APIRouter(
 GatewayToken = Annotated[str, Header(alias="X-Airalogy-Gateway-Token")]
 LeaseToken = Annotated[str, Header(alias="X-Airalogy-Instrument-Lease")]
 LEASE_SECONDS = 120
+FILE_DELIVERY_CLIENT_REQUIRED = (
+    "This job requires a Gateway with recoverable file delivery support"
+)
 FINAL_JOB_STATUSES = {
     ResearchInstrumentJobStatus.COMPLETED.value,
     ResearchInstrumentJobStatus.FAILED.value,
@@ -284,6 +292,7 @@ class InstrumentStop(InstrumentStopDraft):
 
 
 class GatewayLease(BaseModel):
+    file_delivery_version: Literal["airalogy.instrument-output-plan.v1"] | None = None
     model_config = ConfigDict(extra="forbid")
     activation: dict[str, Any] | None = None
 
@@ -500,6 +509,8 @@ async def _command_context(
             status_code=422,
             detail="An approved, unexpired equipment booking is required",
         )
+    if await receiving_policy(db_session, task, command):
+        await authorize_intake(db_session, current_user, task)
     return command, gateway, resource, revision, booking
 
 
@@ -511,6 +522,7 @@ def _action_command(
     booking: EquipmentBooking,
     executor_binding: dict[str, Any],
     params: InstrumentActionDraft,
+    file_receiving: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
         validate_schema_payload(command.input_schema, params.arguments, "command input")
@@ -539,6 +551,7 @@ def _action_command(
         "title": params.title or command.name,
         "description": params.description,
         "idempotency_key": params.idempotency_key,
+        **({"file_receiving": file_receiving} if file_receiving else {}),
     }
 
 
@@ -865,12 +878,14 @@ async def _instrument_control_command(
             )
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+        file_receiving = await receiving_policy(db_session, task, command)
         pinned_steps.append(
             {
                 "key": step.key,
                 "command": {
                     **control_command_pin(command),
                     "executor_binding": executor_binding,
+                    **({"file_receiving": file_receiving} if file_receiving else {}),
                 },
                 "arguments": step.arguments,
                 "transition": step.transition.model_dump(),
@@ -1472,6 +1487,7 @@ async def preview_instrument_action(
         booking=booking,
         executor_binding=executor_binding,
         params=params,
+        file_receiving=await receiving_policy(db_session, task, command),
     )
     return {
         "preview_digest": canonical_digest(command_data),
@@ -1540,6 +1556,7 @@ async def create_instrument_action(
         booking=booking,
         executor_binding=executor_binding,
         params=params,
+        file_receiving=await receiving_policy(db_session, task, command),
     )
     digest = canonical_digest(command_data)
     if digest != params.preview_digest:
@@ -2098,6 +2115,23 @@ async def lease_instrument_job(
         await db_session.commit()
         return {"job": None, "retry_after_seconds": 15}
 
+    files = await output_batch(db_session, job)
+    if files is not None and (params is None or params.file_delivery_version is None):
+        run.last_error = FILE_DELIVERY_CLIENT_REQUIRED
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="instrument_job.file_gateway_required",
+            actor_user_id=None,
+            payload={"job_id": str(job.id), "reason": FILE_DELIVERY_CLIENT_REQUIRED},
+            idempotency_key=f"instrument-job:{job.id}:file-gateway-required",
+        )
+        await db_session.commit()
+        raise HTTPException(409, FILE_DELIVERY_CLIENT_REQUIRED)
+    if run.last_error == FILE_DELIVERY_CLIENT_REQUIRED:
+        run.last_error = None
     lease_token = generate_job_lease_token()
     expires_at = now + timedelta(seconds=LEASE_SECONDS)
     job.status = ResearchInstrumentJobStatus.LEASED.value
@@ -2141,6 +2175,13 @@ async def lease_instrument_job(
     pinned_activation = await job_activation_pin(db_session, job)
     if pinned_activation is not None:
         envelope["activation"] = pinned_activation
+    if files is not None:
+        actor = await db_session.get(User, files.created_by_user_id)
+        await authorize_intake(db_session, actor, task)
+        envelope["file_outputs"] = {
+            "plan": files.plan,
+            "destination": files.lineage["destination"],
+        }
     await emit_research_event(
         db_session,
         task_id=task.id,
@@ -2247,6 +2288,11 @@ async def start_instrument_job(
         )
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    files = await output_batch(db_session, job)
+    if files is not None:
+        await authorize_intake(
+            db_session, await db_session.get(User, files.created_by_user_id), task
+        )
     job.status = ResearchInstrumentJobStatus.RUNNING.value
     job.device_confirmation = {
         "confirmed": params.device_confirmed,
@@ -2435,8 +2481,10 @@ async def complete_instrument_job(
                 status_code=409,
                 detail="Instrument Job was already completed with a different result",
             )
+        files = await output_batch(db_session, job)
+        pending = files is not None and files.finalized_at is None
         await db_session.commit()
-        return {"status": job.status}
+        return {"status": job.status, **({"files_pending": pending} if files else {})}
     if job.status != ResearchInstrumentJobStatus.RUNNING.value:
         raise HTTPException(status_code=409, detail="Instrument Job is not running")
     _ensure_live_lease(job)
@@ -2453,14 +2501,69 @@ async def complete_instrument_job(
     job.completed_at = now
     job.lease_expires_at = None
     job.revision += 1
+    files = await output_batch(db_session, job)
+    if files is not None:
+        action.status = ResearchActionStatus.WAITING.value
+        action.output_data = {"result": job.result, "file_delivery": "awaiting_files"}
+        action.revision += 1
+        run.status = (
+            ResearchRunStatus.PAUSED.value
+            if task.status == ResearchTaskStatus.PAUSED.value
+            else ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
+        )
+        run.last_error = "Instrument execution finished; waiting for captured files, not another physical execution."
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="instrument_job.execution_completed",
+            actor_user_id=None,
+            payload={"job_id": str(job.id), "file_delivery": "awaiting_files"},
+            idempotency_key=f"instrument-job:{job.id}:execution-completed",
+        )
+        await db_session.commit()
+        return {"status": job.status, "files_pending": True}
+    await finish_instrument_action(db_session, job, action, run, task)
+    await db_session.commit()
+    return {"status": job.status}
+
+
+async def finish_instrument_action(db_session, job, action, run, task, *, outputs=None):
+    """Only release the action graph after all declared files are registered."""
+    now = utcnow()
+    if outputs is not None:
+        current = await db_session.scalar(
+            select(ResearchTask)
+            .where(ResearchTask.id == task.id)
+            .with_for_update(skip_locked=True)
+            .execution_options(populate_existing=True)
+        )
+        if current is None:
+            raise HTTPException(409, "Task is changing; retry file finalization")
+        task = current
+        await db_session.refresh(action)
+        await db_session.refresh(run)
+        if (
+            task.status == ResearchTaskStatus.CANCELLED.value
+            or action.status == ResearchActionStatus.CANCELLED.value
+        ):
+            return
     action.status = ResearchActionStatus.COMPLETED.value
     action.output_data = {
         "command_key": job.command_key,
         "command_version": job.command_version,
         "resource_id": str(job.resource_id),
         "equipment_booking_id": str(job.equipment_booking_id),
-        "result": params.result,
+        "result": job.result,
     }
+    if outputs is not None:
+        action.output_data["file_delivery"] = "delivered"
+        action.output_data["data_asset_ids"] = [
+            item["data_asset_id"]
+            for item in outputs["items"]
+            if item["state"] == "registered"
+        ]
     action.error = None
     action.completed_at = now
     action.revision += 1
@@ -2472,7 +2575,7 @@ async def complete_instrument_job(
             "command_key": job.command_key,
             "command_version": job.command_version,
             "resource_id": str(job.resource_id),
-            "result": params.result,
+            "result": job.result,
             "completed_at": now.isoformat(),
         },
     )
@@ -2542,8 +2645,6 @@ async def complete_instrument_job(
             payload={"reason": "ai_disabled"},
             idempotency_key=f"run:{run.id}:manual:instrument-job:{job.id}",
         )
-    await db_session.commit()
-    return {"status": job.status}
 
 
 @gateway_router.post("/jobs/{job_id}/fail")

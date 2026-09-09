@@ -124,6 +124,8 @@ def evaluate_research_action_policy(
         return "deny", "The Action is prohibited by an explicit requirement."
     if source == "manual":
         return "allow", "The user confirmed the deterministic Action preview."
+    if approval_policy == "always_ask":
+        return "ask", "This Action requires an explicit preview and confirmation."
 
     from app.services.research_autonomy_policy import evaluate_automatic_action
 
@@ -1806,7 +1808,14 @@ async def _materialize_aira_action(
             "arguments": proposal.arguments,
             "source": "aira",
             "resume_run": True,
+            **(
+                {"file_receiving": instrument["file_receiving"]}
+                if instrument.get("file_receiving")
+                else {}
+            ),
         }
+        if instrument.get("file_receiving"):
+            requirements["approval_policy"] = "always_ask"
     elif proposal.decision == "service":
         if proposal.service_offering_id is None:
             raise ValueError("Aira Service proposal is incomplete")
@@ -3456,6 +3465,7 @@ async def restore_pending_action_boundary(
         return False
     if task.status == ResearchTaskStatus.ACTIVE.value:
         from sqlalchemy import update
+
         from app.models.resource import PersistentJob
 
         tool_ids = list(

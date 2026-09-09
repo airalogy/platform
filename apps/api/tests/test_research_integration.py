@@ -175,12 +175,19 @@ def test_managed_activation_real_api_and_installed_copy(runtime, tmp_path, monke
     exercise_managed_activation(runtime, tmp_path, monkeypatch)
 
 
+@pytest.mark.parametrize("cancel_before_finalize", [False, True])
 def test_file_declaring_activation_waits_for_scoped_intake(
-    runtime, tmp_path, monkeypatch
+    runtime, tmp_path, monkeypatch, cancel_before_finalize
 ):
     from tests.activation_acceptance import exercise_managed_activation
 
-    exercise_managed_activation(runtime, tmp_path, monkeypatch, file_outputs=True)
+    exercise_managed_activation(
+        runtime,
+        tmp_path,
+        monkeypatch,
+        file_outputs=True,
+        cancel_before_finalize=cancel_before_finalize,
+    )
 
 
 def test_instrument_uncertain_stop_holds_equipment_across_gateways(runtime):

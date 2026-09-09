@@ -54,6 +54,9 @@ async def assert_research_file_upload_quota(
     *,
     incoming_count: int = 1,
 ) -> None:
+    # Every logical ResearchFile writer uses this shared owner lock; physical
+    # blob deduplication never bypasses a concurrent user's logical-file quota.
+    await db_session.scalar(select(User.id).where(User.id == user_id).with_for_update())
     count, total = (
         await db_session.execute(
             select(

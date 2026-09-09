@@ -905,6 +905,9 @@ def test_aira_sees_only_pinned_accessible_commands_with_unused_bookings(monkeypa
         ),
     )
     task = SimpleNamespace(lab_id=lab_id)
+    monkeypatch.setattr(
+        research_instruments, "receiving_policy", AsyncMock(return_value=None)
+    )
     run = SimpleNamespace(
         environment_snapshot={"resources": [{"source_id": str(resource_type_id)}]}
     )
@@ -948,6 +951,7 @@ def test_terminal_gateway_callbacks_are_idempotent_and_conflict_safe(monkeypatch
         SimpleNamespace(),
     )
     db_session = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(routes, "output_batch", AsyncMock(return_value=None))
     monkeypatch.setattr(
         routes,
         "_authenticate_gateway",

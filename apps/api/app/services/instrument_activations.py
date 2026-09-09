@@ -24,21 +24,6 @@ from app.services.instrument_activation_contract import (
 from app.services.instrument_qualifications import qualification_state
 
 
-def file_delivery_block_reason(contract):
-    """Do not silently discard declared scientific files while intake is pending.
-
-    The local capture library alone is not a Platform delivery implementation.
-    Remove this gate only with pinned job intake, scoped draft registration and
-    durable transfer recovery, including tests of the complete file workflow.
-    """
-    if contract.get("outputs"):
-        return (
-            "Commands declaring raw files cannot be activated yet: scoped file "
-            "delivery and draft asset registration are not available"
-        )
-    return None
-
-
 def activation_pin(row):
     return validate_activation_pin(
         {
@@ -88,10 +73,6 @@ async def activation_invalid_reason(db, row):
         or row.plan["qualification_digest"] != qualification.confirmation_digest
     ):
         return "Managed activation target changed"
-    for change in row.plan["commands"]:
-        reason = file_delivery_block_reason(change["contract"])
-        if reason:
-            return reason
     # Authority remains organizational: revoking the approver's current access
     # invalidates new execution, rather than preserving a stale permission bit.
     creator = await db.get(User, row.created_by_user_id)
@@ -177,6 +158,20 @@ async def execution_block_reason(db, gateway_id, resource_id, command, job=None)
             or pinned.pin != activation_pin(row)
         ):
             return "Instrument Job is not pinned to the current active version"
+        from app.models.instrument_output import InstrumentOutputBatch
+        from app.services.instrument_output_contract import declarations
+
+        declared = next(
+            item["contract"]["outputs"]
+            for item in row.plan["commands"]
+            if item["contract"]["key"] == command.command_key
+            and item["contract"]["version"] == command.command_version
+        )
+        batch = await db.get(InstrumentOutputBatch, job.id)
+        if declared and (
+            batch is None or batch.plan["outputs"] != declarations(declared)
+        ):
+            return "Instrument Job has no matching pinned file intake plan"
         expected = next(item for item in row.commands if item["id"] == str(command.id))
         if (
             str(job.resource_revision_id) != expected["resource_revision_id"]
@@ -216,6 +211,9 @@ async def pin_job_activation(db, job, command):
                 job_id=job.id, activation_id=row.id, pin=activation_pin(row)
             )
         )
+        from app.services.instrument_outputs import pin_outputs
+
+        await pin_outputs(db, job, command, row)
 
 
 async def job_activation_pin(db, job):

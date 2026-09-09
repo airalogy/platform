@@ -81,10 +81,11 @@ test("migration and release changes require release metadata checks", () => {
     assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "release-metadata"])
   }
   assert.deepEqual(checkIds(["apps/api/migrations/versions/new_revision.py"]), ["lint", "types", "api-compile", "release-metadata", "api-tests"])
+  assert.deepEqual(checkIds(["apps/api/migrations/versions/0054_instrument_outputs.py"]), ["lint", "types", "api-compile", "release-metadata", "api-tests", "research-integration"])
 })
 
 test("research runtime changes require real database integration", () => {
-  for (const file of ["apps/api/app/services/research_tools.py", "apps/api/app/services/persistent_jobs.py", "apps/api/tests/test_research_integration.py", "apps/api/app/routers/instrument_integrations.py"]) {
+  for (const file of ["apps/api/app/services/research_tools.py", "apps/api/app/services/persistent_jobs.py", "apps/api/tests/test_research_integration.py", "apps/api/app/routers/instrument_integrations.py", "apps/api/tests/activation_acceptance.py", "apps/api/tests/instrument_output_acceptance.py"]) {
     assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "api-tests", "research-integration"])
   }
 })

@@ -174,7 +174,7 @@ pnpm gateway:activation run \
 
 ### 本地原始文件接收基础
 
-SDK 新增 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。这是本地库，**尚未接通运行时上传**；不发现适配器、不调用仪器方法、不请求网络、不提交 Record，也不创建 DataAsset。在范围授权接收与可恢复资产登记接通之前，API 会拒绝声明文件的受管指令启用及新执行，包括可选文件，避免静默忽略科研输出。仅返回结构化结果的现有指令保留原流程，停止/结果核对入口仍保留。
+SDK 新增 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。这是本地库，**尚未接通运行时自动上传**；库本身不发现适配器、不调用仪器方法、不请求网络、不提交 Record，也不创建 DataAsset。Platform 已另行提供下述接收契约。仅返回结构化结果的现有指令保留原流程，停止/结果核对入口仍保留。
 
 调用方提供规范任务 UUID、获批上下文摘要，以及准确的输出文件名、类型、大小上限和必需标记，再显式选择绝对本地目录及其相对文件。每项必须包含带时区的实际采集时间、上报的原始单位、转换规则说明和经独立审核的文件写入完成依据。转换规则只作为来源说明，不执行代码。文件名采用跨平台安全格式，拒绝仅大小写不同的冲突，不允许静默遗漏必需文件。本地路径只写入私有日志，不进入可传输的接收清单。
 
@@ -184,4 +184,23 @@ SDK 新增 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。
 
 默认最多声明 16 份文件，单文件上限 2,147,483,647 字节，暂存区上限 4 GiB/100 项任务，静默窗口 1 秒，检查式接收期限 300 秒；元数据另有限额。当前仅针对支持的 POSIX **本地存储**，不覆盖 Windows ACL 或远程/挂载的厂商文件系统；无法用检查式期限抢占阻塞中的系统磁盘调用。运行账号及已审核适配器仍是可信边界：不能抵御同账号恶意代码，也不把“文件稳定”视作实验成功证明。
 
-后续仍需将清单绑定 API 授权的 Project 接收区，区分物理完成和文件送达，恢复鉴权上传，登记含完整安装来源的私有 ResearchFile 与草稿 DataAsset，再预览确认准确的 Record/样品关联。完整接通并验证后才可移除文件指令执行限制；本地文件故障测试不代表实机验收。
+### Platform 限范围接收契约
+
+迁移 `0054_instrument_outputs` 新增固定接收批次、文件回执与不可变关联历史。须按正常备份部署流程升级，不在验收时修改开发数据库。降级删除接收/关联记录，不删除已经保存的 ResearchFile、DataAsset 或本地副本；有未完成交付时不可降级。
+
+手工/控制会话预览包含准确的 Project 保存位置、文件名与上限、项目成员可见性、草稿资产状态及待确认 Record 关联。Aira 提议必须确认。创建任务时固定获批指令、安装包、配置和设备来源；调用方不能把上传目标改到其他 Lab/Project。接收授权归属预约用户，须持续具备科研执行及 Knowledge 创建权限。
+
+只有支持文件交付的 Gateway 才能在领取时声明 `file_delivery_version: airalogy.instrument-output-plan.v1`；签名任务随后携带 `file_outputs.plan` 与 `file_outputs.destination`。未声明能力时，在领取或开始物理执行前拒绝；不能给旧客户端简单加此字段绕过限制。仓库内运行时尚未实现自动交付。
+
+物理完成后，`/complete` 返回 `files_pending: true`。Instrument Job 已完成，但 Action 保持等待，控制会话及依赖动作不前进。接收入口为 `/instrument-gateway/v1/jobs/{job_id}/outputs`：
+
+1. `POST /capture` 固定共享采集清单；不同内容重试会冲突。
+2. `PUT /{output_id}` 只接收已声明的准确文件，要求匹配的 `Content-Length`、声明的 `Content-Type` 与 `X-Airalogy-Content-SHA256`。流式接收和对象存储等待后再次鉴权；摘要不符、超限、撤权或逻辑文件配额不足时不登记资产。
+3. 成功上传创建私有 Project ResearchFile 及草稿 DataAsset 版本，保存原始上报单位、时间/时区、服务器接收时间和安装版本来源。重试返回相同身份；底层去重不授予访问权限，也不绕过配额。即使共享文件块被其他文件标为可执行页面类型，仪器原始附件仍以禁止嗅探的二进制附件下载，不内联执行。
+4. `POST /finalize` 要求原清单及所有实际采集文件已登记，此后才恢复正常 Action 流转；迟到交付不会重启已取消的 Task。重试不重复创建资产或执行仪器指令。
+
+这些接口同时要求 Gateway 凭据与原任务租约令牌，不是通用文件/Project 权限。启用授权过期或撤销后仍可核对原结果，但 Gateway 凭据或接收用户权限撤销后不可继续。接收不证明科学有效性，不按文件名/时间推断样品，不提交 Record 或覆盖科研证据。
+
+有权用户通过 `GET /research-instrument-jobs/{job_id}/outputs` 查看交付及关联状态。各文件的 `POST /{output_id}/associations/preview` 与确认接口 `/associations` 将预览摘要绑定同一 Project 中的准确 Record 版本/摘要、样品引用及上一关联身份。过期并发操作会冲突，重试不会恢复旧关联；读取时再次检查 Record 权限，受限关联不泄露内容。Record 数据保持原样。
+
+后续仍需接通 SDK 自动收集、字节固定的传输及重启恢复、友好的文件审核/Record 选择界面，并完成真实工作站验收。模拟 API/存储测试不等于完整仪器文件产品或实机验收。

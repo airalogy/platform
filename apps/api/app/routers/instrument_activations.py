@@ -36,7 +36,6 @@ from app.services.instrument_activations import (
     activation_pin,
     command_pin,
     current_activation,
-    file_delivery_block_reason,
 )
 from app.services.instrument_qualifications import qualification_state
 from app.services.research_instruments import sign_job_envelope
@@ -173,8 +172,6 @@ async def _preview(db, user, binding, params, *, lock=False):
             raise HTTPException(
                 409, "Qualified command differs from the reviewed source"
             )
-        if reason := file_delivery_block_reason(contract):
-            raise HTTPException(409, reason)
         existing = await db.scalar(
             select(ResearchInstrumentCommand).where(
                 ResearchInstrumentCommand.gateway_id == binding.gateway_id,

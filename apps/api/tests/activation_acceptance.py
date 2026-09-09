@@ -17,7 +17,9 @@ from app.services.research_instruments import (
 )
 
 
-def exercise_managed_activation(runtime, tmp_path, monkeypatch, *, file_outputs=False):
+def exercise_managed_activation(
+    runtime, tmp_path, monkeypatch, *, file_outputs=False, cancel_before_finalize=False
+):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
     monkeypatch.syspath_prepend(str(sdk_root / "tests"))
@@ -143,15 +145,19 @@ def exercise_managed_activation(runtime, tmp_path, monkeypatch, *, file_outputs=
             content=raw,
         )
         assert saved.status_code == 200, saved.text
-        await runtime.confirm(
-            f"/instrument-adapter-packages/{release_id}/review",
-            {
-                "expected_revision": 1,
-                "operation": "approve_source",
-                "source_reviewed": True,
-                "reason": "Disposable synthetic policy fixture",
-            },
-        )
+        release_id = saved.json()["id"]
+        if saved.json()["state"] == "imported":
+            await runtime.confirm(
+                f"/instrument-adapter-packages/{release_id}/review",
+                {
+                    "expected_revision": saved.json()["revision"],
+                    "operation": "approve_source",
+                    "source_reviewed": True,
+                    "reason": "Disposable synthetic policy fixture",
+                },
+            )
+        else:
+            assert saved.json()["state"] == "approved"
         path = root / "private.json"
         public = prepare(
             destination=path,
@@ -224,24 +230,6 @@ def exercise_managed_activation(runtime, tmp_path, monkeypatch, *, file_outputs=
                 }
 
             first = draft()
-            if file_outputs:
-                rejected = await runtime.json(
-                    "POST", activation_url + "/preview", first, status=409
-                )
-                assert "raw files cannot be activated" in rejected["detail"]
-                rejected = await runtime.json(
-                    "POST",
-                    activation_url,
-                    {**first, "preview_digest": "a" * 64},
-                    status=409,
-                )
-                assert "raw files cannot be activated" in rejected["detail"]
-                local.headers["X-Airalogy-Gateway-Token"] = token
-                assert (await local.get("/instrument-gateway/v1/activation")).json()[
-                    "activation"
-                ] is None
-                assert (await runtime.json("GET", activation_url))["current_id"] is None
-                return
             preview = await runtime.json("POST", activation_url + "/preview", first)
             await runtime.json(
                 "POST",
@@ -312,11 +300,21 @@ def exercise_managed_activation(runtime, tmp_path, monkeypatch, *, file_outputs=
 
             created = await queue()
             job = created["instrument_job"]
+            if file_outputs:
+                old = await local.post(
+                    "/instrument-gateway/v1/jobs/lease",
+                    json={"activation": active["pin"]},
+                )
+                assert old.status_code == 409 and "file delivery" in old.text
             async with sessionmanager.session() as db:
                 pinned = await db.get(InstrumentJobActivation, UUID(job["id"]))
                 assert pinned.pin == active["pin"]
             lease = await local.post(
-                "/instrument-gateway/v1/jobs/lease", json={"activation": active["pin"]}
+                "/instrument-gateway/v1/jobs/lease",
+                json={
+                    "activation": active["pin"],
+                    "file_delivery_version": "airalogy.instrument-output-plan.v1",
+                },
             )
             assert lease.status_code == 200, lease.text
             leased = lease.json()
@@ -351,6 +349,19 @@ def exercise_managed_activation(runtime, tmp_path, monkeypatch, *, file_outputs=
                 },
             )
             assert result.status_code == 200, result.text
+            if file_outputs:
+                assert result.json()["files_pending"] is True
+                from tests.instrument_output_acceptance import exercise_outputs
+
+                await exercise_outputs(
+                    runtime,
+                    local,
+                    leased,
+                    root,
+                    monkeypatch,
+                    cancel_before_finalize=cancel_before_finalize,
+                )
+                return
             async with sessionmanager.session() as db:
                 assert (
                     await db.get(ResearchInstrumentJob, UUID(job["id"]))

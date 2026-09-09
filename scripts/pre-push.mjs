@@ -140,6 +140,8 @@ export function buildCheckPlan(files, fullRequested = false) {
   if (fullRequested || files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
+    || /^apps\/api\/tests\/(?:activation|instrument_output)_acceptance\.py$/.test(file)
+    || /^apps\/api\/migrations\/versions\/\d+_instrument/.test(file)
     || [
       "apps/api/app/services/persistent_jobs.py",
       "apps/api/app/services/resource_job_worker.py",

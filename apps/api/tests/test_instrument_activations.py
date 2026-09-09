@@ -14,51 +14,58 @@ from app.services.instrument_activation_contract import (
     activation_digest,
     validate_activation_pin,
 )
-from app.services.instrument_activations import file_delivery_block_reason
 
 
-def test_existing_file_activation_cannot_bypass_runtime_gate(monkeypatch):
+@pytest.mark.parametrize("required", [True, False])
+def test_file_job_requires_exact_pinned_intake(monkeypatch, required):
     import app.services.instrument_activations as service
+    import app.services.instrument_installations as installations
 
     identity = uuid4()
-    binding = SimpleNamespace(
-        id=identity,
-        gateway_id=identity,
-        resource_id=identity,
-        lab_id=identity,
-        descriptor={},
-        receipt={},
-    )
-    qualification = SimpleNamespace(binding_id=identity, confirmation_digest="a" * 64)
     row = SimpleNamespace(
-        revoked_at=None,
-        binding_id=identity,
-        qualification_id=identity,
-        gateway_id=identity,
-        resource_id=identity,
-        lab_id=identity,
+        id=identity,
         plan={
-            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
-            "descriptor": {},
-            "receipt": {},
-            "qualification_digest": "a" * 64,
             "commands": [
-                {"contract": {"outputs": [{"name": "raw.csv", "required": False}]}}
+                {
+                    "contract": {
+                        "key": "read",
+                        "version": "1",
+                        "outputs": [
+                            {
+                                "name": "raw.csv",
+                                "media_type": "text/csv",
+                                "max_bytes": 1024,
+                                "required": required,
+                            }
+                        ],
+                    }
+                }
             ],
         },
     )
+    pinned = SimpleNamespace(activation_id=identity, pin={"fixture": True})
 
     class Database:
         async def get(self, model, _id):
-            return (
-                binding if model is service.InstrumentDeviceBinding else qualification
-            )
+            return pinned if model is service.InstrumentJobActivation else None
 
     monkeypatch.setattr(
-        service, "qualification_state", AsyncMock(return_value="qualified")
+        installations,
+        "managed_execution_block_reason",
+        AsyncMock(return_value="managed"),
     )
-    assert "raw files cannot be activated" in asyncio.run(
-        service.activation_invalid_reason(Database(), row)
+    monkeypatch.setattr(
+        service, "executable_activation", AsyncMock(return_value=(row, None))
+    )
+    monkeypatch.setattr(service, "activation_pin", lambda _row: pinned.pin)
+    assert "no matching pinned file intake plan" in asyncio.run(
+        service.execution_block_reason(
+            Database(),
+            identity,
+            identity,
+            SimpleNamespace(command_key="read", command_version="1"),
+            SimpleNamespace(id=identity),
+        )
     )
 
 
@@ -95,23 +102,6 @@ def test_activation_capability_is_separate_from_equipment_use():
         assert "equipment.activate" in ROLE_CAPABILITIES[role]
     for role in ("resource_custodian", "resource_operator"):
         assert "equipment.activate" not in ROLE_CAPABILITIES[role]
-
-
-def test_declared_optional_files_are_not_silently_ignored_either():
-    assert file_delivery_block_reason({"outputs": []}) is None
-    for required in (True, False):
-        assert "raw files cannot be activated" in file_delivery_block_reason(
-            {
-                "outputs": [
-                    {
-                        "name": "raw.csv",
-                        "media_type": "text/csv",
-                        "max_bytes": 1024,
-                        "required": required,
-                    }
-                ]
-            }
-        )
 
 
 def test_pin_binds_exact_installation_and_disallows_embedded_code_or_path():
