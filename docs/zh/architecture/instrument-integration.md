@@ -1,6 +1,6 @@
 # 仪器软件接入
 
-本次交付涵盖 [RFC #5](https://github.com/airalogy/platform/issues/5) 的 **GUI 草稿/重放验证与本地安装配对**，不是整个设备接入产品已经完成。
+本次交付涵盖 [RFC #5](https://github.com/airalogy/platform/issues/5) 的 **GUI 草稿/重放验证、本地安装配对及沙箱适配包**，不是整个设备接入产品已经完成。
 
 ## 目标与权限边界
 
@@ -62,6 +62,8 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 
 ### 状态矩阵
 
+现在可以构建实际 Python 驱动包、不执行代码地检查内容，并在隔离容器中测试。参见[仪器适配包](./instrument-adapter-packages.md)中的显式文件选择、不可变产物与安全边界。这不代表已在仪器工作站安装驱动。
+
 `airalogy.gui-rehearsal.v1` 支持 `observe`、`read`、`invoke`、`set_value` 四种**与观察比对的步骤描述**，参数仅为字面标量，最多 10 条命令、每条 40 步、20 个场景。不包含 shell、代码、自动获取 URL、坐标、隐式重试或物理停止声明。在 Gateway 维护一份 Python 源码并生成 API 副本，CI 检查一致。
 
 | 能力                                   | 状态                             |
@@ -71,7 +73,8 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 限于已有目标/控件/状态的可选 Aira 编辑 | 已实现，真实模型调用依赖部署配置 |
 | 自主发现、启动和探索仪器软件           | 尚未实现                         |
 | 原生可访问性及视觉控制后端             | 尚未实现，需明确目标软件/OS      |
-| 沙箱驱动生成、可信包分发               | 尚未实现                         |
+| 含源码适配包构建、完整性检查、隔离测试 | 已实现，包内测试不是实机证据     |
+| 自主驱动生成、可信包分发               | 尚未实现                         |
 | 双端核对、单次配对、私有凭据存储       | 已实现，POSIX 软件验收范围       |
 | 安装回执、适配包与设备资格绑定         | 尚未实现                         |
 | 仪器原始文件接收和草稿 DataAsset 映射  | 本部分尚未实现                   |

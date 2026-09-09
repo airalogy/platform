@@ -1,0 +1,72 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.synthetic-reader",
+  "version": "1.0.0",
+  "entry_point": "synthetic.reader",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Public synthetic reference; deterministic source-wheel builder",
+    "sources": ["Bundled synthetic reader source and explicitly fixed expected output"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "Synthetic",
+        "model": "Reference reader",
+        "firmware": "none",
+        "application": "synthetic_reader",
+        "application_version": "1.0.0",
+        "os": "container-linux",
+        "architecture": "any"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "reader.measure",
+      "version": "1.0.0",
+      "name": "Synthetic measurement",
+      "input_schema": {
+        "type": "object",
+        "properties": { "sample_count": { "type": "integer", "minimum": 1, "maximum": 96 } },
+        "required": ["sample_count"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "value": { "type": "number" },
+          "unit": { "const": "synthetic_unit" },
+          "simulation_only": { "const": true }
+        },
+        "required": ["value", "unit", "simulation_only"],
+        "additionalProperties": false
+      },
+      "risk": "read_only",
+      "device_confirmation_required": false,
+      "safety_contract": {
+        "required_interlocks": [],
+        "operator_presence_required": false,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 30,
+      "units": ["value: synthetic_unit"],
+      "effects": ["Produces synthetic data only; no hardware access"],
+      "completion": "Returns the bounded synthetic measurement object",
+      "stop": "No physical process exists; stop event prevents simulation output",
+      "retry": "never",
+      "outputs": []
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "Not a driver for real equipment",
+    "Compatibility entries are declarations, not physical qualification",
+    "Sandbox test reports never grant installation or hardware authority"
+  ]
+}

@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add immutable, source-included Instrument Adapter Packages with exact payload/wheel integrity checks, offline inspection and a deterministic reference builder. Test drivers in a digest-pinned, network-disabled Docker sandbox with no host or device mounts, bounded resources and verified timeout cleanup. Package tests do not establish source trust, installation approval or hardware qualification.
+
 - Guard Instrument Gateway startup and adapter installation with an exclusive local process lock. Preserve unconfirmed physical stops across restarts, and require a confirmed safe stop after execution exceptions before clearing failure receipts or allowing updates.
 
 - Add single-use, ten-minute Instrument Gateway pairing with local credential generation, two-sided identity fingerprint review, preview-bound administrator confirmation, cancellation, recovery/status and scoped audit records. POSIX private credential files bind the runtime to the paired Platform; pairing never enables the Gateway or authorizes hardware. Windows ACL enrollment, package installation and equipment qualification remain separate work.

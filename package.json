@@ -15,6 +15,7 @@
     "gateway:gui-demo": "node scripts/instrument-gui-demo.mjs",
     "gateway:contract:check": "node scripts/sync-instrument-contract.mjs --check",
     "gateway:pair": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.pairing_cli",
+    "gateway:package": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.package_cli",
     "dev:prepare": "pnpm --filter @airalogy/components prepare",
     "dev": "pnpm run docs:build:web && pnpm --filter @airalogy/web dev",
     "build:prepare": "pnpm --filter @airalogy/components build",
