@@ -109,6 +109,7 @@ const GATEWAY_FILES = new Set([
   ".github/workflows/instrument-gateway.yml",
   "apps/api/app/services/instrument_adapter_contract.py",
   "apps/api/app/services/instrument_package_contract.py",
+  "apps/api/app/services/instrument_installation_contract.py",
   "scripts/sync-instrument-contract.mjs",
 ])
 const COMPUTE_RUNNER_FILES = new Set([".github/workflows/compute-runner.yml"])

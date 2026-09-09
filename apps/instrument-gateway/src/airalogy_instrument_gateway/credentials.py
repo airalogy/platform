@@ -53,7 +53,7 @@ def write_credentials(path: Path, content: dict) -> None:
         os.close(parent_fd)
 
 
-def read_credentials(path: Path) -> dict:
+def read_private_json(path: Path) -> dict:
     parent_fd = _parent(path)
     try:
         fd = os.open(
@@ -74,6 +74,13 @@ def read_credentials(path: Path) -> dict:
             content = json.loads(source.read(16385))
     finally:
         os.close(parent_fd)
+    if not isinstance(content, dict):
+        raise ValueError("Private credential document must be an object")  # noqa: TRY004 - consistent credential validation boundary
+    return content
+
+
+def read_credentials(path: Path) -> dict:
+    content = read_private_json(path)
     if (
         not isinstance(content, dict)
         or content.get("schema") != "airalogy.gateway-credential.v1"

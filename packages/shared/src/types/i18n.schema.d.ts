@@ -3196,6 +3196,39 @@ declare namespace I18n {
           approved: string
           revoked: string
         }
+        installTitle: string
+        installHistory: string
+        installEvent: {
+          authorized: string
+          claimed: string
+          package_downloaded: string
+          installed: string
+          expired: string
+          revoked: string
+        }
+        installHint: string
+        installAuthorize: string
+        installEmpty: string
+        installRetry: string
+        installAuthorized: string
+        installNotQualified: string
+        installMore: string
+        installRequestHint: string
+        installPublicRequest: string
+        installInvalidRequest: string
+        installFingerprint: string
+        installRelease: string
+        installFingerprintConfirm: string
+        installImpact: string
+        installRevoke: string
+        installRevokeImpact: string
+        installState: {
+          authorized: string
+          installing: string
+          installed: string
+          expired: string
+          revoked: string
+        }
         pairingTitle: string
         pairingHint: string
         pairingCreate: string

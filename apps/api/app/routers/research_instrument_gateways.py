@@ -27,6 +27,7 @@ from app.models.resource import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
+from app.services.instrument_installations import assert_no_pending_installation
 from app.services.research_instruments import (
     COMMAND_KEY_RE,
     command_snapshot,
@@ -517,6 +518,8 @@ async def update_instrument_gateway(
         raise HTTPException(status_code=409, detail="Instrument Gateway name is in use")
     gateway.name = params.name
     gateway.description = params.description
+    if params.enabled:
+        await assert_no_pending_installation(db_session, gateway.id)
     gateway.enabled = params.enabled
     gateway.revision += 1
     gateway.updated_by_user_id = current_user.id
@@ -594,6 +597,7 @@ async def rotate_gateway_credential(
                 "Gateway credential"
             ),
         )
+    await assert_no_pending_installation(db_session, gateway.id)
     credential = generate_gateway_token()
     gateway.token_digest = gateway_token_digest(credential)
     gateway.token_hint = gateway_token_hint(credential)

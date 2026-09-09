@@ -82,9 +82,10 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | Source-included package build, integrity inspection, isolated tests | Implemented; package tests are not hardware evidence |
 | Private package import, source review/revocation, protected download | Implemented; not installation or qualification |
 | Inactive pure-Python offline installation and local receipts | Implemented, POSIX; no activation or remote authorization |
-| Autonomous driver generation, signed distribution and Platform-authorized installation | Not implemented |
+| Exact device/package/config binding, independent installation grants and receipt synchronization | Implemented; inactive POSIX pure-Python copies only |
+| Autonomous driver generation and signed distribution | Not implemented |
 | Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
-| Receipt synchronization, adapter/equipment qualification binding | Not implemented |
+| Equipment qualification and enforced active-version selection | Not implemented |
 | Instrument raw-file ingestion and draft DataAsset mapping | Not implemented by this slice |
 | Real equipment, OS installation and safety acceptance | Awaiting authorized pilot and operator |
 

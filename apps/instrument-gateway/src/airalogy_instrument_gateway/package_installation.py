@@ -275,57 +275,69 @@ def install_inactive(
         )
     root = _private_root(root)
     with StateStore(root / "state.json").exclusive():
-        StateStore(root / "state.json").assert_installable()
-        plan = installation_preview(
+        return _install_inactive_locked(
             raw,
             sdk_wheel=sdk_wheel,
             trusted_sdk_digest=trusted_sdk_digest,
             config=config,
             root=root,
+            preview_digest=preview_digest,
         )
-        if plan["preview_digest"] != preview_digest:
-            raise ValueError(
-                "Installation preview changed; inspect and confirm it again"
-            )
-        destination = root / plan["installation_id"]
-        _, files = _contents(raw, sdk_wheel, trusted_sdk_digest)
-        file_hashes = {name: sha256(value) for name, value in files.items()}
-        if destination.exists():
-            return verify_installation(
-                destination, expected_plan=plan, expected_files=file_hashes
-            )
-        staging = Path(tempfile.mkdtemp(prefix=".pending-install-", dir=root))
-        # No pip, dependency resolution, build backend, driver import or subprocess
-        # of adapter code. A venv isolates dependencies, not hardware permissions.
-        builder = venv.EnvBuilder(with_pip=False, symlinks=False)
-        builder.create(staging)
-        context = builder.ensure_directories(staging)
-        site = (
-            staging
-            / "lib"
-            / f"python{sys.version_info.major}.{sys.version_info.minor}"
-            / "site-packages"
+
+
+def _install_inactive_locked(
+    raw, *, sdk_wheel, trusted_sdk_digest, config, root, preview_digest
+):
+    """Trusted manager only: caller holds the configured runtime journal lock."""
+    StateStore(root / "state.json").assert_installable()
+    plan = installation_preview(
+        raw,
+        sdk_wheel=sdk_wheel,
+        trusted_sdk_digest=trusted_sdk_digest,
+        config=config,
+        root=root,
+    )
+    if plan["preview_digest"] != preview_digest:
+        raise ValueError("Installation preview changed; inspect and confirm it again")
+    destination = root / plan["installation_id"]
+    _, files = _contents(raw, sdk_wheel, trusted_sdk_digest)
+    file_hashes = {name: sha256(value) for name, value in files.items()}
+    if destination.exists():
+        return verify_installation(
+            destination, expected_plan=plan, expected_files=file_hashes
         )
-        if hasattr(context, "lib_path") and Path(context.lib_path) != site:
-            raise ValueError("Unsupported virtual environment library layout")
-        for name, value in files.items():
-            _write(site / name, value)
-        receipt = {
-            **plan,
-            "schema": "airalogy.inactive-installation-receipt.v1",
-            "source_reviewed": True,
-            "site_packages": site.relative_to(staging).as_posix(),
-            "files": file_hashes,
-        }
-        _write(staging / "receipt.json", canonical(receipt))
-        verify_installation(staging, expected_plan=plan, expected_files=file_hashes)
-        _sync_snapshot(staging)
-        # No active pointer is changed. Partial staging directories remain private
-        # and unusable after failure; a retry can create a fresh staging directory.
-        os.rename(staging, destination)
-        descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        return receipt
+    staging = Path(tempfile.mkdtemp(prefix=".pending-install-", dir=root))
+    # No pip, dependency resolution, build backend, driver import or subprocess
+    # of adapter code. A venv isolates dependencies, not hardware permissions.
+    builder = venv.EnvBuilder(with_pip=False, symlinks=False)
+    builder.create(staging)
+    context = builder.ensure_directories(staging)
+    site = (
+        staging
+        / "lib"
+        / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        / "site-packages"
+    )
+    if hasattr(context, "lib_path") and Path(context.lib_path) != site:
+        raise ValueError("Unsupported virtual environment library layout")
+    for name, value in files.items():
+        _write(site / name, value)
+    receipt = {
+        **plan,
+        "schema": "airalogy.inactive-installation-receipt.v1",
+        "source_reviewed": True,
+        "site_packages": site.relative_to(staging).as_posix(),
+        "files": file_hashes,
+    }
+    _write(staging / "receipt.json", canonical(receipt))
+    verify_installation(staging, expected_plan=plan, expected_files=file_hashes)
+    _sync_snapshot(staging)
+    # No active pointer is changed. Partial staging directories remain private
+    # and unusable after failure; a retry can create a fresh staging directory.
+    os.rename(staging, destination)
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return receipt

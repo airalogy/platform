@@ -92,5 +92,6 @@ test("research runtime changes require real database integration", () => {
 test("generated instrument contract changes run both API and Gateway tests", () => {
   assert.deepEqual(checkIds(["apps/api/app/services/instrument_adapter_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])
   assert.deepEqual(checkIds(["apps/api/app/services/instrument_package_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])
+  assert.deepEqual(checkIds(["apps/api/app/services/instrument_installation_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])
   assert.deepEqual(checkIds(["scripts/sync-instrument-contract.mjs"]), ["lint", "types", "api-compile", "gateway-tests"])
 })

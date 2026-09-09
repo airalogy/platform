@@ -52,7 +52,7 @@ test("private adapter import, protected download and source review do not qualif
     await page.reload()
     await expect(panel).toContainText(digest)
     await expect(panel).toContainText("Revoked")
-    await panel.getByRole("button", { name: "Inspect and review" }).click()
+    await panel.getByTestId("adapter-release").filter({ hasText: digest }).getByRole("button", { name: "Inspect and review" }).click()
     modal = page.getByRole("dialog").last()
     await modal.getByText("Review history", { exact: true }).click()
     await expect(modal).toContainText("Synthetic version retired")

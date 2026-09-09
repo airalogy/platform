@@ -70,6 +70,7 @@ from .research_instrument_gateways import router as research_instrument_gateways
 from .instrument_integrations import router as instrument_integrations_router
 from .instrument_pairings import router as instrument_pairings_router
 from .instrument_packages import router as instrument_packages_router
+from .instrument_installations import router as instrument_installations_router
 from .research_instrument_jobs import (
     gateway_router as research_instrument_runtime_router,
 )
@@ -312,6 +313,7 @@ app.include_router(research_instrument_gateways_router)
 app.include_router(instrument_integrations_router)
 app.include_router(instrument_pairings_router)
 app.include_router(instrument_packages_router)
+app.include_router(instrument_installations_router)
 app.include_router(research_instrument_jobs_router)
 app.include_router(research_instrument_runtime_router)
 app.include_router(research_actions_router)

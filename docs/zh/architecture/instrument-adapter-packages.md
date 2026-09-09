@@ -84,8 +84,40 @@ pnpm gateway:install preview /absolute/path/to/adapter.zip \
 
 迁移 `0050_instrument_adapter_packages` 新增版本和审核表。按正常备份部署流程升级，软件验收仅使用可销毁数据库。降级删除目录及审核记录，不删除已有 ResearchFile 归档，更不卸载任何本地软件。
 
+### 平台安装授权与回执同步
+
+迁移 `0051_instrument_device_bindings` 新增设备/网关/版本/配置的精确绑定、短时安装授权及修订审计。按正常备份部署流程升级；降级删除授权记录，不卸载本地软件或逆转物理操作。
+
+配对及源码审核后，在本地准备独立的**安装专用身份**。使用网关服务实际目录和 `<root>/state.json` 日志，不能另设日志绕过运行中的服务。私有请求的父目录须为 `0700`。替换以下占位值：
+
+```bash
+pnpm gateway:installation prepare \
+  --platform-url https://lab.example.edu/api \
+  --lab-id <实验室UUID> --gateway-id <网关UUID> \
+  --package /absolute/path/to/adapter.zip \
+  --sdk-wheel /absolute/path/to/airalogy_instrument_gateway-0.1.0-py3-none-any.whl \
+  --trusted-sdk-digest <独立验证的SDK-SHA256> \
+  --config /absolute/private/adapter.json --root /absolute/private/gateway \
+  --destination /absolute/private/install-request.json
+```
+
+管理器先将新 `aiinstall_` 密钥独占写入 `0600` 私有文件，再输出公开 JSON；不读取网关运行凭据。仅将公开 JSON 粘贴到**仪器网关 → 选择网关 → 设备绑定与安装 → 授权安装**，不要上传私有请求文件。Owner/Manager 还须拥有 `equipment.service` 和适配包 ResearchFile 的读取权限。与本地操作人员比对完整指纹、选择准确设备和匹配的已审核版本，预览摘要与修订后确认。私有文件或额外字段会被拒绝。指纹用于核对请求，不证明物理设备身份或本地主机可信。
+
+授权领取前十分钟有效，领取后开启十五分钟下载窗口。安装器只用安装专用凭据获取指定包，不能调用网关任务接口。API 重新检查当前成员资格、设备权限和修订、来源审核、文件权限及配对身份，并在存储读取后再次鉴权。待处理授权阻止网关启用、凭据轮换和重新配对；**尚未领取**的过期授权解除限制，已经领取的授权即使下载窗口过期，也须核对回执或显式撤销。
+
+```bash
+pnpm gateway:installation apply /absolute/private/install-request.json --source-reviewed
+pnpm gateway:installation status /absolute/private/install-request.json
+```
+
+安装后的 SDK 提供 `airalogy-instrument-installation` 或 `python -m airalogy_instrument_gateway.installation_manager_cli` 同等入口。非回环地址必须使用 HTTPS，禁止重定向，响应有大小与时间限制。配置、SDK、适配包或解释器变更后需重新准备请求。领取、下载、非活动安装和回执发送全程持有运行时日志锁，不导入驱动、不启动服务。
+
+本地快照和不可变回执先持久化，再发送到平台。响应丢失时重复同一 `apply`，核对原始字节后仅补交匹配回执，不重新下载或执行物理命令。下载窗口过期后仍可核对匹配回执，但来源或目标授权撤销后会拒绝。已安装快照缺失或被篡改不会自动修复。服务器仅保存身份摘要、文件数量/大小及完整本地回执的摘要，不保存路径、配置正文或文件清单。本地回执记录安装事实，不是授权证书；平台另外保留授权决定。
+
+刷新页面可查看**已安装，未验收**及审计历史。撤销需预览并核对修订，来源撤销后仍能操作。撤销禁止后续安装访问，不清除已下载文件、不卸载、不停止设备，也不证明设备安全；已下载的本地副本需另行处理。此流程不会更改活动版本、注册命令、创建预约或 Executor Binding，也不授予硬件权限。
+
 ### 尚未交付
 
-平台授权的安装计划与回执同步、准确设备/网关/包/配置绑定、独立验收、活动版本切换/回滚/撤销及仪器文件回传仍需受治理流程；本地未启用安装回执不能代替这些门槛。真实软件探索及实机验收需要获授权试点。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
+独立设备验收、强制活动版本切换/回滚及仪器文件回传仍需受治理流程；当前安装授权尚未替代已有的手工运行配置和命令注册路径。自主驱动生成及原生/视觉 Computer Use 也仍待实现。真实软件探索及实机验收需要获授权试点。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
 
 标准库契约以 `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` 为唯一源，生成 API 副本，使用 `pnpm gateway:contract:check` 检查一致性。CI 构建 SDK，并在固定镜像中测试合成驱动、对抗性隔离及超时清理，不将其视为设备认证。

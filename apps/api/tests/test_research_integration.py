@@ -584,6 +584,430 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
     runtime.run(exercise())
 
 
+def test_installation_grant_real_local_copy_receipt_and_revocation(
+    runtime, monkeypatch, tmp_path
+):
+    """Real authorization/storage/local install; no driver or hardware execution."""
+    import json
+    from pathlib import Path
+
+    from app.models.instrument_installation import InstrumentDeviceBinding
+    from app.models.knowledge import ResearchFileAccessAudit
+    from app.services.research_instruments import (
+        gateway_token_digest,
+        generate_gateway_token,
+    )
+
+    sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
+    monkeypatch.syspath_prepend(str(sdk_root / "src"))
+    monkeypatch.syspath_prepend(str(sdk_root / "tests"))
+    from airalogy_instrument_gateway.installation_manager import (
+        apply,
+        prepare,
+        read_request,
+    )
+    from airalogy_instrument_gateway.package_builder import build_package
+    from airalogy_instrument_gateway.package_contract import sha256
+    from test_package_installation import sdk
+
+    example = sdk_root / "examples/adapter-package"
+    manifest = json.loads((example / "manifest.json").read_text())
+    manifest["id"] = "synthetic." + uuid4().hex
+    raw, _ = build_package(
+        manifest,
+        factory="synthetic_reader:create_adapter",
+        payloads={
+            name: (example / name).read_bytes()
+            for name in [
+                "source/synthetic_reader.py",
+                "tests/test_reader.py",
+                "licenses/LICENSE.txt",
+            ]
+        },
+    )
+    sdk_bytes = sdk()
+    # pytest ancestors need not be private; the actual selected root must be.
+    root = tmp_path.resolve() / "station"
+    root.mkdir(mode=0o700)
+    (root / "package.zip").write_bytes(raw)
+    (root / "sdk.whl").write_bytes(sdk_bytes)
+    (root / "config.json").write_text("{}")
+
+    async def exercise():
+        lab = runtime.seed["lab"]["id"]
+        base = f"/labs/{lab}/resource-library"
+        definitions = await runtime.json("GET", base + "/definition-versions")
+        definition = next(
+            item
+            for item in definitions["items"]
+            if item["protocol_uid"] == "plasmid_resource_definition_en"
+        )
+        kind = await runtime.json(
+            "POST",
+            base + "/types",
+            {
+                "protocol_version_id": definition["id"],
+                "code": "install_" + uuid4().hex,
+                "name": "Synthetic installation fixture",
+                "capabilities": {"booking": True},
+                "booking_policy": "approval",
+            },
+        )
+        resource = await runtime.json(
+            "POST",
+            base + "/resources",
+            {
+                "resource_type_id": kind["id"],
+                "name": "Synthetic installation equipment",
+                "code": uuid4().hex,
+                "visibility": "lab",
+                "data": {
+                    "construct_name": "Synthetic",
+                    "features": [],
+                    **dict.fromkeys(
+                        [
+                            "aliases",
+                            "backbone",
+                            "sequence",
+                            "sequence_file",
+                            "resistance_markers",
+                            "host_species",
+                            "copy_number",
+                            "external_source",
+                        ]
+                    ),
+                },
+            },
+        )
+        gateway = (
+            await runtime.confirm(
+                "/research-instrument-gateways",
+                {"lab_id": lab, "name": "Install " + uuid4().hex, "enabled": False},
+            )
+        )["gateway"]
+        issued = await runtime.confirm(
+            "/instrument-pairings",
+            {
+                "gateway_id": gateway["id"],
+                "expected_revision": gateway["revision"],
+                "reason": "Synthetic pairing",
+            },
+        )
+        runtime_token = generate_gateway_token()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as local:
+            paired = await local.post(
+                "/instrument-pairings/claim",
+                json={
+                    "code": issued["code"],
+                    "gateway_id": gateway["id"],
+                    "lab_id": lab,
+                    "client_name": "Synthetic station",
+                    "credential_digest": gateway_token_digest(runtime_token),
+                    "credential_hint": runtime_token[-8:],
+                },
+            )
+            assert paired.status_code == 200, paired.text
+            pair_url = f"/instrument-pairings/{issued['pairing']['id']}"
+            preview = await runtime.json("POST", pair_url + "/preview")
+            gateway = (
+                await runtime.json(
+                    "POST",
+                    pair_url + "/confirm",
+                    {"preview_digest": preview["preview_digest"]},
+                )
+            )["gateway"]
+            release_id = str(uuid4())
+            upload_params = {"lab_id": lab, "request_id": release_id}
+            headers = {"Content-Type": "application/zip"}
+            preview = await runtime.client.post(
+                "/instrument-adapter-packages/preview",
+                params=upload_params,
+                content=raw,
+                headers=headers,
+            )
+            assert preview.status_code == 200, preview.text
+            saved = await runtime.client.post(
+                "/instrument-adapter-packages",
+                params=upload_params,
+                content=raw,
+                headers={
+                    **headers,
+                    "X-Airalogy-Preview-Digest": preview.json()["preview_digest"],
+                },
+            )
+            assert saved.status_code == 200, saved.text
+            review_url = f"/instrument-adapter-packages/{release_id}/review"
+            await runtime.confirm(
+                review_url,
+                {
+                    "expected_revision": 1,
+                    "operation": "approve_source",
+                    "source_reviewed": True,
+                    "reason": "Reviewed synthetic source",
+                },
+            )
+
+            def new_request(name):
+                path = root / name
+                public = prepare(
+                    destination=path,
+                    platform_url="http://127.0.0.1",
+                    lab_id=lab,
+                    gateway_id=gateway["id"],
+                    package=root / "package.zip",
+                    sdk_wheel=root / "sdk.whl",
+                    trusted_sdk_digest=sha256(sdk_bytes),
+                    config=root / "config.json",
+                    root=root,
+                )
+                return (
+                    path,
+                    public,
+                    {
+                        "request": public,
+                        "resource_id": resource["id"],
+                        "release_id": release_id,
+                        "reason": "Independent inactive installation approval",
+                        "fingerprint_confirmed": True,
+                    },
+                )
+
+            path, public, draft = new_request("private.json")
+            preview = await runtime.json(
+                "POST", "/instrument-installations/preview", draft
+            )
+            await runtime.json(
+                "POST",
+                "/instrument-installations",
+                {
+                    **draft,
+                    "reason": "Changed",
+                    "preview_digest": preview["preview_digest"],
+                },
+                status=409,
+            )
+            grants = await asyncio.gather(
+                *(
+                    runtime.json(
+                        "POST",
+                        "/instrument-installations",
+                        {**draft, "preview_digest": preview["preview_digest"]},
+                    )
+                    for _ in range(2)
+                )
+            )
+            assert grants[0]["id"] == grants[1]["id"] == public["id"]
+            assert (
+                "gateway_credential_pin" not in grants[0]
+                and "installer_token_digest" not in grants[0]
+            )
+            url = f"/instrument-installations/{public['id']}"
+            local.headers["X-Airalogy-Installation-Token"] = runtime_token
+            assert (await local.post(url + "/claim")).status_code == 401
+            local.headers["X-Airalogy-Installation-Token"] = read_request(path)[
+                "installation_token"
+            ]
+            assert (await local.post(url + "/package")).status_code == 409
+            assert (
+                await local.post(f"/instrument-installations/{uuid4()}/claim")
+            ).status_code == 401
+            assert (
+                await local.post("/instrument-gateway/v1/jobs/lease")
+            ).status_code in {401, 422}
+            rotation = {
+                "expected_revision": gateway["revision"],
+                "reason": "Must block pending installation",
+            }
+            rotate_preview = await runtime.json(
+                "POST",
+                f"/research-instrument-gateways/{gateway['id']}/rotate/preview",
+                rotation,
+            )
+            await runtime.json(
+                "POST",
+                f"/research-instrument-gateways/{gateway['id']}/rotate",
+                {**rotation, "preview_digest": rotate_preview["preview_digest"]},
+                status=409,
+            )
+            await runtime.json(
+                "POST",
+                "/instrument-pairings/preview",
+                {**rotation, "gateway_id": gateway["id"]},
+                status=409,
+            )
+            update = {
+                **rotation,
+                "name": gateway["name"],
+                "description": gateway["description"],
+                "enabled": True,
+            }
+            update_preview = await runtime.json(
+                "POST", f"/research-instrument-gateways/{gateway['id']}/preview", update
+            )
+            await runtime.json(
+                "PUT",
+                f"/research-instrument-gateways/{gateway['id']}",
+                {**update, "preview_digest": update_preview["preview_digest"]},
+                status=409,
+            )
+
+            loop = asyncio.get_running_loop()
+            calls = []
+
+            async def call(operation, payload):
+                calls.append(operation)
+                response = await local.post(url + "/" + operation, json=payload or {})
+                assert response.status_code == 200, response.text
+                return response.content if operation == "package" else response.json()
+
+            class Bridge:
+                def call(self, operation, payload=None):
+                    return asyncio.run_coroutine_threadsafe(
+                        call(operation, payload), loop
+                    ).result(timeout=30)
+
+            result = await asyncio.to_thread(
+                apply, path, source_reviewed=True, client=Bridge()
+            )
+            assert result["state"] == "installed" and not result["hardware_authorized"]
+            assert calls == ["status", "claim", "package", "receipt"]
+            calls.clear()
+            await asyncio.to_thread(apply, path, source_reviewed=True, client=Bridge())
+            assert calls == ["status", "receipt"]
+            binding = (
+                await runtime.json(
+                    "GET", f"/instrument-installations?gateway_id={gateway['id']}"
+                )
+            )["items"][0]
+            assert binding["qualification_state"] == "not_qualified"
+            receipt = binding["receipt"]
+            assert str(root) not in json.dumps(receipt)
+            assert (
+                await local.post(
+                    url + "/receipt",
+                    json={"receipt": {**receipt, "local_receipt_digest": "a" * 64}},
+                )
+            ).status_code == 409
+            assert (
+                await local.post(
+                    url + "/receipt",
+                    json={"receipt": {**receipt, "hardware_authorized": True}},
+                )
+            ).status_code == 422
+            async with sessionmanager.session() as db:
+                audit = await db.scalar(
+                    select(ResearchFileAccessAudit).where(
+                        ResearchFileAccessAudit.action == "install_download",
+                        ResearchFileAccessAudit.request_id == public["id"],
+                    )
+                )
+                assert audit is not None
+            history = await runtime.json("GET", url + "/history")
+            assert [entry["action"] for entry in history["items"]] == [
+                "authorized",
+                "claimed",
+                "package_downloaded",
+                "installed",
+            ]
+            original_auth = runtime.client.headers["Auth-Token"]
+            viewer = next(
+                account
+                for account in runtime.seed["accounts"]
+                if account["key"] == "viewer"
+            )
+            auth = await runtime.json(
+                "POST",
+                "/signin_by_email",
+                {"email": viewer["email"], "password": viewer["password"]},
+            )
+            try:
+                runtime.client.headers["Auth-Token"] = auth["token"]
+                await runtime.json("GET", url + "/history", status=403)
+                await runtime.json(
+                    "GET",
+                    f"/instrument-installations?gateway_id={gateway['id']}",
+                    status=403,
+                )
+                await runtime.json(
+                    "POST", "/instrument-installations/preview", draft, status=403
+                )
+                await runtime.json(
+                    "POST",
+                    url + "/revoke/preview",
+                    {
+                        "expected_revision": binding["revision"],
+                        "reason": "Unauthorized revocation",
+                    },
+                    status=403,
+                )
+            finally:
+                runtime.client.headers["Auth-Token"] = original_auth
+            await runtime.confirm(
+                url + "/revoke",
+                {
+                    "expected_revision": binding["revision"],
+                    "reason": "Retire synthetic installation",
+                },
+            )
+            assert (
+                await local.post(url + "/receipt", json={"receipt": receipt})
+            ).status_code == 409
+
+            path2, public2, draft2 = new_request("private2.json")
+            await runtime.confirm("/instrument-installations", draft2)
+            local.headers["X-Airalogy-Installation-Token"] = read_request(path2)[
+                "installation_token"
+            ]
+            url2 = f"/instrument-installations/{public2['id']}"
+            async with sessionmanager.session() as db:
+                row = await db.get(InstrumentDeviceBinding, UUID(public2["id"]))
+                row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+                await db.commit()
+            assert (await local.post(url2 + "/claim")).status_code == 409
+            # Expired unclaimed requests release the unique pending slot atomically.
+            path3, public3, draft3 = new_request("private3.json")
+            await runtime.confirm("/instrument-installations", draft3)
+            local.headers["X-Airalogy-Installation-Token"] = read_request(path3)[
+                "installation_token"
+            ]
+            url3 = f"/instrument-installations/{public3['id']}"
+            assert (await local.post(url3 + "/claim")).status_code == 200
+            async with sessionmanager.session() as db:
+                row = await db.get(InstrumentDeviceBinding, UUID(public3["id"]))
+                row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+                await db.commit()
+            assert (await local.post(url3 + "/package")).status_code == 409
+            # An already durable inactive receipt may reconcile after download expiry.
+            assert (
+                await local.post(url3 + "/receipt", json={"receipt": receipt})
+            ).status_code == 200
+            await runtime.confirm(
+                review_url,
+                {
+                    "expected_revision": 2,
+                    "operation": "revoke",
+                    "source_reviewed": False,
+                    "reason": "Withdraw synthetic source",
+                },
+            )
+            assert (
+                await local.post(url3 + "/receipt", json={"receipt": receipt})
+            ).status_code == 409
+            # Revocation remains possible even after the source review is withdrawn.
+            state = (await local.post(url3 + "/status")).json()
+            await runtime.confirm(
+                url3 + "/revoke",
+                {
+                    "expected_revision": state["revision"],
+                    "reason": "Reconcile withdrawn source",
+                },
+            )
+
+    runtime.run(exercise())
+
+
 def test_instrument_pairing_single_use_scope_expiry_and_confirmation(runtime):
     from app.models.instrument_pairing import InstrumentPairing
     from app.models.research_execution import (

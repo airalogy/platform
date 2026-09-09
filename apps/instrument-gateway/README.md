@@ -69,6 +69,8 @@ HTTP is accepted automatically only for loopback. `AIRALOGY_GATEWAY_ALLOW_INSECU
 
 ## Adapter contract
 
+For source-reviewed pure Python packages, `airalogy-instrument-installation` prepares an installation-only request and applies its independent Platform grant without reading the Gateway runtime credential or executing drivers. See [the shared installation guide](../../docs/en/architecture/instrument-adapter-packages.md#platform-authorized-installation-and-receipt-synchronization). The installer must use the same service directory and journal as this runtime. An installed receipt is not equipment qualification or activation.
+
 An adapter subclasses `InstrumentAdapter` and implements exact-version `supports`, device-local `confirm`, blocking `execute`, and idempotent `safe_stop`. It should override `preflight` for commands whose Platform safety contract requires interlocks, local operator presence, or emergency-stop availability. Export a factory accepting an optional configuration `Path`:
 
 ```toml

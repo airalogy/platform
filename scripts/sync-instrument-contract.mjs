@@ -5,6 +5,7 @@ const root = new URL("../", import.meta.url)
 for (const [sourceName, targetName] of [
   ["integration_contract.py", "instrument_adapter_contract.py"],
   ["package_contract.py", "instrument_package_contract.py"],
+  ["installation_contract.py", "instrument_installation_contract.py"],
 ]) {
   const source = new URL(`apps/instrument-gateway/src/airalogy_instrument_gateway/${sourceName}`, root)
   const target = new URL(`apps/api/app/services/${targetName}`, root)

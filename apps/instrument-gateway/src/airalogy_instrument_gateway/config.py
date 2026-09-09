@@ -14,6 +14,21 @@ def _as_bool(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def validate_platform_url(value: str, *, allow_insecure_http=False) -> str:
+    normalized = value.rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Platform requires an absolute HTTP(S) URL")
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise ValueError("Platform URL cannot contain credentials, a query or fragment")
+    if parsed.scheme != "https" and not (
+        (parsed.hostname or "").lower() in {"localhost", "127.0.0.1", "::1"}
+        or allow_insecure_http
+    ):
+        raise ValueError("Platform requires HTTPS outside loopback")
+    return normalized
+
+
 @dataclass(frozen=True)
 class GatewayConfig:
     platform_url: str
@@ -28,24 +43,9 @@ class GatewayConfig:
     allow_insecure_http: bool = False
 
     def __post_init__(self) -> None:
-        normalized_url = self.platform_url.rstrip("/")
-        parsed = urlparse(normalized_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("AIRALOGY_PLATFORM_URL must be an absolute HTTP(S) URL")
-        is_loopback = (parsed.hostname or "").lower() in {
-            "localhost",
-            "127.0.0.1",
-            "::1",
-        }
-        if parsed.scheme != "https" and not (is_loopback or self.allow_insecure_http):
-            raise ValueError(
-                "Instrument Gateway requires HTTPS outside loopback; "
-                "set AIRALOGY_GATEWAY_ALLOW_INSECURE_HTTP only for an isolated test network"
-            )
-        if parsed.query or parsed.fragment or parsed.username or parsed.password:
-            raise ValueError(
-                "AIRALOGY_PLATFORM_URL cannot contain credentials, a query or fragment"
-            )
+        normalized_url = validate_platform_url(
+            self.platform_url, allow_insecure_http=self.allow_insecure_http
+        )
         if not self.gateway_token.startswith("aigw_") or len(self.gateway_token) < 40:
             raise ValueError("AIRALOGY_GATEWAY_TOKEN is missing or invalid")
         if not self.adapter_name.strip():

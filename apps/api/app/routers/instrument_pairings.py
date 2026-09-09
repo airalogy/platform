@@ -19,6 +19,7 @@ from app.models.research_execution import (
 )
 from app.routers.depends import CurrentUser
 from app.routers.research_instrument_gateways import _audit, _gateway_context
+from app.services.instrument_installations import assert_no_pending_installation
 from app.services.research_instruments import gateway_snapshot, gateway_token_digest
 from app.services.research_runtime import canonical_digest, utcnow
 
@@ -54,6 +55,7 @@ class PairingConfirm(BaseModel):
 
 
 async def _idle(gateway, db):
+    await assert_no_pending_installation(db, gateway.id)
     if gateway.enabled:
         raise HTTPException(
             409, "Disable the Gateway before pairing; pairing will not enable it"
