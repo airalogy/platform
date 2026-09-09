@@ -86,8 +86,8 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | Autonomous driver generation and signed distribution | Not implemented |
 | Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
 | Independent scoped acceptance records, expiry and revocation | Implemented; human assertions, simulation kept separate |
-| Enforced active-version selection and local target drift checks | Not implemented |
-| Prevent manual execution bypass after installation claim | Implemented; no managed activation yet; stop/result reconciliation preserved |
+| Enforced active-version selection, rollback and local target drift checks | Implemented, POSIX/pure-Python; reviewed driver observations, not hardware attestation |
+| Prevent manual execution bypass after installation claim | Implemented; exact managed grant required, stop/result reconciliation preserved |
 | Instrument raw-file ingestion and draft DataAsset mapping | Not implemented by this slice |
 | Real equipment, OS installation and safety acceptance | Awaiting authorized pilot and operator |
 

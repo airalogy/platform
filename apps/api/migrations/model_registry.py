@@ -18,6 +18,7 @@ MODEL_MODULES = [
     "app.models.instrument_package",
     "app.models.instrument_installation",
     "app.models.instrument_qualification",
+    "app.models.instrument_activation",
     "app.models.model_usage",
     "app.models.oauth",
     "app.models.pinned_item",

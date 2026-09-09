@@ -42,8 +42,17 @@ from app.models.resource import (
 from app.models.user import User
 from app.routers.depends import CurrentUser
 from app.services.access_control import resolve_resource_access
+from app.services.instrument_activation_contract import validate_activation_pin
+from app.services.instrument_activations import (
+    activation_invalid_reason,
+    activation_pin,
+    assert_execution_allowed,
+    current_activation,
+    execution_block_reason,
+    job_activation_pin,
+    pin_job_activation,
+)
 from app.services.instrument_installations import (
-    assert_manual_execution_allowed,
     managed_execution_block_reason,
 )
 from app.services.model_usage import create_usage_context
@@ -274,7 +283,18 @@ class InstrumentStop(InstrumentStopDraft):
     preview_digest: str = Field(min_length=64, max_length=64)
 
 
-class GatewayStart(BaseModel):
+class GatewayLease(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    activation: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def check_activation(self):
+        if self.activation is not None:
+            self.activation = validate_activation_pin(self.activation)
+        return self
+
+
+class GatewayStart(GatewayLease):
     model_config = ConfigDict(extra="forbid")
 
     device_confirmed: bool = False
@@ -461,7 +481,7 @@ async def _command_context(
     )
     if not access.allows("equipment.book"):
         raise HTTPException(status_code=403, detail="Equipment execution access denied")
-    await assert_manual_execution_allowed(db_session, gateway.id, resource.id)
+    await assert_execution_allowed(db_session, gateway.id, resource.id, command)
     booking_statement = select(EquipmentBooking).where(
         EquipmentBooking.id == booking_id
     )
@@ -1632,6 +1652,7 @@ async def create_instrument_action(
     run.status = ResearchRunStatus.WAITING_FOR_INSTRUMENT.value
     run.last_error = None
     await db_session.flush()
+    await pin_job_activation(db_session, job, command)
     await emit_research_event(
         db_session,
         task_id=task.id,
@@ -1919,11 +1940,24 @@ async def _pause_for_instrument_failure(
 async def lease_instrument_job(
     gateway_token: GatewayToken,
     db_session: DBSession,
+    params: GatewayLease | None = None,
 ):
     gateway = await _authenticate_gateway(db_session, gateway_token)
     if not gateway.enabled:
         raise HTTPException(status_code=403, detail="Instrument Gateway is disabled")
-    await assert_manual_execution_allowed(db_session, gateway.id)
+    if await managed_execution_block_reason(db_session, gateway.id):
+        active_version = await current_activation(db_session, gateway.id)
+        reason = await activation_invalid_reason(db_session, active_version)
+        if (
+            reason
+            or params is None
+            or params.activation != activation_pin(active_version)
+        ):
+            raise HTTPException(
+                409, reason or "The local managed activation identity is required"
+            )
+    elif params is not None and params.activation is not None:
+        raise HTTPException(409, "No managed installation matches this local identity")
     now = utcnow()
     active_jobs = list(
         (
@@ -2017,8 +2051,8 @@ async def lease_instrument_job(
     }:
         invalid_reason = "Instrument Control Session is not executable"
     if invalid_reason is None:
-        invalid_reason = await managed_execution_block_reason(
-            db_session, gateway.id, job.resource_id
+        invalid_reason = await execution_block_reason(
+            db_session, gateway.id, job.resource_id, command, job
         )
     if task is not None and task.status != ResearchTaskStatus.ACTIVE.value:
         await db_session.commit()
@@ -2104,6 +2138,9 @@ async def lease_instrument_job(
             "timeout_seconds": job.timeout_seconds,
         },
     }
+    pinned_activation = await job_activation_pin(db_session, job)
+    if pinned_activation is not None:
+        envelope["activation"] = pinned_activation
     await emit_research_event(
         db_session,
         task_id=task.id,
@@ -2160,7 +2197,12 @@ async def start_instrument_job(
         raise HTTPException(
             status_code=409, detail="Gateway disabled or equipment has unresolved work"
         )
-    await assert_manual_execution_allowed(db_session, gateway.id, job.resource_id)
+    command = await db_session.get(ResearchInstrumentCommand, job.command_id)
+    await assert_execution_allowed(
+        db_session, gateway.id, job.resource_id, command, job
+    )
+    if params.activation != await job_activation_pin(db_session, job):
+        raise HTTPException(409, "Local activation does not match the leased job")
     booking = await db_session.get(EquipmentBooking, job.equipment_booking_id)
     resource = await db_session.get(Resource, job.resource_id)
     now = utcnow()
@@ -2301,7 +2343,21 @@ async def heartbeat_instrument_job(
         and job.lease_expires_at
         and job.lease_expires_at <= now
     )
-    if timed_out or control_timed_out or booking_ended or lease_expired_while_running:
+    managed_invalid = None
+    if await job_activation_pin(db_session, job) is not None:
+        command = await db_session.get(ResearchInstrumentCommand, job.command_id)
+        managed_invalid = await execution_block_reason(
+            db_session, gateway.id, job.resource_id, command, job
+        )
+        if not gateway.enabled:
+            managed_invalid = "Managed Gateway was disabled"
+    if (
+        managed_invalid
+        or timed_out
+        or control_timed_out
+        or booking_ended
+        or lease_expired_while_running
+    ):
         reason = (
             "Instrument Job timeout reached"
             if timed_out
@@ -2315,6 +2371,7 @@ async def heartbeat_instrument_job(
                 )
             )
         )
+        reason = managed_invalid or reason
         job.status = ResearchInstrumentJobStatus.STOP_REQUESTED.value
         job.stop_reason = reason
         job.stop_requested_at = now

@@ -21,6 +21,16 @@ class InstrumentAdapter(ABC):
     def supports(self, job: InstrumentJobEnvelope) -> bool:
         """Return true only for an exact, locally authorized command version."""
 
+    def identity(self) -> dict[str, str]:
+        """Observe the configured equipment/software identity without changing it.
+
+        Managed adapters must implement this independently of job input. Return
+        the six qualification target fields from actual adapter/device probes.
+        Legacy adapters remain compatible but cannot opt into managed execution
+        without an independently reviewed identity implementation.
+        """
+        raise NotImplementedError("Managed execution requires an identity probe")
+
     @abstractmethod
     def confirm(self, job: InstrumentJobEnvelope) -> str | None:
         """Return a device-local confirmation reference, or None when unavailable."""

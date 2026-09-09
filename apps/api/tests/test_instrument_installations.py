@@ -54,12 +54,12 @@ def test_runtime_cannot_bypass_managed_qualification(monkeypatch, operation):
     from app.routers import research_instrument_jobs as jobs
 
     gateway = SimpleNamespace(id=uuid4(), enabled=True)
-    db = SimpleNamespace(scalar=AsyncMock(return_value=True), commit=AsyncMock())
+    db = SimpleNamespace(scalar=AsyncMock(side_effect=[True, None]), get=AsyncMock(return_value=None), commit=AsyncMock())
     monkeypatch.setattr(jobs, "_authenticate_gateway", AsyncMock(return_value=gateway))
     if operation == "lease":
         call = jobs.lease_instrument_job("runtime-credential", db)
     else:
-        job = SimpleNamespace(status="leased", resource_id=uuid4())
+        job = SimpleNamespace(status="leased", resource_id=uuid4(), command_id=uuid4())
         monkeypatch.setattr(
             jobs,
             "_gateway_job_context",
@@ -77,7 +77,7 @@ def test_runtime_cannot_bypass_managed_qualification(monkeypatch, operation):
         call = jobs.start_instrument_job(
             uuid4(), jobs.GatewayStart(), "runtime", "lease", db
         )
-    with pytest.raises(HTTPException, match="qualification"):
+    with pytest.raises(HTTPException, match="activation"):
         asyncio.run(call)
     db.commit.assert_not_awaited()
 

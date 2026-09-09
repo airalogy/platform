@@ -3222,6 +3222,27 @@ declare namespace I18n {
         installImpact: string
         installRevoke: string
         installRevokeImpact: string
+        activation: {
+          title: string
+          hint: string
+          create: string
+          empty: string
+          noQualification: string
+          moreQualifications: string
+          impact: string
+          consent: string
+          saved: string
+          localStart: string
+          localHint: string
+          revoke: string
+          revokeImpact: string
+          state: {
+            authorized: string
+            invalid: string
+            revoked: string
+            redacted: string
+          }
+        }
         qualification: {
           title: string
           hint: string

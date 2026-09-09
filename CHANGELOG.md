@@ -18,7 +18,9 @@ Target initial version: `0.1.0`.
 
 ### Added
 
-- Add immutable, scope-limited Instrument qualification reports with independent observations, exact installation/command pins, expiry, permission-checked evidence references and preview-confirm revocation. The bilingual workbench separates simulation from real-equipment acceptance and reports invalidation without deleting history. Qualification records do not activate hardware; managed active-version execution remains pending.
+- Add separately confirmed Instrument active-version grants, exact command registration and per-job version pins across manual, Aira-approved and control-session execution. A verified POSIX local launcher requires independent startup consent, checks fresh driver-observed target identity, rejects stale/changed grants and preserves revoked-version stop/result recovery. Version switching and rollback require idle equipment and fresh authorization; bilingual controls separate installation, qualification, authorization and running state. Software tests use synthetic fixtures, not physical certification; native OS setup, autonomous integration and raw-file return remain pending.
+
+- Add immutable, scope-limited Instrument qualification reports with independent observations, exact installation/command pins, expiry, permission-checked evidence references and preview-confirm revocation. The bilingual workbench separates simulation from real-equipment acceptance and reports invalidation without deleting history. Qualification records do not activate hardware; active-version authorization remains a separate confirmation.
 
 - Add independent, short-lived Instrument installation grants pinned to paired Gateway, equipment revision, reviewed package, SDK, configuration and Python identity. The local installation manager uses a separate credential, keeps the runtime journal locked and reconciles durable inactive receipts without driver execution. API permissions, exact private downloads, expiry/revocation, audit history and bilingual preview-confirm controls remain separate from hardware qualification and activation.
 

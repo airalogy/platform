@@ -27,7 +27,7 @@ from app.models.resource import (
     ResourceType,
     ResourceTypeRevision,
 )
-from app.services.instrument_installations import managed_instrument_scope
+from app.services.instrument_activations import execution_block_reason
 from app.services.research_compute import (
     compute_environment_snapshot,
     latest_compute_environment_rows,
@@ -240,7 +240,7 @@ async def instrument_command_capability_rows(
     *,
     lab_id: UUID,
 ) -> list[tuple[ResearchInstrumentCommand, ResearchInstrumentGateway, Resource]]:
-    return list(
+    rows = list(
         (
             await db_session.execute(
                 select(ResearchInstrumentCommand, ResearchInstrumentGateway, Resource)
@@ -256,10 +256,6 @@ async def instrument_command_capability_rows(
                     ResearchInstrumentCommand.archived_at.is_(None),
                     ResearchInstrumentGateway.enabled.is_(True),
                     ResearchInstrumentGateway.revoked_at.is_(None),
-                    ~managed_instrument_scope(
-                        ResearchInstrumentGateway.id,
-                        ResearchInstrumentCommand.resource_id,
-                    ),
                     Resource.archived_at.is_(None),
                     Resource.status == ResourceStatus.ACTIVE.value,
                     Resource.current_revision_id
@@ -273,6 +269,14 @@ async def instrument_command_capability_rows(
             )
         ).all()
     )
+
+    return [
+        (command, gateway, resource)
+        for command, gateway, resource in rows
+        if not await execution_block_reason(
+            db_session, gateway.id, resource.id, command
+        )
+    ]
 
 
 async def research_capability_catalog(

@@ -2197,6 +2197,14 @@ async def _materialize_aira_action(
             status=ResearchInstrumentJobStatus.QUEUED.value,
         )
         db_session.add(instrument_job)
+        from app.models.research_execution import ResearchInstrumentCommand
+        from app.services.instrument_activations import pin_job_activation
+
+        await db_session.flush()
+        command = await db_session.get(
+            ResearchInstrumentCommand, instrument_job.command_id
+        )
+        await pin_job_activation(db_session, instrument_job, command)
     elif proposal.decision == "service":
         service_job = ResearchServiceJob(
             action_id=action.id,

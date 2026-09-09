@@ -6,7 +6,7 @@ import path from "node:path"
 import { expect, test } from "@playwright/test"
 import { loadFixtures, selectVisibleOption } from "./fixtures"
 
-for (const mode of ["unclaimed", "qualified"] as const) {
+for (const mode of ["unclaimed", "qualified", "activated"] as const) {
   test(`installation UI ${mode}: exact identity, private-file rejection and acceptance history`, async ({ page, request }) => {
     const fixtures = await loadFixtures()
     const api = process.env.E2E_API_URL || "http://127.0.0.1:4100"
@@ -38,6 +38,9 @@ for (const mode of ["unclaimed", "qualified"] as const) {
       const source = "apps/instrument-gateway/examples/adapter-package"
       const manifest = JSON.parse(await readFile(`${source}/manifest.json`, "utf8"))
       manifest.id = `synthetic.installation.${suffix}`
+      // Disposable policy fixture only, never evidence of real hardware acceptance.
+      if (mode === "activated")
+        manifest.commands[0].output_schema.properties.simulation_only = { type: "boolean" }
       await writeFile(path.join(directory, "manifest.json"), JSON.stringify(manifest))
       const archive = path.join(directory, "synthetic.zip")
       const env = { ...process.env, PYTHONPATH: "apps/instrument-gateway/src:apps/instrument-gateway/tests" }
@@ -71,46 +74,102 @@ for (const mode of ["unclaimed", "qualified"] as const) {
       await modal.getByRole("button", { name: "Preview", exact: true }).click()
       await expect(modal).toContainText(publicRequest.descriptor.archive_digest)
       await expect(modal).toContainText("revoking the grant does not restore manual execution")
-      await expect(modal).toContainText("That activation stage is not yet available")
+      await expect(modal).toContainText("Starting the installed driver requires separate local confirmation")
       expect((await modal.boundingBox())!.width).toBeLessThanOrEqual(358)
       await modal.getByRole("button", { name: "Confirm", exact: true }).click()
       await expect(panel).toContainText("Authorized, awaiting local claim")
-      if (mode === "qualified") {
+      if (mode !== "unclaimed") {
         execFileSync("python3", ["-m", "airalogy_instrument_gateway.installation_manager_cli", "apply", path.join(directory, "private.json"), "--source-reviewed"], { env, timeout: 30000 })
         await panel.getByRole("button", { name: "Refresh", exact: true }).click()
-        await expect(panel).toContainText("Installed, inactive")
+        await expect(panel).toContainText("Installed; execution status is separate")
         await panel.getByRole("button", { name: "Inspect and review" }).click()
-        await page.getByTestId("instrument-qualifications").getByRole("button", { name: "Record an assessment" }).click()
-        const assessment = page.getByRole("dialog").last()
-        for (const key of ["identity_reference", "firmware", "application", "application_version", "driver_version", "os_version"])
-          await page.getByTestId(`qualification-${key}`).locator("input").fill(`Synthetic UI fixture: ${key}`)
-        for (const kind of ["identity", "output", "completion"]) {
-          const check = page.getByTestId(`qualification-check-${kind}`)
-          await check.locator("input:not([type='checkbox'])").fill("Independent synthetic UI observation")
-          await check.locator("textarea").nth(0).fill("Synthetic expected result")
-          await check.locator("textarea").nth(1).fill("Synthetic expected result")
-          await check.getByRole("checkbox").check()
+        if (mode === "activated") {
+          const now = Date.now()
+          const qualification = await confirm(`/instrument-installations/${publicRequest.id}/qualifications`, {
+            id: randomUUID(),
+            scope: "read_only",
+            evidence_origin: "manual_observation",
+            target: Object.fromEntries(["identity_reference", "firmware", "application", "application_version", "driver_version", "os_version"].map(key => [key, "Synthetic UI policy fixture, no hardware"])),
+            commands: [{ key: "reader.measure", version: "1.0.0", checks: ["identity", "output", "completion"].map(kind => ({ kind, method: "Synthetic policy comparison", expected: "42", observed: "42", passed: true })) }],
+            evidence_file_ids: [],
+            assessed_at: new Date(now).toISOString(),
+            expires_at: new Date(now + 86400000).toISOString(),
+            reason: "Synthetic real-scope policy test, not physical acceptance",
+            independent_review_confirmed: true,
+            physical_tests_authorized: true,
+          })
+          expect(qualification.effective_state).toBe("qualified")
+          const activations = page.getByTestId("instrument-activations")
+          await activations.getByRole("button", { name: "Select or roll back an active version" }).click()
+          const activation = page.getByRole("dialog").last()
+          await page.getByTestId("activation-reason").locator("textarea").fill("Synthetic UI active version")
+          await activation.getByRole("checkbox").check()
+          await activation.getByRole("button", { name: "Preview", exact: true }).click()
+          await expect(activation).toContainText("Old queued jobs cannot use the new authorization")
+          expect((await activation.boundingBox())!.width).toBeLessThanOrEqual(358)
+          let committedId = ""
+          await page.route(`**/api/instrument-installations/${publicRequest.id}/activations`, async (route) => {
+            const response = await route.fetch()
+            expect(response.ok(), await response.text()).toBeTruthy()
+            committedId = (await response.json()).id
+            await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Synthetic response loss after commit" }) })
+          }, { times: 1 })
+          await activation.getByRole("button", { name: "Confirm", exact: true }).click()
+          await expect(activation).toContainText("Refresh to check the saved state")
+          await activation.getByRole("button", { name: "Confirm", exact: true }).click()
+          await expect(activations).toContainText("Authorized; local startup required")
+          const persisted = await call(`/instrument-installations/${publicRequest.id}/activations`, undefined, "GET")
+          expect(persisted.items).toHaveLength(1)
+          expect(persisted.current_id).toBe(committedId)
+          await activations.getByText("Local startup and next steps", { exact: true }).click()
+          await expect(activations).toContainText("--startup-authorized")
+          await activations.getByRole("button", { name: "Revoke active-version authorization" }).click()
+          const revocation = page.getByRole("dialog").last()
+          await revocation.locator("textarea").fill("End synthetic authorization")
+          await revocation.getByRole("button", { name: "Preview", exact: true }).click()
+          await expect(revocation).toContainText("not an emergency stop")
+          await revocation.getByRole("button", { name: "Confirm", exact: true }).click()
+          await expect(activations).toContainText("Authorization revoked or superseded")
         }
-        await page.getByTestId("qualification-reason").locator("textarea").fill("Synthetic assessment persists without enabling hardware")
-        await assessment.getByRole("button", { name: "Preview", exact: true }).click()
-        await expect(assessment).toContainText("simulation cannot grant physical qualification")
-        expect((await assessment.boundingBox())!.width).toBeLessThanOrEqual(358)
-        // Commit on the real server, but lose its response at the browser boundary.
-        let committedAssessmentId = ""
-        await page.route(`**/api/instrument-installations/${publicRequest.id}/qualifications`, async (route) => {
-          const response = await route.fetch()
-          expect(response.ok(), await response.text()).toBeTruthy()
-          committedAssessmentId = (await response.json()).id
-          await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Synthetic receipt loss after commit" }) })
-        }, { times: 1 })
-        await assessment.getByRole("button", { name: "Confirm", exact: true }).click()
-        await expect(assessment).toContainText("Refresh to check the saved state")
-        await expect(page.getByTestId("qualification-reason").locator("textarea")).toHaveValue("Synthetic assessment persists without enabling hardware")
-        await assessment.getByRole("button", { name: "Confirm", exact: true }).click()
-        await expect(page.getByTestId("instrument-qualifications")).toContainText("Simulation passed; no physical qualification")
-        const persisted = await call(`/instrument-installations/${publicRequest.id}/qualifications`, undefined, "GET")
-        expect(persisted.items).toHaveLength(1)
-        expect(persisted.items[0].id).toBe(committedAssessmentId)
+        else {
+          await page.getByTestId("instrument-qualifications").getByRole("button", { name: "Record an assessment" }).click()
+          const assessment = page.getByRole("dialog").last()
+          for (const key of ["identity_reference", "firmware", "application", "application_version", "driver_version", "os_version"])
+            await page.getByTestId(`qualification-${key}`).locator("input").fill(`Synthetic UI fixture: ${key}`)
+          for (const kind of ["identity", "output", "completion"]) {
+            const check = page.getByTestId(`qualification-check-${kind}`)
+            await check.locator("input:not([type='checkbox'])").fill("Independent synthetic UI observation")
+            await check.locator("textarea").nth(0).fill("Synthetic expected result")
+            await check.locator("textarea").nth(1).fill("Synthetic expected result")
+            await check.getByRole("checkbox").check()
+          }
+          await page.getByTestId("qualification-reason").locator("textarea").fill("Synthetic assessment persists without enabling hardware")
+          await assessment.getByRole("button", { name: "Preview", exact: true }).click()
+          await expect(assessment).toContainText("simulation cannot grant physical qualification")
+          expect((await assessment.boundingBox())!.width).toBeLessThanOrEqual(358)
+          // Commit on the real server, but lose its response at the browser boundary.
+          let committedAssessmentId = ""
+          await page.route(`**/api/instrument-installations/${publicRequest.id}/qualifications`, async (route) => {
+            const response = await route.fetch()
+            expect(response.ok(), await response.text()).toBeTruthy()
+            committedAssessmentId = (await response.json()).id
+            await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "Synthetic receipt loss after commit" }) })
+          }, { times: 1 })
+          await assessment.getByRole("button", { name: "Confirm", exact: true }).click()
+          await expect(assessment).toContainText("Refresh to check the saved state")
+          await expect(page.getByTestId("qualification-reason").locator("textarea")).toHaveValue("Synthetic assessment persists without enabling hardware")
+          await assessment.getByRole("button", { name: "Confirm", exact: true }).click()
+          await expect(page.getByTestId("instrument-qualifications")).toContainText("Simulation passed; no physical qualification")
+          const persisted = await call(`/instrument-installations/${publicRequest.id}/qualifications`, undefined, "GET")
+          expect(persisted.items).toHaveLength(1)
+          expect(persisted.items[0].id).toBe(committedAssessmentId)
+          const activations = page.getByTestId("instrument-activations")
+          await activations.getByRole("button", { name: "Select or roll back an active version" }).click()
+          const unavailable = page.getByRole("dialog").last()
+          await expect(unavailable).toContainText("Simulation-only results cannot authorize equipment")
+          await expect(unavailable.getByRole("button", { name: "Preview", exact: true })).toBeDisabled()
+          await unavailable.getByRole("button", { name: "Cancel", exact: true }).click()
+        }
         await page.getByRole("dialog").last().getByRole("button", { name: "Close", exact: true }).click()
       }
       await page.reload()
@@ -140,7 +199,7 @@ for (const mode of ["unclaimed", "qualified"] as const) {
       // Cancellation before local claim does not permanently opt into managed execution.
       const update = { expected_revision: current.revision, name: current.name, description: current.description, enabled: true, reason: "Unclaimed synthetic grant was cancelled" }
       const enabledPreview = await call(`/research-instrument-gateways/${current.id}/preview`, update)
-      if (mode === "qualified") {
+      if (mode !== "unclaimed") {
         const denied = await request.put(`${api}/research-instrument-gateways/${current.id}`, { headers, data: { ...update, preview_digest: enabledPreview.preview_digest } })
         expect(denied.status(), await denied.text()).toBe(409)
         return

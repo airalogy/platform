@@ -44,6 +44,7 @@ ALL_CAPABILITIES = frozenset(
         "equipment.book",
         "equipment.service",
         "equipment.qualify",
+        "equipment.activate",
         "research.read",
         "research.create",
         "research.run",

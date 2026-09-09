@@ -890,6 +890,7 @@ def test_aira_sees_only_pinned_accessible_commands_with_unused_bookings(monkeypa
     bookings = SimpleNamespace(all=lambda: [booking])
     no_active_bookings = SimpleNamespace(all=list)
     db_session = SimpleNamespace(
+        scalar=AsyncMock(return_value=False),
         execute=AsyncMock(return_value=rows),
         get=AsyncMock(side_effect=get_model),
         scalars=AsyncMock(side_effect=[bookings, no_active_bookings]),

@@ -263,6 +263,11 @@ class GatewayRuntime:
                 job.safety_contract,
                 self.adapter.preflight(job),
             )
+        except GatewayHaltError:
+            # A bounded managed preflight may leave a probe thread alive. Keep
+            # the journal and process lock until the process exits; do not poll
+            # another job after claiming that this controller is idle.
+            raise
         except Exception as error:  # noqa: BLE001 - adapter is an isolation boundary
             self._report_failure(job, state, f"Local safety preflight failed: {error}")
             return True

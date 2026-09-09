@@ -36,6 +36,8 @@ Replace all placeholders; create the service-account-owned parent directory with
 
 ### Supervised runtime
 
+The following is the existing **unmanaged** adapter path. An installation claimed through the managed lifecycle cannot use manual enablement or this generic entry point to bypass qualification. For managed packages, use the separate [active-version authorization and explicit local launcher](../../docs/en/architecture/instrument-adapter-packages.md#active-versions-local-startup-and-rollback). It pins the reviewed installed SDK/driver/config, checks fresh `identity()` observations, and retains old-version safe-stop/result recovery; Platform does not remotely launch the process. Current managed installation support is POSIX/pure-Python, not Windows/native vendor installation or physical certification.
+
 Use a dedicated operating-system account on the equipment network:
 
 ```bash

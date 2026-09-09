@@ -3207,7 +3207,7 @@
       "installEmpty": "No installation requests yet. Prepare one with the local installation manager after pairing and source review.",
       "installRetry": "Installation operation did not complete. Your input is preserved. Refresh state, check permissions, pairing, package review, expiry and equipment activity, then preview again.",
       "installAuthorized": "Installation authorized for ten minutes. Apply the same private request locally, then refresh here for its receipt. No device is enabled.",
-      "installNotQualified": "Installed does not mean qualified. Claimed installations cannot use manual Gateway or command enablement, including through another Gateway for this equipment. Review acceptance records separately. Managed active-version execution is not yet available; do not use this installation path for production control.",
+      "installNotQualified": "Installed does not mean qualified or running. Managed equipment cannot bypass qualification through manual command enablement or another Gateway. Check the assessment and active-version authorization separately; local startup still requires explicit confirmation.",
       "installMore": "Load more installations",
       "installRequestHint": "Paste only the public JSON printed by the local installation manager. Never upload its private request file, runtime credential, local configuration or tokens.",
       "installPublicRequest": "Public installation request",
@@ -3215,12 +3215,33 @@
       "installFingerprint": "Full installer fingerprint",
       "installRelease": "Source-approved matching package",
       "installFingerprintConfirm": "I compared the full fingerprint with the local manager and checked the Platform, Lab, Gateway, equipment and exact package/configuration. This is identity confirmation, not physical device attestation.",
-      "installImpact": "Authorize this exact inactive installation only. Once claimed, this Gateway and equipment require managed qualification and active-version authorization; revoking the grant does not restore manual execution. That activation stage is not yet available. An unclaimed grant can be cancelled or expire without this permanent restriction.",
+      "installImpact": "Authorize this exact inactive installation only. Once claimed, this Gateway and equipment require managed qualification and active-version authorization; revoking the grant does not restore manual execution. Starting the installed driver requires separate local confirmation. An unclaimed grant can be cancelled or expire without this permanent restriction.",
       "installRevoke": "Preview installation revocation",
       "installRevokeImpact": "Revoke further installation access and release the pending-installation guard. Already downloaded inactive files may remain locally; this does not uninstall software, cancel a physical operation or certify safe equipment.",
+      "activation": {
+        "title": "Active version authorization",
+        "hint": "Approve exact commands from a currently qualified installation. The local station must independently confirm startup. Authorization is not proof that equipment is connected or running; no real instrument pilot has been certified by this software release.",
+        "create": "Select or roll back an active version",
+        "empty": "No active-version authorizations for this Gateway.",
+        "noQualification": "This installation has no selectable current real-equipment assessment. Simulation-only results cannot authorize equipment. Load more assessments if available.",
+        "moreQualifications": "Load more assessments",
+        "impact": "Enable the exact qualified commands and Gateway for new jobs. Switching requires no running, leased or unresolved stop job. Old queued jobs cannot use the new authorization. Rollback creates a fresh reviewed authorization, not a restored token.",
+        "consent": "I verified the equipment/software identity, command effects, qualification, expiry and on-site startup arrangements. I authorize only these exact commands.",
+        "saved": "Active version authorized. Confirm startup at the local station; the Platform does not start the driver remotely.",
+        "localStart": "Local startup and next steps",
+        "localHint": "Use the verified SDK on the paired station. Replace LOCAL paths and PREVIEW_DIGEST with your own reviewed values; never paste credentials into Platform. Driver startup may initialize equipment. Recovery of an unresolved job uses the same authorization ID with --recover and never leases new work.",
+        "revoke": "Revoke active-version authorization",
+        "revokeImpact": "Prevent new execution and signal running work to stop on its next heartbeat. This is not an emergency stop or proof of physical safety. Keep the original runtime available for safe stopping and receipt reconciliation; unresolved equipment remains reserved.",
+        "state": {
+          "authorized": "Authorized; local startup required",
+          "invalid": "Authorization is no longer valid",
+          "revoked": "Authorization revoked or superseded",
+          "redacted": "Authorization details restricted"
+        }
+      },
       "qualification": {
         "title": "Equipment qualification",
-        "hint": "Record independent acceptance for this exact installation, equipment and software. Simulation and real-equipment results stay separate. Saving a report does not enable hardware; managed activation is not yet available.",
+        "hint": "Record independent acceptance for this exact installation, equipment and software. Simulation and real-equipment results stay separate. Saving a report does not enable hardware; active-version authorization and local startup are separate confirmations.",
         "create": "Record an assessment",
         "empty": "No assessments for this installation.",
         "retry": "The request could not be fully confirmed. Your input is retained. Refresh to check the saved state; review permissions, target versions, evidence and dates before retrying.",
@@ -3286,7 +3307,7 @@
       "installState": {
         "authorized": "Authorized, awaiting local claim",
         "installing": "Claimed, awaiting receipt",
-        "installed": "Installed, inactive",
+        "installed": "Installed; execution status is separate",
         "expired": "Authorization expired",
         "revoked": "Authorization revoked"
       },

@@ -169,6 +169,12 @@ def runtime():
         runtime.run(sessionmanager._engine.dispose())
 
 
+def test_managed_activation_real_api_and_installed_copy(runtime, tmp_path, monkeypatch):
+    from tests.activation_acceptance import exercise_managed_activation
+
+    exercise_managed_activation(runtime, tmp_path, monkeypatch)
+
+
 def test_instrument_uncertain_stop_holds_equipment_across_gateways(runtime):
     """Inject persisted synthetic jobs, then exercise real API/locking/recovery."""
     from app.models.research import ResearchRun
@@ -1189,7 +1195,7 @@ def test_installation_grant_real_local_copy_receipt_and_revocation(
                 headers={"X-Airalogy-Gateway-Token": runtime_token},
             )
             assert guarded_lease.status_code == 409, guarded_lease.text
-            assert "qualification" in guarded_lease.text
+            assert "activation" in guarded_lease.text
             async with sessionmanager.session() as db:
                 station = await db.get(ResearchInstrumentGateway, UUID(gateway["id"]))
                 station.enabled = False

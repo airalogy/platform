@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import ssl
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import (
     HTTPRedirectHandler,
     HTTPSHandler,
+    ProxyHandler,
     Request,
     build_opener,
 )
@@ -37,9 +39,10 @@ class PlatformClient:
         self.platform_url = f"{platform_url.rstrip('/')}/"
         self.gateway_token = gateway_token
         self.timeout_seconds = timeout_seconds
-        self._opener = build_opener(
-            _RejectRedirects(), HTTPSHandler(context=ssl.create_default_context())
-        )
+        handlers = [_RejectRedirects(), HTTPSHandler(context=ssl.create_default_context())]
+        if urlparse(self.platform_url).hostname in {"localhost", "127.0.0.1", "::1"}:
+            handlers.append(ProxyHandler({}))
+        self._opener = build_opener(*handlers)
 
     def _request(
         self,
@@ -68,9 +71,19 @@ class PlatformClient:
         request = Request(url, data=body, headers=headers, method=method)
         try:
             with self._opener.open(request, timeout=self.timeout_seconds) as response:
-                raw = response.read()
+                raw = bytearray()
+                deadline = time.monotonic() + 60
+                limit = 4 * 1024 * 1024
+                while True:
+                    chunk = response.read1(min(65536, limit + 1 - len(raw)))
+                    raw.extend(chunk)
+                    if len(raw) > limit or time.monotonic() > deadline:
+                        raise GatewayAPIError("Platform response exceeded its limit")
+                    if not chunk:
+                        break
         except HTTPError as error:
-            raw = error.read()
+            raw = error.read(8192)
+            error.close()
             try:
                 detail = json.loads(raw.decode("utf-8")).get("detail")
             except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):

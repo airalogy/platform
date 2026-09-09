@@ -53,7 +53,7 @@ def write_credentials(path: Path, content: dict) -> None:
         os.close(parent_fd)
 
 
-def read_private_json(path: Path) -> dict:
+def read_private_json(path: Path, *, max_bytes: int = 16384) -> dict:
     parent_fd = _parent(path)
     try:
         fd = os.open(
@@ -66,12 +66,15 @@ def read_private_json(path: Path) -> dict:
                 or info.st_uid != os.getuid()
                 or info.st_mode & 0o077
                 or info.st_nlink != 1
-                or info.st_size > 16384
+                or info.st_size > max_bytes
             ):
                 raise ValueError(
                     "Credential file must be a small owner-only regular file, without hard links"
                 )
-            content = json.loads(source.read(16385))
+            raw = source.read(max_bytes + 1)
+            if len(raw) > max_bytes:
+                raise ValueError("Private document exceeded its size limit")
+            content = json.loads(raw)
     finally:
         os.close(parent_fd)
     if not isinstance(content, dict):
