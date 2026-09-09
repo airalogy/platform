@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add digest-bound, inactive POSIX installation snapshots for independently reviewed pure-Python Adapter Packages. Offline installation executes no driver or build scripts, preserves existing versions, shares the runtime journal lock and verifies retries against original wheel bytes. Local receipts do not grant Platform installation authorization, equipment qualification or activation.
+
 - Add Lab-private Adapter Package import with byte-bound previews, immutable version deduplication, protected ResearchFile downloads and independently confirmed source approval/revocation history. The bilingual resource workbench distinguishes source review from installation or hardware qualification; no driver execution, installation or Gateway activation occurs during import or review.
 
 - Add immutable, source-included Instrument Adapter Packages with exact payload/wheel integrity checks, offline inspection and a deterministic reference builder. Test drivers in a digest-pinned, network-disabled Docker sandbox with no host or device mounts, bounded resources and verified timeout cleanup. Package tests do not establish source trust, installation approval or hardware qualification.

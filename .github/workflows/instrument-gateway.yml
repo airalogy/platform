@@ -65,4 +65,4 @@ jobs:
         run: |
           docker pull "$ADAPTER_TEST_IMAGE"
           export ADAPTER_TEST_SDK_WHEEL="$(pwd)/dist/airalogy_instrument_gateway-$(cat ../../VERSION)-py3-none-any.whl"
-          RUN_ADAPTER_SANDBOX_TESTS=1 PYTHONPATH=src python -m unittest discover -s tests -p test_packages.py -v
+          RUN_ADAPTER_SANDBOX_TESTS=1 PYTHONPATH=src python -m unittest discover -s tests -p 'test_package*.py' -v

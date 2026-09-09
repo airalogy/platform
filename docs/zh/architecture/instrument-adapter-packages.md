@@ -48,6 +48,30 @@ pnpm gateway:package test /absolute/path/to/adapter.zip \
 
 报告绑定归档、清单、SDK 与镜像摘要，始终标记 `simulation_only: true`、`hardware_authorized: false`。**包自带测试不是独立验收**，可能不完整或不诚实。通过后不会自动上传、安装、启用网关、注册指令或操作设备。
 
+## 未启用的离线安装
+
+独立审核源码和依赖后，本地操作人员可以准备一份**未启用**的安装快照：将已检查的 wheel 字节安装到独立 Python 环境，不调用 pip、不联网解析依赖、不运行构建脚本、不导入驱动，也不操作设备。虚拟环境只隔离依赖，**不是安全沙箱**；这项本地操作不代表平台安装授权、设备绑定或实机验收。
+
+首版仅支持 POSIX 私有目录、纯 Python `py3-none-any` wheel 和无条件精确版本依赖。不支持的标签、依赖表达式、Python 版本或缺失依赖直接拒绝，不自动下载。厂商原生安装程序及 Windows ACL/服务安装仍需独立支持。
+
+选择已存在且权限为 `0700` 的真实绝对目录（包括祖先目录均不经过符号链接）、独立验证过的 SDK wheel，以及明确选择的本地 JSON 配置文件。配置正文不会输出，只在预览和回执中记录摘要。合成示例配置内容为 `{}`。替换以下占位值：
+
+```bash
+pnpm gateway:install preview /absolute/path/to/adapter.zip \
+  --root /absolute/private/gateway \
+  --sdk-wheel /absolute/path/to/airalogy_instrument_gateway-0.1.0-py3-none-any.whl \
+  --trusted-sdk-sha256 <独立验证的SDK-SHA256> \
+  --config /absolute/private/adapter.json
+```
+
+核对目标目录、配置/SDK/包摘要、Python 版本及文件数量和大小。将同一命令中的 `preview` 改为 `install`，追加 `--source-reviewed --confirm-digest <预览摘要>` 后执行。这记录的是**本地操作人员**的审核声明，不冒充平台中的实验室来源批准，也不代替其他管理员授予安装权限。
+
+安装器与已有网关必须使用**同一个** `<root>/state.json` 日志。安装器取得独占进程锁，任何未核对任务（包括未确认停止和待重传回执）都会阻止安装。另设一个日志目录不能保护已经运行的网关；应使用服务实际配置的目录，不能通过换目录绕过正在运行的进程。
+
+每组包/SDK/配置/Python 身份生成独立快照，发布前核对 wheel 内容与回执。重试会再次与独立提供的原始 wheel 字节比对，篡改回执中的哈希也不能绕过。不会覆盖已有快照，**不会更改活动版本、系统服务、命令白名单或网关状态**。中断可能留下私有 `.pending-install-*` 目录，它不是已安装或已启用版本；重试使用新的暂存目录。不要从准备好的环境中手工启动未经验收的厂商代码。
+
+回执明确标记 `platform_authorized: false`、`hardware_authorized: false`、`activation_performed: false`。仅检查本地回执可发现相对于本地元数据的变化，不证明来源可信或远程签名。软件测试在 macOS 及无网络 Linux 容器中明确加载仓库自带合成适配器；不代表任何真实仪器软件或硬件通过验收。
+
 ## 后续生命周期
 
 ### 私有导入与来源审核
@@ -62,6 +86,6 @@ pnpm gateway:package test /absolute/path/to/adapter.zip \
 
 ### 尚未交付
 
-安装计划/回执、准确设备/网关/包/配置绑定、独立验收、已安装版本回滚/撤销及仪器文件回传仍需受治理流程。真实软件探索及实机验收需要获授权试点。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
+平台授权的安装计划与回执同步、准确设备/网关/包/配置绑定、独立验收、活动版本切换/回滚/撤销及仪器文件回传仍需受治理流程；本地未启用安装回执不能代替这些门槛。真实软件探索及实机验收需要获授权试点。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
 
 标准库契约以 `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` 为唯一源，生成 API 副本，使用 `pnpm gateway:contract:check` 检查一致性。CI 构建 SDK，并在固定镜像中测试合成驱动、对抗性隔离及超时清理，不将其视为设备认证。

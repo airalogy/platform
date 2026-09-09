@@ -68,7 +68,7 @@ Private directory/file permissions, symbolic/hard links, exclusive creation and 
 
 ### Support matrix
 
-Actual Python drivers can now be built, inspected without execution and tested in an isolated container. See [Adapter Packages](./instrument-adapter-packages.md) for the selected-file workflow, immutable artifacts and security boundaries. This does not install drivers on an instrument workstation.
+Actual Python drivers can now be built, inspected without execution, tested in an isolated container and prepared as inactive POSIX installation snapshots. See [Adapter Packages](./instrument-adapter-packages.md) for the selected-file workflow, immutable artifacts and security boundaries. Preparation does not activate an instrument driver.
 
 `airalogy.gui-rehearsal.v1` supports `observe`, `read`, `invoke`, `set_value` as **step descriptions compared with observations**, literal scalars, up to 10 commands, 40 steps per command and 20 scenarios. No shell, code, URL fetching, coordinates, implicit retries or physical stop claims. One authored Python contract in Gateway generates the API copy; CI checks equality.
 
@@ -81,9 +81,10 @@ Actual Python drivers can now be built, inspected without execution and tested i
 | Native accessibility and visual control backends | Not implemented; target software/OS required |
 | Source-included package build, integrity inspection, isolated tests | Implemented; package tests are not hardware evidence |
 | Private package import, source review/revocation, protected download | Implemented; not installation or qualification |
-| Autonomous driver generation, signed distribution and installation | Not implemented |
+| Inactive pure-Python offline installation and local receipts | Implemented, POSIX; no activation or remote authorization |
+| Autonomous driver generation, signed distribution and Platform-authorized installation | Not implemented |
 | Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
-| Installation receipts, adapter/equipment qualification binding | Not implemented |
+| Receipt synchronization, adapter/equipment qualification binding | Not implemented |
 | Instrument raw-file ingestion and draft DataAsset mapping | Not implemented by this slice |
 | Real equipment, OS installation and safety acceptance | Awaiting authorized pilot and operator |
 

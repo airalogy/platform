@@ -48,6 +48,30 @@ The host enforces a 1–300 second deadline and verifies container cleanup. If t
 
 Reports bind archive, manifest, SDK and image digests and always mark `simulation_only: true`, `hardware_authorized: false`. A test pass is **not independent qualification**: package-authored tests can be incomplete or dishonest. No upload, install, Gateway enablement, command registration or device action follows automatically.
 
+## Inactive offline installation
+
+After independent source/dependency review, a local operator can prepare an **inactive** installation snapshot. This creates an isolated Python environment from already inspected wheel bytes without pip, network resolution, build scripts, driver imports or device actions. A virtual environment separates dependencies; it is **not** a security sandbox. Platform installation authorization, equipment binding and qualification are not implied by this local operation.
+
+The first installer accepts POSIX owner-only directories and pure Python `py3-none-any` wheels with unconditional exact dependency pins. Unsupported tags, dependency expressions, Python versions or missing dependencies are rejected, not fetched. Native vendor installers and Windows ACL/service setup need separate support.
+
+Choose an existing, physical absolute directory with mode `0700` (no symlink ancestors), the independently verified SDK wheel, and an explicitly selected local JSON configuration file. Configuration contents stay local; previews/receipts contain only its digest. For the synthetic example, the configuration file contains `{}`. Replace the placeholders:
+
+```bash
+pnpm gateway:install preview /absolute/path/to/adapter.zip \
+  --root /absolute/private/gateway \
+  --sdk-wheel /absolute/path/to/airalogy_instrument_gateway-0.1.0-py3-none-any.whl \
+  --trusted-sdk-sha256 <independently-verified-SDK-SHA256> \
+  --config /absolute/private/adapter.json
+```
+
+Review the destination, configuration/SDK/package digests, Python version and file count/size. Repeat the command with `install` instead of `preview`, adding `--source-reviewed --confirm-digest <preview-digest>`. This acknowledgement records the **local operator's** review; it does not impersonate Platform's Lab source approval or grant installation authority on behalf of another administrator.
+
+The installer and the existing Gateway must use the **same** `<root>/state.json` journal. The installer takes its exclusive process lock and refuses any unreconciled job, including unconfirmed stops or pending receipts. Another independently configured journal cannot protect an already running Gateway. Use the configured service directory; do not point installation at a new directory to bypass a live process.
+
+Each package/SDK/configuration/Python identity produces a separate snapshot. Complete wheel bytes and their receipt are verified before publishing it; a matching retry checks against the independently supplied original wheel bytes, including when receipt hashes have been altered. Existing snapshots are never overwritten and **no active pointer, service, command allowlist or Gateway state is changed**. A crash can leave a private `.pending-install-*` directory; it is not an installed/active version, and a retry uses a new staging directory. Do not manually launch unqualified vendor code from the prepared environment.
+
+Receipts explicitly carry `platform_authorized: false`, `hardware_authorized: false` and `activation_performed: false`. Receipt-only verification detects differences relative to local metadata, not author trust or a signed remote attestation. The software tests explicitly load the repository's synthetic adapter from a prepared environment on macOS and inside a network-disabled Linux container; these tests do not qualify real instrument software or hardware.
+
 ## Remaining lifecycle
 
 ### Private import and source review
@@ -62,6 +86,6 @@ Migration `0050_instrument_adapter_packages` adds release and review records. Us
 
 ### Not yet delivered
 
-Installation plans/receipts, exact equipment/Gateway/package/configuration binding, independent qualification, installed-version rollback/revocation and instrument-file return still need their governed workflows. Real software exploration and real hardware acceptance need an authorized pilot. See the [integration support matrix](./instrument-integration.md#support-matrix).
+Platform-authorized installation plans and receipt synchronization, exact equipment/Gateway/package/configuration binding, independent qualification, active-version switching/rollback/revocation and instrument-file return still need their governed workflows. The inactive local receipt is not a replacement for those gates. Real software exploration and real hardware acceptance need an authorized pilot. See the [integration support matrix](./instrument-integration.md#support-matrix).
 
 The standard-library contract is authored in `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` and generated into the API. Run `pnpm gateway:contract:check` to check parity. CI builds the SDK and runs the synthetic, adversarial isolation and timeout tests with an exact container image; this does not certify equipment.
