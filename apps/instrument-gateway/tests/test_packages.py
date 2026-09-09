@@ -49,6 +49,23 @@ def contents(raw):
 
 
 class PackageTests(unittest.TestCase):
+    def test_output_names_cannot_collide_on_case_insensitive_stations(self):
+        _raw, result = example()
+        first = {
+            "name": "raw.csv",
+            "media_type": "text/csv",
+            "max_bytes": 1000,
+            "required": True,
+        }
+        for outputs in (
+            [first, {**first, "name": "RAW.csv"}],
+            [{**first, "media_type": "текст/csv"}],
+        ):
+            manifest = copy.deepcopy(result["manifest"])
+            manifest["commands"][0]["outputs"] = outputs
+            with self.assertRaises(ValueError):
+                validate_manifest(manifest)
+
     def test_selected_file_cli_build_inspect_and_no_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "adapter.zip"

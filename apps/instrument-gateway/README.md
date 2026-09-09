@@ -20,6 +20,8 @@ The last command operates the bundled synthetic reader in an isolated browser wi
 
 The contract is authored in `src/airalogy_instrument_gateway/integration_contract.py`. After editing it, run `node scripts/sync-instrument-contract.mjs` from the repository root to generate the API copy for its independent Docker build context. CI checks equality. See the [support matrix](../../docs/en/architecture/instrument-integration.md).
 
+`output_contract.py` and `output_capture.CaptureStore` provide the [local raw-file capture foundation](../../docs/en/architecture/instrument-adapter-packages.md#local-raw-file-capture-foundation): pinned selections, private bounded snapshots, provenance and restart recovery without instrument calls. This is not yet wired to runtime delivery or Platform assets. Managed commands declaring files remain blocked until the full authorized upload/registration workflow is available. The library does not grant file access, verify scientific success or automatically delete retained data.
+
 ## Gateway runtime installation
 
 Executable adapters now have a separate source-included package format and a no-network Docker test path. See [Adapter Packages](../../docs/en/architecture/instrument-adapter-packages.md). Inspection never imports driver code; the test command never installs it on the host. Distribution, approved workstation installation and equipment qualification are separate from package tests.

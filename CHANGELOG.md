@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a POSIX local raw-file capture SDK foundation with pinned selections, bounded private snapshots, acquisition provenance, process locking and crash recovery without instrument replay. API/SDK contracts are synchronized; file-declaring managed commands now fail closed until scoped upload and draft asset registration are connected, rather than silently discarding declared outputs. This does not yet deliver files to Platform or establish physical acceptance.
+
 - Add separately confirmed Instrument active-version grants, exact command registration and per-job version pins across manual, Aira-approved and control-session execution. A verified POSIX local launcher requires independent startup consent, checks fresh driver-observed target identity, rejects stale/changed grants and preserves revoked-version stop/result recovery. Version switching and rollback require idle equipment and fresh authorization; bilingual controls separate installation, qualification, authorization and running state. Software tests use synthetic fixtures, not physical certification; native OS setup, autonomous integration and raw-file return remain pending.
 
 - Add immutable, scope-limited Instrument qualification reports with independent observations, exact installation/command pins, expiry, permission-checked evidence references and preview-confirm revocation. The bilingual workbench separates simulation from real-equipment acceptance and reports invalidation without deleting history. Qualification records do not activate hardware; active-version authorization remains a separate confirmation.

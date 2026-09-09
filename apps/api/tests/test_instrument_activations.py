@@ -1,4 +1,7 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -11,6 +14,52 @@ from app.services.instrument_activation_contract import (
     activation_digest,
     validate_activation_pin,
 )
+from app.services.instrument_activations import file_delivery_block_reason
+
+
+def test_existing_file_activation_cannot_bypass_runtime_gate(monkeypatch):
+    import app.services.instrument_activations as service
+
+    identity = uuid4()
+    binding = SimpleNamespace(
+        id=identity,
+        gateway_id=identity,
+        resource_id=identity,
+        lab_id=identity,
+        descriptor={},
+        receipt={},
+    )
+    qualification = SimpleNamespace(binding_id=identity, confirmation_digest="a" * 64)
+    row = SimpleNamespace(
+        revoked_at=None,
+        binding_id=identity,
+        qualification_id=identity,
+        gateway_id=identity,
+        resource_id=identity,
+        lab_id=identity,
+        plan={
+            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            "descriptor": {},
+            "receipt": {},
+            "qualification_digest": "a" * 64,
+            "commands": [
+                {"contract": {"outputs": [{"name": "raw.csv", "required": False}]}}
+            ],
+        },
+    )
+
+    class Database:
+        async def get(self, model, _id):
+            return (
+                binding if model is service.InstrumentDeviceBinding else qualification
+            )
+
+    monkeypatch.setattr(
+        service, "qualification_state", AsyncMock(return_value="qualified")
+    )
+    assert "raw files cannot be activated" in asyncio.run(
+        service.activation_invalid_reason(Database(), row)
+    )
 
 
 def draft():
@@ -46,6 +95,23 @@ def test_activation_capability_is_separate_from_equipment_use():
         assert "equipment.activate" in ROLE_CAPABILITIES[role]
     for role in ("resource_custodian", "resource_operator"):
         assert "equipment.activate" not in ROLE_CAPABILITIES[role]
+
+
+def test_declared_optional_files_are_not_silently_ignored_either():
+    assert file_delivery_block_reason({"outputs": []}) is None
+    for required in (True, False):
+        assert "raw files cannot be activated" in file_delivery_block_reason(
+            {
+                "outputs": [
+                    {
+                        "name": "raw.csv",
+                        "media_type": "text/csv",
+                        "max_bytes": 1024,
+                        "required": required,
+                    }
+                ]
+            }
+        )
 
 
 def test_pin_binds_exact_installation_and_disallows_embedded_code_or_path():

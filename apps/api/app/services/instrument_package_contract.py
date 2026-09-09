@@ -388,15 +388,16 @@ def _validate_manifest(value: dict) -> dict:
             name = safe_path(output["name"])
             if (
                 "/" in name
-                or name in names
+                or name.casefold() in names
                 or type(output["max_bytes"]) is not int
                 or not 1 <= output["max_bytes"] <= 2_147_483_647
                 or type(output["required"]) is not bool
             ):
                 raise ValueError("Invalid output file contract")
-            names.add(name)
+            names.add(name.casefold())
             if not re.fullmatch(
-                r"[\w.+-]+/[\w.+-]+", _text(output["media_type"], "media type", 128)
+                r"[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+",
+                _text(output["media_type"], "media type", 128),
             ):
                 raise ValueError("Invalid media type")
     paths = set()

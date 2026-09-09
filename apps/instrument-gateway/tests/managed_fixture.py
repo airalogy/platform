@@ -18,7 +18,7 @@ TARGET = dict.fromkeys(
 )
 
 
-def package(*, physical_policy=False):
+def package(*, physical_policy=False, file_outputs=False):
     manifest = json.loads((EXAMPLE / "manifest.json").read_text())
     manifest["id"] = "synthetic.managed-policy-fixture"
     # Exercise the real-qualification policy branch in disposable tests only.
@@ -27,6 +27,16 @@ def package(*, physical_policy=False):
         manifest["commands"][0]["output_schema"]["properties"]["simulation_only"] = {
             "type": "boolean"
         }
+    if file_outputs:
+        manifest["id"] = "synthetic.managed-file-policy-fixture"
+        manifest["commands"][0]["outputs"] = [
+            {
+                "name": "synthetic.csv",
+                "media_type": "text/csv",
+                "max_bytes": 4096,
+                "required": True,
+            }
+        ]
     source = (EXAMPLE / "source/synthetic_reader.py").read_text()
     source = source.replace(
         "    def supports(self, job):",

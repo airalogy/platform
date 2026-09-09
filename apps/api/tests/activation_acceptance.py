@@ -17,7 +17,7 @@ from app.services.research_instruments import (
 )
 
 
-def exercise_managed_activation(runtime, tmp_path, monkeypatch):
+def exercise_managed_activation(runtime, tmp_path, monkeypatch, *, file_outputs=False):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
     monkeypatch.syspath_prepend(str(sdk_root / "tests"))
@@ -33,7 +33,7 @@ def exercise_managed_activation(runtime, tmp_path, monkeypatch):
 
     from tests.test_instrument_qualifications import report
 
-    raw, wheel = package(physical_policy=True), sdk()
+    raw, wheel = package(physical_policy=True, file_outputs=file_outputs), sdk()
     root = tmp_path.resolve() / "managed-station"
     root.mkdir(mode=0o700)
     for name, value in (
@@ -224,6 +224,24 @@ def exercise_managed_activation(runtime, tmp_path, monkeypatch):
                 }
 
             first = draft()
+            if file_outputs:
+                rejected = await runtime.json(
+                    "POST", activation_url + "/preview", first, status=409
+                )
+                assert "raw files cannot be activated" in rejected["detail"]
+                rejected = await runtime.json(
+                    "POST",
+                    activation_url,
+                    {**first, "preview_digest": "a" * 64},
+                    status=409,
+                )
+                assert "raw files cannot be activated" in rejected["detail"]
+                local.headers["X-Airalogy-Gateway-Token"] = token
+                assert (await local.get("/instrument-gateway/v1/activation")).json()[
+                    "activation"
+                ] is None
+                assert (await runtime.json("GET", activation_url))["current_id"] is None
+                return
             preview = await runtime.json("POST", activation_url + "/preview", first)
             await runtime.json(
                 "POST",

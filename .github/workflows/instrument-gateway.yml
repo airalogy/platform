@@ -8,6 +8,7 @@ on:
       - "apps/api/app/services/instrument_package_contract.py"
       - "apps/api/app/services/instrument_installation_contract.py"
       - "apps/api/app/services/instrument_activation_contract.py"
+      - "apps/api/app/services/instrument_output_contract.py"
       - "scripts/sync-instrument-contract.mjs"
       - ".github/workflows/instrument-gateway.yml"
   pull_request:
@@ -17,6 +18,7 @@ on:
       - "apps/api/app/services/instrument_package_contract.py"
       - "apps/api/app/services/instrument_installation_contract.py"
       - "apps/api/app/services/instrument_activation_contract.py"
+      - "apps/api/app/services/instrument_output_contract.py"
       - "scripts/sync-instrument-contract.mjs"
       - ".github/workflows/instrument-gateway.yml"
 

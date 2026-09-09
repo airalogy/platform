@@ -7,6 +7,7 @@ for (const [sourceName, targetName] of [
   ["package_contract.py", "instrument_package_contract.py"],
   ["installation_contract.py", "instrument_installation_contract.py"],
   ["activation_contract.py", "instrument_activation_contract.py"],
+  ["output_contract.py", "instrument_output_contract.py"],
 ]) {
   const source = new URL(`apps/instrument-gateway/src/airalogy_instrument_gateway/${sourceName}`, root)
   const target = new URL(`apps/api/app/services/${targetName}`, root)

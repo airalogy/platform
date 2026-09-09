@@ -24,6 +24,21 @@ from app.services.instrument_activation_contract import (
 from app.services.instrument_qualifications import qualification_state
 
 
+def file_delivery_block_reason(contract):
+    """Do not silently discard declared scientific files while intake is pending.
+
+    The local capture library alone is not a Platform delivery implementation.
+    Remove this gate only with pinned job intake, scoped draft registration and
+    durable transfer recovery, including tests of the complete file workflow.
+    """
+    if contract.get("outputs"):
+        return (
+            "Commands declaring raw files cannot be activated yet: scoped file "
+            "delivery and draft asset registration are not available"
+        )
+    return None
+
+
 def activation_pin(row):
     return validate_activation_pin(
         {
@@ -73,6 +88,10 @@ async def activation_invalid_reason(db, row):
         or row.plan["qualification_digest"] != qualification.confirmation_digest
     ):
         return "Managed activation target changed"
+    for change in row.plan["commands"]:
+        reason = file_delivery_block_reason(change["contract"])
+        if reason:
+            return reason
     # Authority remains organizational: revoking the approver's current access
     # invalidates new execution, rather than preserving a stale permission bit.
     creator = await db.get(User, row.created_by_user_id)
