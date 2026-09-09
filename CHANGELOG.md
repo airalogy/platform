@@ -153,6 +153,8 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Preserve explicit browser-test selection when `pnpm e2e -- <spec>` forwards its separator; focused checks no longer silently expand into the full suite. Add isolated wrapper regression tests and run check-selection tests in browser CI.
+
 - Prevent claimed Instrument installations from bypassing qualification through legacy Gateway/command enablement, another Gateway for the same equipment, task queueing or runtime lease/start endpoints. Revocation does not restore manual execution; unclaimed cancellation/expiry remains recoverable. Preserve stop/result reconciliation and explicitly disclose that managed qualification/activation is not yet available.
 - Fix Instrument command creation previews being shadowed by the Gateway-ID route, with actual API and route-matching regression coverage.
 

@@ -47,7 +47,7 @@
     "lint-staged": "lint-staged",
     "prepush:check": "node scripts/pre-push.mjs",
     "prepush:full": "node scripts/pre-push.mjs --full",
-    "prepush:test": "node --test scripts/pre-push.test.mjs",
+    "prepush:test": "node --test scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
     "i18n:generate": "node scripts/generate-i18n-types.mjs",
     "version:check": "node scripts/check-version.mjs",
     "build:info": "node scripts/write-build-info.mjs apps/api/app/build-info.json",
