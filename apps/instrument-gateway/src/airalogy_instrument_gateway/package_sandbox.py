@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from .package_contract import inspect_package, sha256, wheel_identity
 
@@ -68,7 +68,45 @@ def sandbox_command(executable, image, name):
     ]
 
 
-def test_package(raw, *, sdk_wheel, trusted_sdk_digest, image, timeout_seconds=60):
+def sandbox_name(invocation_id):
+    return "airalogy-adapter-test-" + UUID(str(invocation_id)).hex
+
+
+def reconcile_sandbox(invocation_id):
+    """Stop only an explicitly journaled disposable test, then prove absence."""
+    name = sandbox_name(invocation_id)
+    executable = shutil.which("docker")
+    if not executable:
+        raise SandboxError("Docker is unavailable; sandbox termination is unknown")
+    subprocess.run(
+        [executable, "rm", "--force", name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=30,
+        check=False,
+    )
+    check = subprocess.run(
+        [
+            executable,
+            "container",
+            "ls",
+            "--all",
+            "--filter",
+            f"name=^/{name}$",
+            "--format",
+            "{{.ID}}",
+        ],
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    if check.returncode or check.stdout.strip():
+        raise SandboxError("Sandbox termination could not be established")
+
+
+def test_package(
+    raw, *, sdk_wheel, trusted_sdk_digest, image, timeout_seconds=60, invocation_id=None
+):
     if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 300:
         raise ValueError("Sandbox timeout must be between 1 and 300 seconds")
     inspection = inspect_package(raw)
@@ -90,7 +128,7 @@ def test_package(raw, *, sdk_wheel, trusted_sdk_digest, image, timeout_seconds=6
         raise SandboxError(
             "Docker is unavailable; adapter code will not run on the host"
         )
-    name = "airalogy-adapter-test-" + uuid4().hex
+    name = sandbox_name(invocation_id or uuid4())
     command = sandbox_command(executable, image, name)
     probe = subprocess.run(
         [executable, "image", "inspect", image],

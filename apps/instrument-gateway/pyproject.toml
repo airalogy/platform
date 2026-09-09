@@ -12,6 +12,7 @@ dependencies = []
 airalogy-instrument-gateway = "airalogy_instrument_gateway.__main__:main"
 airalogy-instrument-installation = "airalogy_instrument_gateway.installation_manager_cli:main"
 airalogy-instrument-activation = "airalogy_instrument_gateway.activation_cli:main"
+airalogy-instrument-authoring = "airalogy_instrument_gateway.authoring_cli:main"
 
 [project.entry-points."airalogy.instrument_adapters"]
 mock = "airalogy_instrument_gateway.adapters:mock_adapter_factory"

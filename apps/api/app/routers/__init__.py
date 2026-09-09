@@ -38,6 +38,14 @@ from .groups import router as groups_router
 from .health import router as health_router
 from .hub import router as hub_router
 from .instance import router as instance_router
+from .instrument_activations import router as instrument_activations_router
+from .instrument_authoring import router as instrument_authoring_router
+from .instrument_installations import router as instrument_installations_router
+from .instrument_integrations import router as instrument_integrations_router
+from .instrument_outputs import router as instrument_outputs_router
+from .instrument_packages import router as instrument_packages_router
+from .instrument_pairings import router as instrument_pairings_router
+from .instrument_qualifications import router as instrument_qualifications_router
 from .knowledge import router as knowledge_router
 from .labs import router as labs_router
 from .login import router as login_router
@@ -67,13 +75,6 @@ from .research_compute_runners import runtime_router as research_compute_runtime
 from .research_executor_bindings import router as research_executor_bindings_router
 from .research_human_executors import router as research_human_executors_router
 from .research_instrument_gateways import router as research_instrument_gateways_router
-from .instrument_integrations import router as instrument_integrations_router
-from .instrument_pairings import router as instrument_pairings_router
-from .instrument_packages import router as instrument_packages_router
-from .instrument_installations import router as instrument_installations_router
-from .instrument_qualifications import router as instrument_qualifications_router
-from .instrument_activations import router as instrument_activations_router
-from .instrument_outputs import router as instrument_outputs_router
 from .research_instrument_jobs import (
     gateway_router as research_instrument_runtime_router,
 )
@@ -320,6 +321,7 @@ app.include_router(instrument_installations_router)
 app.include_router(instrument_qualifications_router)
 app.include_router(instrument_activations_router)
 app.include_router(instrument_outputs_router)
+app.include_router(instrument_authoring_router)
 app.include_router(research_instrument_jobs_router)
 app.include_router(research_instrument_runtime_router)
 app.include_router(research_actions_router)

@@ -175,6 +175,14 @@ def test_managed_activation_real_api_and_installed_copy(runtime, tmp_path, monke
     exercise_managed_activation(runtime, tmp_path, monkeypatch)
 
 
+def test_source_authoring_real_api_local_resume_and_private_permissions(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.authoring_acceptance import exercise_authoring
+
+    exercise_authoring(runtime, tmp_path, monkeypatch)
+
+
 @pytest.mark.parametrize("cancel_before_finalize", [False, True])
 def test_file_declaring_activation_waits_for_scoped_intake(
     runtime, tmp_path, monkeypatch, cancel_before_finalize

@@ -93,6 +93,8 @@
 
     <instrument-installations-panel v-if="selectedGateway" :key="`install-${selectedGateway.id}`" :lab-id="labId" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
 
+    <instrument-authoring-panel v-if="selectedGateway" :key="`author-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
+
     <instrument-integration-panel
       v-if="selectedGateway"
       :key="selectedGateway.id"
@@ -390,6 +392,7 @@ import {
 } from "@/service/api/research-instruments"
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NSpace, NTag } from "naive-ui"
+import InstrumentAuthoringPanel from "./instrument-authoring-panel.vue"
 import InstrumentInstallationsPanel from "./instrument-installations-panel.vue"
 import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
 import InstrumentPackagesPanel from "./instrument-packages-panel.vue"

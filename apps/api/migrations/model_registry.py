@@ -20,6 +20,7 @@ MODEL_MODULES = [
     "app.models.instrument_qualification",
     "app.models.instrument_activation",
     "app.models.instrument_output",
+    "app.models.instrument_authoring",
     "app.models.model_usage",
     "app.models.oauth",
     "app.models.pinned_item",

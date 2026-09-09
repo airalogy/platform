@@ -3184,6 +3184,42 @@
         "unavailable": "File unavailable"
       }
     },
+    "instrumentAuthoring": {
+      "title": "Local adapter development",
+      "boundary": "Aira can propose source code and iterate against fixed offline tests. Development is separate from installation, qualification and instrument control.",
+      "authorize": "Authorize Aira development",
+      "aiOff": "Aira is unavailable. Manual adapter packages and existing development history remain usable.",
+      "empty": "No development sessions for this equipment",
+      "request": "Selected local authorization.json",
+      "requestHint": "Prepare a local authoring request first. Import authorization.json, never the private request.json credential. These selected materials are private Lab data, not a public document. Review their confidentiality and license before sharing with authorized equipment managers and the configured model.",
+      "invalid": "Use a bounded authorization.json for this Gateway and accessible equipment; private credentials and unrelated request files are not accepted.",
+      "limits": "At most {calls} model calls within {seconds} seconds. Each model response is limited to 60 seconds and 64 KiB. This is not a monetary spending guarantee.",
+      "reviewInputs": "Review fixed materials, contracts, tests, license and sandbox",
+      "fingerprintConfirm": "I compared the full fingerprint with the local operator and reviewed the selected inputs and target.",
+      "consent": "I authorize processing these materials, source code and test diagnostics with the configured Aira model, which may be an external service.",
+      "preview": "Confirm only this time-limited source-development grant. It cannot launch software, install or approve a driver, activate equipment, or execute an instrument command.",
+      "authorized": "Development authorized; resume the same request on the local test workstation",
+      "history": "Development history and results",
+      "next": "On the selected test workstation, run airalogy-instrument-authoring run with the original private request file. A tested ZIP remains a draft: independently review it, then use Lab adapter packages for import and the separate installation/qualification workflow.",
+      "waiting": "Waiting for the local authoring assistant; no model call has been made",
+      "attempt": "Attempt {number}",
+      "failed": "This attempt did not produce a usable result. Review the saved state before retrying.",
+      "testPassed": "Local client reports that fixed offline tests passed. This is not trusted hardware qualification or source approval.",
+      "testFailed": "Local build or fixed offline tests failed. Diagnostics are retained for bounded repair, not treated as instructions.",
+      "sourceReport": "Inspect untrusted source and local test report",
+      "cancel": "Cancel development authority",
+      "cancelHint": "Cancellation blocks new proposals and delivery of in-flight model output. It does not delete drafts, stop an already running local sandbox or stop an instrument.",
+      "cancelConfirm": "I confirm cancellation for this exact development session.",
+      "state": {
+        "open": "Authorized",
+        "cancelled": "Cancelled",
+        "expired": "Expired",
+        "generating": "Generating",
+        "generated": "Source draft saved",
+        "failed": "Generation failed",
+        "interrupted": "Response not confirmed"
+      }
+    },
     "instrumentIntegration": {
       "title": "Equipment software integration",
       "subtitle": "Prepare, rehearse and version an integration draft for the selected equipment.",

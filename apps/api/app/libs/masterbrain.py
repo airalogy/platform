@@ -2,7 +2,7 @@ import json
 import os
 import re
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import aclosing, asynccontextmanager, nullcontext
 from typing import Literal
 
 import httpx
@@ -12,7 +12,6 @@ from masterbrain.usage import UsageContext, bind_usage_context
 from app.config import config
 from app.models.chat import Chat
 from app.services.model_usage import configure_embedded_masterbrain_app
-
 
 MASTERBRAIN_MODEL_NAME_MAP = {
     "qwen-flash": "qwen3.5-flash",
@@ -51,9 +50,8 @@ def _get_masterbrain_app() -> FastAPI:
 
 
 def _use_external_masterbrain_api() -> bool:
-    return (
-        config.MASTERBRAIN_CALL_MODE.strip().lower() == "external"
-        and bool(config.CHAT_API_ENDPOINT.strip())
+    return config.MASTERBRAIN_CALL_MODE.strip().lower() == "external" and bool(
+        config.CHAT_API_ENDPOINT.strip()
     )
 
 
@@ -115,7 +113,9 @@ async def stream_request(
 
     request_target = _masterbrain_request_target(path)
     usage_scope = (
-        bind_usage_context(usage_context) if usage_context is not None else nullcontext()
+        bind_usage_context(usage_context)
+        if usage_context is not None
+        else nullcontext()
     )
     with usage_scope:
         async with _masterbrain_client() as client:
@@ -146,7 +146,9 @@ async def json_request(
     # print(json.dumps(json_body, ensure_ascii=False))
     request_target = _masterbrain_request_target(path)
     usage_scope = (
-        bind_usage_context(usage_context) if usage_context is not None else nullcontext()
+        bind_usage_context(usage_context)
+        if usage_context is not None
+        else nullcontext()
     )
     with usage_scope:
         async with _masterbrain_client() as client:
@@ -182,9 +184,7 @@ def build_masterbrain_model(model: dict) -> dict:
     }
 
 
-async def chat_qa_language(
-    chat: Chat, *, usage_context: UsageContext | None = None
-):
+async def chat_qa_language(chat: Chat, *, usage_context: UsageContext | None = None):
     # qa chat
     async for chunk in stream_request(
         "endpoints/chat/qa/language",
@@ -209,9 +209,7 @@ async def hub_chat(chat: Chat, *, usage_context: UsageContext | None = None):
         yield chunk
 
 
-async def field_input_chat(
-    chat: Chat, *, usage_context: UsageContext | None = None
-):
+async def field_input_chat(chat: Chat, *, usage_context: UsageContext | None = None):
     response = await json_request(
         "endpoints/chat/field_input",
         {
@@ -227,9 +225,7 @@ async def field_input_chat(
     return response
 
 
-async def stt(
-    audio_base64: str, *, usage_context: UsageContext | None = None
-):
+async def stt(audio_base64: str, *, usage_context: UsageContext | None = None):
     response = await json_request(
         "endpoints/chat/qa/stt",
         {
@@ -337,9 +333,7 @@ async def protocol_check(
         yield chunk
 
 
-async def protocol_debug(
-    chat: Chat, *, usage_context: UsageContext | None = None
-):
+async def protocol_debug(chat: Chat, *, usage_context: UsageContext | None = None):
     response = await json_request(
         "endpoints/protocol_debug",
         {
@@ -409,7 +403,7 @@ def _extract_json_object(content: str) -> dict:
     except json.JSONDecodeError as error:
         raise ValueError("Aira Action planner returned invalid JSON") from error
     if not isinstance(value, dict):
-        raise ValueError("Aira Action planner response must be a JSON object")
+        raise ValueError("Aira Action planner response must be a JSON object")  # noqa: TRY004 - preserve the public validation boundary
     return value
 
 
@@ -418,26 +412,32 @@ async def aira_structured_proposal(
     model_name: str | None = None,
     *,
     usage_context: UsageContext | None = None,
+    max_response_bytes: int | None = None,
 ) -> dict:
     """Ask Masterbrain for one bounded JSON object validated by Platform."""
 
-    chunks = [
-        chunk
-        async for chunk in stream_request(
-            "endpoints/chat/qa/language",
-            {
-                "model": build_masterbrain_model(
-                    {
-                        "name": build_masterbrain_aira_model(model_name),
-                        "enable_thinking": False,
-                        "enable_search": False,
-                    }
-                ),
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            usage_context=usage_context,
-        )
-    ]
+    chunks = []
+    size = 0
+    stream = stream_request(
+        "endpoints/chat/qa/language",
+        {
+            "model": build_masterbrain_model(
+                {
+                    "name": build_masterbrain_aira_model(model_name),
+                    "enable_thinking": False,
+                    "enable_search": False,
+                }
+            ),
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        usage_context=usage_context,
+    )
+    async with aclosing(stream):
+        async for chunk in stream:
+            size += len(chunk.encode("utf-8"))
+            if max_response_bytes is not None and size > max_response_bytes:
+                raise ValueError("Aira proposal exceeded its streaming response limit")
+            chunks.append(chunk)
     return _extract_json_object("".join(chunks))
 
 

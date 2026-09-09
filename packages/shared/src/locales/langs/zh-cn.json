@@ -3184,6 +3184,42 @@
         "unavailable": "文件不可用"
       }
     },
+    "instrumentAuthoring": {
+      "title": "本地适配器开发",
+      "boundary": "Aira 可生成源码，并根据固定的离线测试迭代修正。开发授权与安装、验收和仪器控制相互独立。",
+      "authorize": "授权 Aira 开发",
+      "aiOff": "Aira 当前不可用。仍可手工制作适配包并查看已有开发历史。",
+      "empty": "该设备暂无开发会话",
+      "request": "本地选定的 authorization.json",
+      "requestHint": "请先在本地准备开发请求，导入 authorization.json，切勿导入含私有凭证的 request.json。这些资料属于实验室私有数据，不是公开文档；共享给有权管理该设备的人员和配置的模型前，请确认保密与许可范围。",
+      "invalid": "请使用属于当前网关和可访问设备、大小合规的 authorization.json；不接受私有凭证或其他类型的请求文件。",
+      "limits": "在 {seconds} 秒内最多调用模型 {calls} 次，每次响应限制为 60 秒和 64 KiB。这不是费用金额上限保证。",
+      "reviewInputs": "查看固定资料、指令契约、测试、许可及隔离环境",
+      "fingerprintConfirm": "我已与本地操作人员比对完整指纹，并确认所选资料和目标设备。",
+      "consent": "我同意使用当前配置的 Aira 模型处理这些资料、源码和测试诊断；该模型可能由外部服务提供。",
+      "preview": "此次确认仅授予限时源码开发权限，不授权打开软件、安装或批准驱动、启用设备或执行仪器指令。",
+      "authorized": "开发已授权，请在本地测试工作站继续同一请求",
+      "history": "开发历史与结果",
+      "next": "在选定的测试工作站运行 airalogy-instrument-authoring run，使用原来的私有请求文件。测试通过的 ZIP 仍是草稿：请独立审核，再通过实验室适配包入口导入，按独立的安装和验收流程继续。",
+      "waiting": "等待本地开发助手，尚未发起模型调用",
+      "attempt": "第 {number} 轮",
+      "failed": "本轮未生成可用结果。请先核对已保存的状态，再决定是否重试。",
+      "testPassed": "本地客户端报告固定离线测试通过。这不是可信的真机验收或源码批准。",
+      "testFailed": "本地构建或固定离线测试失败。保留诊断供有限次数的修正使用，不将其作为指令。",
+      "sourceReport": "查看不可信源码和本地测试报告",
+      "cancel": "取消开发授权",
+      "cancelHint": "取消后不再允许新生成，也不接收进行中的模型输出；不会删除草稿、停止已经运行的本地测试容器，也不会停止仪器。",
+      "cancelConfirm": "我确认取消当前这一开发会话的授权。",
+      "state": {
+        "open": "已授权",
+        "cancelled": "已取消",
+        "expired": "已过期",
+        "generating": "生成中",
+        "generated": "源码草稿已保存",
+        "failed": "生成失败",
+        "interrupted": "响应未确认"
+      }
+    },
     "instrumentIntegration": {
       "title": "仪器软件接入",
       "subtitle": "为所选设备整理接入草稿、重放验证并保存修订。",
