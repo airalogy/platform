@@ -95,6 +95,8 @@
 
     <instrument-authoring-panel v-if="selectedGateway" :key="`author-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
 
+    <instrument-exploration-panel v-if="selectedGateway" :key="`explore-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
+
     <instrument-integration-panel
       v-if="selectedGateway"
       :key="selectedGateway.id"
@@ -393,6 +395,7 @@ import {
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NSpace, NTag } from "naive-ui"
 import InstrumentAuthoringPanel from "./instrument-authoring-panel.vue"
+import InstrumentExplorationPanel from "./instrument-exploration-panel.vue"
 import InstrumentInstallationsPanel from "./instrument-installations-panel.vue"
 import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
 import InstrumentPackagesPanel from "./instrument-packages-panel.vue"

@@ -183,6 +183,14 @@ def test_source_authoring_real_api_local_resume_and_private_permissions(
     exercise_authoring(runtime, tmp_path, monkeypatch)
 
 
+def test_interface_exploration_real_api_browser_and_scope(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.exploration_acceptance import exercise_exploration
+
+    exercise_exploration(runtime, tmp_path, monkeypatch)
+
+
 @pytest.mark.parametrize("cancel_before_finalize", [False, True])
 def test_file_declaring_activation_waits_for_scoped_intake(
     runtime, tmp_path, monkeypatch, cancel_before_finalize

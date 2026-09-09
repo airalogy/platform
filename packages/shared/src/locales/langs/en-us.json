@@ -3184,6 +3184,31 @@
         "unavailable": "File unavailable"
       }
     },
+    "instrumentExploration": {
+      "title": "Aira interface exploration",
+      "boundary": "Authorize bounded choices among reviewed local interface actions. Live URLs are observation-only; no production hardware authority is granted.",
+      "authorize": "Authorize interface exploration",
+      "aiOff": "Aira is disabled. Manual observation and confirmed interface plans remain available.",
+      "empty": "No interface-development sessions for this equipment.",
+      "limits": "At most {calls} model calls within {seconds} seconds. Each response is limited to 60 seconds and 16 KiB. The local browser has separate limits; this is not a monetary spending guarantee.",
+      "waiting": "Waiting for the locally confirmed interface explorer.",
+      "requestHint": "Import only authorization.json from the local exploration tool. Never upload request.json or its bearer token. Selected labels and readbacks are private Lab material.",
+      "invalid": "Use a valid, credential-free exploration authorization for this Gateway and equipment (maximum 128 KiB).",
+      "reviewPolicy": "Review target, controls, allowed actions and success checks",
+      "actionsReviewed": "I reviewed every allowed local action and success check. This grant does not approve production equipment control.",
+      "consent": "I authorize the configured Aira model to process the selected control labels, readbacks and action results; the provider may be external. No raw screenshots or HTML are included.",
+      "preview": "Confirming permits bounded model suggestions only. The local operator must separately confirm the exact application/action policy before opening software.",
+      "history": "Interface exploration history",
+      "next": "Compare the fingerprint and confirm the local preview before running. Outcomes are client-reported development evidence, not equipment qualification. Retain uncertain actions; synchronize saved reports without relaunching.",
+      "evidence": "Observation, proposal and client-reported result",
+      "cancelHint": "Cancellation prevents further model calls and the next local action after the client checks. It does not prove that a running operation or physical device has stopped.",
+      "cancelConfirm": "I understand the local operator must reconcile any uncertain operation.",
+      "state": {
+        "open": "Authorized",
+        "cancelled": "Closed or cancelled",
+        "expired": "Expired"
+      }
+    },
     "instrumentAuthoring": {
       "title": "Local adapter development",
       "boundary": "Aira can propose source code and iterate against fixed offline tests. Development is separate from installation, qualification and instrument control.",

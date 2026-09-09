@@ -14,6 +14,7 @@
     "gateway:rehearse": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.integration_cli",
     "gateway:gui-demo": "node scripts/instrument-gui-demo.mjs",
     "gateway:interface": "node apps/instrument-interface/src/cli.mjs",
+    "gateway:explore": "node apps/instrument-interface/src/exploration-cli.mjs",
     "gateway:interface-example": "node scripts/instrument-interface-example.mjs",
     "gateway:interface-test": "pnpm --filter @airalogy/instrument-interface test:browser",
     "gateway:contract:check": "node scripts/sync-instrument-contract.mjs --check",

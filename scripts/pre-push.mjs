@@ -147,8 +147,9 @@ export function buildCheckPlan(files, fullRequested = false) {
   if (fullRequested || files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
-    || /^apps\/api\/tests\/(?:activation|instrument_output)_acceptance\.py$/.test(file)
+    || /^apps\/api\/tests\/(?:activation|instrument_output|authoring|exploration)_acceptance\.py$/.test(file)
     || /^apps\/instrument-gateway\/(?:src|tests)\//.test(file)
+    || file.startsWith("apps/instrument-interface/")
     || /^apps\/api\/migrations\/versions\/\d+_instrument/.test(file)
     || [
       "apps/api/app/services/persistent_jobs.py",
@@ -158,6 +159,7 @@ export function buildCheckPlan(files, fullRequested = false) {
       "tests/e2e/scripts/api-env.sh",
       "tests/e2e/scripts/research-integration.sh",
       ".github/workflows/research-integration.yml",
+      "scripts/instrument-interface-example.mjs",
     ].includes(file),
   )) {
     plan.push(checks.researchIntegration)

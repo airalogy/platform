@@ -76,7 +76,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | --- | --- |
 | 私有草稿/修订、导入导出、预览确认 | 已实现 |
 | 离线重放和合成软件浏览器演示 | 已实现，不代表实机证据 |
-| 选定浏览器应用观察及有界模拟操作 | 已实现本地[浏览器界面后端](./instrument-browser-interface.md)，不提供模型自主探索或真实 URL 写操作 |
+| 选定浏览器应用观察及有界模拟探索 | 已实现本地[浏览器界面后端](./instrument-browser-interface.md)及独立授权的[Aira 动作选择](./instrument-interface-exploration.md)，不提供未知应用发现或真实 URL 写操作 |
 | 限于已有目标/控件/状态的可选 Aira 编辑 | 已实现，真实模型调用依赖部署配置 |
 | 自主发现、启动和探索仪器软件 | 尚未实现 |
 | 原生可访问性及视觉控制后端 | 尚未实现，需明确目标软件/OS |

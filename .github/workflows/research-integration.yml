@@ -7,6 +7,10 @@ on:
         "apps/api/**",
         "apps/instrument-gateway/src/**",
         "apps/instrument-gateway/tests/**",
+        "apps/instrument-interface/**",
+        "scripts/instrument-interface-example.mjs",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
         "tests/e2e/**",
         "package.json",
         ".github/workflows/research-integration.yml",
@@ -18,6 +22,10 @@ on:
         "apps/api/**",
         "apps/instrument-gateway/src/**",
         "apps/instrument-gateway/tests/**",
+        "apps/instrument-interface/**",
+        "scripts/instrument-interface-example.mjs",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
         "tests/e2e/**",
         "package.json",
         ".github/workflows/research-integration.yml",
@@ -33,6 +41,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Install locked browser interface runtime
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+          pnpm gateway:contract:check
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"

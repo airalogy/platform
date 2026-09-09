@@ -1,0 +1,360 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "airalogy.interface-exploration.v1",
+  "definitions": {
+    "check": {
+      "type": "object",
+      "properties": {
+        "control_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+        },
+        "equals": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4096
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "required": ["control_id", "equals"],
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "enum": ["read", "fill", "click"]
+        },
+        "control_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+        },
+        "before": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+        },
+        "after": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "required": ["operation", "control_id", "before", "after"],
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "maxItems": 64,
+          "minItems": 1
+        },
+        "success": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/check"
+          },
+          "maxItems": 16,
+          "minItems": 1
+        }
+      },
+      "required": ["goal", "actions", "success"],
+      "additionalProperties": false
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "local_preview_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "application": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "enum": ["file", "url"]
+            }
+          },
+          "required": ["application", "version", "kind"],
+          "additionalProperties": false
+        },
+        "controls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "read": {
+                "enum": ["text", "value", "checked"]
+              }
+            },
+            "required": ["id", "label", "read"],
+            "additionalProperties": false
+          },
+          "maxItems": 64,
+          "minItems": 1
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/check"
+                },
+                "maxItems": 16,
+                "minItems": 1
+              }
+            },
+            "required": ["id", "checks"],
+            "additionalProperties": false
+          },
+          "maxItems": 16,
+          "minItems": 1
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "maxItems": 64,
+          "minItems": 1
+        },
+        "success": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/check"
+          },
+          "maxItems": 16,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "goal",
+        "local_preview_digest",
+        "target",
+        "controls",
+        "states",
+        "actions",
+        "success"
+      ],
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "airalogy.interface-exploration.v1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "gateway_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "resource_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "credential_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 900
+        },
+        "spec": {
+          "$ref": "#/definitions/spec"
+        }
+      },
+      "required": [
+        "schema",
+        "id",
+        "gateway_id",
+        "resource_id",
+        "credential_digest",
+        "fingerprint",
+        "max_iterations",
+        "duration_seconds",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "local_preview_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "state": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,95}$"
+        },
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "enabled": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required": ["session_id", "sequence", "local_preview_digest", "state", "values", "enabled"],
+      "additionalProperties": false
+    },
+    "proposal": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": ["act", "finish", "needs_information"]
+        },
+        "action_index": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "missing_information": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "maxItems": 8,
+          "minItems": 0
+        }
+      },
+      "required": ["kind", "action_index", "summary", "missing_information"],
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "proposal_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "outcome": {
+          "enum": ["executed", "uncertain", "declined"]
+        },
+        "before_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/observation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": ["proposal_digest", "outcome", "before_digest", "after", "evidence_digest"],
+      "additionalProperties": false
+    }
+  }
+}

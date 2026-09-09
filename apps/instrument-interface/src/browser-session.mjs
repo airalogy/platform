@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks"
 import { chromium } from "playwright"
 import { bytesDigest, canonical, digest, validateDefinition, validatePlan } from "./contract.mjs"
 import { Evidence, readPrivateSelection } from "./evidence.mjs"
+import { validatePolicy } from "./exploration-contract.mjs"
 
 const require = createRequire(import.meta.url)
 const engine = { tool: require("../package.json").version, playwright: require("playwright/package.json").version }
@@ -19,7 +20,7 @@ function freeze(value) {
   return value
 }
 
-export async function previewInterface(definition, plan) {
+export async function previewInterface(definition, plan, policy = null) {
   // Detach callers' mutable objects before approval or browser work.
   definition = validateDefinition(JSON.parse(canonical(definition)))
   plan = validatePlan(JSON.parse(canonical(plan)), definition)
@@ -31,6 +32,11 @@ export async function previewInterface(definition, plan) {
       throw new Error("Selected HTML bytes changed")
   }
   const selected = { schema: "airalogy.interface-preview.v1", engine, definition, plan }
+  if (policy !== null) {
+    if (plan.steps.length)
+      throw new Error("Select a fixed plan or an exploration policy, not both")
+    selected.policy = validatePolicy(JSON.parse(canonical(policy)), definition)
+  }
   return freeze({ ...selected, sha256: digest(selected) })
 }
 
@@ -39,8 +45,8 @@ function locate(root, spec) {
 }
 
 export class BrowserInterfaceSession {
-  static async open({ definition, plan, confirmation, evidenceRoot }) {
-    const preview = await previewInterface(definition, plan)
+  static async open({ definition, plan, policy = null, confirmation, evidenceRoot }) {
+    const preview = await previewInterface(definition, plan, policy)
     if (confirmation !== preview.sha256)
       throw new Error("Confirm the exact current preview before opening the application")
     const evidence = await Evidence.create(evidenceRoot, preview)
@@ -59,6 +65,7 @@ export class BrowserInterfaceSession {
     this.preview = preview
     this.definition = preview.definition
     this.plan = preview.plan
+    this.policy = preview.policy ?? null
     this.evidence = evidence
     this.sessionId = randomUUID()
     this.deadline = performance.now() + this.definition.limits.duration_seconds * 1000
@@ -291,13 +298,15 @@ export class BrowserInterfaceSession {
     }
   }
 
-  async step(expectedObservation) {
+  async step(expectedObservation, actionIndex) {
     if (this.busy)
       throw new Error("Concurrent interface operations are not allowed")
     this.busy = true
     let attempted = false
     try {
-      const step = this.plan.steps[this.cursor]
+      if (this.cursor >= this.definition.limits.max_steps || (this.policy ? !Number.isInteger(actionIndex) || actionIndex < 0 : actionIndex !== undefined))
+        throw new Error("Action selection or budget is outside the confirmed policy")
+      const step = this.policy ? this.policy.actions[actionIndex] : this.plan.steps[this.cursor]
       if (!step)
         throw new Error("No further step was confirmed")
       const before = await this.snapshot()
@@ -359,6 +368,6 @@ export class BrowserInterfaceSession {
     clearTimeout(this.timer)
     await this.context?.close().catch(() => {})
     await this.browser?.close().catch(() => {})
-    await this.evidence.append("closed", { completed_steps: this.cursor, planned_steps: this.plan.steps.length, physical_stop_confirmed: false })
+    await this.evidence.append("closed", { completed_steps: this.cursor, planned_steps: this.policy ? null : this.plan.steps.length, physical_stop_confirmed: false })
   }
 }

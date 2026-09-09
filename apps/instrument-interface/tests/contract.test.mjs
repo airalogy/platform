@@ -7,8 +7,19 @@ import { join } from "node:path"
 import test from "node:test"
 import { previewInterface } from "../src/browser-session.mjs"
 import { canonical, digest, exactUrl, validateDefinition, validatePlan } from "../src/contract.mjs"
-import { Evidence, readPrivateSelection } from "../src/evidence.mjs"
+import { Evidence, readPrivateSelection, syncDirectory } from "../src/evidence.mjs"
 import { definition, fixture, plan } from "./fixture.mjs"
+
+test("durable directory publication refuses symlink and non-directory targets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "interface-directory-"))
+  await syncDirectory(root)
+  const file = join(root, "ordinary.txt")
+  await writeFile(file, "Synthetic directory-sync test")
+  const alias = join(root, "alias")
+  await symlink(root, alias)
+  await assert.rejects(syncDirectory(alias))
+  await assert.rejects(syncDirectory(file))
+})
 
 test("canonical hashing is stable, bounded, and rejects non-JSON", () => {
   assert.equal(digest({ b: 2, a: 1 }), digest({ a: 1, b: 2 }))

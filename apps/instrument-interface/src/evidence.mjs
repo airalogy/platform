@@ -4,6 +4,16 @@ import { lstat, mkdir, mkdtemp, open, realpath } from "node:fs/promises"
 import { isAbsolute, join } from "node:path"
 import { canonical, digest, MAX_BYTES } from "./contract.mjs"
 
+export async function syncDirectory(path) {
+  const handle = await open(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW)
+  try {
+    await handle.sync()
+  }
+  finally {
+    await handle.close()
+  }
+}
+
 export async function readPrivateSelection(path, limit = MAX_BYTES) {
   if (!isAbsolute(path))
     throw new Error("Select an absolute local path")
@@ -33,7 +43,9 @@ export class Evidence {
     const info = await lstat(root)
     if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) || info.uid !== process.getuid())
       throw new Error("Evidence parent must be an owner-only directory (0700)")
-    const directory = await mkdtemp(join(await realpath(root), "interface-"))
+    const parent = await realpath(root)
+    const directory = await mkdtemp(join(parent, "interface-"))
+    await syncDirectory(parent)
     const evidence = new Evidence(directory)
     await evidence.write("preview.json", Buffer.from(canonical(preview)))
     return evidence
@@ -56,6 +68,8 @@ export class Evidence {
     finally {
       await file.close()
     }
+    // Flush the new name too, before treating an intent/receipt as published.
+    await syncDirectory(this.directory)
   }
 
   async append(kind, data) {

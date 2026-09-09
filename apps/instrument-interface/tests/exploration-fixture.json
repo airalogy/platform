@@ -1,0 +1,88 @@
+{
+  "schema": "airalogy.interface-exploration.v1",
+  "id": "11111111-1111-1111-1111-111111111111",
+  "gateway_id": "22222222-2222-2222-2222-222222222222",
+  "resource_id": "33333333-3333-3333-3333-333333333333",
+  "credential_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+  "fingerprint": "e9c59337cd64973244b5b057845405845aa7d14110bea59792deb906f7155b12",
+  "max_iterations": 5,
+  "duration_seconds": 600,
+  "spec": {
+    "goal": "Read two synthetic samples",
+    "local_preview_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+    "target": {
+      "application": "Synthetic reader",
+      "version": "1.0",
+      "kind": "file"
+    },
+    "controls": [
+      {
+        "id": "count",
+        "label": "Sample count",
+        "read": "value"
+      },
+      {
+        "id": "run",
+        "label": "Run simulation",
+        "read": "text"
+      },
+      {
+        "id": "result",
+        "label": "result",
+        "read": "text"
+      },
+      {
+        "id": "status",
+        "label": "status",
+        "read": "text"
+      }
+    ],
+    "states": [
+      {
+        "id": "ready",
+        "checks": [
+          {
+            "control_id": "status",
+            "equals": "Ready"
+          }
+        ]
+      },
+      {
+        "id": "complete",
+        "checks": [
+          {
+            "control_id": "status",
+            "equals": "Complete"
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "operation": "fill",
+        "control_id": "count",
+        "value": "2",
+        "before": "ready",
+        "after": "ready"
+      },
+      {
+        "operation": "click",
+        "control_id": "run",
+        "before": "ready",
+        "after": "complete"
+      },
+      {
+        "operation": "read",
+        "control_id": "result",
+        "before": "complete",
+        "after": "complete"
+      }
+    ],
+    "success": [
+      {
+        "control_id": "result",
+        "equals": "0.84"
+      }
+    ]
+  }
+}

@@ -7,7 +7,7 @@ Local, bounded Chromium observation and supervised **synthetic HTML** replay for
 - Exact accessible roles/names or test IDs, unique visible controls, known states and readback.
 - Live HTTP(S) targets are **observation-only**. No clicks/fills, authentication profiles, redirects, arbitrary JS/selector commands, uploads, downloads, sockets or embedded frames.
 - Local HTML runs from its selected bytes in an `about:blank` document, without file-origin access or authorized network requests. Only reviewed simulation/training HTML belongs here.
-- Private, exclusive evidence files with event hashes, before/after observations and opt-in scoped screenshots. No automatic model calls or upload.
+- Private, exclusive evidence files with event hashes, before/after observations and opt-in scoped screenshots. The manual CLI makes no model calls or uploads; optional Aira exploration requires separate Platform consent/grant and local policy confirmation.
 - No automatic retries or restart replay. Closing Chromium does not establish a physical safe stop.
 
 Source checkout, Node 22+, POSIX owner-only evidence directory, installed workspace dependencies and matching Chromium:
@@ -28,7 +28,9 @@ Preview emits **private** JSON and never opens an application. Review the select
 
 Omit `--plan` for observation only. Successful run prints its evidence directory and session ID; failed runs exit nonzero. Read `stopped`/`closed` events before deciding what happened. A new run is a new operation, not a recovery mechanism; reconcile uncertainty with the operator first. Evidence is not an attestation: its owning user can replace it.
 
-For the library, use `previewInterface`, then `BrowserInterfaceSession.open({ definition, plan, confirmation, evidenceRoot })`, `session.step(digest(session.lastObservation))`, and `session.close()` in `finally`. The backend accepts the next **already confirmed** step only. It does not take model-selected commands. Treat the imported module and session object as trusted local code, not an RPC security boundary.
+For manual library use, call `previewInterface`, then `BrowserInterfaceSession.open({ definition, plan, confirmation, evidenceRoot })`, `session.step(digest(session.lastObservation))`, and `session.close()` in `finally`. The manual backend accepts the next **already confirmed** step only. Optional exploration uses a separately confirmed finite policy; a model may choose only an approved action index, never new controls/values/code. Treat the imported module and session object as trusted local code, not an RPC security boundary.
+
+`pnpm gateway:explore` (installed: `airalogy-interface-exploration`) provides `prepare`, `run REQUEST --confirm LOCAL_DIGEST`, and `sync REQUEST`. Follow the bilingual **Bounded Aira interface exploration** guide in `docs`: import only the generated `authorization.json` into Platform, never the credential-bearing `request.json`. The grant fixes target scope, actions, selected model data and at most five calls. Reports are client evidence, not hardware qualification. No auto relaunch: `sync` sends existing reports without opening a browser or calling a model. The Node-authored JSON Schema is shared with API validation and checked by `pnpm gateway:contract:check`.
 
 `pnpm gateway:gui-demo` exercises the same backend with only the bundled synthetic app and independently verifies its exported `airalogy.gui-rehearsal.v1` bundle. It accepts no target arguments. `pnpm gateway:interface-test` runs contract, actual browser, private-evidence and independent-process CLI tests. The package can be packed from its directory; install its pinned Playwright Chromium on the selected host.
 

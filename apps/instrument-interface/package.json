@@ -12,7 +12,8 @@
     "./contract": "./src/contract.mjs"
   },
   "bin": {
-    "airalogy-instrument-interface": "./src/cli.mjs"
+    "airalogy-instrument-interface": "./src/cli.mjs",
+    "airalogy-interface-exploration": "./src/exploration-cli.mjs"
   },
   "files": [
     "src",
@@ -24,6 +25,7 @@
     "test:browser": "RUN_INTERFACE_BROWSER_TESTS=1 node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "ajv": "catalog:",
     "playwright": "catalog:"
   }
 }

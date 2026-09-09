@@ -2,7 +2,7 @@
 
 The local assistant can request actual Python source from the configured Aira model, assemble a source-included Adapter Package, run its **fixed** tests in the existing isolated Docker sandbox, and send bounded failure diagnostics back for another source proposal. It does not execute model code in Platform or on the host. It does not open instrument software, discover a workstation, install a driver, approve source, qualify equipment or activate commands.
 
-This is one implementation slice of RFC #5, not completion of autonomous instrument onboarding. Native/visual Computer Use, authorized application exploration, supported-OS operations and a real pilot remain pending. The first source author accepts read-only command drafts, pure Python and the trusted SDK/standard library only; no dependency download, native build, arbitrary tools or physical experiment is available to the model. Human-reviewed material, command contracts and independent tests are still required.
+This is one implementation slice of RFC #5, not completion of autonomous instrument onboarding. Separately authorized [bounded browser exploration](./instrument-interface-exploration.md) is available for reviewed controls/actions. Native/visual Computer Use, unknown-app discovery, supported-OS operations and a real pilot remain pending. The first source author accepts read-only command drafts, pure Python and the trusted SDK/standard library only; no dependency download, native build, arbitrary tools or physical experiment is available to the model. Human-reviewed material, command contracts and independent tests are still required.
 
 ## Prepare selected inputs locally
 

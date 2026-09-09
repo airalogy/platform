@@ -3188,6 +3188,27 @@ declare namespace I18n {
           unavailable: string
         }
       }
+      instrumentExploration: {
+        title: string
+        boundary: string
+        authorize: string
+        aiOff: string
+        empty: string
+        limits: string
+        waiting: string
+        requestHint: string
+        invalid: string
+        reviewPolicy: string
+        actionsReviewed: string
+        consent: string
+        preview: string
+        history: string
+        next: string
+        evidence: string
+        cancelHint: string
+        cancelConfirm: string
+        state: { open: string, cancelled: string, expired: string }
+      }
       instrumentAuthoring: {
         title: string
         boundary: string

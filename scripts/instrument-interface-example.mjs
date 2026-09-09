@@ -47,7 +47,8 @@ export async function createExample() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = await mkdtemp(join(tmpdir(), "airalogy-interface-example-"))
   const example = await createExample()
-  for (const name of ["definition", "plan"])
+  example.policy = { goal: "Read two synthetic samples", actions: example.plan.steps, success: [{ control_id: "result.value", equals: "0.84" }] }
+  for (const name of ["definition", "plan", "policy"])
     await writeFile(join(root, `${name}.json`), `${canonical(example[name])}\n`, { flag: "wx", mode: 0o600 })
-  process.stdout.write(`${canonical({ definition: join(root, "definition.json"), plan: join(root, "plan.json"), evidence: root })}\n`)
+  process.stdout.write(`${canonical({ definition: join(root, "definition.json"), plan: join(root, "plan.json"), policy: join(root, "policy.json"), evidence: root })}\n`)
 }

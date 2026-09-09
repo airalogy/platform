@@ -21,9 +21,15 @@ class InstrumentAuthoringSession(Base):
     __tablename__ = "instrument_authoring_sessions"
     __table_args__ = (
         CheckConstraint("state IN ('open','cancelled')", name="ck_authoring_state"),
+        CheckConstraint(
+            "purpose IN ('source','interface')", name="ck_authoring_purpose"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
+    purpose: Mapped[str] = mapped_column(
+        String(16), default="source", server_default="source"
+    )
     gateway_id: Mapped[UUID] = mapped_column(
         ForeignKey("research_instrument_gateways.id", ondelete="CASCADE"), index=True
     )
@@ -60,6 +66,7 @@ class InstrumentAuthoringTurn(Base):
     )
     ordinal: Mapped[int]
     previous_id: Mapped[UUID | None]
+    input: Mapped[dict | None] = mapped_column(JSON)
     state: Mapped[str] = mapped_column(String(16))
     proposal: Mapped[dict | None] = mapped_column(JSON)
     candidate_digest: Mapped[str | None] = mapped_column(String(64))

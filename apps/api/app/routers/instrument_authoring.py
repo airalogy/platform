@@ -77,6 +77,7 @@ async def list_sessions(
         await db_session.scalars(
             select(InstrumentAuthoringSession)
             .where(
+                InstrumentAuthoringSession.purpose == "source",
                 InstrumentAuthoringSession.gateway_id == gateway_id,
                 InstrumentAuthoringSession.resource_id == resource_id,
             )
@@ -178,7 +179,8 @@ async def create_session(
     )
     if existing:
         if (
-            existing.created_by_user_id != current_user.id
+            existing.purpose != "source"
+            or existing.created_by_user_id != current_user.id
             or existing.request != params.request
             or existing.confirmation_digest != params.preview_digest
         ):
@@ -252,7 +254,7 @@ async def _snapshot(db, row):
 
 async def _user_session(db, user, session_id):
     row = await db.get(InstrumentAuthoringSession, session_id)
-    if row is None:
+    if row is None or row.purpose != "source":
         raise HTTPException(404, "Authoring session not found")
     await _scope(db, user, row.request)
     return row
@@ -316,6 +318,7 @@ async def _token_session(db, session_id, token, *, write=False):
     )
     if (
         row is None
+        or row.purpose != "source"
         or not re.fullmatch(r"aiauthor_[A-Za-z0-9_-]{43}", token)
         or not hmac.compare_digest(
             sha256(token.encode()), row.request["credential_digest"]

@@ -21,3 +21,14 @@ for (const [sourceName, targetName] of [
     writeFileSync(fileURLToPath(target), content)
   }
 }
+
+// Browser and API validators consume one authored JSON Schema.
+const explorationSchema = readFileSync(new URL("apps/instrument-interface/src/exploration.schema.json", root), "utf8")
+const explorationTarget = new URL("apps/api/app/services/instrument_exploration.schema.json", root)
+if (process.argv.includes("--check")) {
+  if (readFileSync(explorationTarget, "utf8") !== explorationSchema)
+    throw new Error("Interface exploration schema is out of sync")
+}
+else {
+  writeFileSync(fileURLToPath(explorationTarget), explorationSchema)
+}

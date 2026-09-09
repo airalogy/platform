@@ -73,6 +73,8 @@ test("inventory rejects over-consumption and commits a valid operation", async (
   await page.getByTestId("inventory-operation-select").click()
   await selectVisibleOption(page, /consumption/i)
   await page.getByTestId("inventory-resource-select").click()
+  // Resource fixtures can exceed the virtualized dropdown's first viewport.
+  await page.getByTestId("inventory-resource-select").getByRole("textbox").fill("E2E Plasmid pUC19")
   await selectVisibleOption(page, /E2E Plasmid pUC19/)
   await page.getByTestId("inventory-container-select").click()
   await selectVisibleOption(page, /E2E-TUBE-001/)
