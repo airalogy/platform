@@ -11,7 +11,7 @@ const analysis = { summary: "A synthetic interface with a readable status.", fea
 
 test("survey report schema, canonical digest and privacy/readback invariants are bounded", () => {
   validateSurveyReport(report)
-  assert.equal(digest(report).length, 64)
+  assert.equal(digest(report), "9d8a358b89858829cbbf99c21d6191203e818e702a45fc99cc9fdef80e54461e")
   for (const change of [
     item => item.controls.push(item.controls[0]),
     item => item.controls[1].read = "value",

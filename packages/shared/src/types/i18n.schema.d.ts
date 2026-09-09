@@ -3188,6 +3188,45 @@ declare namespace I18n {
           unavailable: string
         }
       }
+      instrumentSurvey: {
+        title: string
+        boundary: string
+        local: string
+        authorize: string
+        aiOff: string
+        empty: string
+        reportHint: string
+        report: string
+        invalid: string
+        goal: string
+        reviewed: string
+        consent: string
+        preview: string
+        history: string
+        next: string
+        analyze: string
+        export: string
+        waiting: string
+        uncertain: string
+        route: string
+        routes: {
+          browser: string
+          api_or_sdk: string
+          manual: string
+          unknown: string
+        }
+        basis: {
+          observed: string
+          inferred: string
+        }
+        risks: {
+          read_only: string
+          state_change: string
+          unknown: string
+        }
+        cancelHint: string
+        cancelConfirm: string
+      }
       instrumentExploration: {
         title: string
         boundary: string
@@ -3207,7 +3246,11 @@ declare namespace I18n {
         evidence: string
         cancelHint: string
         cancelConfirm: string
-        state: { open: string, cancelled: string, expired: string }
+        state: {
+          open: string
+          cancelled: string
+          expired: string
+        }
       }
       instrumentAuthoring: {
         title: string

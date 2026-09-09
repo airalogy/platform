@@ -41,6 +41,7 @@ from .instance import router as instance_router
 from .instrument_activations import router as instrument_activations_router
 from .instrument_authoring import router as instrument_authoring_router
 from .instrument_exploration import router as instrument_exploration_router
+from .instrument_surveys import router as instrument_surveys_router
 from .instrument_installations import router as instrument_installations_router
 from .instrument_integrations import router as instrument_integrations_router
 from .instrument_outputs import router as instrument_outputs_router
@@ -324,6 +325,7 @@ app.include_router(instrument_activations_router)
 app.include_router(instrument_outputs_router)
 app.include_router(instrument_authoring_router)
 app.include_router(instrument_exploration_router)
+app.include_router(instrument_surveys_router)
 app.include_router(research_instrument_jobs_router)
 app.include_router(research_instrument_runtime_router)
 app.include_router(research_actions_router)

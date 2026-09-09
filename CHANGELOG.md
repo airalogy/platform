@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Connect private interface surveys to separately confirmed one-shot Aira interpretation with scoped, immutable history, cancellation, strict observed-control references and capture-bound exports for local read-only draft assembly. Add bilingual narrow-screen review and AI-off history/export, migration 0057, shared contract tests and real synthetic browser/API acceptance. No software launch, action, installation or hardware authority is granted by analysis.
+
 - Add bounded selected-browser interface surveys without handwritten control/state maps: independently confirmed one-time capture, browser-verified semantic locators, value-consent and composed-DOM privacy checks, private retained evidence and manual assembly into ordinary read-only drafts. Share the existing isolated browser lifecycle and a Node/API schema; pin the shared AJV catalog to the already-tested 8.12.0 and include its version in local previews for reproducible standalone validation. This local phase neither calls Aira nor installs, activates or qualifies equipment; native/visual and real-instrument acceptance remain open.
 
 - Add separately authorized Aira interface exploration: a local confirmed policy fixes controls, literal actions and success checks; the model may only choose an approved index. Purpose-separated credentials, immutable bounded calls, fresh readbacks, private history and report-only recovery stop stale or uncertain runs without replay. Bilingual authorization/AI-off controls, shared Node/API schema and real API/Chromium synthetic acceptance accompany migration 0056. Live URLs remain observation-only; native/visual/production equipment integration and a real pilot remain pending.

@@ -148,6 +148,8 @@ def test_action_reports_bind_original_input_proposal_session_and_readback():
     [
         (source_token_session, "interface", "aiauthor_" + "A" * 43),
         (token_session, "source", "aiinterface_" + "A" * 43),
+        (source_token_session, "survey", "aiauthor_" + "A" * 43),
+        (token_session, "survey", "aiinterface_" + "A" * 43),
     ],
 )
 def test_source_and_interface_credentials_cannot_cross_development_purpose(

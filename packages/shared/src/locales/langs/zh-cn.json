@@ -3184,6 +3184,45 @@
         "unavailable": "文件不可用"
       }
     },
+    "instrumentSurvey": {
+      "title": "应用界面勘察",
+      "boundary": "理解明确选定的软件快照，不扫描任意已安装应用；不授予启动软件、点击、安装或设备控制权。",
+      "local": "先用本地 gateway:survey prepare/run 流程采集并审核报告。手工审核和只读草稿生成无需 Aira。",
+      "authorize": "用 Aira 审阅勘察报告",
+      "aiOff": "Aira 已关闭。本地采集、手工审核、草稿生成和已有分析导出仍可用。",
+      "empty": "此设备尚无勘察分析。",
+      "reportHint": "仅导入 survey.json，不上传 request.json、源码 HTML、截图或凭据。报告文字可能含私有科研数据，须先审核范围及保密性。",
+      "report": "选定的勘察报告",
+      "invalid": "请使用有效的 survey.json（不超过 128 KiB），不要包含凭据或其他请求文件字段。",
+      "goal": "希望 Aira 帮助理解什么？",
+      "reviewed": "我已审核此准确快照及隐私范围。它是客户端报告，不是设备验收凭据。",
+      "consent": "我允许当前配置的模型处理此报告与目标；服务可能在外部。不发送截图或 HTML。",
+      "preview": "请与本地结果核对采集摘要。确认后五分钟内可发起一次模型调用，响应最多 60 秒、32 KiB，不保证货币支出上限。随后在历史面板单独启动。",
+      "history": "勘察分析与后续步骤",
+      "next": "请区分观察事实与推断。导出分析，在本地用原请求执行 assemble，生成普通只读草稿。不代表动作、状态转换、实验成功、来源批准或实机验收。",
+      "analyze": "开始单次分析",
+      "export": "导出已审阅分析",
+      "waiting": "尚未调用模型。可启动一次已授权分析，或取消授权。",
+      "uncertain": "没有自动发起新调用。请刷新已保存状态；中断或失败的调用需要新的显式授权。",
+      "route": "建议接入方式：",
+      "routes": {
+        "browser": "浏览器语义控件",
+        "api_or_sdk": "有文档依据的 API 或 SDK",
+        "manual": "手工接入",
+        "unknown": "需要更多信息"
+      },
+      "basis": {
+        "observed": "观察到",
+        "inferred": "推断"
+      },
+      "risks": {
+        "read_only": "只读",
+        "state_change": "可能改变状态",
+        "unknown": "风险未知"
+      },
+      "cancelHint": "取消会丢弃迟到建议并阻止新调用，不能撤回已发送数据，也不保证取消服务商计费。",
+      "cancelConfirm": "我理解取消不能撤销已经开始的模型处理。"
+    },
     "instrumentExploration": {
       "title": "Aira 界面探索",
       "boundary": "授权 AI 在已审核的本地界面操作中选择下一步。真实 URL 仅允许观察，不授予生产仪器控制权。",

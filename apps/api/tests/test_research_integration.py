@@ -191,6 +191,14 @@ def test_interface_exploration_real_api_browser_and_scope(
     exercise_exploration(runtime, tmp_path, monkeypatch)
 
 
+def test_interface_survey_real_browser_api_and_readonly_draft(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.survey_acceptance import exercise_survey
+
+    exercise_survey(runtime, tmp_path, monkeypatch)
+
+
 @pytest.mark.parametrize("cancel_before_finalize", [False, True])
 def test_file_declaring_activation_waits_for_scoped_intake(
     runtime, tmp_path, monkeypatch, cancel_before_finalize

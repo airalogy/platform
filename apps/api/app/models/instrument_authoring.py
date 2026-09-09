@@ -22,7 +22,7 @@ class InstrumentAuthoringSession(Base):
     __table_args__ = (
         CheckConstraint("state IN ('open','cancelled')", name="ck_authoring_state"),
         CheckConstraint(
-            "purpose IN ('source','interface')", name="ck_authoring_purpose"
+            "purpose IN ('source','interface','survey')", name="ck_authoring_purpose"
         ),
     )
 

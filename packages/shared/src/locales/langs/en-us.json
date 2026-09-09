@@ -3184,6 +3184,45 @@
         "unavailable": "File unavailable"
       }
     },
+    "instrumentSurvey": {
+      "title": "Application survey",
+      "boundary": "Interpret an explicitly selected software snapshot, not arbitrary installed applications. This grants no software launch, clicks, installation or equipment authority.",
+      "local": "First use the local gateway:survey prepare/run flow to capture a reviewed report. Manual review and read-only draft assembly do not require Aira.",
+      "authorize": "Review survey with Aira",
+      "aiOff": "Aira is disabled. Local capture, manual review, draft assembly and saved analysis exports remain available.",
+      "empty": "No survey analyses for this equipment.",
+      "reportHint": "Import only survey.json. Never upload request.json, source HTML, screenshots or credentials. Report text may contain private research data; review its scope and confidentiality first.",
+      "report": "Selected survey report",
+      "invalid": "Use a valid survey.json report (maximum 128 KiB), without credentials or unrelated request fields.",
+      "goal": "What should Aira help understand?",
+      "reviewed": "I reviewed this exact capture and its privacy scope. It is client-reported evidence, not device qualification.",
+      "consent": "I authorize the configured model, possibly external, to process this report and goal. No screenshots or HTML are sent.",
+      "preview": "Compare this capture digest with the local result. Confirmation permits one model attempt within five minutes: at most 60 seconds and 32 KiB of response, without a guaranteed monetary ceiling. Start it separately from the history panel.",
+      "history": "Survey analysis and next steps",
+      "next": "Review observed facts versus inferences. Export the analysis and use local assemble with the original request to create an ordinary read-only draft. No action, transition, experiment success, source approval or hardware qualification is implied.",
+      "analyze": "Analyze once",
+      "export": "Export reviewed analysis",
+      "waiting": "No model attempt yet. Start the authorized analysis once, or cancel this grant.",
+      "uncertain": "No new attempt was started automatically. Refresh the saved state; an interrupted or failed attempt requires a new explicit authorization.",
+      "route": "Suggested integration route:",
+      "routes": {
+        "browser": "Browser semantics",
+        "api_or_sdk": "Documented API or SDK",
+        "manual": "Manual integration",
+        "unknown": "More information needed"
+      },
+      "basis": {
+        "observed": "Observed",
+        "inferred": "Inferred"
+      },
+      "risks": {
+        "read_only": "Read only",
+        "state_change": "May change state",
+        "unknown": "Unknown risk"
+      },
+      "cancelHint": "Cancellation discards late proposals and prevents a new call. It cannot recall data already sent or guarantee cancellation of provider charges.",
+      "cancelConfirm": "I understand cancellation does not undo model processing already started."
+    },
     "instrumentExploration": {
       "title": "Aira interface exploration",
       "boundary": "Authorize bounded choices among reviewed local interface actions. Live URLs are observation-only; no production hardware authority is granted.",

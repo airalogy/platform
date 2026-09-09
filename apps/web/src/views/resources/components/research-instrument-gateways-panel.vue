@@ -95,6 +95,8 @@
 
     <instrument-authoring-panel v-if="selectedGateway" :key="`author-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
 
+    <instrument-survey-panel v-if="selectedGateway" :key="`survey-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
+
     <instrument-exploration-panel v-if="selectedGateway" :key="`explore-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
 
     <instrument-integration-panel
@@ -400,6 +402,7 @@ import InstrumentInstallationsPanel from "./instrument-installations-panel.vue"
 import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
 import InstrumentPackagesPanel from "./instrument-packages-panel.vue"
 import InstrumentPairingPanel from "./instrument-pairing-panel.vue"
+import InstrumentSurveyPanel from "./instrument-survey-panel.vue"
 
 const props = defineProps<{
   labId: string
