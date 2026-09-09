@@ -168,7 +168,7 @@ pnpm gateway:activation run \
 
 ### 尚未交付
 
-仪器文件审核界面、有边界的自主驱动生成、经授权的原生/视觉 Computer Use、受支持操作系统的服务安装仍需实现。真实软件探索、设备安全验收及第二台复用验证需要获授权试点。当前受管执行仅完成 POSIX/纯 Python 软件验证，不等于通用厂商驱动或硬件认证。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
+有边界的自主驱动生成、经授权的原生/视觉 Computer Use、受支持操作系统的服务安装仍需实现。真实软件探索、设备安全验收及第二台复用验证需要获授权试点。当前受管执行仅完成 POSIX/纯 Python 软件验证，不等于通用厂商驱动或硬件认证。参见[接入状态矩阵](./instrument-integration.md#状态矩阵)。
 
 标准库契约以 `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` 为唯一源，生成 API 副本，使用 `pnpm gateway:contract:check` 检查一致性。CI 构建 SDK，并在固定镜像中测试合成驱动、对抗性隔离及超时清理，不将其视为设备认证。
 
@@ -203,7 +203,17 @@ SDK 提供 `output_contract.py` 及 `output_capture.py` 中的 `CaptureStore`。
 
 有权用户通过 `GET /research-instrument-jobs/{job_id}/outputs` 查看交付及关联状态。各文件的 `POST /{output_id}/associations/preview` 与确认接口 `/associations` 将预览摘要绑定同一 Project 中的准确 Record 版本/摘要、样品引用及上一关联身份。过期并发操作会冲突，重试不会恢复旧关联；读取时再次检查 Record 权限，受限关联不泄露内容。Record 数据保持原样。
 
-后续仍需接通友好的文件审核/Record 选择界面，并完成真实工作站验收。模拟 API/存储测试不等于完整仪器文件产品或实机验收。
+### 审核文件并关联准确 Record
+
+在科研任务的执行记录中，打开产出文件的仪器动作下的“仪器文件”，核对实际交付状态和保存的实验室/项目。采集完成不代表文件已经收齐；此时应恢复原 Gateway 交付日志，不应重做采集。文件保持为项目私有草稿 DataAsset。“下载原件”使用当前文件鉴权并记录审计，原件以附件形式下载，不作为可执行内联预览。
+
+展开“原始文件与来源信息”，核对带上报时区的采集时间、服务端接收时间、上报单位/转换说明/完成依据、SHA-256 和不可变 DataAsset 版本 ID。这些声明及字节校验不代表科学有效性，不能根据文件名或时间推断样品身份。
+
+选择“关联 Record”，再选择同项目中的协议，以 Record 编号或 UUID 搜索并选择准确版本。唯一可用选项会自动继承，大列表支持显式分页；可选样品引用仅保存操作者观察的文字。预览显示 Record ID/版本/内容摘要和原始 DataAsset 版本/摘要。确认只追加关联，不编辑或提交 Record、不将 DataAsset 升为已验证状态，也不删除原关联。“关联历史”区分当前和历史条目，点击 Record 链接进入该准确版本的报告。
+
+读写权限由 API 执行，不依赖隐藏按钮。`GET /research-instrument-jobs/{job_id}/outputs/record-options` 接收 `protocol_id` 以及可选 `q`、`offset`、`limit`（1–100）；包括仅本人 Record 的限制在分页前生效。`GET .../outputs/{output_id}/associations` 按不可变修订分页，对无权访问的 Record/样品明细脱敏。关联要求当前科研执行和 Knowledge 创建权限；有权只读的成员可以查看和下载文件，不因此获得写权限。
+
+确认回执丢失后，重试同一确认，或先“检查保存状态”再编辑。并发变化使旧预览失效，核对后按需重新选择并预览；刷新失败会清除之前显示的文件明细。整个流程不依赖 AI。模拟安装驱动、真实 API/存储及浏览器测试验证的是软件行为，不能代替真实设备和工作站安全验收，仍须完成获授权试点。
 
 ### 自动交付与恢复
 

@@ -7,11 +7,12 @@ import tempfile
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
+from app.config import config
 from app.database import DBSession
 from app.libs.file_storage import (
     default_storage_backend,
@@ -24,7 +25,8 @@ from app.models.instrument_output import (
     InstrumentOutputBatch,
 )
 from app.models.knowledge import ResearchFile, ResearchFileBlob
-from app.models.project import Project
+from app.models.lab import Lab
+from app.models.project import Project, ProjectRole, ProjectType
 from app.models.protocol import Protocol
 from app.models.record import Record
 from app.models.research import ResearchAction, ResearchRun, ResearchTask
@@ -39,6 +41,7 @@ from app.routers.research_instrument_jobs import (
     _authenticate_gateway,
     _gateway_job_context,
 )
+from app.services.access_control import resolve_structured_access
 from app.services.instrument_output_contract import validate_capture
 from app.services.instrument_outputs import authorize_intake, batch_rows, batch_snapshot
 from app.services.knowledge import (
@@ -415,10 +418,56 @@ async def _record(db, task, user, record_id, version):
     return record, protocol
 
 
+def _record_option(record, protocol):
+    return {
+        "record_id": str(record.id),
+        "record_version": record.version,
+        "record_number": record.number,
+        "protocol_id": str(protocol.id),
+        "protocol_uid": protocol.uid,
+        "protocol_name": protocol.name,
+        "protocol_version": record.protocol_version,
+        "created_at": record.created_at,
+    }
+
+
+async def _association_data(db, task, user, association):
+    try:
+        record, protocol = await _record(
+            db, task, user, association.record_id, association.record_version
+        )
+        return {
+            "id": str(association.id),
+            "state": "associated",
+            **_record_option(record, protocol),
+            "sample_reference": association.sample_reference,
+        }
+    except HTTPException:
+        return {"id": str(association.id), "state": "restricted"}
+
+
 @router.get(PUBLIC)
 async def list_outputs(job_id: UUID, current_user: CurrentUser, db_session: DBSession):
     batch, _job, _action, _run, task = await _public(db_session, job_id, current_user)
     result = await batch_snapshot(db_session, batch, user=current_user)
+    project = await db_session.get(Project, task.project_id)
+    lab = await db_session.get(Lab, task.lab_id)
+    result["context"] = {
+        "project_id": str(project.id),
+        "project_uid": project.uid,
+        "project_name": project.name,
+        "lab_id": str(lab.id),
+        "lab_uid": lab.uid,
+        "lab_name": lab.name,
+        "task_id": str(task.id),
+    }
+    result["permissions"] = {"associate": False}
+    try:
+        await authorize_intake(db_session, current_user, task)
+        result["permissions"]["associate"] = True
+    except HTTPException as error:
+        if error.status_code not in {400, 403, 404}:
+            raise
     for item in result["items"]:
         association = await db_session.scalar(
             select(InstrumentOutputAssociation)
@@ -428,25 +477,138 @@ async def list_outputs(job_id: UUID, current_user: CurrentUser, db_session: DBSe
         )
         item["association"] = None
         if association:
-            try:
-                record, protocol = await _record(
-                    db_session,
-                    task,
-                    current_user,
-                    association.record_id,
-                    association.record_version,
-                )
-                item["association"] = {
-                    "id": str(association.id),
-                    "state": "associated",
-                    "record_id": str(record.id),
-                    "record_version": record.version,
-                    "protocol_id": str(protocol.id),
-                    "sample_reference": association.sample_reference,
-                }
-            except HTTPException:
-                item["association"] = {"id": str(association.id), "state": "restricted"}
+            item["association"] = await _association_data(
+                db_session, task, current_user, association
+            )
     return result
+
+
+@router.get(PUBLIC + "/record-options")
+async def record_options(
+    job_id: UUID,
+    protocol_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+    q: str = Query(default="", max_length=200),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=100),
+):
+    """Same-Project exact versions; no Record contents, guessed samples or hidden counts."""
+    _batch, _job, _action, _run, task = await _public(
+        db_session, job_id, current_user, write=True
+    )
+    protocol = await db_session.get(Protocol, protocol_id)
+    if (
+        protocol is None
+        or protocol.deleted_at
+        or protocol.project_id != task.project_id
+    ):
+        raise HTTPException(404, "Protocol not found")
+    project = await db_session.get(Project, task.project_id)
+    try:
+        role = await check_user_permission(
+            db_session, project, current_user, "read_record", protocol=protocol
+        )
+    except HTTPException as error:
+        raise HTTPException(404, "Protocol not found") from error
+    conditions = [Record.protocol_id == protocol.id, Record.deleted_at.is_(None)]
+    structured_read = False
+    if config.effective_lab_structure_mode == "structured":
+        access = await resolve_structured_access(
+            db_session,
+            current_user.id,
+            task.lab_id,
+            project,
+            protocol,
+            include_legacy=False,
+        )
+        structured_read = access.allows("read_record")
+    if not structured_read and (
+        (project.type == ProjectType.PRIVATE and role == ProjectRole.RECORDER)
+        or (
+            project.type == ProjectType.PUBLIC
+            and role
+            in {
+                ProjectRole.RECORDER_SELF_ONLY,
+                ProjectRole.EXPLORER_SELF_ONLY,
+                ProjectRole.VIEWER_SELF_ONLY,
+            }
+        )
+    ):
+        conditions.append(Record.user_id == current_user.id)
+    query = q.strip()
+    if query:
+        if query.isascii() and query.isdecimal() and len(query) < 10:
+            conditions.append(Record.number == int(query))
+        else:
+            try:
+                record_id = UUID(query)
+            except ValueError:
+                return {"items": [], "has_more": False, "next_offset": offset}
+            conditions.append(Record.id == record_id)
+    records = list(
+        await db_session.scalars(
+            select(Record)
+            .where(*conditions)
+            .order_by(Record.created_at.desc(), Record.id.desc(), Record.version.desc())
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    )
+    # Recheck the same authoritative object permission used on confirmation.
+    # Permission drift fails the page instead of exposing a hidden Record/count.
+    for record in records:
+        await check_user_permission(
+            db_session,
+            project,
+            current_user,
+            "read_record",
+            protocol=protocol,
+            record=record,
+        )
+    return {
+        "items": [_record_option(record, protocol) for record in records[:limit]],
+        "has_more": len(records) > limit,
+        "next_offset": offset + min(len(records), limit),
+    }
+
+
+@router.get(PUBLIC + "/{output_id}/associations")
+async def association_history(
+    job_id: UUID,
+    output_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=100),
+):
+    _batch, _job, _action, _run, task = await _public(db_session, job_id, current_user)
+    output = await db_session.get(InstrumentOutput, output_id)
+    if output is None or output.job_id != job_id or not output.research_file_id:
+        raise HTTPException(404, "Registered instrument output not found")
+    await _registered(db_session, output, current_user)
+    rows = list(
+        await db_session.scalars(
+            select(InstrumentOutputAssociation)
+            .where(InstrumentOutputAssociation.output_id == output_id)
+            .order_by(InstrumentOutputAssociation.revision.desc())
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    )
+    items = [
+        {
+            **await _association_data(db_session, task, current_user, row),
+            "revision": row.revision,
+            "associated_at": row.created_at,
+        }
+        for row in rows[:limit]
+    ]
+    return {
+        "items": items,
+        "has_more": len(rows) > limit,
+        "next_offset": offset + min(len(rows), limit),
+    }
 
 
 class AssociationDraft(BaseModel):
@@ -513,12 +675,20 @@ async def preview_association(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    command, _output, _context, _existing = await _association_preview(
+    command, output, context, _existing = await _association_preview(
         db_session, current_user, job_id, output_id, params
+    )
+    record, protocol = await _record(
+        db_session, context[3], current_user, params.record_id, params.record_version
     )
     return {
         "preview_digest": canonical_digest(command),
         "command": command,
+        "record": _record_option(record, protocol),
+        "output": {
+            "name": output.name,
+            **await _registered(db_session, output, current_user),
+        },
         "effects": [
             "Associate the original captured DataAsset version with this exact Record version",
             "Preserve existing Record data and prior associations; no Record submission or scientific validation",

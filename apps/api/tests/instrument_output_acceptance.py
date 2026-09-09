@@ -19,7 +19,7 @@ from app.models.instrument_output import (
 )
 from app.models.knowledge import ResearchFile, ResearchFileAccessAudit, ResearchFileBlob
 from app.models.lab import LabUser
-from app.models.project import Project, ProjectRole, ProjectUser
+from app.models.project import Project, ProjectRole, ProjectType, ProjectUser
 from app.models.protocol import Protocol
 from app.models.record import Record
 from app.models.research import ResearchAction
@@ -170,6 +170,8 @@ async def exercise_outputs(
     await asyncio.to_thread(store.prepare, plan, source, sources)
     capture = await asyncio.to_thread(store.capture, plan)
     before = await runtime.json("GET", public)
+    assert before["context"]["project_id"] == runtime.seed["project"]["id"]
+    assert before["permissions"]["associate"] is True
     assert before["state"] == "awaiting_files"
     assert before["items"][0]["state"] == "awaiting_capture"
     async with sessionmanager.session() as db:
@@ -379,6 +381,16 @@ async def exercise_outputs(
     async with sessionmanager.session() as db:
         record = await db.get(Record, record_key)
         original_data, original_hash = record.data, record.hash
+        selected_protocol_id = str(record.protocol_id)
+    options_url = public + f"/record-options?protocol_id={selected_protocol_id}"
+    options = await runtime.json("GET", options_url + f"&q={record_key[0]}")
+    assert any(
+        item["record_id"] == str(record_key[0])
+        and item["record_version"] == record_key[1]
+        for item in options["items"]
+    )
+    assert all("data" not in item and "hash" not in item for item in options["items"])
+    assert (await runtime.json("GET", options_url + "&q=not-a-record"))["items"] == []
     association_url = public + f"/{output['id']}/associations"
     draft = {
         "id": str(uuid4()),
@@ -388,6 +400,8 @@ async def exercise_outputs(
         "expected_association_id": None,
     }
     preview = await runtime.json("POST", association_url + "/preview", draft)
+    assert preview["record"]["record_id"] == str(record_key[0])
+    assert preview["output"]["sha256"] == hashlib.sha256(raw).hexdigest()
     confirm = {**draft, "preview_digest": preview["preview_digest"]}
     await runtime.json(
         "POST", association_url, {**confirm, "sample_reference": "changed"}, status=409
@@ -441,6 +455,10 @@ async def exercise_outputs(
         db.add(other_record)
         await db.commit()
         other_id = str(other_record.id)
+        other_protocol_id = str(other_protocol.id)
+    await runtime.json(
+        "GET", public + f"/record-options?protocol_id={other_protocol_id}", status=404
+    )
     await runtime.json(
         "POST",
         association_url + "/preview",
@@ -474,9 +492,25 @@ async def exercise_outputs(
             public, headers={"Auth-Token": viewer_auth["token"]}
         )
         assert response.status_code == 200, response.text
+        assert response.json()["permissions"]["associate"] is False
         linked = response.json()["items"][0]["association"]
         assert linked == {"id": draft["id"], "state": "restricted"}
         assert "sample_reference" not in linked and "record_id" not in linked
+        history = await runtime.client.get(
+            association_url, headers={"Auth-Token": viewer_auth["token"]}
+        )
+        assert history.status_code == 200
+        hidden = history.json()["items"][0]
+        assert (
+            hidden["state"] == "restricted"
+            and "sample_reference" not in hidden
+            and "record_id" not in hidden
+        )
+        assert (
+            await runtime.client.get(
+                options_url, headers={"Auth-Token": viewer_auth["token"]}
+            )
+        ).status_code == 403
         denied = await runtime.client.post(
             association_url + "/preview",
             json=draft,
@@ -487,6 +521,55 @@ async def exercise_outputs(
         async with sessionmanager.session() as db:
             membership = await db.get(ProjectUser, membership_id)
             membership.role = old_role
+            await db.commit()
+    # Picker filtering must happen before pagination, including own-only roles;
+    # inaccessible Record existence/counts must not leak through search or pages.
+    async with sessionmanager.session() as db:
+        project = await db.get(Project, UUID(runtime.seed["project"]["id"]))
+        old_project_type = project.type
+        own_record = Record(
+            protocol_id=UUID(selected_protocol_id),
+            protocol_version=record_fixture["source_version"],
+            user_id=viewer_row.id,
+            number=9876,
+            data={},
+            hash="synthetic-picker-owned-record",
+        )
+        db.add(own_record)
+        await db.commit()
+        own_record_id = str(own_record.id)
+    try:
+        for project_type, role in (
+            (ProjectType.PUBLIC, ProjectRole.RECORDER_SELF_ONLY),
+            (ProjectType.PRIVATE, ProjectRole.RECORDER),
+        ):
+            async with sessionmanager.session() as db:
+                project = await db.get(Project, UUID(runtime.seed["project"]["id"]))
+                project.type = project_type
+                membership = await db.get(ProjectUser, membership_id)
+                membership.role = role
+                await db.commit()
+            response = await runtime.client.get(
+                options_url + "&limit=1", headers={"Auth-Token": viewer_auth["token"]}
+            )
+            assert response.status_code == 200, response.text
+            selected = response.json()
+            assert [item["record_id"] for item in selected["items"]] == [own_record_id]
+            assert selected["has_more"] is False
+            hidden_search = await runtime.client.get(
+                options_url + f"&q={record_key[0]}",
+                headers={"Auth-Token": viewer_auth["token"]},
+            )
+            assert hidden_search.status_code == 200
+            assert hidden_search.json()["items"] == []
+    finally:
+        async with sessionmanager.session() as db:
+            project = await db.get(Project, UUID(runtime.seed["project"]["id"]))
+            project.type = old_project_type
+            membership = await db.get(ProjectUser, membership_id)
+            membership.role = old_role
+            own_record = await db.get(Record, (UUID(own_record_id), 1))
+            await db.delete(own_record)
             await db.commit()
     async with sessionmanager.session() as db:
         record = await db.get(Record, record_key)
@@ -512,6 +595,13 @@ async def exercise_outputs(
         "id"
     ] == replacement["id"]
     assert (await runtime.json("POST", association_url, confirm))["id"] == draft["id"]
+    history = await runtime.json("GET", association_url + "?limit=1")
+    assert history["has_more"] and history["items"][0]["id"] == replacement["id"]
+    assert history["items"][0]["revision"] == 2
+    older = await runtime.json(
+        "GET", association_url + f"?limit=1&offset={history['next_offset']}"
+    )
+    assert older["items"][0]["id"] == draft["id"] and not older["has_more"]
     assert (await runtime.json("GET", public))["items"][0]["association"][
         "id"
     ] == replacement["id"]

@@ -168,7 +168,7 @@ Management APIs are `GET/POST /instrument-installations/{binding_id}/activations
 
 ### Not yet delivered
 
-Instrument file-review UI, bounded autonomous driver generation, authorized native/visual Computer Use and supported OS service installation still need their governed workflows. Real software exploration, device safety acceptance and second-installation reuse require an authorized pilot. Current managed execution is POSIX/pure-Python software acceptance only, not general vendor-driver or hardware certification. See the [integration support matrix](./instrument-integration.md#support-matrix).
+Bounded autonomous driver generation, authorized native/visual Computer Use and supported OS service installation still need their governed workflows. Real software exploration, device safety acceptance and second-installation reuse require an authorized pilot. Current managed execution is POSIX/pure-Python software acceptance only, not general vendor-driver or hardware certification. See the [integration support matrix](./instrument-integration.md#support-matrix).
 
 The standard-library contract is authored in `apps/instrument-gateway/src/airalogy_instrument_gateway/package_contract.py` and generated into the API. Run `pnpm gateway:contract:check` to check parity. CI builds the SDK and runs the synthetic, adversarial isolation and timeout tests with an exact container image; this does not certify equipment.
 
@@ -203,7 +203,17 @@ These endpoints require both the authenticated Gateway and original job lease to
 
 `GET /research-instrument-jobs/{job_id}/outputs` returns current delivery/association state to authorized users. For each output, `POST /{output_id}/associations/preview` and its confirmation endpoint `/associations` bind the preview digest to an exact same-Project Record version/hash, sample reference and prior association ID. Concurrent stale writes conflict; retrying a confirmation does not restore an older association. Reads recheck Record permission and redact restricted associations. Record data remains unchanged.
 
-Remaining integration: user-friendly file-review/Record selection and real workstation acceptance. The passing synthetic API/storage tests do not establish a complete instrument-file product or physical acceptance.
+### Review files and associate an exact Record
+
+In a Research Task's execution ledger, open **Instrument files** on a file-producing Instrument Action. Review the actual delivery state and saved Lab/Project. A completed acquisition may still be awaiting files; resume the original Gateway delivery journal, not acquisition. Files stay private Project draft DataAssets. **Download original** uses current file authorization and audit; originals are attachments, not executable inline previews.
+
+Expand **Original file and provenance** for acquisition time with its reported timezone, server receipt time, reported units/conversions/completion reference, SHA-256 and the immutable DataAsset version ID. These declarations and byte checks are not scientific validation. Do not infer sample identity from filenames or timestamps.
+
+Choose **Associate Record**, select a Protocol in the same Project, then search by Record number or UUID and choose its exact version. Unique accessible options are inherited; larger lists have explicit pagination. Optional sample references are literal operator observations. Preview shows the Record ID/version/content hash and original DataAsset version/checksum. Confirmation appends a new association without editing/submitting the Record, promoting the DataAsset, or deleting the previous association. **Association history** distinguishes current and previous entries; opening a Record goes to that exact report version.
+
+API permissions, not UI visibility, govern read/write access. `GET /research-instrument-jobs/{job_id}/outputs/record-options` takes `protocol_id`, optional `q`, `offset` and `limit` (1–100); permissions including own-only Record access are applied before pagination. `GET .../outputs/{output_id}/associations` paginates immutable revisions and redacts inaccessible Record/sample details. Associating requires current research execution and Knowledge creation authority; authorized read-only users retain file inspection/download without gaining write access.
+
+After a lost confirmation response, retry the **same confirmation**, or use **Check saved state** before editing again. Concurrent changes invalidate stale previews; reconciliation reloads current state and requires a new selection/preview when needed. Refresh failure clears previously displayed file details. AI is not required anywhere in this workflow. Synthetic installed-driver, actual API/storage and browser tests validate software behavior, not real equipment or workstation safety; authorized pilot acceptance remains necessary.
 
 ### Automatic delivery and recovery
 

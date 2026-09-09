@@ -3126,6 +3126,68 @@ declare namespace I18n {
           excludeLabel: string
         }
       }
+      instrumentFiles: {
+        title: string
+        hint: string
+        destination: string
+        scopeHint: string
+        pendingHint: string
+        readOnly: string
+        loadError: string
+        downloadError: string
+        download: string
+        sizeLimit: string
+        required: string
+        optional: string
+        associate: string
+        changeAssociation: string
+        unassociated: string
+        restrictedAssociation: string
+        sample: string
+        unspecified: string
+        sampleHint: string
+        provenance: string
+        acquiredAt: string
+        receivedAt: string
+        units: string
+        conversions: string
+        noConversion: string
+        completionReference: string
+        assetVersion: string
+        recordHash: string
+        history: string
+        noHistory: string
+        current: string
+        previous: string
+        more: string
+        moreProtocols: string
+        protocol: string
+        protocolSearch: string
+        protocolVersion: string
+        recordSearch: string
+        recordSearchHint: string
+        recordVersion: string
+        noRecords: string
+        associationHint: string
+        confirmHint: string
+        editError: string
+        uncertain: string
+        checkSaved: string
+        saved: string
+        delivery: {
+          awaiting_execution: string
+          execution_stopped: string
+          awaiting_files: string
+          delivered: string
+        }
+        fileState: {
+          awaiting_capture: string
+          awaiting_upload: string
+          registered: string
+          omitted: string
+          unavailable: string
+        }
+      }
       instrumentIntegration: {
         title: string
         subtitle: string

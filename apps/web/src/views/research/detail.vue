@@ -34,7 +34,7 @@
                 {{ $t("page.research.airaManaged") }}
               </n-tag>
             </div>
-            <h1 class="aira-type-page-title mb-0 mt-2">
+            <h1 class="aira-type-page-title mb-0 mt-2 break-words">
               {{ task.title }}
             </h1>
             <p class="aira-type-body aira-text-secondary mb-0 mt-3 whitespace-pre-wrap">
@@ -62,7 +62,11 @@
               @created="() => loadTask(true)"
             />
             <n-popover v-if="canCancel" trigger="click" placement="bottom-end">
-              <template #trigger><n-button quaternary>{{ $t("common.more") }}</n-button></template>
+              <template #trigger>
+                <n-button quaternary>
+                  {{ $t("common.more") }}
+                </n-button>
+              </template>
               <n-button v-if="canCancel" type="error" tertiary :loading="mutating" @click="cancelTask">
                 {{ $t("page.research.cancelTask") }}
               </n-button>
@@ -117,15 +121,23 @@
                 </div>
               </div>
               <div class="mt-4 rounded-2 bg-blue-50 p-4" data-testid="research-next-step">
-                <div class="aira-type-label">{{ $t("page.research.nextStep") }}</div>
-                <p class="aira-type-body mb-0 mt-1" :data-testid="!task.ai_available && task.status === 'active' ? 'research-manual-next-step' : undefined">{{ nextStepHint }}</p>
-                <n-button v-if="nextStepTarget" class="mt-3" secondary @click="focusNextStep">{{ $t("page.research.openNextStep") }}</n-button>
+                <div class="aira-type-label">
+                  {{ $t("page.research.nextStep") }}
+                </div>
+                <p class="aira-type-body mb-0 mt-1" :data-testid="!task.ai_available && task.status === 'active' ? 'research-manual-next-step' : undefined">
+                  {{ nextStepHint }}
+                </p>
+                <n-button v-if="nextStepTarget" class="mt-3" secondary @click="focusNextStep">
+                  {{ $t("page.research.openNextStep") }}
+                </n-button>
               </div>
             </section>
 
             <details v-if="canAddAction" ref="actionToolsRef" class="aira-disclosure research-panel mt-4" data-testid="research-add-actions">
               <summary>{{ $t("page.research.addAction") }}</summary>
-              <p class="aira-type-meta mb-4">{{ $t("page.research.addActionHint") }}</p>
+              <p class="aira-type-meta mb-4">
+                {{ $t("page.research.addActionHint") }}
+              </p>
               <div class="flex flex-wrap gap-2">
                 <n-button v-if="canAddAction" secondary @click="openActionModal">
                   {{ $t("page.research.addProtocolWork") }}
@@ -162,7 +174,6 @@
                   :has-environments="task.compute.some(item => item.available)"
                   @created="() => loadTask(true)"
                 />
-
               </div>
             </details>
 
@@ -326,7 +337,9 @@
               <h2 class="aira-type-section-title mb-0 mt-1">
                 {{ $t("page.research.actions") }}
               </h2>
-              <p v-if="!task.actions.length" class="aira-type-meta my-3">{{ $t("page.research.noActions") }}</p>
+              <p v-if="!task.actions.length" class="aira-type-meta my-3">
+                {{ $t("page.research.noActions") }}
+              </p>
               <div v-else class="mt-4 divide-y divide-gray-100">
                 <div v-for="action in task.actions" :key="action.id" class="flex gap-3 py-4 first:pt-0 last:pb-0">
                   <div class="research-sequence">
@@ -545,6 +558,9 @@
                         {{ action.instrument_job.error || action.instrument_job.stop_reason }}
                       </n-alert>
                       <pre v-if="Object.keys(action.instrument_job.result || {}).length" class="mt-3">{{ formatPayload(action.instrument_job.result) }}</pre>
+                      <div v-if="action.input_data.file_receiving" class="mt-3">
+                        <research-instrument-files :job-id="action.instrument_job.id" @changed="() => loadTask(true)" />
+                      </div>
                     </div>
                     <div v-if="action.compute_job" class="research-digital-result mt-3">
                       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -778,7 +794,9 @@
 
             <details class="research-panel aira-disclosure" data-testid="research-environment-details">
               <summary>{{ $t("page.research.researchEnvironment") }}</summary>
-              <p class="aira-type-meta">{{ $t("page.research.environmentSelectionSummary", { methods: task.protocols.length, tools: pinnedTools.length, knowledge: task.knowledge.length, resources: task.resources.length + task.services.length + task.compute.length }) }}</p>
+              <p class="aira-type-meta">
+                {{ $t("page.research.environmentSelectionSummary", { methods: task.protocols.length, tools: pinnedTools.length, knowledge: task.knowledge.length, resources: task.resources.length + task.services.length + task.compute.length }) }}
+              </p>
               <div class="aira-type-eyebrow">
                 {{ $t("page.research.researchEnvironment") }}
               </div>
@@ -934,8 +952,8 @@
     </n-spin>
 
     <n-modal
-      style="--aira-dialog-width: 44rem"
       v-model:show="actionModalVisible"
+      style="--aira-dialog-width: 44rem"
       preset="card"
       class="aira-dialog research-modal"
       :title="$t('page.research.addProtocolWork')"
@@ -1164,6 +1182,7 @@ import ResearchComputeJobActions from "./components/research-compute-job-actions
 import ResearchDigitalActionModal from "./components/research-digital-action-modal.vue"
 import ResearchHumanWorkActionModal from "./components/research-human-work-action-modal.vue"
 import ResearchInstrumentControlActions from "./components/research-instrument-control-actions.vue"
+import ResearchInstrumentFiles from "./components/research-instrument-files.vue"
 import ResearchInstrumentStop from "./components/research-instrument-stop.vue"
 import ResearchReproductionReview from "./components/research-reproduction-review.vue"
 import ResearchResourceActionModal from "./components/research-resource-action-modal.vue"
