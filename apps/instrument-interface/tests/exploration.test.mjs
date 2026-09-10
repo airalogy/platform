@@ -8,6 +8,7 @@ import { digest } from "../src/contract.mjs"
 import { prepareExploration, runExploration, syncExploration } from "../src/exploration.mjs"
 import { fingerprint, validateProposal, validateRequest } from "../src/exploration-contract.mjs"
 import { previewSelectedInterface } from "../src/interface-backend.mjs"
+import { previewWorkflow, runWorkflow, workflowFromEvidence } from "../src/workflow.mjs"
 import { fixture, plan } from "./fixture.mjs"
 
 const policy = { goal: "Read two synthetic samples", actions: plan.steps, success: [{ control_id: "result", equals: "0.84" }] }
@@ -115,6 +116,12 @@ browserTest("adaptive model choices execute actual browser steps and stop on ind
   assert.equal(after.values.result, "0.84")
   assert.equal(after.sequence, 2)
   assert.equal(outcome.hardware_qualified, false)
+  const workflow = await workflowFromEvidence(outcome.evidence)
+  const preview = await previewWorkflow(workflow)
+  const repeated = await runWorkflow(workflow, { confirmation: preview.sha256, evidenceRoot: dirname(files.request_file), acknowledgeNewRun: true })
+  assert.deepEqual(repeated.values, { result: "0.84" })
+  assert.notEqual(repeated.session_id, workflow.source.session_id)
+  assert.equal(client.proposals, 3) // Deterministic reuse does not call the model.
   await assert.rejects(runExploration(files.request_file, { confirmation: files.local_preview_digest, client }))
 })
 
@@ -146,6 +153,8 @@ browserTest("lost action receipt syncs immutable evidence without reopening a br
   assert.equal(client.proposals, 1)
   assert.deepEqual(await readdir(dirname(files.request_file)), before)
   assert.equal([...client.reports.values()][0].after.values.count, "2")
+  const evidenceName = before.find(name => name.startsWith("interface-"))
+  await assert.rejects(workflowFromEvidence(`${dirname(files.request_file)}/${evidenceName}`))
   await assert.rejects(runExploration(files.request_file, { confirmation: files.local_preview_digest, client }))
 })
 

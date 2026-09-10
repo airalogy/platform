@@ -15,6 +15,7 @@
     "gateway:gui-demo": "node scripts/instrument-gui-demo.mjs",
     "gateway:interface": "node apps/instrument-interface/src/cli.mjs",
     "gateway:explore": "node apps/instrument-interface/src/exploration-cli.mjs",
+    "gateway:workflow": "node apps/instrument-interface/src/workflow-cli.mjs",
     "gateway:survey": "node apps/instrument-interface/src/survey-cli.mjs",
     "gateway:native": "node apps/instrument-interface/src/native-cli.mjs",
     "gateway:interface-example": "node scripts/instrument-interface-example.mjs",

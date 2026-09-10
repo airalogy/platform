@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import uvicorn
+
 from app.config import config
 from app.database import sessionmanager
 from app.libs import masterbrain
@@ -276,6 +277,51 @@ def exercise_exploration(runtime, tmp_path, monkeypatch, *, native=False):
             assert history["effective_state"] == "cancelled"
             assert len(history["turns"]) == 3
             assert history["turns"][1]["report"]["after"]["values"][result_id] == "0.84"
+            # Export only complete local evidence, then reuse the literal flow
+            # without another model request. No physical device is involved.
+            workflow_cli = "apps/instrument-interface/src/workflow-cli.mjs"
+            workflow_preview = await node(
+                workflow_cli, "prepare", "--evidence", outcome["evidence"]
+            )
+            assert workflow_preview["workflow"]["hardware_qualified"] is False
+            assert len(workflow_preview["workflow"]["plan"]["steps"]) == 2
+            saved_workflow = await node(
+                workflow_cli,
+                "export",
+                "--evidence",
+                outcome["evidence"],
+                "--workspace",
+                tmp_path,
+                "--confirm",
+                workflow_preview["sha256"],
+            )
+            assert saved_workflow["application_opened"] is False
+            if not native:
+                replay_preview = await node(
+                    workflow_cli,
+                    "preview",
+                    "--workflow",
+                    saved_workflow["workflow_file"],
+                )
+                repeated = await node(
+                    workflow_cli,
+                    "run",
+                    "--workflow",
+                    saved_workflow["workflow_file"],
+                    "--evidence",
+                    tmp_path,
+                    "--confirm",
+                    replay_preview["sha256"],
+                    "--ack-new-run",
+                )
+                assert repeated["state"] == "workflow_completed"
+                assert repeated["values"][result_id] == "0.84"
+                assert (
+                    repeated["session_id"]
+                    != workflow_preview["workflow"]["source"]["session_id"]
+                )
+            # Native export is offline; it never resets or relaunches a running app.
+            assert len(calls) == 3
             if native:
                 assert "SYNTHETIC_PRIVATE" not in json.dumps(calls, default=str)
                 assert "SYNTHETIC_PASSWORD" not in json.dumps(calls, default=str)

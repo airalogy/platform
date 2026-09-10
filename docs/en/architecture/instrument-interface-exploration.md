@@ -78,6 +78,8 @@ The result distinguishes `client_reported_success`, `needs_information` and `bud
 
 ## Deployment and acceptance
 
+Successful, fully closed local evidence can be [saved as a reviewed fixed workflow](./instrument-interface-workflow.md) and replayed without further model calls. Export retains only actual steps, initial conditions, original success checks and lineage; it does not import, install or activate an adapter. Stopped/uncertain traces cannot be promoted. New runs retain all existing backend target, approval and simulation-only restrictions.
+
 Migration `0056_instrument_exploration` adds a purpose discriminator (existing sessions default to `source`) and immutable turn inputs to the development tables. Deploy API and local runtime together through the normal backed-up release workflow. Downgrade deletes interface-development sessions/turns before removing the discriminator, so an older source-only server cannot reuse their authority; it preserves source sessions and never undoes local actions/files.
 
 `gateway:contract:check` verifies the shared Node-authored JSON Schema copied to the API; golden requests test matching canonical fingerprints. `gateway:interface-test` uses actual Chromium with synthetic model choices. `research:integration` additionally runs the real API, disposable PostgreSQL and independently launched Node/Chromium together; only the model stream is synthetic. UI tests check confirmation, private-file rejection, escaped output, history/cancel and AI-off behavior using explicit UI response fixtures. No paid-model quality, vendor software or physical-device acceptance is implied.

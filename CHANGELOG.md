@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add private, reviewed fixed workflows from fully successful interface exploration: validate complete event/step evidence, retain initial conditions, predeclared success and lineage, and reuse the existing deterministic backend without further model calls. Include stale-safe export/run previews, failure rejection and actual headless/API acceptance; no hardware authorization, managed GUI execution or simulation-boundary expansion.
+
 - Add separately configured, fixed-operation HTTP JSON control for reviewed adapters, reusing pinned TLS, bounded responses and non-retrying I/O without broadening read-only configuration. Include a stateful loopback source package with exact Job correlation, independent completion/stop readback, fixed offline tests, independent installation reuse and actual Platform receipt-recovery acceptance; all equipment observations remain synthetic.
 
 - Extend source-only Aira adapter development to fixed non-read-only command contracts with separate strict development consent, visible risk/effect/completion/stop review and durable authorization audit. Preserve all package safety requirements and independent runtime gates. Add an owned stateful control reference, independent fake-transport tests, actual isolated fail/repair acceptance, bilingual mobile review and API/local-browser coverage; simulation remains ineligible for real-equipment activation.
