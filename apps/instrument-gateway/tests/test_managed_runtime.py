@@ -12,6 +12,12 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+from managed_fixture import TARGET, package
+from test_gateway import envelope
+from test_installation_manager import FakePlatform
+from test_output_delivery import ReceivingClient, file_job
+from test_package_installation import sdk
+
 from airalogy_instrument_gateway.activation_cli import launch_command, main
 from airalogy_instrument_gateway.activation_contract import SCHEMA, activation_digest
 from airalogy_instrument_gateway.client import GatewayAPIError
@@ -26,11 +32,6 @@ from airalogy_instrument_gateway.managed_runtime import (
 from airalogy_instrument_gateway.package_contract import sha256
 from airalogy_instrument_gateway.security import expected_job_signature
 from airalogy_instrument_gateway.state import GatewayState, StateStore
-from managed_fixture import TARGET, package
-from test_gateway import envelope
-from test_installation_manager import FakePlatform
-from test_output_delivery import ReceivingClient, file_job
-from test_package_installation import sdk
 
 
 @unittest.skipUnless(os.name == "posix", "POSIX installation support")

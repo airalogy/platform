@@ -9,6 +9,10 @@ import unittest
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from http_reader_fixture import PROJECT, RESULT, TARGET, package, serve, spec
+from test_http_read import config
+from test_package_installation import sdk
+
 from airalogy_instrument_gateway.authoring_contract import (
     generation_prompt,
     validate_spec,
@@ -21,9 +25,6 @@ from airalogy_instrument_gateway.package_installation import (
     verify_installation,
 )
 from airalogy_instrument_gateway.package_sandbox import test_package as run_isolated
-from http_reader_fixture import PROJECT, RESULT, TARGET, package, serve, spec
-from test_http_read import config
-from test_package_installation import sdk
 
 SCRIPT = """
 import json, sys, threading

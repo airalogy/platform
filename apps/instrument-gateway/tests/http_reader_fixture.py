@@ -5,8 +5,9 @@ import json
 import runpy
 from pathlib import Path
 
-from airalogy_instrument_gateway.package_builder import build_package
 from test_http_read import response, server
+
+from airalogy_instrument_gateway.package_builder import build_package
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples/http-reader"
 PROJECT = Path(__file__).resolve().parents[3]

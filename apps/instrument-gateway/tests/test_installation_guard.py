@@ -6,10 +6,11 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from test_gateway import TOKEN, BlockingAdapter, FakeClient, config, envelope
+
 from airalogy_instrument_gateway.runtime import GatewayHaltError, GatewayRuntime
 from airalogy_instrument_gateway.security import expected_job_signature
 from airalogy_instrument_gateway.state import GatewayState, StateStore
-from test_gateway import TOKEN, BlockingAdapter, FakeClient, config, envelope
 
 
 class InstallationGuardTests(unittest.TestCase):

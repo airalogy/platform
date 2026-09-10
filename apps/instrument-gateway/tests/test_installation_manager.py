@@ -7,6 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import uuid4
 
+from test_package_installation import sdk
+from test_packages import example
+
 from airalogy_instrument_gateway.client import GatewayAPIError
 from airalogy_instrument_gateway.installation_contract import validate_request
 from airalogy_instrument_gateway.installation_manager import (
@@ -17,8 +20,6 @@ from airalogy_instrument_gateway.installation_manager import (
 )
 from airalogy_instrument_gateway.package_contract import sha256
 from airalogy_instrument_gateway.state import StateStore
-from test_package_installation import sdk
-from test_packages import example
 
 
 class FakePlatform:

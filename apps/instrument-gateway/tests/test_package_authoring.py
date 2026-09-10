@@ -12,6 +12,9 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+from test_package_installation import sdk
+from test_packages import EXAMPLE, contents
+
 from airalogy_instrument_gateway.authoring import (
     AuthoringClient,
     prepare,
@@ -31,8 +34,6 @@ from airalogy_instrument_gateway.package_contract import sha256
 from airalogy_instrument_gateway.package_sandbox import SandboxError
 from airalogy_instrument_gateway.package_sandbox import test_package as isolated_test
 from airalogy_instrument_gateway.state import StateStore
-from test_package_installation import sdk
-from test_packages import EXAMPLE, contents
 
 
 def spec():

@@ -2,8 +2,9 @@
 
 import json
 
-from airalogy_instrument_gateway.package_builder import build_package
 from test_packages import EXAMPLE
+
+from airalogy_instrument_gateway.package_builder import build_package
 
 TARGET = dict.fromkeys(
     (

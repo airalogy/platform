@@ -8,6 +8,9 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from test_gateway import envelope
+from test_packages import EXAMPLE, example
+
 from airalogy_instrument_gateway.installation_cli import main
 from airalogy_instrument_gateway.package_builder import build_package, source_wheel
 from airalogy_instrument_gateway.package_contract import canonical, sha256
@@ -18,8 +21,6 @@ from airalogy_instrument_gateway.package_installation import (
     verify_installation,
 )
 from airalogy_instrument_gateway.state import GatewayState, StateStore
-from test_gateway import envelope
-from test_packages import EXAMPLE, example
 
 
 def sdk():
