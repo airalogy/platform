@@ -61,6 +61,8 @@ pnpm gateway:gui-demo
 
 ### 本地浏览器接入向导
 
+首次安装可使用独立确认的 [SDK 来源核验与隔离安装引导](./instrument-sdk-installation.md)，或独立可信的手工 SDK 安装。接入向导本身不负责证明自身可信。
+
 在已获授权、已安装审核过的 Gateway SDK 的 POSIX 工作站运行：
 
 ```bash
@@ -124,7 +126,8 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 未启用的纯 Python 离线安装及本地回执 | 已实现，POSIX；不启用、不代表远程授权 |
 | 设备/包/配置精确绑定、独立安装授权及回执同步 | 已实现；仅 POSIX 纯 Python 非活动副本 |
 | 有界源码生成与测试修正 | 已实现[本地开发助手](./instrument-source-authoring.md)，固定人工选定的契约/测试，仅完成合成验收 |
-| 自主软件探索与签名分发 | 尚未实现 |
+| 自主软件探索 | 尚未实现 |
+| 官方 SDK 来源核验与隔离安装 | [显式稳定版本安装](./instrument-sdk-installation.md)、固定来源/提交策略、离线证明支持及真实验证器发布门禁；不等于厂商适配包签名目录或实机验收 |
 | 双端核对、单次配对、私有凭据存储 | 已实现，POSIX 软件验收范围 |
 | 本地浏览器向导、公开请求交接及安装恢复 | 已实现，仅鉴权回环/POSIX；不含引导分发、驱动启动或实机验收 |
 | 独立限范围验收记录、到期与撤销 | 已实现；人工声明，模拟与实机分开 |

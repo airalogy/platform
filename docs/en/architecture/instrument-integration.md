@@ -61,6 +61,8 @@ This operates only the bundled synthetic reader through the shared [browser inte
 
 ### Local browser setup
 
+For first installation, use the separately confirmed [SDK provenance verification and isolated bootstrap](./instrument-sdk-installation.md), or an independently trusted manual SDK installation. The setup guide itself does not bootstrap its own trust.
+
 On an authorized POSIX workstation with the reviewed Gateway SDK already installed:
 
 ```bash
@@ -124,7 +126,8 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | Inactive pure-Python offline installation and local receipts | Implemented, POSIX; no activation or remote authorization |
 | Exact device/package/config binding, independent installation grants and receipt synchronization | Implemented; inactive POSIX pure-Python copies only |
 | Bounded source generation and test repair | Implemented through the [local authoring assistant](./instrument-source-authoring.md); fixed human-selected contracts/tests, synthetic acceptance only |
-| Autonomous application exploration and signed distribution | Not implemented |
+| Autonomous application exploration | Not implemented |
+| Official SDK provenance and isolated bootstrap | [Explicit stable-release installation](./instrument-sdk-installation.md), fixed origin/commit policy, offline proof support and a real-verifier release gate; not a signed vendor Adapter Package catalogue or hardware acceptance |
 | Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
 | Local browser setup, public-request handoff and installation recovery | Implemented, authenticated loopback/POSIX; no bootstrap distribution, driver startup or hardware qualification |
 | Independent scoped acceptance records, expiry and revocation | Implemented; human assertions, simulation kept separate |

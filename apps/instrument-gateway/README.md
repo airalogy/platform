@@ -38,6 +38,8 @@ The SDK's [bounded HTTP read backend](../../docs/en/architecture/instrument-http
 
 ### Local browser setup
 
+First install a reviewed SDK using the [provenance-checked isolated bootstrap](../../docs/en/architecture/instrument-sdk-installation.md), or the existing trusted manual package workflow. The standalone bootstrap is attached to official releases and does not need an already installed Gateway. Trust the bootstrap itself independently before execution; it does not install Python/GitHub CLI, configure services or qualify equipment.
+
 After installing the reviewed Gateway SDK on an authorized POSIX workstation, run:
 
 ```bash

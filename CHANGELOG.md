@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a standalone, explicitly confirmed POSIX SDK bootstrap with exact official-release provenance checks, offline proof/root support, bounded wheel extraction, immutable-directory receipts and isolated named entry-point launch. It never starts drivers or changes existing runtime data. Include the bootstrap/attestation bundle in releases and gate official release installation with the real verifier; keep synthetic positive tests distinct from cryptographic and hardware acceptance.
+
 - Add a private local browser guide for bounded adapter source development: byte-bound input previews, independent material/AI approval handoff, observed worker progress, cooperative pause, explicit interrupted-test reconciliation and verified draft/report downloads. Reuse the existing authoring coordinator, isolation and credential boundaries; refresh never starts work and saved tickets do not prove liveness. Cover real browser/API/database flow with synthetic provider/test outcomes separately from actual Docker tests.
 
 - Add an authenticated loopback equipment setup guide with bilingual destination/pairing review, private local file selection, stale-safe installation previews, public-request handoff and durable inactive-installation recovery. Package its UI in the Gateway SDK and verify both built-wheel serving and real-API browser acceptance. The guide never starts drivers or grants hardware authority; POSIX-only, with independent source/installation/qualification approvals preserved.

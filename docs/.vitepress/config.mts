@@ -39,6 +39,7 @@ const englishSidebar = [
       { text: "Single-Lab deployment", link: "/en/single-lab-deployment" },
       { text: "Release and deployment identity", link: "/en/release-and-deployment-identity" },
       { text: "Self-hosted architecture", link: "/en/architecture/self-hosted-architecture" },
+      { text: "Install Instrument SDK", link: "/en/architecture/instrument-sdk-installation" },
     ],
   },
   {
@@ -84,6 +85,7 @@ const chineseSidebar = [
       { text: "单实验室部署", link: "/zh/single-lab-deployment" },
       { text: "发布与部署身份", link: "/zh/release-and-deployment-identity" },
       { text: "自托管架构", link: "/zh/architecture/self-hosted-architecture" },
+      { text: "安装 Instrument SDK", link: "/zh/architecture/instrument-sdk-installation" },
     ],
   },
   {

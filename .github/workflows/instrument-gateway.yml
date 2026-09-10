@@ -58,10 +58,10 @@ jobs:
         run: uv lock --check
 
       - name: Run tests
-        run: PYTHONPATH=src python -m unittest discover -s tests
+        run: RUN_BOOTSTRAP_ATTESTATION_TESTS=1 PYTHONPATH=src python -m unittest discover -s tests
 
       - name: Compile package
-        run: python -m compileall -q src tests
+        run: python -m compileall -q src tests bootstrap.py
 
       - name: Build package
         run: uv build
@@ -73,6 +73,10 @@ jobs:
           "$RUNNER_TEMP/instrument-gateway-wheel/bin/python" -c \
             "import airalogy_instrument_gateway, importlib.metadata; print(importlib.metadata.version('airalogy-instrument-gateway'))"
           "$RUNNER_TEMP/instrument-gateway-wheel/bin/python" tests/check_installed_setup.py
+
+      - name: Verify isolated SDK bootstrap and local guides
+        run: >-
+          python tests/check_bootstrap_install.py --wheel "dist/airalogy_instrument_gateway-$(cat ../../VERSION)-py3-none-any.whl" --release-tag "v$(cat ../../VERSION)"
 
       - name: Exercise adapter package isolation and timeout
         env:

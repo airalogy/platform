@@ -77,10 +77,25 @@ jobs:
           python-version: "3.13"
       - run: uv --directory apps/instrument-gateway lock --check
       - run: uv --directory apps/instrument-gateway build
+      - name: Include independently verifiable SDK bootstrap
+        run: cp apps/instrument-gateway/bootstrap.py apps/instrument-gateway/dist/airalogy-instrument-bootstrap.py
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        id: gateway_provenance
         if: github.event.repository.visibility == 'public'
         with:
           subject-path: apps/instrument-gateway/dist/*
+      - name: Retain SDK attestation bundle for offline verification
+        if: github.event.repository.visibility == 'public'
+        env:
+          SDK_ATTESTATION_BUNDLE: ${{ steps.gateway_provenance.outputs.bundle-path }}
+        run: cp "$SDK_ATTESTATION_BUNDLE" apps/instrument-gateway/dist/airalogy-instrument-attestations.jsonl
+      - name: Verify official SDK provenance and isolated installation
+        if: github.repository == 'airalogy/platform' && github.event.repository.visibility == 'public'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          python apps/instrument-gateway/tests/check_bootstrap_install.py --wheel "apps/instrument-gateway/dist/airalogy_instrument_gateway-$(cat VERSION)-py3-none-any.whl" --release-tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --verify-release
+
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: platform-instrument-gateway-package
