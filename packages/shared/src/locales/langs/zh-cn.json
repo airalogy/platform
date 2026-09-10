@@ -3207,6 +3207,7 @@
       "route": "建议接入方式：",
       "routes": {
         "browser": "浏览器语义控件",
+        "native_accessibility": "原生辅助功能（macOS 只读）",
         "api_or_sdk": "有文档依据的 API 或 SDK",
         "manual": "手工接入",
         "unknown": "需要更多信息"

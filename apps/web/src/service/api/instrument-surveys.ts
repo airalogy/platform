@@ -4,7 +4,7 @@ export interface SurveyReport {
   schema: "airalogy.interface-survey.v1"
   id: string
   preview_digest: string
-  target: { application: string, version: string, title: string, locale: string, kind: "file" | "url" }
+  target: { application: string, version: string, title: string, locale: string, kind: "file" | "url" | "native_macos" }
   capture_values: boolean
   controls: Array<{ id: string, label: string, role: string, locator: { kind: string, name: string, role?: string } | null, read: string | null, value: string | boolean | null, enabled: boolean }>
   omitted_private: number
@@ -15,7 +15,7 @@ export interface SurveyAnalysis {
   features: Array<{ control_id: string, interpretation: string, basis: "observed" | "inferred", risk: "read_only" | "state_change" | "unknown" }>
   read_controls: string[]
   identity_control: string | null
-  route: "browser" | "api_or_sdk" | "manual" | "unknown"
+  route: "browser" | "native_accessibility" | "api_or_sdk" | "manual" | "unknown"
   limitations: string[]
   missing_information: string[]
 }

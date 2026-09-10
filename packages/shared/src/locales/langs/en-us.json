@@ -3207,6 +3207,7 @@
       "route": "Suggested integration route:",
       "routes": {
         "browser": "Browser semantics",
+        "native_accessibility": "Native Accessibility (read-only macOS)",
         "api_or_sdk": "Documented API or SDK",
         "manual": "Manual integration",
         "unknown": "More information needed"

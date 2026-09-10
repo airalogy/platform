@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a read-only macOS Accessibility backend for explicitly selected running instrument applications: private source/binary-pinned builds, bundle/process/window identity checks, bounded password/private-region masking, native survey/Aira review, offline read-only draft assembly and separately confirmed readbacks. Includes an owned AppKit simulator, native CLI, shared API validation, bilingual guidance and opt-in actual native acceptance; CI never grants Accessibility permissions. Native writes, app discovery/launch, visual control, production GUI integration and real-instrument qualification remain pending.
+
 - Connect private interface surveys to separately confirmed one-shot Aira interpretation with scoped, immutable history, cancellation, strict observed-control references and capture-bound exports for local read-only draft assembly. Add bilingual narrow-screen review and AI-off history/export, migration 0057, shared contract tests and real synthetic browser/API acceptance. No software launch, action, installation or hardware authority is granted by analysis.
 
 - Add bounded selected-browser interface surveys without handwritten control/state maps: independently confirmed one-time capture, browser-verified semantic locators, value-consent and composed-DOM privacy checks, private retained evidence and manual assembly into ordinary read-only drafts. Share the existing isolated browser lifecycle and a Node/API schema; pin the shared AJV catalog to the already-tested 8.12.0 and include its version in local previews for reproducible standalone validation. This local phase neither calls Aira nor installs, activates or qualifies equipment; native/visual and real-instrument acceptance remain open.

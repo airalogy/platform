@@ -13,8 +13,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import select
-
 from app.config import config
 from app.database import sessionmanager
 from app.main import app
@@ -36,6 +34,7 @@ from app.services.resource_job_worker import (
     process_persistent_job,
     reconcile_exhausted_jobs,
 )
+from sqlalchemy import select
 
 pytestmark = pytest.mark.skipif(
     os.getenv("RESEARCH_INTEGRATION_TEST") != "1",
@@ -197,6 +196,18 @@ def test_interface_survey_real_browser_api_and_readonly_draft(
     from tests.survey_acceptance import exercise_survey
 
     exercise_survey(runtime, tmp_path, monkeypatch)
+
+
+@pytest.mark.skipif(
+    os.environ.get("RUN_INTERFACE_NATIVE_TESTS") != "1",
+    reason="Requires an explicitly authorized graphical macOS session",
+)
+def test_interface_survey_real_native_api_and_readonly_draft(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.survey_acceptance import exercise_survey
+
+    exercise_survey(runtime, tmp_path, monkeypatch, native=True)
 
 
 @pytest.mark.parametrize("cancel_before_finalize", [False, True])

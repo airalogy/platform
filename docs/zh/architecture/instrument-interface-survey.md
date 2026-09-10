@@ -1,5 +1,7 @@
 # 选定应用的界面勘察
 
+对于已经运行的 macOS 原生应用，先使用[原生观察准备流程](./instrument-native-interface.md)，再复用本页一次性 `run`、手工/Aira 审核和 `assemble`。原生定义仅可读取，不是浏览器动作策略。
+
 在**明确选定**的浏览器应用中自动识别可见控件，不必先手写控件与状态表。这是有界本地开发证据，不是自动扫描已安装软件，也不授予设备操作权限。复用[浏览器后端](./instrument-browser-interface.md)的独立 Chromium、精确网络白名单、隐私遮挡与停止规则。目前只支持 Linux/macOS 私有文件环境；原生 Windows 与视觉 Computer Use 仍未认证。
 
 ## 准备并审核

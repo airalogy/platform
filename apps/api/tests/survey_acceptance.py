@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 from importlib import import_module
 from pathlib import Path
 from uuid import uuid4
@@ -18,8 +19,9 @@ from sqlalchemy import text
 from tests.exploration_acceptance import ROOT, node, target
 
 
-def exercise_survey(runtime, tmp_path, monkeypatch):
+def exercise_survey(runtime, tmp_path, monkeypatch, *, native=False):
     calls, gate, invalid = [], None, False
+    owned_process = None
 
     async def provider(endpoint, payload, **kwargs):
         calls.append((endpoint, payload, kwargs))
@@ -36,12 +38,16 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
         identity = next(
             item
             for item in report["controls"]
-            if item["locator"] and item["locator"]["name"] == "software-version"
+            if item["locator"]
+            and item["locator"]["name"]
+            == ("app.identity" if native else "software-version")
         )
         status = next(
             item
             for item in report["controls"]
-            if item["locator"] and item["locator"]["name"] == "reader-status"
+            if item["locator"]
+            and item["locator"]["name"]
+            == ("reader.status" if native else "reader-status")
         )
         proposal = {
             "summary": "Synthetic interpretation, not hardware qualification",
@@ -55,7 +61,7 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
             ],
             "read_controls": [status["id"]],
             "identity_control": identity["id"],
-            "route": "browser",
+            "route": "native_accessibility" if native else "browser",
             "limitations": ["No operation or physical readiness verified"],
             "missing_information": [],
         }
@@ -69,11 +75,11 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CHAT_API_ENDPOINT", "http://synthetic-model.invalid")
 
     async def exercise():
-        nonlocal gate, invalid
+        nonlocal gate, invalid, owned_process
         resource, gateway = await target(runtime)
         cli = ROOT / "apps/instrument-interface/src/survey-cli.mjs"
         tmp_path.chmod(0o700)
-        prepared = await node(
+        browser_arguments = (
             cli,
             "prepare",
             "--file",
@@ -89,6 +95,44 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
             "--workspace",
             tmp_path,
         )
+        if native:
+            native_cli = ROOT / "apps/instrument-interface/src/native-cli.mjs"
+            built = await node(native_cli, "build", "--workspace", tmp_path)
+            doctor = await node(native_cli, "doctor", "--build", built["build_file"])
+            assert doctor["accessibility_trusted"] is True
+            assert doctor["permissions_changed"] is False
+            # Only the fixed, just-built, no-network/no-hardware synthetic app.
+            owned_process = await asyncio.to_thread(
+                subprocess.Popen,
+                [str(Path(built["simulator_app"]) / "Contents/MacOS/Simulator")],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            ready = await asyncio.wait_for(
+                asyncio.to_thread(owned_process.stdout.readline), 10
+            )
+            assert ready.startswith(b"SIMULATOR_READY")
+            masks = tmp_path / "private-masks.json"
+            masks.write_text('["private.note"]')
+            masks.chmod(0o600)
+            prepared = await node(
+                native_cli,
+                "prepare",
+                "--build",
+                built["build_file"],
+                "--bundle",
+                built["simulator_app"],
+                "--pid",
+                owned_process.pid,
+                "--title",
+                "Airalogy Native Reader — Simulation",
+                "--redact",
+                masks,
+                "--workspace",
+                tmp_path,
+            )
+        else:
+            prepared = await node(*browser_arguments)
         captured = await node(
             cli,
             "run",
@@ -97,6 +141,10 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
             prepared["local_preview_digest"],
         )
         report = json.loads(Path(captured["report_file"]).read_text())
+        if native:
+            assert report["target"]["kind"] == "native_macos"
+            assert "SYNTHETIC_PRIVATE" not in json.dumps(report)
+            assert "SYNTHETIC_PASSWORD" not in json.dumps(report)
         draft = {
             "id": str(uuid4()),
             "gateway_id": gateway["id"],
@@ -178,6 +226,23 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
         assert all(item["operations"] == ["read"] for item in definition["controls"])
         assert json.loads(Path(result["plan_file"]).read_text())["steps"] == []
         assert len(calls) == 1
+        if native:
+            preview_read = await node(
+                native_cli, "preview", "--definition", result["definition_file"]
+            )
+            read = await node(
+                native_cli,
+                "read",
+                "--definition",
+                result["definition_file"],
+                "--confirm",
+                preview_read["sha256"],
+                "--evidence",
+                tmp_path,
+                "--ack-new-read",
+            )
+            values = json.loads(Path(read["readback_file"]).read_text())
+            assert "Ready" in values.values() and read["actions_executed"] == 0
         history = await runtime.json("GET", f"/instrument-surveys/{session_id}")
         assert not history["can_analyze"] and len(history["turns"]) == 1
         listed = await runtime.json(
@@ -331,4 +396,14 @@ def exercise_survey(runtime, tmp_path, monkeypatch):
         async with sessionmanager.connect() as connection:
             await connection.run_sync(migrate)
 
-    runtime.run(exercise())
+    try:
+        runtime.run(exercise())
+    finally:
+        if owned_process:
+            owned_process.terminate()
+            try:
+                owned_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                owned_process.kill()
+                owned_process.wait(timeout=5)
+            owned_process.stdout.close()

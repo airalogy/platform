@@ -21,10 +21,10 @@ export async function prepareSurvey(selection, workspace) {
   return { request_file: join(evidence.directory, "request.json"), local_preview_digest: preview.sha256, browser_opened: false, model_called: false }
 }
 
-async function readRequest(path) {
+async function readRequest(path, options = {}) {
   const request = await readPrivateJson(path)
   checkObject(request, ["selection", "preview_digest"])
-  const preview = await previewSurvey(request.selection)
+  const preview = await previewSurvey(request.selection, options)
   if (preview.sha256 !== request.preview_digest)
     throw new Error("Survey target, runtime or capture policy changed; prepare and review again")
   return { request, preview }
@@ -55,7 +55,9 @@ export async function runPreparedSurvey(path, confirmation) {
 }
 
 export async function assemblePreparedSurvey(path, analysisPath, workspace) {
-  const { request, preview } = await readRequest(path)
+  // Assembly consumes retained evidence, not a new live application observation.
+  // Preserve old process pins in the draft; executing it still requires fresh checks.
+  const { request, preview } = await readRequest(path, { verifyTarget: false })
   const root = dirname(path)
   if ((await readPrivateSelection(join(root, "run.started"))).toString("utf8") !== preview.sha256)
     throw new Error("The saved survey launch does not match this preparation")

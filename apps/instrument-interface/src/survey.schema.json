@@ -7,6 +7,29 @@
         {
           "type": "object",
           "properties": {
+            "kind": { "const": "ax_identifier" },
+            "role": {
+              "enum": [
+                "AXStaticText",
+                "AXTextField",
+                "AXTextArea",
+                "AXButton",
+                "AXCheckBox",
+                "AXRadioButton",
+                "AXPopUpButton",
+                "AXComboBox",
+                "AXSlider",
+                "AXTabGroup"
+              ]
+            },
+            "name": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          "required": ["kind", "role", "name"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
             "kind": {
               "const": "test_id"
             },
@@ -157,7 +180,7 @@
               "maxLength": 512
             },
             "kind": {
-              "enum": ["file", "url"]
+              "enum": ["file", "url", "native_macos"]
             }
           },
           "required": ["application", "version", "title", "locale", "kind"],
@@ -265,7 +288,7 @@
           ]
         },
         "route": {
-          "enum": ["browser", "api_or_sdk", "manual", "unknown"]
+          "enum": ["browser", "native_accessibility", "api_or_sdk", "manual", "unknown"]
         },
         "limitations": {
           "type": "array",

@@ -3211,6 +3211,7 @@ declare namespace I18n {
         route: string
         routes: {
           browser: string
+          native_accessibility: string
           api_or_sdk: string
           manual: string
           unknown: string

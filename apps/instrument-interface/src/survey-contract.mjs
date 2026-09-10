@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer"
 import { createRequire } from "node:module"
 import Ajv from "ajv"
 import { canonical, digest, validateDefinition, validateLocator } from "./contract.mjs"
+import { validateNativeDefinition, validateNativeLocator } from "./native-contract.mjs"
 
 const schema = createRequire(import.meta.url)("./survey.schema.json")
 const ajv = new Ajv({ strict: true })
@@ -17,15 +18,26 @@ export function validateSurveyReport(report) {
   const ids = new Set()
   const locators = new Set()
   for (const control of report.controls) {
+    if (report.target.kind === "native_macos" && control.read !== null
+      && (control.read === "text" ? control.role !== "AXStaticText" : control.read !== "value" || !["AXTextField", "AXTextArea"].includes(control.role))) {
+      throw new Error("Native readback type must agree with its observed role")
+    }
     if (ids.has(control.id) || (control.read === null ? control.value !== null : control.read === "checked" ? typeof control.value !== "boolean" : typeof control.value !== "string"))
       throw new Error("Survey control IDs and readback types must agree")
     if (!report.capture_values && ["value", "checked"].includes(control.read))
       throw new Error("Survey values require explicit capture consent")
     if (control.locator) {
-      validateLocator(control.locator)
+      if (report.target.kind === "native_macos") {
+        validateNativeLocator(control.locator)
+        if (control.role !== control.locator.role)
+          throw new Error("Native locator and observed role must agree")
+      }
+      else {
+        validateLocator(control.locator)
+      }
       const signature = canonical(control.locator)
       if (locators.has(signature))
-        throw new Error("Browser-verified locators must be unique")
+        throw new Error("Verified locators must be unique")
       locators.add(signature)
     }
     ids.add(control.id)
@@ -45,7 +57,7 @@ export function validateSurveyAnalysis(analysis, report) {
   for (const id of analysis.read_controls) {
     const control = controls.get(id)
     if (!control?.locator || !control.read)
-      throw new Error("Only browser-addressable, consented readbacks can be selected")
+      throw new Error("Only addressable, consented readbacks can be selected")
   }
   if (analysis.identity_control !== null) {
     const control = controls.get(analysis.identity_control)
@@ -64,6 +76,16 @@ export function assembleSurveyDefinition(selection, report, analysis, previewDig
   const ids = new Set([analysis.identity_control, ...analysis.read_controls])
   const chosen = report.controls.filter(item => ids.has(item.id))
   const identity = chosen.find(item => item.id === analysis.identity_control)
+  if (report.target.kind === "native_macos") {
+    const definition = validateNativeDefinition({
+      schema: "airalogy.native-read-definition.v1",
+      id: selection.id,
+      selection,
+      identity: { locator: identity.locator, text: identity.value },
+      controls: chosen.map(item => ({ id: item.id, locator: item.locator, read: item.read, operations: ["read"] })),
+    })
+    return { definition, plan: { schema: "airalogy.interface-plan.v1", steps: [] }, provenance: { capture_digest: digest(report), analysis_digest: digest(analysis), baseline_only: true, actions_approved: false, hardware_qualified: false } }
+  }
   const definition = {
     schema: "airalogy.browser-interface.v1",
     id: selection.id,

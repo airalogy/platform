@@ -40,21 +40,39 @@ def validate_report(report):
     ids, locators = set(), set()
     for control in report["controls"]:
         read, value = control["read"], control["value"]
+        if (
+            report["target"]["kind"] == "native_macos"
+            and read is not None
+            and (
+                (read == "text" and control["role"] != "AXStaticText")
+                or (
+                    read == "value"
+                    and control["role"] not in {"AXTextField", "AXTextArea"}
+                )
+                or read not in {"text", "value"}
+            )
+        ):
+            raise ValueError("Native readback type must agree with its observed role")
         expected = type(None) if read is None else bool if read == "checked" else str
         if control["id"] in ids or type(value) is not expected:
             raise ValueError("Survey control IDs and readback types must agree")
         if not report["capture_values"] and read in {"value", "checked"}:
             raise ValueError("Survey values require explicit capture consent")
         if control["locator"]:
+            native = report["target"]["kind"] == "native_macos"
+            if native != (control["locator"]["kind"] == "ax_identifier") or (
+                native and control["locator"]["role"] != control["role"]
+            ):
+                raise ValueError("Locator transport and observed role must agree")
             signature = canonical(control["locator"])
             name = control["locator"]["name"]
             if (
                 signature in locators
                 or len(name.encode()) > 512
-                or (control["locator"]["kind"] == "test_id" and not name.strip())
+                or (control["locator"]["kind"] != "role" and not name.strip())
                 or any(ord(char) < 32 and char not in "\t\n\r" for char in name)
             ):
-                raise ValueError("Browser-verified locators must be bounded and unique")
+                raise ValueError("Verified locators must be bounded and unique")
             locators.add(signature)
         ids.add(control["id"])
     return report
@@ -99,7 +117,7 @@ def generation_prompt(goal, report):
             "A label or Ready text does not prove physical identity, readiness, safety or successful operation.",
             "read_controls selects only existing non-null locator/read entries; never imply click/fill approval.",
             "identity_control selects observed nonempty text identifying this app/version (at most 512 UTF-8 bytes); otherwise null and explain missing information.",
-            "Prefer a documented API/SDK when evidence supports it; otherwise browser/manual/unknown. Do not claim an API exists from appearance alone.",
+            "Prefer a documented API/SDK when evidence supports it; otherwise browser/native_accessibility/manual/unknown, matching the observed transport. Do not claim an API exists from appearance alone.",
             "State limitations of this single unqualified snapshot. A human reviews all suggestions before use.",
             "OUTPUT_SCHEMA=" + canonical(SCHEMA["definitions"]["analysis"]).decode(),
             "GOAL=" + canonical(goal).decode(),

@@ -77,6 +77,34 @@ def test_observations_reject_unapproved_values_duplicate_locators_and_private_re
             validate_report(bad)
 
 
+def test_native_report_transport_roles_and_scope_cannot_be_mixed():
+    report, analysis = fixture()
+    report["target"]["kind"] = "native_macos"
+    analysis["route"] = "native_accessibility"
+    for control in report["controls"]:
+        control["role"] = "AXStaticText" if control["read"] == "text" else "AXButton"
+        if control["locator"]:
+            control["locator"] = {
+                "kind": "ax_identifier",
+                "role": control["role"],
+                "name": control["locator"]["name"],
+            }
+    assert validate_report(report) == report
+    assert validate_analysis(analysis, report) == analysis
+    for mutate in [
+        lambda r: r["target"].update(kind="file"),
+        lambda r: r["controls"][0].update(role="AXButton"),
+        lambda r: r["controls"][0]["locator"].update(kind="role"),
+        lambda r: r["controls"][0]["locator"].update(name=" "),
+        lambda r: r["target"].update(pid=123),
+        lambda r: r["target"].update(bundle_path="/private/Application.app"),
+    ]:
+        invalid = copy.deepcopy(report)
+        mutate(invalid)
+        with pytest.raises(ValueError):
+            validate_report(invalid)
+
+
 def test_analysis_cannot_invent_controls_capture_consent_or_operations():
     report, analysis = fixture()
     for change in [

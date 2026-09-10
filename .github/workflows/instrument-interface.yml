@@ -60,6 +60,11 @@ jobs:
           node --check apps/instrument-interface/src/cli.mjs
       - name: Test bounded browser sessions and CLI
         run: pnpm gateway:interface-test
+      - name: Compile native read transport and owned simulator without opening applications
+        if: runner.os == 'macOS'
+        run: RUN_INTERFACE_NATIVE_BUILD_TESTS=1 node --test apps/instrument-interface/tests/native.test.mjs
+      # Actual AX tests require an operator-authorized graphical macOS session.
+      # Never grant TCC or silently turn a missing permission into a passing GUI test.
       - name: Verify existing rehearsal compatibility
         run: pnpm gateway:gui-demo
       - name: Build installable package

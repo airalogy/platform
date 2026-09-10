@@ -1,5 +1,7 @@
 # Selected-application interface survey
 
+For an already-running native macOS application, use the [native observation preparation](./instrument-native-interface.md), then this same single-use `run`, review/Aira and `assemble` flow. Native definitions remain read-only; they are not browser action policies.
+
 Survey the visible controls of an **explicitly selected** browser application without handwriting its control/state map. This is bounded local development evidence, not automatic discovery of installed software or permission to operate equipment. It shares the [browser backend](./instrument-browser-interface.md)'s isolated Chromium, exact network allowlist, privacy masks and stopping rules. Linux/macOS private-file support only; native Windows and visual Computer Use remain unqualified.
 
 ## Prepare and review

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { browserEngine, BrowserRuntime } from "./browser-runtime.mjs"
 import { bytesDigest, canonical, checkKey, checkObject, checkText, digest, MAX_BYTES, validateBrowserEnvironment, validateLocator } from "./contract.mjs"
 import { Evidence, readPrivateSelection } from "./evidence.mjs"
+import { previewNativeSurvey, runNativeSurvey } from "./native-survey.mjs"
 import { overlapsPrivate } from "./privacy.mjs"
 import { validateSurveyReport } from "./survey-contract.mjs"
 
@@ -20,7 +21,9 @@ function freeze(value) {
   }
   return value
 }
-export async function previewSurvey(selection) {
+export async function previewSurvey(selection, options = {}) {
+  if (selection?.schema === "airalogy.native-survey-selection.v1")
+    return previewNativeSurvey(selection, options)
   selection = JSON.parse(canonical(selection))
   if (Buffer.byteLength(canonical(selection)) > MAX_BYTES)
     throw new Error("Survey selection exceeds its limit")
@@ -191,6 +194,8 @@ class BrowserSurvey extends BrowserRuntime {
 }
 
 export async function runSurvey(selection, { confirmation, evidenceRoot }) {
+  if (selection?.schema === "airalogy.native-survey-selection.v1")
+    return runNativeSurvey(selection, { confirmation, evidenceRoot })
   const preview = await previewSurvey(selection)
   if (confirmation !== preview.sha256)
     throw new Error("Confirm the exact survey target and capture policy before opening")

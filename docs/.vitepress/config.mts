@@ -50,6 +50,7 @@ const englishSidebar = [
       { text: "File Storage Bridge", link: "/en/architecture/file-storage-bridge" },
       { text: "Instrument integration", link: "/en/architecture/instrument-integration" },
       { text: "Selected-application survey", link: "/en/architecture/instrument-interface-survey" },
+      { text: "Native macOS observation", link: "/en/architecture/instrument-native-interface" },
     ],
   },
 ]
@@ -93,6 +94,7 @@ const chineseSidebar = [
       { text: "文件存储桥接", link: "/zh/architecture/file-storage-bridge" },
       { text: "仪器接入", link: "/zh/architecture/instrument-integration" },
       { text: "选定应用勘察", link: "/zh/architecture/instrument-interface-survey" },
+      { text: "macOS 原生界面观察", link: "/zh/architecture/instrument-native-interface" },
     ],
   },
 ]
