@@ -1,6 +1,31 @@
 # Native macOS interface observation
 
-This is a **development backend**, not a production instrument controller. Surveys and assembled read definitions remain read-only for explicitly selected, already-running applications. A separate action definition permits bounded fill/press operations on **this build's owned simulator only**, not vendor software. Application startup requires its own local single-use approval; a survey or Aira grant never authorizes launch. No automatic app discovery, coordinate/script actions, screenshots or system-permission changes. Windows/Linux native and visual backends remain separate work.
+This is a **development backend**, not a production instrument controller. Surveys and assembled read definitions remain read-only for explicitly selected, already-running applications. A separate action definition permits bounded fill/press operations on **this build's owned simulator only**, not vendor software. Application startup requires its own local single-use approval; a survey or Aira grant never authorizes launch. Bounded discovery can list application metadata within a separately confirmed directory, not scan the workstation without a selected scope. No coordinate/script actions, screenshots or system-permission changes. Windows/Linux native and visual backends remain separate work.
+
+## Find software in a selected directory
+
+When the application path is not known, use Node 22+ and macOS's built-in property-list parser. This step requires neither the Swift helper nor Accessibility permission. It does not launch applications, read executable bytes, enumerate running processes or inspect windows.
+
+```bash
+pnpm gateway:native prepare-discovery --directory /Applications --depth 0 --workspace /absolute/private/discovery
+```
+
+There is **no default scan directory**. Select an absolute, POSIX-canonical physical directory you are authorized to inspect. Preparation reads only its identity and the discovery runtime, then writes a five-minute private preview/request. Keep the owner-only evidence workspace outside the selected directory. The preview records the exact directory/device/inode, depth, bounds and read-only effects; review it before continuing:
+
+```bash
+pnpm gateway:native discover --request /absolute/private/discovery/interface-ID/request.json --confirm REVIEWED_DISCOVERY_DIGEST
+pnpm gateway:native discovery-result --request /absolute/private/discovery/interface-ID/request.json
+```
+
+Use the returned request path and reviewed digest. `discover` prints only a private report path, count and stop reason; `discovery-result` explicitly displays the saved **private** snapshot. The installed package exposes the same commands through `airalogy-interface-native`. No model call, Platform upload, automatic target selection or installation follows discovery.
+
+- Depth `0` examines immediate children only; `1` or `2` explicitly includes that many vendor-directory levels. At most 1,000 entries and 40 application candidates are examined, with a 15-second scan budget and a 20-second parent-worker deadline. Each metadata parser has its own 1.5-second bound. Timeout stops only the owned worker/parser process group, never discovered applications.
+- Dot-prefixed names, symbolic links, other-filesystem descendants and known non-application bundle interiors are excluded. It never descends into `.app` internals to discover helper applications. Only the candidate's bounded regular, unlinked `Contents/Info.plist` is read, at most 1 MiB, using a fixed system parser on selected bytes. The selected filesystem itself may be backed by network storage; this is not an offline-storage guarantee.
+- Results retain the literal bundle path, declared names/identifier/version/build and metadata hash, **not verified vendor identity or code-signature trust**. Missing, invalid, oversized or linked metadata stays visible as an unavailable candidate. Metadata text is untrusted data, never a command. Manufacturer/model, APIs and equipment capability are not inferred from an app name.
+- Stop reasons and exclusion counts describe partial coverage. No result means no discovered candidate within this exact bounded scope, not that the workstation has no compatible software. Select a narrower directory or separately authorize a different scope; there is no automatic expansion.
+- Changed directory identity or runtime refuses execution. A started request cannot rescan; `discovery-result` reads historical evidence offline, including after software removal or update. It does not claim current availability. Prepare a new request for a new snapshot. Owner-controlled files are not cryptographic attestations against that owner.
+
+After reviewing a candidate, pass its exact `bundle_path` to **`inspect` below**. That separate check verifies current bundle/code identity and matching processes; it can reject software that discovery merely listed. A subsequent startup still requires independent initialization approval, and UI observation/action permission remains separate. Discovery acceptance uses synthetic binary/XML metadata and the built, signed owned simulator without opening it; this does not qualify vendor software or hardware.
 
 ## Prepare, review, capture
 

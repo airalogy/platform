@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add separately confirmed macOS application discovery in an explicit directory/depth, with private expiring previews, bounded metadata-only scans, visible exclusions/partial results and offline snapshots. Candidate paths feed current identity inspection; discovery never launches apps, reads UI, uploads a workstation inventory or grants equipment authority.
+
 - Add Lab-private adapter reuse lookup with exact manufacturer/model filtering before pagination and per-combination firmware, software and runtime comparisons. Bilingual review distinguishes missing information, conflicts and package-supplied test claims without granting installation or device authority. Revoked versions are excluded by default; inspection reloads current source-review state and AI-disabled lookup remains available.
 
 - Add separately confirmed startup for an explicitly selected macOS application: metadata-only inspection, expiring bundle/runtime-pinned previews, explicit initialization-risk acknowledgment, durable single-use launch intents, cross-workspace launch serialization and verified returned process identity. Offline receipt inspection never relaunches or infers current readiness. Startup is not sandboxed and does not grant UI/hardware authority; acceptance opens only the owned simulator, with real vendor qualification still pending.

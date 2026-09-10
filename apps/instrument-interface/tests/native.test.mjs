@@ -12,6 +12,7 @@ import { canonical, digest } from "../src/contract.mjs"
 import { Evidence } from "../src/evidence.mjs"
 import { prepareExploration, runExploration, syncExploration } from "../src/exploration.mjs"
 import { validateNativeDefinition, validateNativeSelection } from "../src/native-contract.mjs"
+import { nativeDiscoveryResult, prepareNativeDiscovery, runNativeDiscovery } from "../src/native-discovery.mjs"
 import { nativeLaunchStatus, prepareNativeLaunch, runNativeLaunch, validateLaunchPreview } from "../src/native-launch.mjs"
 import { NativeInterfaceSession, previewNativeInterface, validateNativeInterface } from "../src/native-session.mjs"
 import { previewNativeRead, runNativeRead, selectNative } from "../src/native-survey.mjs"
@@ -165,6 +166,18 @@ test("actual macOS build, integrity and permission diagnostic without app launch
   assert.equal(doctor.permissions_changed, false)
   await assert.rejects(focusOwnedFixture(built.build_file, process.pid), /target_changed/)
   assert.equal((await nativeCall(built.build_file, { operation: "inspect_bundle", bundle_path: built.simulator_app })).bundle_id, "org.airalogy.InstrumentInterfaceSimulator")
+  // Connect private discovery to the existing full identity check, without
+  // launching the signed owned fixture or observing its windows.
+  const discovery = await prepareNativeDiscovery({ directory: dirname(built.simulator_app), workspace: root })
+  await runNativeDiscovery(discovery.request_file, discovery.preview_digest)
+  const inventory = (await nativeDiscoveryResult(discovery.request_file)).report
+  assert.equal(inventory.applications.length, 1)
+  assert.equal(inventory.applications[0].bundle_path, built.simulator_app)
+  const inspected = await nativeCall(built.build_file, { operation: "inspect_application", bundle_path: inventory.applications[0].bundle_path })
+  assert.equal(inspected.bundle.info_sha256, inventory.applications[0].declared.info_sha256)
+  assert.equal(inspected.bundle.bundle_id, inventory.applications[0].declared.bundle_id)
+  assert.deepEqual(inspected.running, [])
+  assert.equal(inventory.signature_verified, false)
   await assert.rejects(nativeCall(built.build_file, { operation: "click", target: "arbitrary" }), /invalid_request/)
   await assert.rejects(nativeCall(built.build_file, { operation: "doctor", prompt: true }), /invalid_request/)
   if (!doctor.interactive_session.ready) {
