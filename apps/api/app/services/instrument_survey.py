@@ -5,6 +5,12 @@ from pathlib import Path
 
 from jsonschema import Draft7Validator
 
+from .instrument_application_selection import (
+    is_candidates,
+    selection_prompt,
+    validate_candidates,
+    validate_selection,
+)
 from .instrument_package_contract import canonical
 
 SCHEMA = json.loads(
@@ -36,6 +42,8 @@ def shape(name, value):
 
 
 def validate_report(report):
+    if is_candidates(report):
+        return validate_candidates(report)
     shape("report", report)
     ids, locators = set(), set()
     for control in report["controls"]:
@@ -79,6 +87,8 @@ def validate_report(report):
 
 
 def validate_analysis(analysis, report):
+    if is_candidates(report):
+        return validate_selection(analysis, report)
     shape("analysis", analysis)
     validate_report(report)
     controls = {item["id"]: item for item in report["controls"]}
@@ -106,6 +116,8 @@ def validate_analysis(analysis, report):
 
 
 def generation_prompt(goal, report):
+    if is_candidates(report):
+        return selection_prompt(goal, report)
     validate_report(report)
     return "\n".join(
         [

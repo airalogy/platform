@@ -42,3 +42,13 @@ if (process.argv.includes("--check")) {
 else {
   writeFileSync(fileURLToPath(surveyTarget), surveySchema)
 }
+
+const selectionSchema = readFileSync(new URL("apps/instrument-interface/src/application-selection.schema.json", root), "utf8")
+const selectionTarget = new URL("apps/api/app/services/instrument_application_selection.schema.json", root)
+if (process.argv.includes("--check")) {
+  if (readFileSync(selectionTarget, "utf8") !== selectionSchema)
+    throw new Error("Application selection schema is out of sync")
+}
+else {
+  writeFileSync(fileURLToPath(selectionTarget), selectionSchema)
+}

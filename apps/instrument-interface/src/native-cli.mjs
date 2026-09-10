@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util"
+import { prepareApplicationSelection, resolveApplicationSelection } from "./application-selection.mjs"
 import { canonical, digest } from "./contract.mjs"
 import { readPrivateSelection } from "./evidence.mjs"
 import { nativeDiscoveryResult, prepareNativeDiscovery, runNativeDiscovery } from "./native-discovery.mjs"
@@ -13,17 +14,25 @@ import { prepareSurvey } from "./survey-workspace.mjs"
 let selectedCommand = null
 
 async function main() {
-  const keys = ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "definition", "plan", "confirm", "evidence", "request", "reason", "duration-seconds", "directory", "depth"]
+  const keys = ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "definition", "plan", "confirm", "evidence", "request", "reason", "duration-seconds", "directory", "depth", "indices", "selection", "candidate", "analysis"]
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { ...Object.fromEntries(keys.map(key => [key, { type: "string" }])), "capture-values": { type: "boolean" }, "ack-new-read": { type: "boolean" }, "ack-new-run": { type: "boolean" }, "ack-initialization": { type: "boolean" } } })
   if (positionals.length !== 1)
     throw new Error("Select exactly one native command")
   const command = positionals[0]
   selectedCommand = command
-  const allowed = { "build": ["workspace"], "doctor": ["build"], "inspect": ["build", "bundle"], "windows": ["build", "bundle", "pid"], "prepare": ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], "simulation-template": ["workspace", "build", "pid"], "preview": ["definition", "plan"], "read": ["definition", "confirm", "evidence", "ack-new-read"], "run": ["definition", "plan", "confirm", "evidence", "ack-new-run"], "prepare-launch": ["workspace", "build", "bundle", "reason", "duration-seconds"], "launch": ["request", "confirm", "ack-initialization"], "launch-status": ["request"], "prepare-discovery": ["directory", "depth", "workspace"], "discover": ["request", "confirm"], "discovery-result": ["request"] }[command]
+  const allowed = { "build": ["workspace"], "doctor": ["build"], "inspect": ["build", "bundle"], "windows": ["build", "bundle", "pid"], "prepare": ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], "simulation-template": ["workspace", "build", "pid"], "preview": ["definition", "plan"], "read": ["definition", "confirm", "evidence", "ack-new-read"], "run": ["definition", "plan", "confirm", "evidence", "ack-new-run"], "prepare-launch": ["workspace", "build", "bundle", "reason", "duration-seconds"], "launch": ["request", "confirm", "ack-initialization"], "launch-status": ["request"], "prepare-discovery": ["directory", "depth", "workspace"], "discover": ["request", "confirm"], "discovery-result": ["request"], "prepare-selection": ["request", "indices", "workspace"], "inspect-selection": ["selection", "candidate", "analysis", "build"] }[command]
   if (!allowed || Object.keys(values).some(key => !allowed.includes(key)))
     throw new Error("Unexpected native command option")
   let result
-  if (command === "prepare-discovery") {
+  if (command === "prepare-selection") {
+    if (!/^[1-9]\d?(?:,[1-9]\d?){0,9}$/.test(values.indices || ""))
+      throw new Error("Select explicit one-based candidate numbers")
+    result = await prepareApplicationSelection({ requestFile: values.request, indices: values.indices.split(",").map(Number), workspace: values.workspace })
+  }
+  else if (command === "inspect-selection") {
+    result = await resolveApplicationSelection({ selectionFile: values.selection, candidateId: values.candidate, analysisFile: values.analysis, buildFile: values.build })
+  }
+  else if (command === "prepare-discovery") {
     result = await prepareNativeDiscovery({ directory: values.directory, depth: Number(values.depth ?? 0), workspace: values.workspace })
   }
   else if (command === "discover") {

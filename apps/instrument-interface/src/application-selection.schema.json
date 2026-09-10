@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "airalogy.application-selection.v1",
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "id": { "type": "string", "pattern": "^candidate_[1-9][0-9]?$" },
+    "metadata": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 },
+    "notes": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    },
+    "candidate": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "$ref": "#/definitions/metadata" },
+        "display_name": { "$ref": "#/definitions/metadata" },
+        "bundle_id": { "$ref": "#/definitions/metadata" },
+        "version": { "$ref": "#/definitions/metadata" },
+        "build_version": { "$ref": "#/definitions/metadata" },
+        "info_sha256": { "anyOf": [{ "$ref": "#/definitions/hash" }, { "type": "null" }] }
+      },
+      "required": [
+        "id",
+        "name",
+        "display_name",
+        "bundle_id",
+        "version",
+        "build_version",
+        "info_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": "airalogy.application-candidates.v1" },
+        "id": { "$ref": "#/definitions/uuid" },
+        "source_digest": { "$ref": "#/definitions/hash" },
+        "scope": { "const": "explicitly_selected_metadata_only" },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": { "$ref": "#/definitions/candidate" }
+        }
+      },
+      "required": ["schema", "id", "source_digest", "scope", "candidates"],
+      "additionalProperties": false
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "recommendations": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "properties": {
+              "candidate_id": { "$ref": "#/definitions/id" },
+              "rationale": { "type": "string", "minLength": 1, "maxLength": 1000 },
+              "evidence_fields": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 5,
+                "uniqueItems": true,
+                "items": {
+                  "enum": ["name", "display_name", "bundle_id", "version", "build_version"]
+                }
+              }
+            },
+            "required": ["candidate_id", "rationale", "evidence_fields"],
+            "additionalProperties": false
+          }
+        },
+        "limitations": {
+          "allOf": [{ "$ref": "#/definitions/notes" }],
+          "minItems": 1,
+          "type": "array"
+        },
+        "missing_information": { "$ref": "#/definitions/notes" }
+      },
+      "required": ["summary", "recommendations", "limitations", "missing_information"],
+      "additionalProperties": false
+    },
+    "export": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": "airalogy.application-selection-export.v1" },
+        "session_id": { "$ref": "#/definitions/uuid" },
+        "turn_id": { "$ref": "#/definitions/uuid" },
+        "capture_digest": { "$ref": "#/definitions/hash" },
+        "analysis": { "$ref": "#/definitions/analysis" }
+      },
+      "required": ["schema", "session_id", "turn_id", "capture_digest", "analysis"],
+      "additionalProperties": false
+    }
+  }
+}

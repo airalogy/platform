@@ -1,0 +1,17 @@
+{
+  "schema": "airalogy.application-candidates.v1",
+  "id": "11111111-1111-4111-8111-111111111111",
+  "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "scope": "explicitly_selected_metadata_only",
+  "candidates": [
+    {
+      "id": "candidate_1",
+      "name": "Synthetic Reader",
+      "display_name": null,
+      "bundle_id": "org.airalogy.synthetic.reader",
+      "version": "1.0",
+      "build_version": null,
+      "info_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

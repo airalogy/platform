@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add explicitly selected software-candidate reports, one-shot Aira recommendations and private local resolution to current signed application identity. Reuse scoped survey consent/history and reject invented candidates, evidence fields and paths; retain manual selection with AI disabled. Suggestions never start software or grant UI/equipment control.
+
 - Add separately confirmed macOS application discovery in an explicit directory/depth, with private expiring previews, bounded metadata-only scans, visible exclusions/partial results and offline snapshots. Candidate paths feed current identity inspection; discovery never launches apps, reads UI, uploads a workstation inventory or grants equipment authority.
 
 - Add Lab-private adapter reuse lookup with exact manufacturer/model filtering before pagination and per-combination firmware, software and runtime comparisons. Bilingual review distinguishes missing information, conflicts and package-supplied test claims without granting installation or device authority. Revoked versions are excluded by default; inspection reloads current source-review state and AI-disabled lookup remains available.

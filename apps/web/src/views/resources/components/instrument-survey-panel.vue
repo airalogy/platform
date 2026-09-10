@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SurveyReport, SurveySession, SurveySummary } from "@/service/api/instrument-surveys"
+import type { SoftwareReport, SurveySession, SurveySummary } from "@/service/api/instrument-surveys"
 import { analyzeSurvey, cancelSurvey, confirmSurvey, exportSurvey, getSurvey, listSurveys, previewSurvey } from "@/service/api/instrument-surveys"
 import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
@@ -13,6 +13,7 @@ const offset = ref(0)
 const busy = ref(false)
 const generating = ref(false)
 const createVisible = ref(false)
+const candidateMode = ref(false)
 const text = ref("")
 const goal = ref("")
 const reason = ref("")
@@ -25,17 +26,35 @@ const cancelReason = ref("")
 const cancelConfirmed = ref(false)
 const fileInput = ref<HTMLInputElement>()
 const turnIds = new Map<string, string>()
-const parsed = computed<SurveyReport | null>(() => {
+const parsed = computed<SoftwareReport | null>(() => {
   try {
     if (new TextEncoder().encode(text.value).length > 131072 || /(?:aiinterface|aiauthor|aiinstall|aigw)_[\w-]{43}/.test(text.value))
       return null
     const value = JSON.parse(text.value)
+    if (candidateMode.value) {
+      if (new TextEncoder().encode(text.value).length > 65536 || !value || Object.keys(value).sort().join(",") !== "candidates,id,schema,scope,source_digest" || value.schema !== "airalogy.application-candidates.v1" || value.scope !== "explicitly_selected_metadata_only" || !Array.isArray(value.candidates) || !value.candidates.length || value.candidates.length > 10)
+        return null
+      if (value.candidates.some((item: Record<string, unknown>) => !item || Object.keys(item).sort().join(",") !== "build_version,bundle_id,display_name,id,info_sha256,name,version"))
+        return null
+      return value
+    }
     if (!value || Object.keys(value).sort().join(",") !== "capture_values,controls,id,limitations,omitted_private,preview_digest,schema,target" || value.schema !== "airalogy.interface-survey.v1" || !value.target?.application || !Array.isArray(value.controls) || value.controls.length > 64 || !Array.isArray(value.limitations))
       return null
     return value
   }
   catch { return null }
 })
+const observedReport = computed(() => parsed.value?.schema === "airalogy.interface-survey.v1" ? parsed.value : null)
+const candidatesReport = computed(() => parsed.value?.schema === "airalogy.application-candidates.v1" ? parsed.value : null)
+const selectedCandidates = computed(() => selected.value?.request.spec.report.schema === "airalogy.application-candidates.v1" ? selected.value.request.spec.report.candidates : null)
+function candidateLabel(id: string) {
+  const candidate = selectedCandidates.value?.find(item => item.id === id)
+  return candidate?.display_name || candidate?.name || candidate?.bundle_id || $t("page.instrumentSurvey.unknownSoftware")
+}
+function controlLabel(id: string) {
+  const report = selected.value?.request.spec.report
+  return report?.schema === "airalogy.interface-survey.v1" ? report.controls.find(item => item.id === id)?.label || id : id
+}
 watch([text, goal, reason, consent, reviewed, resourceId], () => {
   preview.value = null
 })
@@ -65,7 +84,8 @@ async function refresh(append = false) {
 }
 watch(resourceId, () => guarded(() => refresh()))
 onMounted(() => guarded(() => refresh()))
-function openCreate() {
+function openCreate(candidates = false) {
+  candidateMode.value = candidates
   text.value = goal.value = reason.value = ""
   consent.value = reviewed.value = false
   preview.value = null
@@ -78,8 +98,8 @@ async function importFile(event: Event) {
   target.value = ""
   if (!file)
     return
-  if (file.size > 131072) {
-    window.$message?.error($t("page.instrumentSurvey.invalid"))
+  if (file.size > (candidateMode.value ? 65536 : 131072)) {
+    window.$message?.error($t(candidateMode.value ? "page.instrumentSurvey.candidatesInvalid" : "page.instrumentSurvey.invalid"))
     return
   }
   text.value = await file.text()
@@ -138,7 +158,7 @@ async function download() {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }))
   const link = document.createElement("a")
   link.href = url
-  link.download = `instrument-survey-${data.session_id}.json`
+  link.download = `${data.schema === "airalogy.application-selection-export.v1" ? "instrument-software-candidates" : "instrument-survey"}-${data.session_id}.json`
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
@@ -157,8 +177,11 @@ async function download() {
       <n-select v-model:value="resourceId" :options="equipmentOptions" :disabled="busy || generating || createVisible || !!selected" />
     </n-form-item>
     <n-space class="mb-3">
-      <n-button v-if="instance.aiEnabled" :disabled="busy || generating || !resourceId" @click="openCreate">
+      <n-button v-if="instance.aiEnabled" :disabled="busy || generating || !resourceId" @click="openCreate()">
         {{ $t("page.instrumentSurvey.authorize") }}
+      </n-button>
+      <n-button v-if="instance.aiEnabled" :disabled="busy || generating || !resourceId" @click="openCreate(true)">
+        {{ $t("page.instrumentSurvey.chooseSoftware") }}
       </n-button>
       <n-button :loading="busy" :disabled="!resourceId" @click="guarded(() => refresh())">
         {{ $t("common.refresh") }}
@@ -181,9 +204,9 @@ async function download() {
       {{ $t("page.resourceLibrary.installMore") }}
     </n-button>
 
-    <n-modal v-model:show="createVisible" preset="card" class="aira-dialog" style="--aira-dialog-width: 54rem" :title="$t('page.instrumentSurvey.authorize')" :mask-closable="false" :closable="!busy" :close-on-esc="!busy">
+    <n-modal v-model:show="createVisible" preset="card" class="aira-dialog" style="--aira-dialog-width: 54rem" :title="$t(candidateMode ? 'page.instrumentSurvey.chooseSoftware' : 'page.instrumentSurvey.authorize')" :mask-closable="false" :closable="!busy" :close-on-esc="!busy">
       <n-alert type="warning" class="mb-4">
-        {{ $t("page.instrumentSurvey.reportHint") }}
+        {{ $t(candidateMode ? "page.instrumentSurvey.candidatesHint" : "page.instrumentSurvey.reportHint") }}
       </n-alert>
       <n-form label-placement="top" :disabled="busy">
         <n-form-item :label="$t('page.instrumentSurvey.report')" required>
@@ -194,13 +217,18 @@ async function download() {
             <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" @change="guarded(() => importFile($event))">
             <n-input v-model:value="text" type="textarea" :readonly="!!preview" :autosize="{ minRows: 4, maxRows: 8 }" data-testid="survey-report" />
             <p v-if="text && !parsed" role="alert">
-              {{ $t("page.instrumentSurvey.invalid") }}
+              {{ $t(candidateMode ? "page.instrumentSurvey.candidatesInvalid" : "page.instrumentSurvey.invalid") }}
             </p>
           </div>
         </n-form-item>
-        <p v-if="parsed" class="break-words">
-          {{ parsed.target.application }} · {{ parsed.target.version }} · {{ parsed.controls.length }}
+        <p v-if="observedReport" class="break-words">
+          {{ observedReport.target.application }} · {{ observedReport.target.version }} · {{ observedReport.controls.length }}
         </p>
+        <ul v-if="candidatesReport" class="mb-4 space-y-2">
+          <li v-for="candidate in candidatesReport.candidates" :key="candidate.id" class="break-words">
+            {{ candidate.id }} · {{ candidate.display_name || candidate.name || candidate.bundle_id || $t('page.instrumentSurvey.unknownSoftware') }} · {{ candidate.version || '—' }}
+          </li>
+        </ul>
         <n-form-item :label="$t('page.instrumentSurvey.goal')" required>
           <n-input v-model:value="goal" :readonly="!!preview" maxlength="4000" data-testid="survey-goal" />
         </n-form-item>
@@ -235,7 +263,7 @@ async function download() {
         </p>
         <p>{{ $t(`page.instrumentExploration.state.${selected.effective_state}`) }} · {{ new Date(selected.expires_at).toLocaleString() }}</p>
         <n-alert type="info" class="my-3">
-          {{ $t("page.instrumentSurvey.next") }}
+          {{ $t(selectedCandidates ? "page.instrumentSurvey.candidatesNext" : "page.instrumentSurvey.next") }}
         </n-alert>
         <n-space>
           <n-button :loading="busy" @click="guarded(() => inspect(selected!.id))">
@@ -260,14 +288,24 @@ async function download() {
             <p class="my-3 break-words">
               {{ turn.proposal.summary }}
             </p>
-            <p>{{ $t("page.instrumentSurvey.route") }} {{ $t(`page.instrumentSurvey.routes.${turn.proposal.route}`) }}</p>
-            <div v-for="feature in turn.proposal.features" :key="feature.control_id" class="my-3 min-w-0 rounded bg-gray-50 p-3">
-              <strong>{{ selected.request.spec.report.controls.find(control => control.id === feature.control_id)?.label || feature.control_id }}</strong>
-              <p class="break-words">
-                {{ feature.interpretation }}
-              </p>
-              <span>{{ $t(`page.instrumentSurvey.basis.${feature.basis}`) }} · {{ $t(`page.instrumentSurvey.risks.${feature.risk}`) }}</span>
-            </div>
+            <template v-if="'recommendations' in turn.proposal">
+              <p>{{ $t("page.instrumentSurvey.candidatesInference") }}</p>
+              <div v-for="recommendation in turn.proposal.recommendations" :key="recommendation.candidate_id" class="my-3 min-w-0 rounded bg-gray-50 p-3">
+                <strong class="break-words">{{ recommendation.candidate_id }} · {{ candidateLabel(recommendation.candidate_id) }}</strong>
+                <p class="break-words">{{ recommendation.rationale }}</p>
+                <p>{{ $t("page.instrumentSurvey.candidatesEvidence") }} {{ recommendation.evidence_fields.map(field => $t(`page.instrumentSurvey.candidateFields.${field}`)).join(' · ') }}</p>
+              </div>
+            </template>
+            <template v-else>
+              <p>{{ $t("page.instrumentSurvey.route") }} {{ $t(`page.instrumentSurvey.routes.${turn.proposal.route}`) }}</p>
+              <div v-for="feature in turn.proposal.features" :key="feature.control_id" class="my-3 min-w-0 rounded bg-gray-50 p-3">
+                <strong>{{ controlLabel(feature.control_id) }}</strong>
+                <p class="break-words">
+                  {{ feature.interpretation }}
+                </p>
+                <span>{{ $t(`page.instrumentSurvey.basis.${feature.basis}`) }} · {{ $t(`page.instrumentSurvey.risks.${feature.risk}`) }}</span>
+              </div>
+            </template>
             <ul class="my-3 list-disc pl-5">
               <li v-for="note in [...turn.proposal.limitations, ...turn.proposal.missing_information]" :key="note" class="break-words">
                 {{ note }}

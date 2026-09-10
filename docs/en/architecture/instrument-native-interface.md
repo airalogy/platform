@@ -27,6 +27,28 @@ Use the returned request path and reviewed digest. `discover` prints only a priv
 
 After reviewing a candidate, pass its exact `bundle_path` to **`inspect` below**. That separate check verifies current bundle/code identity and matching processes; it can reject software that discovery merely listed. A subsequent startup still requires independent initialization approval, and UI observation/action permission remains separate. Discovery acceptance uses synthetic binary/XML metadata and the built, signed owned simulator without opening it; this does not qualify vendor software or hardware.
 
+## Compare candidates with Aira or select manually
+
+The existing private, one-shot survey-analysis workflow also accepts a distinct `airalogy.application-candidates.v1` report and exports `airalogy.application-selection-export.v1`. This does not turn directory entries into interface controls or grant a development/runtime bearer credential.
+
+```bash
+pnpm gateway:native prepare-selection --request /absolute/private/discovery/interface-ID/request.json --indices 1,3 --workspace /absolute/private/selections
+```
+
+Numbers are one-based positions in the saved discovery report: explicitly choose 1–10 distinct entries. `candidates.json` includes only their declared name/display name/identifier/version/build and metadata hash, stable candidate IDs and an opaque source digest. Paths, directory names, process IDs and unselected software are not copied. `selection.json` retains the local mapping: **never upload it, the complete discovery report or request files**. Metadata strings may themselves contain confidential or hostile text; this is field selection, not automatic secret removal.
+
+In **Lab → resource library → Instrument Gateways → select Gateway → Software understanding → Choose software with Aira**, select equipment, import only `candidates.json`, enter the goal, review the exact report and consent to configured-model processing. Existing Owner/Manager plus `equipment.service` checks, preview binding, five-minute authorization, one reserved model attempt, 60-second/32-KiB response bound, private history, cancellation and read-only lost-response recovery apply. No new migration is needed beyond the existing survey tables. The provider may be external; limits do not guarantee a monetary ceiling.
+
+Recommendations reference only supplied IDs and non-null metadata fields. They are **inferences**, not verified functions, vendor identity or compatibility. Insufficient data produces questions rather than an invented match. No paths, action fields or automatic launch are accepted. Review and export the analysis, then explicitly choose a candidate locally:
+
+```bash
+pnpm gateway:native inspect-selection --selection /absolute/private/selections/interface-ID/selection.json --candidate candidate_1 --analysis /absolute/private/reviewed-analysis.json --build /absolute/private/native-builds/interface-ID/native-build.json
+```
+
+The local tool validates retained discovery/selection digests, checks the chosen ID against the exported recommendations, resolves its path only from local evidence, and independently inspects current signed code and matching processes. Changed metadata is refused. It opens no application and grants no UI/hardware authority; continue through separate startup/observation approvals. With AI disabled, omit `--analysis` for explicit manual selection. Neither route proves scientific capability or real instrument qualification.
+
+Acceptance uses actual local selection tools, API, isolated PostgreSQL and the existing model wrapper with synthetic provider responses; macOS additionally checks the owned signed simulator without opening it. No paid-model quality or vendor acceptance is implied.
+
 ## Prepare, review, capture
 
 On macOS 13 or newer, use Node 22+, the installed workspace dependencies and Apple's Swift command-line toolchain. Build the bundled trusted helper into a new owner-only workspace:

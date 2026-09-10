@@ -3189,6 +3189,20 @@ declare namespace I18n {
         }
       }
       instrumentSurvey: {
+        chooseSoftware: string
+        candidatesHint: string
+        candidatesInvalid: string
+        candidatesNext: string
+        candidatesInference: string
+        candidatesEvidence: string
+        unknownSoftware: string
+        candidateFields: {
+          name: string
+          display_name: string
+          bundle_id: string
+          version: string
+          build_version: string
+        }
         title: string
         boundary: string
         local: string

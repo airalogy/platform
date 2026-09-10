@@ -18,6 +18,8 @@ Selected application startup is separate: `inspect` reads metadata/current match
 - Private, exclusive evidence files with event hashes, before/after observations and opt-in scoped screenshots. The manual CLI makes no model calls or uploads; optional Aira exploration requires separate Platform consent/grant and local policy confirmation.
 - No automatic retries or restart replay. Closing Chromium does not establish a physical safe stop.
 
+For optional intent-based software advice, `gateway:native prepare-selection --request REQUEST_FILE --indices 1,3 --workspace PRIVATE_ROOT` exports only the explicitly selected candidate metadata. Import its `candidates.json` in Platform's software understanding panel with separate model consent. The original private paths stay local. `inspect-selection --selection SELECTION_FILE --candidate candidate_1 --analysis EXPORTED_ANALYSIS --build BUILD_FILE` resolves that explicit choice against private evidence and checks current signed code and metadata without launching it. Omit `--analysis` for manual selection with AI off. Recommendations are not verified capabilities or startup authority; see the bilingual native guide for the complete review sequence.
+
 Source checkout, Node 22+, POSIX owner-only evidence directory, installed workspace dependencies and matching Chromium:
 
 ```bash

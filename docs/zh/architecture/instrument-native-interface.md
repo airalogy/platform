@@ -27,6 +27,28 @@ pnpm gateway:native discovery-result --request /absolute/private/discovery/inter
 
 审核候选后，将准确 `bundle_path` 传给下文的 **`inspect`**。它独立核验当前应用/代码身份及匹配进程，可以拒绝查找阶段仅列出的软件。之后的启动仍须独立确认初始化风险，界面观察和操作权限也分别控制。验收使用合成二进制/XML 元数据以及已构建签名的自建模拟器文件，不打开模拟器，也不代表厂商软件或设备已验收。
 
+## 用 Aira 比较候选，或手工选择
+
+复用现有私有、单次勘察分析流程，新增独立的 `airalogy.application-candidates.v1` 报告及 `airalogy.application-selection-export.v1` 导出格式。不会把目录条目伪装成界面控件，也不授予本地开发或运行时凭据。
+
+```bash
+pnpm gateway:native prepare-selection --request /absolute/private/discovery/interface-ID/request.json --indices 1,3 --workspace /absolute/private/selections
+```
+
+序号对应已保存查找报告中的顺序，从 1 开始；须明确选择 1–10 个不重复条目。`candidates.json` 只包含所选条目声明的名称/显示名/标识/版本/构建号及元数据哈希，以及稳定候选 ID 和来源摘要。不复制路径、目录名、进程 ID 或未选中的软件。`selection.json` 保留本地映射：**不要上传它、完整查找报告或请求文件**。元数据文字本身仍可能含保密信息或恶意指令；这里只做字段选择，不保证自动去除秘密。
+
+在**实验室 → 资源库 → 仪器网关 → 选中网关 → 软件理解与候选分析 → 让 Aira 推荐软件候选**中选择设备，只导入 `candidates.json`，填写目标，审核准确内容并同意当前模型处理。沿用 Owner/Manager 加 `equipment.service` 权限、预览绑定、五分钟授权、一次预留模型调用、60 秒/32 KiB 响应限制、私有历史、取消和丢失响应后的只读恢复。无需新增迁移，但须已有勘察数据表。模型服务可能在外部，调用限制不是保证的费用封顶。
+
+建议只能引用已提供的候选 ID 和非空元数据字段。这些是**推断**，不是已验证的软件功能、厂商身份或兼容性。信息不足时提出问题，不编造匹配；不接受路径、动作字段或自动启动。审核并导出分析后，在本地明确选择一个候选：
+
+```bash
+pnpm gateway:native inspect-selection --selection /absolute/private/selections/interface-ID/selection.json --candidate candidate_1 --analysis /absolute/private/reviewed-analysis.json --build /absolute/private/native-builds/interface-ID/native-build.json
+```
+
+本地工具校验保留的查找/选择摘要，检查指定 ID 是否出现在导出建议中，仅从本地证据解析路径，再独立检查当前签名代码和匹配进程。元数据变化时拒绝继续。不打开应用、不授予界面或硬件权限，之后仍须独立进行启动/观察授权。AI 关闭时省略 `--analysis` 即可手工选择；两条路径都不证明科研能力或实机资格。
+
+验收使用实际本地选择工具、API、隔离 PostgreSQL 和既有模型调用封装，模型响应为合成数据；macOS 还检查自建签名模拟器文件而不启动它。不代表付费模型质量或厂商软件验收。
+
 ## 准备、审核与采集
 
 要求 macOS 13 及以上、Node 22+、工作区依赖和 Apple Swift 命令行工具。先在新的仅本人可访问目录中构建仓库提供的可信辅助程序：

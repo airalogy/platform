@@ -2,8 +2,10 @@ import { readFile } from "node:fs/promises"
 import { expect, test } from "@playwright/test"
 import { loadFixtures, selectVisibleOption } from "./fixtures"
 
-for (const native of [false, true]) {
-  test(`survey UI fixtures (${native ? "native" : "browser"}): scoped report review, one-shot result/export, narrow screen and AI-off`, async ({ page, request }, testInfo) => {
+for (const variant of ["browser", "native", "candidates"]) {
+  const native = variant === "native"
+  const candidates = variant === "candidates"
+  test(`survey UI fixtures (${variant}): scoped report review, one-shot result/export, narrow screen and AI-off`, async ({ page, request }, testInfo) => {
   // Real permission-governed resource setup; survey responses below are explicit UI fixtures.
   // The actual API/model-wrapper/Chromium chain is covered in research:integration.
     const fixtures = await loadFixtures()
@@ -24,7 +26,11 @@ for (const native of [false, true]) {
     const draft = { lab_id: fixtures.lab.id, name: `Survey gateway ${suffix}`, enabled: false }
     const preview = await call("/research-instrument-gateways/preview", draft)
     const gateway = (await call("/research-instrument-gateways", { ...draft, preview_digest: preview.preview_digest })).gateway
-    const report = JSON.parse(await readFile("apps/instrument-interface/tests/fixtures/survey.json", "utf8"))
+    const report = JSON.parse(await readFile(`apps/instrument-interface/tests/fixtures/${candidates ? "application-candidates" : "survey"}.json`, "utf8"))
+    if (candidates) {
+      report.candidates[0].display_name = report.candidates[0].name
+      report.candidates[0].name = null
+    }
     if (native) {
       report.target.kind = "native_macos"
       for (const control of report.controls) {
@@ -44,7 +50,7 @@ for (const native of [false, true]) {
     await page.route(url => url.pathname === "/api/instrument-surveys" || url.pathname.startsWith("/api/instrument-surveys/"), async (route) => {
       const path = new URL(route.request().url()).pathname
       if (route.request().method() === "GET") {
-        const data = path.endsWith("/export") ? { schema: "airalogy.survey-analysis-export.v1", session_id: saved!.id, turn_id: saved!.turns[0].id, capture_digest: "a".repeat(64), analysis: saved!.turns[0].proposal } : path === "/api/instrument-surveys" ? { items: saved ? [{ id: saved.id, goal: saved.request.spec.goal, state: saved.effective_state, expires_at: saved.expires_at }] : [], has_more: false, next_offset: 20 } : saved
+        const data = path.endsWith("/export") ? { schema: candidates ? "airalogy.application-selection-export.v1" : "airalogy.survey-analysis-export.v1", session_id: saved!.id, turn_id: saved!.turns[0].id, capture_digest: "a".repeat(64), analysis: saved!.turns[0].proposal } : path === "/api/instrument-surveys" ? { items: saved ? [{ id: saved.id, goal: saved.request.spec.goal, state: saved.effective_state, expires_at: saved.expires_at }] : [], has_more: false, next_offset: 20 } : saved
         await route.fulfill({ json: data })
         return
       }
@@ -54,8 +60,9 @@ for (const native of [false, true]) {
         attempts++
         saved!.can_analyze = false
         const turn = { id: input.id, effective_state: "generated", proposal: { summary: "Synthetic software interpretation", features: [{ control_id: "observed.3", interpretation: "<img data-survey-injected src=x onerror=alert(1)>", basis: "inferred", risk: "unknown" }], identity_control: "observed.1", read_controls: ["observed.3"], route: native ? "native_accessibility" : "browser", limitations: ["No hardware qualification"], missing_information: ["Vendor validation needed"] }, error: null }
-        saved!.turns = [turn]
-        await route.fulfill({ json: turn })
+        const candidateTurn = { id: input.id, effective_state: "generated", proposal: { summary: "Synthetic software interpretation", recommendations: [{ candidate_id: "candidate_1", rationale: "<img data-survey-injected src=x onerror=alert(1)>", evidence_fields: ["display_name", "bundle_id"] }], limitations: ["No hardware qualification"], missing_information: ["Vendor validation needed"] }, error: null }
+        saved!.turns = [candidates ? candidateTurn : turn]
+        await route.fulfill({ json: saved!.turns[0] })
         return
       }
       if (path.endsWith("/cancel")) {
@@ -84,7 +91,7 @@ for (const native of [false, true]) {
     const panel = page.getByTestId("instrument-survey-panel")
     await panel.locator(".n-select").click()
     await selectVisibleOption(page, equipment.name)
-    await panel.getByRole("button", { name: "Review survey with Aira", exact: true }).click()
+    await panel.getByRole("button", { name: candidates ? "Choose software with Aira" : "Review survey with Aira", exact: true }).click()
     const modal = page.getByRole("dialog").last()
     const input = page.getByTestId("survey-report").locator("textarea")
     await input.fill(JSON.stringify({ selection: report, token: `aiinterface_${"A".repeat(43)}` }))
@@ -108,8 +115,16 @@ for (const native of [false, true]) {
     await expect(modal).toContainText("Synthetic software interpretation")
     await expect(modal.getByRole("heading", { name: "Analysis saved", exact: true })).toBeVisible()
     await expect(modal).not.toContainText("Source draft saved")
-    await expect(modal).toContainText(native ? "Native Accessibility (read-only macOS)" : "Browser semantics")
-    await expect(modal).toContainText("Inferred · Unknown risk")
+    if (candidates) {
+      await expect(modal).toContainText("metadata-based suggestions")
+      await expect(modal).toContainText("candidate_1 · Synthetic Reader")
+      await expect(modal).toContainText("Display name · Bundle identifier")
+      await expect(modal.getByRole("button", { name: /launch|install|execute/i })).toHaveCount(0)
+    }
+    else {
+      await expect(modal).toContainText(native ? "Native Accessibility (read-only macOS)" : "Browser semantics")
+      await expect(modal).toContainText("Inferred · Unknown risk")
+    }
     await expect(page.locator("[data-survey-injected]")).toHaveCount(0)
     await modal.getByRole("button", { name: "Refresh", exact: true }).click()
     expect(attempts).toBe(1)
@@ -117,8 +132,9 @@ for (const native of [false, true]) {
     const download = page.waitForEvent("download")
     await modal.getByRole("button", { name: "Export reviewed analysis", exact: true }).click()
     const downloaded = await download
+    expect(downloaded.suggestedFilename()).toMatch(candidates ? /^instrument-software-candidates-/ : /^instrument-survey-/)
     const exported = JSON.parse(await readFile((await downloaded.path())!, "utf8"))
-    expect(exported.schema).toBe("airalogy.survey-analysis-export.v1")
+    expect(exported.schema).toBe(candidates ? "airalogy.application-selection-export.v1" : "airalogy.survey-analysis-export.v1")
     expect(exported.capture_digest).toBe("a".repeat(64))
     await modal.locator("input").fill("Close reviewed synthetic analysis")
     await modal.getByRole("checkbox").check()
@@ -131,6 +147,7 @@ for (const native of [false, true]) {
     await page.locator(".gateway-card__main").filter({ hasText: gateway.name }).click()
     await expect(panel).toContainText("Aira 已关闭")
     await expect(panel.getByRole("button", { name: "用 Aira 审阅勘察报告" })).toHaveCount(0)
+    await expect(panel.getByRole("button", { name: "让 Aira 推荐软件候选" })).toHaveCount(0)
     await panel.locator(".n-select").click()
     await selectVisibleOption(page, equipment.name)
     await expect(panel).toContainText("已结束或取消")

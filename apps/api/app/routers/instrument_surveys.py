@@ -24,6 +24,7 @@ from app.routers.instrument_authoring import (
     _turns,
 )
 from app.routers.research_instrument_gateways import _audit, _gateway_context
+from app.services.instrument_application_selection import is_candidates
 from app.services.instrument_package_contract import canonical, sha256
 from app.services.instrument_survey import (
     generation_prompt,
@@ -57,7 +58,9 @@ class Draft(BaseModel):
     def request(self):
         value = {
             "id": str(self.id),
-            "schema": "airalogy.survey-analysis.v1",
+            "schema": "airalogy.application-selection.v1"
+            if is_candidates(self.report)
+            else "airalogy.survey-analysis.v1",
             "gateway_id": str(self.gateway_id),
             "resource_id": str(self.resource_id),
             "spec": {"goal": self.goal, "report": self.report},
@@ -89,7 +92,7 @@ def preview(params, pin):
         "effects": [
             "Store this private client-supplied report and send its selected text and goal to the configured Aira model, which may be external",
             "One model attempt, at most 60 seconds and 32 KiB of response; not a guaranteed monetary ceiling",
-            "Store and export advisory interpretations and read-only mapping suggestions for human review",
+            "Store and export advisory software candidates or read-only mapping suggestions for human review; metadata does not prove software capabilities",
             "No browser/software launch, screenshots, tools, action approval, source approval, installation or hardware authority",
         ],
     }
@@ -295,7 +298,9 @@ async def analyze(
         raise HTTPException(409, "Turn identity is already in use")
     can_generate(row, current_user, pin)
     usage = create_usage_context(
-        feature="instrument.survey",
+        feature="instrument.application_selection"
+        if is_candidates(row.request["spec"]["report"])
+        else "instrument.survey",
         user_id=current_user.id,
         lab_id=gateway.lab_id,
         attributes={"session_id": str(row.id), "turn_id": str(params.id)},
@@ -366,7 +371,9 @@ async def export_analysis(
         raise HTTPException(409, "There is no completed analysis to export")
     turn = turns[0]
     return {
-        "schema": "airalogy.survey-analysis-export.v1",
+        "schema": "airalogy.application-selection-export.v1"
+        if is_candidates(row.request["spec"]["report"])
+        else "airalogy.survey-analysis-export.v1",
         "session_id": str(row.id),
         "turn_id": str(turn.id),
         "capture_digest": sha256(canonical(row.request["spec"]["report"])),
