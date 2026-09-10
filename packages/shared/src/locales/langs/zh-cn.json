@@ -3205,6 +3205,12 @@
       "waiting": "尚未调用模型。可启动一次已授权分析，或取消授权。",
       "uncertain": "没有自动发起新调用。请刷新已保存状态；中断或失败的调用需要新的显式授权。",
       "route": "建议接入方式：",
+      "state": {
+        "generating": "正在分析",
+        "generated": "分析已保存",
+        "failed": "分析失败",
+        "interrupted": "分析已中断"
+      },
       "routes": {
         "browser": "浏览器语义控件",
         "native_accessibility": "原生辅助功能（macOS 只读）",

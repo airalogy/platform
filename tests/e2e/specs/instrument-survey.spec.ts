@@ -106,6 +106,8 @@ for (const native of [false, true]) {
     await expect(modal).toContainText("No model attempt yet")
     await modal.getByRole("button", { name: "Analyze once", exact: true }).click()
     await expect(modal).toContainText("Synthetic software interpretation")
+    await expect(modal.getByRole("heading", { name: "Analysis saved", exact: true })).toBeVisible()
+    await expect(modal).not.toContainText("Source draft saved")
     await expect(modal).toContainText(native ? "Native Accessibility (read-only macOS)" : "Browser semantics")
     await expect(modal).toContainText("Inferred · Unknown risk")
     await expect(page.locator("[data-survey-injected]")).toHaveCount(0)
@@ -132,6 +134,8 @@ for (const native of [false, true]) {
     await panel.locator(".n-select").click()
     await selectVisibleOption(page, equipment.name)
     await expect(panel).toContainText("已结束或取消")
+    await panel.getByRole("button", { name: "查看与审核", exact: true }).click()
+    await expect(page.getByRole("dialog").last().getByRole("heading", { name: "分析已保存", exact: true })).toBeVisible()
     expect(attempts).toBe(1)
   })
 }

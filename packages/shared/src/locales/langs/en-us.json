@@ -3205,6 +3205,12 @@
       "waiting": "No model attempt yet. Start the authorized analysis once, or cancel this grant.",
       "uncertain": "No new attempt was started automatically. Refresh the saved state; an interrupted or failed attempt requires a new explicit authorization.",
       "route": "Suggested integration route:",
+      "state": {
+        "generating": "Analyzing",
+        "generated": "Analysis saved",
+        "failed": "Analysis failed",
+        "interrupted": "Analysis interrupted"
+      },
       "routes": {
         "browser": "Browser semantics",
         "native_accessibility": "Native Accessibility (read-only macOS)",

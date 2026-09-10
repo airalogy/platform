@@ -159,6 +159,8 @@ Target initial version: `0.1.0`.
 
 ### Fixed
 
+- Distinguish saved interface-survey analysis from generated adapter source in both languages; the review panel no longer labels an interpretation as a saved source draft.
+
 - Preserve explicit browser-test selection when `pnpm e2e -- <spec>` forwards its separator; focused checks no longer silently expand into the full suite. Add isolated wrapper regression tests and run check-selection tests in browser CI.
 
 - Prevent claimed Instrument installations from bypassing qualification through legacy Gateway/command enablement, another Gateway for the same equipment, task queueing or runtime lease/start endpoints. Revocation does not restore manual execution; unclaimed cancellation/expiry remains recoverable. Preserve stop/result reconciliation and explicitly disclose that managed qualification/activation is not yet available.

@@ -252,7 +252,7 @@ async function download() {
           {{ $t("page.instrumentSurvey.waiting") }}
         </p>
         <article v-for="turn in selected.turns" :key="turn.id" class="my-4 min-w-0 border rounded-lg p-3">
-          <h4>{{ $t(`page.instrumentAuthoring.state.${turn.effective_state}`) }}</h4>
+          <h4>{{ $t(`page.instrumentSurvey.state.${turn.effective_state}`) }}</h4>
           <p v-if="turn.error">
             {{ $t("page.instrumentSurvey.uncertain") }} <code>{{ turn.error }}</code>
           </p>

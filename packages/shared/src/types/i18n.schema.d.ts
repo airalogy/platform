@@ -3209,6 +3209,12 @@ declare namespace I18n {
         waiting: string
         uncertain: string
         route: string
+        state: {
+          generating: string
+          generated: string
+          failed: string
+          interrupted: string
+        }
         routes: {
           browser: string
           native_accessibility: string
