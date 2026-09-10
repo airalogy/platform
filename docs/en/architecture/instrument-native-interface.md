@@ -1,6 +1,6 @@
 # Native macOS interface observation
 
-This is a **read-only development backend**, not a production instrument controller. It attaches only to an explicitly selected, already-running application. It does not discover installed applications, launch vendor software, click, fill, focus, use coordinates, execute scripts, capture screenshots or change system permissions. Windows/Linux native and visual backends remain separate work.
+This is a **development backend**, not a production instrument controller. Surveys and assembled read definitions remain read-only for explicitly selected, already-running applications. A separate action definition permits bounded fill/press operations on **this build's owned simulator only**, not vendor software. It does not discover applications, launch vendor software, steal focus, use coordinates, execute scripts, capture screenshots or change system permissions. Windows/Linux native and visual backends remain separate work.
 
 ## Prepare, review, capture
 
@@ -48,10 +48,26 @@ pnpm gateway:native read --definition /absolute/private/drafts/interface-ID/defi
 
 Assembly verifies the retained capture/analysis digests and creates a fresh editable `airalogy.native-read-definition.v1`, copied evidence and empty plan. It does **not** require the original application to remain open. Execution does require its pinned process and identity anchor to match, and selects only the reviewed readbacks. After restarting/upgrading software, explicitly prepare a new selection and review its identity before reusing mappings; old process pins never silently attach to a replacement. Definitions cannot add click/fill or input-value consent.
 
-The owned fixture has synthetic labels, a secure field, an opt-in sample count and an ordinary simulation button. Its manual button computes `sample_count × 0.42`; this backend never presses it. Tests open only this bundled fixture and close their own process, verify private omissions, malformed selections, stale lifetime/window identities, no replay, offline assembly and independent CLI reads. Run actual GUI acceptance only in an operator-authorized graphical session:
+## Separately reviewed owned-simulator actions
+
+After explicitly opening the returned `simulator_app` in an authorized graphical session, select its actual PID. The following preparation reads metadata only and writes editable definition, plan and policy files; it does not open or operate the app:
+
+```bash
+pnpm gateway:native simulation-template --build /absolute/private/native-builds/interface-ID/native-build.json --pid 12345 --workspace /absolute/private/native-actions
+pnpm gateway:native preview --definition /absolute/private/native-actions/interface-ID/definition.json --plan /absolute/private/native-actions/interface-ID/plan.json
+pnpm gateway:native run --definition /absolute/private/native-actions/interface-ID/definition.json --plan /absolute/private/native-actions/interface-ID/plan.json --confirm REVIEWED_ACTION_DIGEST --evidence /absolute/private/runs --ack-new-run
+```
+
+Use the returned file paths, review the exact preview, and leave the simulator's selected window focused. `airalogy.native-interface.v1` is distinct from the survey's read-only definition: it declares controls, literal operations, states and limits. The template fills two synthetic samples, presses the simulation button and checks both `Complete` and the independently specified result `0.84`. It never learns the expected result from its own output.
+
+The trusted builder seals the owned simulator's executable/Info.plist hashes into the helper. The helper also requires that exact sibling bundle path and the pinned process; a `simulation` label or same bundle ID cannot authorize another app. Rebuild older v1 manifests; builds now include sealed source and simulator identity. This is still an operator-owned development tool, not a boundary against malicious code running as that operator.
+
+Every action durably records intent, rechecks the fresh snapshot in the helper, retains the exact AX control reference, checks focus/enabled state, uses only fixed AXValue/AXPress operations, and checks the post-state/readback. No focus stealing, arbitrary AX actions, script or coordinate fallback. An attempted action with missing/invalid results is uncertain and cannot be retried within that session. A new run is a new explicitly acknowledged operation, **not recovery**; preserve the evidence and reconcile first. Closing a session leaves the operator's app running and makes no physical safe-stop claim.
+
+The owned fixture has synthetic labels, a secure field and an opt-in sample count. Tests open only this bundled fixture and close their own process, verifying private omissions, malformed selections, stale identities/observations, offline assembly, independent CLI reads and actual fill/press/result checks. Run actual GUI acceptance only in an operator-authorized graphical session:
 
 ```bash
 pnpm --filter @airalogy/instrument-interface test:native
 ```
 
-Hosted macOS CI compiles and checks the helper/signature/permission diagnostic without opening apps or granting TCC. Actual GUI tests fail, rather than silently skip, if explicitly requested on a host without authorization. Native production writes still need reviewed action policies, independent safety checks, Gateway booking/lease/stop integration and a real pilot. This stage supplies native observation to the existing research-development flow; it does not complete automated equipment onboarding.
+Hosted macOS CI compiles and checks the helper/signature/permission diagnostic without opening apps or granting TCC. Actual GUI tests fail, rather than silently skip, if explicitly requested on a host without authorization. Native production writes still need qualified vendor adapters, independent safety checks, Gateway booking/lease/stop integration and a real pilot. The owned-simulator action path does not complete automated equipment onboarding or qualify vendor control.

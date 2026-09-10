@@ -1,6 +1,6 @@
 # macOS 原生界面观察
 
-这是**只读开发后端**，不是生产仪器控制器。只附着到明确选定、已经运行的应用；不扫描已安装软件，不启动厂商软件，不点击、填写、切换焦点、猜坐标、执行脚本、截屏或改变系统权限。Windows/Linux 原生及视觉后端仍需单独实现。
+这是**开发后端**，不是生产仪器控制器。勘察及生成的读取定义仍只读，面向明确选定、已运行的应用；另设操作定义，仅允许对**本次构建的自建模拟器**有界填写和按按钮，不允许操作厂商软件。不扫描应用、不启动厂商软件、不抢焦点、不猜坐标、不执行脚本、不截屏、不改变系统权限。Windows/Linux 原生及视觉后端仍需单独实现。
 
 ## 准备、审核与采集
 
@@ -48,10 +48,26 @@ pnpm gateway:native read --definition /absolute/private/drafts/interface-ID/defi
 
 生成时核对保留的采集/分析摘要，写入新的可编辑 `airalogy.native-read-definition.v1`、证据副本和空计划；不要求原应用仍打开。执行则重新核对准确进程及身份文本，仅保存已审核的读数。应用重启或升级后，必须明确准备并审核新目标，再复用映射；旧 PID 不会自动改绑。定义不能新增点击/填写或输入值同意。
 
-内置模拟器包含合成文字、密码字段、可选读取的样本数和普通模拟按钮；手工按钮按“样本数 × 0.42”计算，本后端不按按钮。测试只打开此自建模拟器并关闭自己的进程，验证私有排除、错误选择、过期进程/窗口、禁止重放、离线生成及独立 CLI 读取。在已由操作者授权的图形会话运行：
+## 单独审核的自建模拟器操作
+
+在获授权的图形会话中明确打开构建返回的 `simulator_app` 后，选择其真实 PID。下面的准备只读取元数据，生成可编辑定义、计划与策略文件，不打开或操作应用：
+
+```bash
+pnpm gateway:native simulation-template --build /absolute/private/native-builds/interface-ID/native-build.json --pid 12345 --workspace /absolute/private/native-actions
+pnpm gateway:native preview --definition /absolute/private/native-actions/interface-ID/definition.json --plan /absolute/private/native-actions/interface-ID/plan.json
+pnpm gateway:native run --definition /absolute/private/native-actions/interface-ID/definition.json --plan /absolute/private/native-actions/interface-ID/plan.json --confirm 已审核的操作摘要 --evidence /absolute/private/runs --ack-new-run
+```
+
+使用返回的实际路径，审核完整预览，并保持选定模拟器窗口处于焦点。`airalogy.native-interface.v1` 与勘察只读定义独立，声明控件、字面量操作、状态与限额。模板填写两个合成样本、按下模拟按钮，检查 `Complete` 和独立写定的结果 `0.84`，不根据运行读数反推预期值。
+
+可信构建器把自建模拟器的程序与 Info.plist 摘要编入辅助程序；执行还要求准确的同目录应用路径及固定进程。标注“模拟”或使用相同应用标识不能授权其他软件。旧 v1 构建须重新构建，新清单包含封入的源码及模拟器身份。这仍是操作者拥有的开发工具，不抵御同一账户下的恶意本地代码。
+
+每步先持久化意图，辅助程序重新核对最新快照并持有准确 AX 控件引用，检查窗口焦点及可用性，只执行固定 AXValue/AXPress，然后核对结果与参数。没有抢焦点、任意 AX 操作、脚本或坐标回退。尝试操作后结果缺失或不符合预期，标记不确定并禁止在本会话重试。新运行是明确确认的新操作，**不是恢复**；必须保留证据、先核对状态。关闭会话不退出操作者的应用，也不声明物理安全停止。
+
+内置模拟器只含合成文字、密码字段和可选读取的样本数。测试只打开自建模拟器并关闭自己的进程，验证私有排除、错误选择、过期身份/观察、离线生成、独立 CLI 读取，以及实际填写、按按钮和结果核对。在已由操作者授权的图形会话运行：
 
 ```bash
 pnpm --filter @airalogy/instrument-interface test:native
 ```
 
-托管 macOS CI 只编译并检查完整性和授权诊断，不打开应用、不授予 TCC；显式要求实际 GUI 测试时，缺少授权会失败，不伪装成通过。生产原生写操作仍需审核后的动作策略、独立安全检查、Gateway 预约/租约/停止集成及真实试点。此阶段接通原生观察，不代表自动化设备接入整体完成。
+托管 macOS CI 只编译并检查完整性和授权诊断，不打开应用、不授予 TCC；显式要求实际 GUI 测试时，缺少授权会失败，不伪装成通过。生产原生写操作仍需合格厂商适配器、独立安全检查、Gateway 预约/租约/停止集成及真实试点。自建模拟器操作路径不代表自动化设备接入整体完成，也不代表厂商控制已验收。

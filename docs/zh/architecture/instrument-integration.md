@@ -79,7 +79,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 选定浏览器应用观察及有界模拟探索 | [本地勘察](./instrument-interface-survey.md)自动识别选定范围内的可见控件提示；[浏览器后端](./instrument-browser-interface.md)及独立授权的[Aira 动作选择](./instrument-interface-exploration.md)使用已审核定义/策略。不扫描已安装应用，不提供真实 URL 写操作 |
 | 限于已有目标/控件/状态的可选 Aira 编辑 | 已实现，真实模型调用依赖部署配置 |
 | 自主发现、启动和探索仪器软件 | 尚未实现 |
-| 原生可访问性及视觉控制后端 | [macOS 原生观察](./instrument-native-interface.md)支持明确选定、身份固定的运行中应用、私有勘察、Aira/手工审核及普通只读定义。原生写操作、Windows/Linux 和视觉控制尚未实现；实机验收仍需明确目标 |
+| 原生可访问性及视觉控制后端 | [macOS 原生观察](./instrument-native-interface.md)支持身份固定的运行中应用、私有勘察、Aira/手工审核及只读定义。独立审核的填写/按按钮仅在准确的自建 AppKit 模拟器通过验证。厂商原生写操作、Windows/Linux 和视觉控制仍待实现；实机验收须明确目标 |
 | 含源码适配包构建、完整性检查、隔离测试 | 已实现，包内测试不是实机证据 |
 | 私有包导入、来源批准/撤销、受保护下载 | 已实现，不代表安装或实机资格 |
 | 未启用的纯 Python 离线安装及本地回执 | 已实现，POSIX；不启用、不代表远程授权 |

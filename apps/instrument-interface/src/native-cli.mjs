@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util"
-import { canonical } from "./contract.mjs"
+import { canonical, digest } from "./contract.mjs"
 import { readPrivateSelection } from "./evidence.mjs"
+import { NativeInterfaceSession, previewNativeInterface } from "./native-session.mjs"
 import { previewNativeRead, runNativeRead, selectNative } from "./native-survey.mjs"
+import { prepareNativeSimulation } from "./native-template.mjs"
 import { buildNative, nativeCall } from "./native-transport.mjs"
 import { prepareSurvey } from "./survey-workspace.mjs"
 
 async function main() {
-  const keys = ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "definition", "confirm", "evidence"]
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { ...Object.fromEntries(keys.map(key => [key, { type: "string" }])), "capture-values": { type: "boolean" }, "ack-new-read": { type: "boolean" } } })
+  const keys = ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "definition", "plan", "confirm", "evidence"]
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { ...Object.fromEntries(keys.map(key => [key, { type: "string" }])), "capture-values": { type: "boolean" }, "ack-new-read": { type: "boolean" }, "ack-new-run": { type: "boolean" } } })
   if (positionals.length !== 1)
     throw new Error("Select exactly one native command")
   const command = positionals[0]
-  const allowed = { build: ["workspace"], doctor: ["build"], prepare: ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], preview: ["definition"], read: ["definition", "confirm", "evidence", "ack-new-read"] }[command]
+  const allowed = { "build": ["workspace"], "doctor": ["build"], "prepare": ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], "simulation-template": ["workspace", "build", "pid"], "preview": ["definition", "plan"], "read": ["definition", "confirm", "evidence", "ack-new-read"], "run": ["definition", "plan", "confirm", "evidence", "ack-new-run"] }[command]
   if (!allowed || Object.keys(values).some(key => !allowed.includes(key)))
     throw new Error("Unexpected native command option")
   let result
@@ -22,6 +24,11 @@ async function main() {
   else if (command === "doctor") {
     result = await nativeCall(values.build, { operation: "doctor" })
   }
+  else if (command === "simulation-template") {
+    if (!/^\d+$/.test(values.pid || ""))
+      throw new Error("Select the already running owned simulator")
+    result = await prepareNativeSimulation({ buildFile: values.build, pid: Number(values.pid), workspace: values.workspace })
+  }
   else if (command === "prepare") {
     if (!/^\d+$/.test(values.pid || ""))
       throw new Error("Select a running application PID")
@@ -30,8 +37,25 @@ async function main() {
   }
   else {
     const definition = JSON.parse(await readPrivateSelection(values.definition))
+    const plan = values.plan ? JSON.parse(await readPrivateSelection(values.plan)) : { schema: "airalogy.interface-plan.v1", steps: [] }
     if (command === "preview") {
-      result = await previewNativeRead(definition)
+      if (definition.schema === "airalogy.native-read-definition.v1") {
+        if (values.plan)
+          throw new Error("Read-only survey definitions cannot receive action plans")
+        result = await previewNativeRead(definition)
+      }
+      else { result = await previewNativeInterface(definition, plan) }
+    }
+    else if (command === "run") {
+      if (!values["ack-new-run"])
+        throw new Error("A new simulation is not uncertain-run recovery")
+      const session = await NativeInterfaceSession.open({ definition, plan, confirmation: values.confirm, evidenceRoot: values.evidence })
+      try {
+        for (let index = 0; index < plan.steps.length; index++)
+          await session.step(digest(session.lastObservation))
+        result = { evidence: session.evidence.directory, completed_steps: session.cursor, values: session.lastObservation.values, hardware_qualified: false }
+      }
+      finally { await session.close() }
     }
     else {
       if (!values["ack-new-read"])
@@ -43,6 +67,6 @@ async function main() {
 }
 main().catch(() => {
   // Transport failures contain only fixed codes; do not expose app/OS error bodies.
-  process.stderr.write("Native operation refused. Check the selected build, process, single window and capture policy. Review private evidence and retain uncertain-run markers; no software or equipment action was authorized.\n")
+  process.stderr.write("Native operation stopped. Check the reviewed build, process, focused single window and policy. Retain private evidence: an attempted simulation write may be uncertain and must not be retried automatically. No hardware qualification or physical safe-stop is claimed.\n")
   process.exitCode = 1
 })
