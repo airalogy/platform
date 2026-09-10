@@ -32,6 +32,8 @@ For the [private local browser guide](../../docs/en/architecture/instrument-sour
 
 The separate [source authoring assistant](../../docs/en/architecture/instrument-source-authoring.md) can use explicitly selected material and fixed tests to produce actual Python Adapter Packages through bounded Aira calls and offline sandbox repair. Run `airalogy-instrument-authoring --help` after installation. Its short-lived credential and private development journal are separate from this runtime; a tested draft does not authorize installation, software exploration or hardware control.
 
+Non-read-only source drafts require additional explicit Platform consent and visible command effects/completion/stop review. The owned `examples/controlled-reader` reference exercises parameter readback, single start, takeover and uncertain stopping with independent fake transports; it has no production configuration and remains simulation-only. This expands source development, not device access or execution authority.
+
 ### Documented HTTP reads
 
 The SDK's [bounded HTTP read backend](../../docs/en/architecture/instrument-http-interface.md) provides fixed GET/JSON operations, private explicit origin/IP/authentication configuration, verified TLS, response/deadline limits and cancellation without redirects or retries. The source-included `examples/http-reader` reference and its loopback simulator exercise reuse, independent package tests and installed result recovery. It is not a generic network tool, real-device adapter or physical safe-stop implementation. Manual development remains available without AI.

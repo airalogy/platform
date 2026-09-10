@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Extend source-only Aira adapter development to fixed non-read-only command contracts with separate strict development consent, visible risk/effect/completion/stop review and durable authorization audit. Preserve all package safety requirements and independent runtime gates. Add an owned stateful control reference, independent fake-transport tests, actual isolated fail/repair acceptance, bilingual mobile review and API/local-browser coverage; simulation remains ineligible for real-equipment activation.
+
 - Add read-only, exact-export inbox collection with pinned POSIX source identity, explicit producer completion/sample evidence, original byte hashes and bounded cancellable reads. Include a source-included CSV/receipt collector, fixed offline tests, optional Aira authoring inputs and bilingual guidance. Reuse governed installed execution and scoped draft DataAsset intake; actual API/storage tests verify original bytes and lost-receipt recovery without rereading the source. Vendor export-completion bridges and real-device qualification remain separate.
 
 - Add a standalone, explicitly confirmed POSIX SDK bootstrap with exact official-release provenance checks, offline proof/root support, bounded wheel extraction, immutable-directory receipts and isolated named entry-point launch. It never starts drivers or changes existing runtime data. Include the bootstrap/attestation bundle in releases and gate official release installation with the real verifier; keep synthetic positive tests distinct from cryptographic and hardware acceptance.

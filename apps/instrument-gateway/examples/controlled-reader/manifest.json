@@ -1,0 +1,75 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.synthetic-controlled-reader",
+  "version": "1.0.0",
+  "entry_point": "synthetic.controlled-reader",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Owned in-memory stateful reference, no vendor or physical device",
+    "sources": ["Public fixed controlled-reader specification and independent fake-transport tests"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "Synthetic",
+        "model": "Stateful controlled reader",
+        "firmware": "simulation",
+        "application": "controlled_reader",
+        "application_version": "1.0.0",
+        "os": "container-linux",
+        "architecture": "any"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "reader.measure",
+      "version": "1.0.0",
+      "name": "Stateful controlled simulation",
+      "input_schema": {
+        "type": "object",
+        "properties": { "sample_count": { "type": "integer", "minimum": 1, "maximum": 96 } },
+        "required": ["sample_count"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sample_count": { "type": "integer", "minimum": 1, "maximum": 96 },
+          "value": { "type": "number" },
+          "unit": { "const": "synthetic_unit" },
+          "simulation_only": { "const": true }
+        },
+        "required": ["sample_count", "value", "unit", "simulation_only"],
+        "additionalProperties": false
+      },
+      "risk": "medium",
+      "device_confirmation_required": true,
+      "safety_contract": {
+        "required_interlocks": ["reader.ready"],
+        "operator_presence_required": true,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 30,
+      "units": ["value: synthetic_unit"],
+      "effects": [
+        "Configure and start an owned in-memory state machine only; never connect to real equipment"
+      ],
+      "completion": "Observed complete state, matching parameter readback, sample count and original synthetic units; no physical success claim",
+      "stop": "Idempotently stop this simulation and observe idle/stopped; retain uncertainty when the observed stop fails",
+      "retry": "never",
+      "outputs": []
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "Simulation only; never eligible for real hardware activation",
+    "Declared risk exercises controlled-source review, not a physical safety assessment",
+    "No vendor transport, operating system control, production configuration or physical safe stop"
+  ]
+}

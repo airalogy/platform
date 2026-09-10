@@ -3271,6 +3271,12 @@
       }
     },
     "instrumentAuthoring": {
+      "commandReview": "Declared command effects — source draft only",
+      "declaredRiskHint": "These are reviewed input declarations, not AI safety ratings or hardware qualification. A passing test grants no instrument control.",
+      "completionContract": "Required completion evidence",
+      "stopContract": "Required stopping and reconciliation",
+      "safetyContract": "Local confirmation and safety contract",
+      "controlledConsent": "I explicitly authorize drafting source for these non-read-only commands and testing it only with isolated simulation/fake transports. This does not approve the source, device access, installation or physical execution.",
       "browserGuide": "Local browser development guide (separate credentials and approvals)",
       "title": "Local adapter development",
       "boundary": "Aira can propose source code and iterate against fixed offline tests. Development is separate from installation, qualification and instrument control.",

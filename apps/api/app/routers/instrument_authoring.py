@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 from sqlalchemy import select
 
 from app.config import config
@@ -29,6 +29,7 @@ from app.services.instrument_authoring_contract import (
     MAX_PROPOSAL_BYTES,
     candidate_digest,
     generation_prompt,
+    source_review,
     validate_proposal,
     validate_request,
 )
@@ -47,10 +48,18 @@ class Draft(BaseModel):
     request: dict
     reason: str = Field(min_length=1, max_length=2000)
     model_processing_consent: bool = False
+    controlled_source_consent: StrictBool = False
 
     @model_validator(mode="after")
     def validate_content(self):
         validate_request(self.request)
+        if (
+            source_review(self.request["spec"])["requires_controlled_source_consent"]
+            and not self.controlled_source_consent
+        ):
+            raise ValueError(
+                "Explicit approval to draft controlled-command source is required; this is not equipment control permission"
+            )
         if not self.reason.strip():
             raise ValueError("An authorization reason is required")
         return self
@@ -138,10 +147,13 @@ def _preview(params, pin):
             422,
             "Explicit permission to process the selected materials and test diagnostics is required",
         )
+    review = source_review(params.request["spec"])
+    confirmation = {"request": params.request, "reason": params.reason, "pin": pin}
+    if review["requires_controlled_source_consent"]:
+        confirmation["controlled_source_consent"] = params.controlled_source_consent
     return {
-        "preview_digest": sha256(
-            canonical({"request": params.request, "reason": params.reason, "pin": pin})
-        ),
+        "preview_digest": sha256(canonical(confirmation)),
+        "source_review": review,
         "request_fingerprint": params.request["fingerprint"],
         "scope_pin": pin,
         "hardware_authorized": False,
@@ -213,6 +225,8 @@ async def create_session(
                 "session_id": str(row.id),
                 "fingerprint": params.request["fingerprint"],
                 "scope_pin": pin,
+                "controlled_source_consent": params.controlled_source_consent,
+                "source_review": preview["source_review"],
             },
             reason=params.reason,
         )
@@ -244,6 +258,13 @@ def _turn_data(turn):
 async def _snapshot(db, row):
     return {
         **row.as_dict(),
+        # Interface exploration and observation share this envelope, but do not
+        # carry a source manifest or acquire source-development authority.
+        **(
+            {"source_review": source_review(row.request["spec"])}
+            if row.purpose == "source"
+            else {}
+        ),
         "effective_state": "expired"
         if row.state == "open" and row.expires_at <= utcnow()
         else row.state,

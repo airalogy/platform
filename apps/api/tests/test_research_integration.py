@@ -197,6 +197,14 @@ def test_source_authoring_real_api_local_resume_and_private_permissions(
     exercise_authoring(runtime, tmp_path, monkeypatch)
 
 
+def test_controlled_source_authoring_real_api_consent_and_no_execution(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.authoring_acceptance import exercise_authoring
+
+    exercise_authoring(runtime, tmp_path, monkeypatch, controlled=True)
+
+
 def test_export_reader_installed_runtime_actual_intake_and_lost_receipt(
     runtime, tmp_path, monkeypatch
 ):

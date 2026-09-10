@@ -3275,6 +3275,12 @@ declare namespace I18n {
         }
       }
       instrumentAuthoring: {
+        commandReview: string
+        declaredRiskHint: string
+        completionContract: string
+        stopContract: string
+        safetyContract: string
+        controlledConsent: string
         browserGuide: string
         title: string
         boundary: string

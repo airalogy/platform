@@ -126,7 +126,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 查找实验室内可复用适配包 | [准确声明比较](./instrument-adapter-packages.md#查找并比较实验室已有适配包)、候选分页及当前来源审核已实现；不自动选包，不代表公共目录或实机资格 |
 | 未启用的纯 Python 离线安装及本地回执 | 已实现，POSIX；不启用、不代表远程授权 |
 | 设备/包/配置精确绑定、独立安装授权及回执同步 | 已实现；仅 POSIX 纯 Python 非活动副本 |
-| 有界源码生成与测试修正 | 已实现[本地开发助手](./instrument-source-authoring.md)，固定人工选定的契约/测试，仅完成合成验收 |
+| 有界源码生成与测试修正 | 已实现[本地开发助手](./instrument-source-authoring.md)，固定人工选定的契约/测试，非只读源码单独确认并通过自建有状态隔离验收；不授予真实设备权限 |
 | 自主软件探索 | 尚未实现 |
 | 官方 SDK 来源核验与隔离安装 | [显式稳定版本安装](./instrument-sdk-installation.md)、固定来源/提交策略、离线证明支持及真实验证器发布门禁；不等于厂商适配包签名目录或实机验收 |
 | 双端核对、单次配对、私有凭据存储 | 已实现，POSIX 软件验收范围 |

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { AuthoringRequest, AuthoringSession, AuthoringSummary } from "@/service/api/instrument-authoring"
+import type { AuthoringRequest, AuthoringSession, AuthoringSourceReview, AuthoringSummary } from "@/service/api/instrument-authoring"
 import { cancelAuthoring, confirmAuthoring, fetchAuthoringSession, fetchAuthoringSessions, previewAuthoring } from "@/service/api/instrument-authoring"
 import { useAppStore } from "@/store/modules/app"
 import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 import { documentationPageUrl } from "@airalogy/shared/utils"
+import InstrumentSourceReview from "./instrument-source-review.vue"
 
 const props = defineProps<{ gatewayId: string, equipmentOptions: Array<{ label: string, value: string }> }>()
 const instance = useInstanceStore()
@@ -19,6 +20,8 @@ const createVisible = ref(false)
 const text = ref("")
 const reason = ref("")
 const consent = ref(false)
+const controlledConsent = ref(false)
+const serverReview = ref<AuthoringSourceReview | null>(null)
 const fingerprintConfirmed = ref(false)
 const previewDigest = ref("")
 const fileInput = ref<HTMLInputElement>()
@@ -35,12 +38,22 @@ const parsed = computed<AuthoringRequest | null>(() => {
       return null
     if (!value.spec?.goal || !Array.isArray(value.spec.materials) || !value.sandbox || /(?:aiauthor_|aiinstall_|aigw_)[\w-]{43}/.test(text.value))
       return null
+    const commands = value.spec.manifest?.commands
+    if (!Array.isArray(commands) || !commands.length || commands.some(command => !command || !["read_only", "low", "medium", "high"].includes(command.risk) || typeof command.key !== "string" || typeof command.version !== "string" || typeof command.name !== "string" || !Array.isArray(command.effects) || command.effects.some((effect: unknown) => typeof effect !== "string") || typeof command.completion !== "string" || typeof command.stop !== "string" || !command.safety_contract))
+      return null
     return value
   }
   catch { return null }
 })
-watch([text, reason, consent, fingerprintConfirmed], () => {
+const needsControlledConsent = computed(() => parsed.value?.spec.manifest.commands.some(command => command.risk !== "read_only") ?? false)
+watch(text, () => {
+  consent.value = false
+  controlledConsent.value = false
+  fingerprintConfirmed.value = false
+})
+watch([text, reason, consent, controlledConsent, fingerprintConfirmed], () => {
   previewDigest.value = ""
+  serverReview.value = null
 })
 
 async function guarded(action: () => Promise<void>) {
@@ -70,6 +83,7 @@ function openCreate() {
   text.value = ""
   reason.value = ""
   consent.value = false
+  controlledConsent.value = false
   fingerprintConfirmed.value = false
   previewDigest.value = ""
   createVisible.value = true
@@ -87,11 +101,13 @@ async function importFile(event: Event) {
   text.value = await file.text()
 }
 async function authorize() {
-  if (!parsed.value || !consent.value || !fingerprintConfirmed.value || !reason.value.trim())
+  if (!parsed.value || !consent.value || !fingerprintConfirmed.value || !reason.value.trim() || (needsControlledConsent.value && !controlledConsent.value))
     return
-  const draft = { request: parsed.value, reason: reason.value, model_processing_consent: consent.value }
+  const draft = { request: parsed.value, reason: reason.value, model_processing_consent: consent.value, ...(needsControlledConsent.value ? { controlled_source_consent: controlledConsent.value } : {}) }
   if (!previewDigest.value) {
-    previewDigest.value = (await previewAuthoring(draft)).preview_digest
+    const result = await previewAuthoring(draft)
+    previewDigest.value = result.preview_digest
+    serverReview.value = result.source_review
     return
   }
   selected.value = await confirmAuthoring({ ...draft, preview_digest: previewDigest.value })
@@ -179,6 +195,7 @@ async function cancel() {
           <p>{{ equipmentOptions.find(item => item.value === parsed?.resource_id)?.label }}</p>
           <code class="block break-all text-xs">{{ parsed.fingerprint }}</code>
           <p>{{ $t("page.instrumentAuthoring.limits", { calls: parsed.max_iterations, seconds: parsed.duration_seconds }) }}</p>
+          <instrument-source-review :commands="serverReview?.commands || parsed.spec.manifest.commands" />
           <n-collapse class="my-3">
             <n-collapse-item :title="$t('page.instrumentAuthoring.reviewInputs')">
               <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs">{{ JSON.stringify(parsed.spec, null, 2) }}</pre>
@@ -195,6 +212,9 @@ async function cancel() {
         <n-checkbox v-model:checked="consent">
           {{ $t("page.instrumentAuthoring.consent") }}
         </n-checkbox>
+        <n-checkbox v-if="needsControlledConsent" v-model:checked="controlledConsent" class="mt-3" data-testid="authoring-controlled-consent">
+          {{ $t("page.instrumentAuthoring.controlledConsent") }}
+        </n-checkbox>
       </n-form>
       <n-alert v-if="previewDigest" type="warning" class="mt-4">
         {{ $t("page.instrumentAuthoring.preview") }}
@@ -203,7 +223,7 @@ async function cancel() {
         <n-button v-if="previewDigest" :disabled="busy" @click="previewDigest = ''">
           {{ $t("common.edit") }}
         </n-button>
-        <n-button type="primary" :loading="busy" :disabled="!instance.aiEnabled || !parsed || !consent || !fingerprintConfirmed || !reason.trim()" @click="guarded(authorize)">
+        <n-button type="primary" :loading="busy" :disabled="!instance.aiEnabled || !parsed || !consent || !fingerprintConfirmed || !reason.trim() || (needsControlledConsent && !controlledConsent)" @click="guarded(authorize)">
           {{ $t(previewDigest ? 'common.confirm' : 'common.preview') }}
         </n-button>
       </div>
@@ -214,6 +234,7 @@ async function cancel() {
         <p>{{ selected.request.spec.goal }}</p>
         <code class="block break-all text-xs">{{ selected.request.fingerprint }}</code>
         <p>{{ $t(`page.instrumentAuthoring.state.${selected.effective_state}`) }} · {{ new Date(selected.expires_at).toLocaleString() }}</p>
+        <instrument-source-review :commands="selected.source_review?.commands || selected.request.spec.manifest.commands" />
         <n-alert type="info" class="my-3">
           {{ $t("page.instrumentAuthoring.next") }}
         </n-alert>

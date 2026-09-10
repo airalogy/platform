@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx
+from sqlalchemy import select
 
 from app.config import config
 from app.database import sessionmanager
@@ -20,9 +21,10 @@ from app.models.instrument_authoring import (
     InstrumentAuthoringSession,
     InstrumentAuthoringTurn,
 )
+from app.models.research_execution import ResearchInstrumentGatewayAudit
 
 
-def exercise_authoring(runtime, tmp_path, monkeypatch):
+def exercise_authoring(runtime, tmp_path, monkeypatch, *, controlled=False):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
     monkeypatch.syspath_prepend(str(sdk_root / "tests"))
@@ -30,6 +32,9 @@ def exercise_authoring(runtime, tmp_path, monkeypatch):
     from airalogy_instrument_gateway.package_contract import sha256
     from test_package_authoring import fixture_test, proposal, spec
     from test_package_installation import sdk
+
+    if controlled:
+        from controlled_reader_fixture import fixture_test, proposal, spec
 
     root = tmp_path.resolve() / "private-authoring"
     root.mkdir(mode=0o700)
@@ -121,6 +126,7 @@ def exercise_authoring(runtime, tmp_path, monkeypatch):
             "request": content["request"],
             "reason": "Synthetic API authoring acceptance",
             "model_processing_consent": True,
+            **({"controlled_source_consent": True} if controlled else {}),
         }
         await runtime.json("POST", "/instrument-authoring/preview", draft, status=409)
         monkeypatch.setattr(config, "AI_ENABLED", True)
@@ -134,7 +140,43 @@ def exercise_authoring(runtime, tmp_path, monkeypatch):
             {**draft, "model_processing_consent": False},
             status=422,
         )
+        if controlled:
+            for consent in (False, "true", 1):
+                await runtime.json(
+                    "POST",
+                    "/instrument-authoring/preview",
+                    {**draft, "controlled_source_consent": consent},
+                    status=422,
+                )
         preview = await runtime.json("POST", "/instrument-authoring/preview", draft)
+        assert (
+            preview["source_review"]["requires_controlled_source_consent"] == controlled
+        )
+        assert preview["source_review"]["execution_authorized"] is False
+        if controlled:
+            await runtime.json(
+                "POST",
+                "/instrument-authoring",
+                {
+                    **draft,
+                    "controlled_source_consent": False,
+                    "preview_digest": preview["preview_digest"],
+                },
+                status=422,
+            )
+            changed = copy.deepcopy(draft)
+            changed["request"]["spec"]["manifest"]["commands"][0]["stop"] = (
+                "Different independent stop requirement"
+            )
+            from app.services.instrument_authoring_contract import fingerprint
+
+            changed["request"]["fingerprint"] = fingerprint(changed["request"])
+            await runtime.json(
+                "POST",
+                "/instrument-authoring",
+                {**changed, "preview_digest": preview["preview_digest"]},
+                status=409,
+            )
         await runtime.json(
             "POST",
             "/instrument-authoring",
@@ -156,6 +198,16 @@ def exercise_authoring(runtime, tmp_path, monkeypatch):
         row = results[0].json()
         assert row["id"] == content["request"]["id"]
         assert content["authoring_token"] not in json.dumps(row)
+        assert row["source_review"] == preview["source_review"]
+        async with sessionmanager.session() as db:
+            audit = await db.scalar(
+                select(ResearchInstrumentGatewayAudit).where(
+                    ResearchInstrumentGatewayAudit.gateway_id == UUID(gateway["id"]),
+                    ResearchInstrumentGatewayAudit.action == "authoring.authorized",
+                )
+            )
+            assert audit.snapshot["controlled_source_consent"] == controlled
+            assert audit.snapshot["source_review"] == preview["source_review"]
         return content, prepared, draft, gateway
 
     content, prepared, draft, gateway = runtime.run(setup())
@@ -346,16 +398,19 @@ def exercise_authoring(runtime, tmp_path, monkeypatch):
 
     runtime.run(policies())
     gate = None
-    exercise_authoring_browser(runtime, tmp_path, monkeypatch, draft, sdk_root)
+    exercise_authoring_browser(
+        runtime, tmp_path, monkeypatch, draft, sdk_root, spec, fixture_test
+    )
 
 
-def exercise_authoring_browser(runtime, tmp_path, monkeypatch, draft, sdk_root):
+def exercise_authoring_browser(
+    runtime, tmp_path, monkeypatch, draft, sdk_root, spec, fixture_test
+):
     """Actual browser/local server/API/DB; only model and sandbox outcomes injected."""
     from airalogy_instrument_gateway import authoring
     from airalogy_instrument_gateway.authoring_workspace import AuthoringWorkspace
     from airalogy_instrument_gateway.package_contract import sha256
     from airalogy_instrument_gateway.setup_cli import SetupServer
-    from test_package_authoring import fixture_test, spec
     from test_package_installation import sdk
 
     root = tmp_path.resolve() / "private-authoring-browser"

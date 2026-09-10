@@ -12,7 +12,7 @@ from typing import ClassVar
 from uuid import UUID, uuid4
 
 from . import authoring
-from .authoring_contract import candidate_digest, validate_proposal
+from .authoring_contract import candidate_digest, source_review, validate_proposal
 from .package_contract import MAX_ARCHIVE_BYTES, canonical, sha256, strict_json
 from .package_sandbox import sandbox_name
 from .setup_cli import LocalDownload
@@ -352,6 +352,7 @@ class AuthoringWorkspace(SetupWorkspace):
                     "request": content["request"],
                     "platform_url": content["platform_url"],
                     "model_calls_permitted": can_generate,
+                    "source_review": source_review(content["request"]["spec"]),
                     "reconcile_interrupted_test": data["reconcile"],
                     "uncertain_containers": [
                         item["container"]

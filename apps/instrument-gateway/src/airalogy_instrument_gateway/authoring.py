@@ -22,6 +22,7 @@ from .authoring_contract import (
     REQUEST_SCHEMA,
     candidate_digest,
     fingerprint,
+    source_review,
     validate_proposal,
     validate_request,
     validate_spec,
@@ -145,6 +146,7 @@ def prepare_preview(
     }
     return {
         **content,
+        "source_review": source_review(spec),
         "preview_digest": sha256(canonical(content)),
         "hardware_authorized": False,
     }

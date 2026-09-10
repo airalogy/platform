@@ -25,6 +25,7 @@ from airalogy_instrument_gateway.authoring_contract import (
     candidate_digest,
     fingerprint,
     generation_prompt,
+    source_review,
     validate_proposal,
     validate_request,
     validate_spec,
@@ -137,6 +138,39 @@ def fixture_test(raw, **kwargs):
 
 
 class AuthoringTests(unittest.TestCase):
+    def test_controlled_source_preserves_fixed_risk_safety_and_no_execution(self):
+        for risk in ("read_only", "low", "medium", "high"):
+            selected = spec()
+            command = selected["manifest"]["commands"][0]
+            command["risk"] = risk
+            command["device_confirmation_required"] = risk in ("medium", "high")
+            command["safety_contract"] = {
+                "required_interlocks": ["fixture.ready"],
+                "operator_presence_required": risk == "high",
+                "emergency_stop_required": risk == "high",
+            }
+            self.assertEqual(validate_spec(selected), selected)
+            review = source_review(selected)
+            self.assertEqual(
+                review["requires_controlled_source_consent"], risk != "read_only"
+            )
+            self.assertFalse(review["execution_authorized"])
+            self.assertEqual(review["commands"][0]["risk"], risk)
+            review["commands"][0]["safety_contract"]["required_interlocks"].clear()
+            self.assertEqual(
+                command["safety_contract"]["required_interlocks"], ["fixture.ready"]
+            )
+            self.assertIn("SOURCE DRAFTS ONLY", generation_prompt(selected))
+            if risk in ("medium", "high"):
+                command["device_confirmation_required"] = False
+                with self.assertRaises(ValueError):
+                    validate_spec(selected)
+            if risk == "high":
+                command["device_confirmation_required"] = True
+                command["safety_contract"]["emergency_stop_required"] = False
+                with self.assertRaises(ValueError):
+                    validate_spec(selected)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

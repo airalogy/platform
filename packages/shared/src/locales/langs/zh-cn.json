@@ -3271,6 +3271,12 @@
       }
     },
     "instrumentAuthoring": {
+      "commandReview": "指令副作用声明——仅源码草稿",
+      "declaredRiskHint": "这些是审核输入中的声明，不是 AI 安全评级或实机验收。测试通过不授予仪器控制权限。",
+      "completionContract": "要求的完成依据",
+      "stopContract": "要求的停止与状态核对",
+      "safetyContract": "本地确认及安全契约",
+      "controlledConsent": "我明确授权为这些非只读指令草拟源码，并仅使用隔离模拟或假通信接口测试。这不代表源码获批，也不授权设备访问、安装或物理执行。",
       "browserGuide": "本地浏览器开发向导（独立凭据与审批）",
       "title": "本地适配器开发",
       "boundary": "Aira 可生成源码，并根据固定的离线测试迭代修正。开发授权与安装、验收和仪器控制相互独立。",

@@ -2,7 +2,7 @@
 
 本地助手可通过当前配置的 Aira 模型生成真实 Python 源码，构建包含源码的适配包，在已有 Docker 隔离环境中运行**固定测试**，再根据有限长度的失败诊断修正源码。模型代码不会在 Platform 或宿主机上执行。这个流程不会打开仪器软件、扫描工作站、安装或批准驱动、验收设备或启用指令。
 
-这只是 RFC #5 的一个实现阶段，不代表自主设备接入全部完成。已提供独立授权的[有界浏览器探索](./instrument-interface-exploration.md)、[限定范围的 macOS 发现/观察与自建模拟器动作](./instrument-native-interface.md)，以及[正式 HTTP 接口读取](./instrument-http-interface.md)。厂商原生/视觉控制、跨平台运维和真实试点仍待完成。首版源码开发只接受只读指令草稿、纯 Python、可信 SDK 和标准库，不向模型开放依赖下载、原生编译、任意工具或物理实验。仍需人工确认资料、指令契约和独立测试。
+这只是 RFC #5 的一个实现阶段，不代表自主设备接入全部完成。已提供独立授权的[有界浏览器探索](./instrument-interface-exploration.md)、[限定范围的 macOS 发现/观察与自建模拟器动作](./instrument-native-interface.md)，以及[正式 HTTP 接口读取](./instrument-http-interface.md)。厂商原生/视觉控制、跨平台运维和真实试点仍待完成。源码开发支持固定的只读及低/中/高风险指令契约，非只读源码须单独明确批准开发。仍只允许纯 Python、可信 SDK 和标准库，不向模型开放依赖下载、原生编译、任意工具或物理实验；资料、指令契约和独立测试仍须人工审核。
 
 ## 本地浏览器开发向导
 
@@ -38,6 +38,24 @@ node scripts/instrument-authoring-example.mjs /absolute/private/synthetic-spec.j
 添加 `--http-reader` 可选择正式 HTTP 参考接口及其独立固定的样本/Schema 测试。模型提示会说明可复用的 SDK 通信工具，但不授予联网权限；应选择确实包含 `HttpReadClient` 的准确 SDK wheel。两种示例生成器都不访问设备或模型。
 
 也可添加 `--export-reader`，选择[已完成导出文件采集](./instrument-export-interface.md)的公开契约和独立合成文件测试。须使用包含 `ExportReadClient` 的准确 SDK wheel；这不会授权读取真实导出目录，也不会自动生成厂商完成桥接。AI 关闭时仍可使用手写含源码包。
+
+### 受控指令源码草稿
+
+同一源码流程可为低/中/高风险指令生成实现草稿，但不授予执行权限。固定的风险、本地确认、联锁、完成及停止要求继续由共享包校验器检查：中/高风险不得省略本地确认，高风险不得省略现场人员和急停要求。Aira 不能降低这些条件或修改独立测试。这些是输入中的要求声明，不是 AI 安全评级，也不证明生成实现已经满足要求。
+
+授权前，Platform 直接展示准确指令/版本、声明风险、副作用、完成依据、停止和本地安全契约。任何非只读指令的预览与确认，都须独立于模型资料处理同意，携带严格布尔值 `controlled_source_consent: true`。改变输入会清除界面确认并使预览失效，服务端也独立执行校验；授权审计记录该确认及指令审阅内容。已有只读请求不需要新确认，不会扩大指令权限，原规范仍不可变。历史和本地准备/运行预览保持同样的“仅源码开发”边界，不增加数据库迁移或执行凭据。
+
+可使用固定独立假通信接口测试自建有状态参考实现：
+
+```bash
+node scripts/instrument-authoring-example.mjs /absolute/private/controlled-spec.json --controlled-reader
+```
+
+须选择包含本支持的准确可信 SDK 构建，并配套更新 API/前端。参考包位于 `examples/controlled-reader`，工厂为 `controlled_reader:create_adapter`，AI 关闭时也可手工构建。它配置内存控制器、读回参数、启动一次、观察完成并核对单位/数量；独立测试提供不同结果，模拟控制权改变、取消、启动回执丢失及停止确认失败。控制器不接收生产配置、没有真实通信接口；一个新控制器代表一次模拟采集，不提供物理复位/重启指令。输出契约始终固定 `simulation_only: true`，不能用于真实设备的启用验收。
+
+实际 Docker 验收会先拒绝故意重复启动的源码，再让修正源码通过不变的独立测试，并验证同一回执恢复不重跑候选代码。API/本地浏览器测试另外使用合成模型/测试响应，核对确认、审计、有界修正、取消及开发凭据不能访问执行指令。这些是软件测试，不是付费模型能力基准或厂商实机安全验收。
+
+真实受控实现仍须有独立明确的参数读回、完成、接管和设备特定停止语义，以及独立测试。缺少信息须返回 `missing_information`，不能编造接口、空操作停止或把模拟改名为硬件。测试通过的草稿仍须源码审核、准确安装、覆盖受控指令的非模拟实机验收、启用授权、预约及本地启动/操作条件。此改动不授权模型或开发进程接触真实设备。
 
 真实说明文件是 JSON，字段固定为 `goal`、`manifest`、`factory`、`materials`、`tests`、`licenses`、`initial_sources`。manifest 是尚未构建的适配包模板（`files: []`、`provenance.kind: "aira"`、无已测试真机声明）；factory 固定为 Python `module:function`。materials 是 1–16 项显式选定的 `{name, text}`，名称不含本地目录；测试、许可和初始源码分别是 `tests/*.py`、`licenses/*`、`source/*.py` 到文本的映射。初始源码可以为空，总上下文最多 128 KiB。这里不执行 PDF/OCR、目录采集或软件发现；需要时请在许可范围内提供明确审阅过的文本摘录。
 
