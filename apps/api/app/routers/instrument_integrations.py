@@ -118,15 +118,26 @@ async def get_example(current_user: CurrentUser):
 
 @router.get("")
 async def list_integrations(
-    gateway_id: UUID, current_user: CurrentUser, db_session: DBSession
+    gateway_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+    resource_id: UUID | None = None,
 ):
     gateway = await _gateway_context(db_session, current_user, gateway_id, lock=False)
+    query = select(InstrumentIntegrationDraft).where(
+        InstrumentIntegrationDraft.gateway_id == gateway_id
+    )
+    if resource_id is not None:
+        await _equipment_context(
+            db_session,
+            current_user=current_user,
+            gateway=gateway,
+            resource_id=resource_id,
+        )
+        query = query.where(InstrumentIntegrationDraft.resource_id == resource_id)
     rows = (
         await db_session.scalars(
-            select(InstrumentIntegrationDraft)
-            .where(InstrumentIntegrationDraft.gateway_id == gateway_id)
-            .order_by(InstrumentIntegrationDraft.updated_at.desc())
-            .limit(100)
+            query.order_by(InstrumentIntegrationDraft.updated_at.desc()).limit(100)
         )
     ).all()
     visible = []

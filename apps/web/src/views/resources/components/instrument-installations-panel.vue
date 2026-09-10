@@ -7,7 +7,7 @@ import { $t } from "@airalogy/shared/locales"
 import InstrumentActivationsPanel from "./instrument-activations-panel.vue"
 import InstrumentQualificationsPanel from "./instrument-qualifications-panel.vue"
 
-const props = defineProps<{ labId: string, gatewayId: string, equipmentOptions: Array<{ label: string, value: string }> }>()
+const props = defineProps<{ labId: string, gatewayId: string, equipmentOptions: Array<{ label: string, value: string }>, resourceId?: string, requireEquipment?: boolean }>()
 const busy = ref(false)
 const items = ref<DeviceBinding[]>([])
 const releases = ref<AdapterRelease[]>([])
@@ -52,7 +52,7 @@ async function guarded(action: () => Promise<void>) {
   finally { busy.value = false }
 }
 async function refresh(append = false) {
-  const response = await fetchInstallations(props.gatewayId, append ? offset.value : 0)
+  const response = await fetchInstallations(props.gatewayId, append ? offset.value : 0, props.resourceId)
   items.value = append ? [...items.value, ...response.items] : response.items
   offset.value = response.next_offset
   more.value = response.has_more
@@ -63,9 +63,11 @@ async function loadReleases(append = false) {
   moreReleases.value = response.has_more
 }
 async function openCreate() {
+  if (props.requireEquipment && !props.resourceId)
+    return
   publicText.value = ""
   preview.value = null
-  Object.assign(draft, { resource_id: props.equipmentOptions.length === 1 ? props.equipmentOptions[0].value : "", release_id: "", reason: "", fingerprint_confirmed: false })
+  Object.assign(draft, { resource_id: props.resourceId || (props.equipmentOptions.length === 1 ? props.equipmentOptions[0].value : ""), release_id: "", reason: "", fingerprint_confirmed: false })
   await loadReleases()
   showCreate.value = true
 }
@@ -115,7 +117,7 @@ onMounted(() => guarded(() => refresh()))
       {{ $t("page.resourceLibrary.installHint") }}
     </p>
     <n-space class="mb-3">
-      <n-button :disabled="busy" @click="guarded(openCreate)">
+      <n-button :disabled="busy || (requireEquipment && !resourceId)" @click="guarded(openCreate)">
         {{ $t("page.resourceLibrary.installAuthorize") }}
       </n-button>
       <n-button :loading="busy" @click="guarded(() => refresh())">

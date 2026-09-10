@@ -57,6 +57,10 @@ async function getData<T>(options: Parameters<typeof request<T>>[0]): Promise<T>
 
 const gatewayUrl = "/research-instrument-gateways"
 
+export function fetchInstrumentEquipment(gatewayId: string, params: { q?: string, resource_id?: string, offset?: number } = {}) {
+  return getData<{ items: { id: string, name: string, code: string }[], has_more: boolean, next_offset: number }>({ url: `${gatewayUrl}/${gatewayId}/equipment-options`, params })
+}
+
 export function fetchInstrumentGateways(labId: string) {
   return getData<{ items: InstrumentGateway[] }>({
     url: gatewayUrl,

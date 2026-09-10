@@ -28,3 +28,10 @@ export async function selectVisibleOption(page: Page, label: string | RegExp) {
   const option = page.locator(".n-base-select-option").filter({ hasText: label })
   await option.last().click()
 }
+
+export function instrumentWorkspaceUrl(labUid: string, gatewayId: string, resourceId: string, step: "connect" | "prepare" | "install" | "use", tool = "reuse") {
+  const query = new URLSearchParams({ instrument_gateway: gatewayId, instrument_step: step, instrument_tool: tool })
+  if (resourceId)
+    query.set("instrument_resource", resourceId)
+  return `/labs/${labUid}/resources/gateways?${query}`
+}

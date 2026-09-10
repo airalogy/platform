@@ -1,24 +1,39 @@
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
-import { loadFixtures } from "./fixtures"
+import { instrumentWorkspaceUrl, loadFixtures } from "./fixtures"
 
-test("private adapter import, protected download and source review do not qualify equipment", async ({ page }) => {
+test("private adapter import, protected download and source review do not qualify equipment", async ({ page, request }) => {
   const fixture = await loadFixtures()
+  const api = process.env.E2E_API_URL || "http://127.0.0.1:4100"
+  const login = await request.post(`${api}/signin_by_email`, { data: { email: "dev.owner@airalogy.dev", password: "AiralogyDev123!" } })
+  expect(login.ok()).toBeTruthy()
+  const headers = { "Auth-Token": (await login.json()).token }
+  const draft = { lab_id: fixture.lab.id, name: `Package fixture ${Date.now()}`, enabled: false }
+  const preview = await (await request.post(`${api}/research-instrument-gateways/preview`, { headers, data: draft })).json()
+  const created = await request.post(`${api}/research-instrument-gateways`, { headers, data: { ...draft, preview_digest: preview.preview_digest } })
+  expect(created.ok()).toBeTruthy()
+  const gateway = (await created.json()).gateway
   const directory = await mkdtemp(path.join(os.tmpdir(), "airalogy-adapter-e2e-"))
   try {
     const archive = path.join(directory, "synthetic.zip")
     const source = "apps/instrument-gateway/examples/adapter-package"
-    execFileSync("python3", ["-m", "airalogy_instrument_gateway.package_cli", "build", "--manifest", `${source}/manifest.json`, "--factory", "synthetic_reader:create_adapter", "--file", `source/synthetic_reader.py=${source}/source/synthetic_reader.py`, "--file", `tests/test_reader.py=${source}/tests/test_reader.py`, "--file", `licenses/LICENSE.txt=${source}/licenses/LICENSE.txt`, "--output", archive], {
+    // Isolate matching from other tests' packages in this shared synthetic Lab.
+    const manifest = JSON.parse(await readFile(`${source}/manifest.json`, "utf8"))
+    const model = `Catalogue reader ${Date.now()}`
+    manifest.compatibility.declared[0].model = model
+    const manifestPath = path.join(directory, "manifest.json")
+    await writeFile(manifestPath, JSON.stringify(manifest))
+    execFileSync("python3", ["-m", "airalogy_instrument_gateway.package_cli", "build", "--manifest", manifestPath, "--factory", "synthetic_reader:create_adapter", "--file", `source/synthetic_reader.py=${source}/source/synthetic_reader.py`, "--file", `tests/test_reader.py=${source}/tests/test_reader.py`, "--file", `licenses/LICENSE.txt=${source}/licenses/LICENSE.txt`, "--output", archive], {
       env: { ...process.env, PYTHONPATH: "apps/instrument-gateway/src" },
     })
     const original = await readFile(archive)
     const digest = createHash("sha256").update(original).digest("hex")
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto(`/labs/${fixture.lab.uid}/resources/gateways`)
+    await page.goto(instrumentWorkspaceUrl(fixture.lab.uid, gateway.id, "", "prepare"))
     const panel = page.getByTestId("instrument-packages-panel")
     await expect(panel).toBeVisible()
     expect((await panel.boundingBox())!.width).toBeLessThanOrEqual(390)
@@ -40,7 +55,7 @@ test("private adapter import, protected download and source review do not qualif
     await panel.getByRole("button", { name: "Find reusable adapters" }).click()
     modal = page.getByRole("dialog").last()
     await page.getByTestId("adapter-match-manufacturer").locator("input").fill("Synthetic")
-    await page.getByTestId("adapter-match-model").locator("input").fill("Reference reader")
+    await page.getByTestId("adapter-match-model").locator("input").fill(model)
     await page.getByTestId("adapter-match-search").click()
     const candidate = page.getByTestId("adapter-match-candidate").filter({ hasText: digest })
     await expect(candidate).toContainText("More information or review needed")
@@ -83,7 +98,7 @@ test("private adapter import, protected download and source review do not qualif
     await panel.getByRole("button", { name: "Find reusable adapters" }).click()
     modal = page.getByRole("dialog").last()
     await page.getByTestId("adapter-match-manufacturer").locator("input").fill("Synthetic")
-    await page.getByTestId("adapter-match-model").locator("input").fill("Reference reader")
+    await page.getByTestId("adapter-match-model").locator("input").fill(model)
     await page.getByTestId("adapter-match-search").click()
     await expect(page.getByTestId("adapter-match-candidate")).toHaveCount(0)
     await expect(modal).toContainText("No package in this Lab declares this exact manufacturer and model")

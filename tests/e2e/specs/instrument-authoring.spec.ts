@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { expect, test } from "@playwright/test"
-import { loadFixtures, selectVisibleOption } from "./fixtures"
+import { instrumentWorkspaceUrl, loadFixtures, selectVisibleOption } from "./fixtures"
 
 test("authoring UI contract fixtures: private-file rejection, confirmation, history and AI-off fallback", async ({ page, request }, testInfo) => {
   // Real resource/Gateway permissions; authoring responses below are UI fixtures.
@@ -72,7 +72,7 @@ test("authoring UI contract fixtures: private-file rejection, confirmation, hist
     }
   })
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(`/labs/${fixtures.lab.uid}/resources/gateways`)
+  await page.goto(instrumentWorkspaceUrl(fixtures.lab.uid, gateway.id, equipment.id, "prepare", "author"))
   await page.locator(".gateway-card__main").filter({ hasText: gateway.name }).click()
   const panel = page.getByTestId("instrument-authoring-panel")
   await panel.getByRole("button", { name: "Authorize Aira development", exact: true }).click()

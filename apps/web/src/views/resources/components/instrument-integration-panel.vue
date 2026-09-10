@@ -140,7 +140,7 @@ import { draftIntegrationWithAira, fetchIntegrationExample, fetchIntegrationHist
 import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
 
-const props = defineProps<{ gatewayId: string, gatewayName: string, equipmentOptions: Array<{ label: string, value: string }> }>()
+const props = defineProps<{ gatewayId: string, gatewayName: string, equipmentOptions: Array<{ label: string, value: string }>, resourceId?: string }>()
 const instanceStore = useInstanceStore()
 const items = ref<SavedIntegration[]>([])
 const loading = ref(false)
@@ -167,7 +167,7 @@ async function reload() {
   loading.value = true
   loadError.value = false
   try {
-    items.value = (await fetchIntegrations(props.gatewayId)).items
+    items.value = (await fetchIntegrations(props.gatewayId, props.resourceId)).items
   }
   catch { loadError.value = true }
   finally { loading.value = false }

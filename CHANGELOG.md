@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a shared equipment onboarding workspace with searchable authorized context, reloadable stage/tool links, guarded context switching and scoped installation/rehearsal history. Filter bookable resources before pagination and retain archived-equipment installation history; workflow navigation never grants installation, qualification or execution authority.
+
 - Add a reusable fixed-operation Instrument HTTP GET/JSON backend with private origin/IP/authentication binding, verified TLS, bounded responses and cancellation without automatic retries. Include a source-included synthetic reader, loopback simulator, Aira authoring inputs, independent offline package tests and installed-driver/real-API result recovery acceptance; no vendor equipment qualification is implied.
 
 - Add explicitly selected software-candidate reports, one-shot Aira recommendations and private local resolution to current signed application identity. Reuse scoped survey consent/history and reject invented candidates, evidence fields and paths; retain manual selection with AI disabled. Suggestions never start software or grant UI/equipment control.

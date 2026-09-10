@@ -3306,6 +3306,33 @@
         "interrupted": "Response not confirmed"
       }
     },
+    "instrumentOnboarding": {
+      "title": "Connect equipment",
+      "hint": "Choose the equipment once, then use the same context across preparation, installation and command management.",
+      "boundary": "These tabs are workflow navigation, not completed checks. Pairing, source review, installation, hardware qualification and execution approval remain separate.",
+      "selectEquipment": "Search and select equipment to continue",
+      "unavailable": "The previously selected equipment is no longer available. Select a current authorized target; no replacement was chosen automatically.",
+      "changeTitle": "Switch equipment context?",
+      "changeHint": "Unsaved forms in the current equipment workspace will close. Saved work stays with its original equipment; switching does not move assets or change approvals.",
+      "connectHint": "Pair this Gateway with the local workstation and compare identities. Pairing does not install an adapter or enable hardware.",
+      "prepareHint": "Look for a reusable package first. If needed, separately review software observations, authorize source development or rehearse a draft. Manual packages remain available without AI.",
+      "installHint": "Authorize the exact package and local configuration, wait for the installation receipt, then independently qualify and activate the required commands inside the installation details.",
+      "allHistory": "Showing installation history across this Gateway, including inactive equipment. Select current equipment above before creating an installation request.",
+      "useHint": "Review the selected equipment's exact command versions. Research execution still requires its authorized Task, environment, booking and approvals; an enabled command is not a safety attestation.",
+      "steps": {
+        "connect": "Connection",
+        "prepare": "Prepare adapter",
+        "install": "Install & qualify",
+        "use": "Commands"
+      },
+      "tools": {
+        "reuse": "Find or import a package",
+        "survey": "Understand software",
+        "author": "Develop adapter source",
+        "explore": "Bounded interface exploration",
+        "rehearse": "Rehearse a GUI draft"
+      }
+    },
     "instrumentIntegration": {
       "title": "Equipment software integration",
       "subtitle": "Prepare, rehearse and version an integration draft for the selected equipment.",

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { loadFixtures, selectVisibleOption } from "./fixtures"
+import { instrumentWorkspaceUrl, loadFixtures, selectVisibleOption } from "./fixtures"
 
 test("equipment integration draft survives reload and exports without enabling commands", async ({ page, request }) => {
   const fixtures = await loadFixtures()
@@ -27,13 +27,14 @@ test("equipment integration draft survives reload and exports without enabling c
     data: { construct_name: "Synthetic fixture", aliases: null, backbone: null, sequence: null, sequence_file: null, resistance_markers: null, host_species: null, copy_number: null, external_source: null, features: [] },
   } })
   expect(equipmentResponse.ok()).toBeTruthy()
+  const equipment = await equipmentResponse.json()
   const gatewayDraft = { lab_id: fixtures.lab.id, name: `GUI gateway ${suffix}`, enabled: false }
   const preview = await (await request.post(`${api}/research-instrument-gateways/preview`, { headers, data: gatewayDraft })).json()
   const gatewayResponse = await request.post(`${api}/research-instrument-gateways`, { headers, data: { ...gatewayDraft, preview_digest: preview.preview_digest } })
   expect(gatewayResponse.ok()).toBeTruthy()
   const gateway = (await gatewayResponse.json()).gateway
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(`/labs/${fixtures.lab.uid}/resources/gateways`)
+  await page.goto(instrumentWorkspaceUrl(fixtures.lab.uid, gateway.id, equipment.id, "prepare", "rehearse"))
   await page.getByTestId("instrument-integration-panel").getByRole("button", { name: "New integration draft", exact: true }).click()
   const modal = page.getByRole("dialog").last()
   await expect(modal).toBeVisible()

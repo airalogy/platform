@@ -48,7 +48,7 @@ async function call<T>(path: string, data?: unknown, params?: Record<string, str
 }
 
 export const fetchIntegrationExample = () => call<IntegrationBundle>("/example")
-export const fetchIntegrations = (gatewayId: string) => call<{ items: SavedIntegration[] }>("", undefined, { gateway_id: gatewayId })
+export const fetchIntegrations = (gatewayId: string, resourceId?: string) => call<{ items: SavedIntegration[] }>("", undefined, { gateway_id: gatewayId, ...(resourceId ? { resource_id: resourceId } : {}) })
 export const previewIntegration = (data: IntegrationDraft) => call<IntegrationPreview>("/preview", data)
 export const saveIntegration = (data: IntegrationDraft & { preview_digest: string }) => call<SavedIntegration>("", data)
 export const draftIntegrationWithAira = (data: IntegrationDraft & { authorized_notes: string, model_processing_consent: boolean }) => call<{ package: Record<string, unknown> }>("/draft-with-aira", data)

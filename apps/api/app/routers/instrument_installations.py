@@ -359,13 +359,30 @@ async def list_installations(
     gateway_id: UUID,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    resource_id: UUID | None = None,
 ):
-    await _gateway_context(db_session, current_user, gateway_id, lock=False)
+    gateway = await _gateway_context(db_session, current_user, gateway_id, lock=False)
+    query = select(InstrumentDeviceBinding).where(
+        InstrumentDeviceBinding.gateway_id == gateway_id
+    )
+    if resource_id is not None:
+        # History/revocation remains available for retired or archived targets.
+        resource = await db_session.get(Resource, resource_id)
+        if resource is None or resource.lab_id != gateway.lab_id:
+            raise HTTPException(404, "Equipment not found")
+        access = await resolve_resource_access(
+            db_session,
+            current_user.id,
+            gateway.lab_id,
+            resource_type_id=resource.resource_type_id,
+            resource_id=resource.id,
+        )
+        if not access.allows("equipment.service"):
+            raise HTTPException(403, "Equipment management access denied")
+        query = query.where(InstrumentDeviceBinding.resource_id == resource_id)
     rows = (
         await db_session.scalars(
-            select(InstrumentDeviceBinding)
-            .where(InstrumentDeviceBinding.gateway_id == gateway_id)
-            .order_by(
+            query.order_by(
                 InstrumentDeviceBinding.created_at.desc(),
                 InstrumentDeviceBinding.id.desc(),
             )

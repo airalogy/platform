@@ -57,7 +57,7 @@ async function call<T>(path: string, data?: unknown, params?: Record<string, str
     throw new Error("No installation response")
   return result.data
 }
-export const fetchInstallations = (gatewayId: string, offset = 0) => call<{ items: DeviceBinding[], has_more: boolean, next_offset: number }>("", undefined, { gateway_id: gatewayId, offset })
+export const fetchInstallations = (gatewayId: string, offset = 0, resourceId?: string) => call<{ items: DeviceBinding[], has_more: boolean, next_offset: number }>("", undefined, { gateway_id: gatewayId, offset, ...(resourceId ? { resource_id: resourceId } : {}) })
 export const previewInstallation = (draft: InstallationDraft) => call<InstallationPreview>("/preview", draft)
 export const confirmInstallation = (draft: InstallationDraft & { preview_digest: string }) => call<DeviceBinding>("", draft)
 export const fetchInstallationHistory = (id: string) => call<{ items: { revision: number, action: "authorized" | "claimed" | "package_downloaded" | "installed" | "expired" | "revoked", reason: string, created_at: string }[] }>(`/${id}/history`)

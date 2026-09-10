@@ -169,6 +169,12 @@ def runtime():
         runtime.run(sessionmanager._engine.dispose())
 
 
+def test_equipment_onboarding_real_api_pagination_and_scope(runtime):
+    from tests.onboarding_acceptance import exercise_onboarding_scope
+
+    exercise_onboarding_scope(runtime)
+
+
 def test_managed_activation_real_api_and_installed_copy(runtime, tmp_path, monkeypatch):
     from tests.activation_acceptance import exercise_managed_activation
 

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { expect, test } from "@playwright/test"
-import { loadFixtures, selectVisibleOption } from "./fixtures"
+import { instrumentWorkspaceUrl, loadFixtures, selectVisibleOption } from "./fixtures"
 
 for (const mode of ["unclaimed", "qualified", "activated"] as const) {
   test(`installation UI ${mode}: exact identity, private-file rejection and acceptance history`, async ({ page, request }) => {
@@ -28,7 +28,7 @@ for (const mode of ["unclaimed", "qualified", "activated"] as const) {
       const definitions = await call(`${base}/definition-versions`, undefined, "GET")
       const definition = definitions.items.find((item: { protocol_uid: string }) => item.protocol_uid === "plasmid_resource_definition_en")
       const kind = await call(`${base}/types`, { protocol_version_id: definition.id, code: `install_${suffix}`, name: "Synthetic install equipment", capabilities: { booking: true }, booking_policy: "approval" })
-      await call(`${base}/resources`, { resource_type_id: kind.id, name: `Install Reader ${suffix}`, code: `INSTALL-${suffix}`, visibility: "lab", data: { construct_name: "Synthetic fixture", aliases: null, backbone: null, sequence: null, sequence_file: null, resistance_markers: null, host_species: null, copy_number: null, external_source: null, features: [] } })
+      const equipment = await call(`${base}/resources`, { resource_type_id: kind.id, name: `Install Reader ${suffix}`, code: `INSTALL-${suffix}`, visibility: "lab", data: { construct_name: "Synthetic fixture", aliases: null, backbone: null, sequence: null, sequence_file: null, resistance_markers: null, host_species: null, copy_number: null, external_source: null, features: [] } })
       const gateway = (await confirm("/research-instrument-gateways", { lab_id: fixtures.lab.id, name: `Install gateway ${suffix}`, enabled: false })).gateway
       const pairing = await confirm("/instrument-pairings", { gateway_id: gateway.id, expected_revision: gateway.revision, reason: "Synthetic UI pairing" })
       const token = `aigw_${randomBytes(32).toString("base64url")}`
@@ -56,7 +56,7 @@ for (const mode of ["unclaimed", "qualified", "activated"] as const) {
       // Generate a real local request without executing adapter or hardware code.
       const publicRequest = JSON.parse(execFileSync("python3", ["-c", "import sys,json; from pathlib import Path; from test_package_installation import sdk; from airalogy_instrument_gateway.package_contract import sha256; from airalogy_instrument_gateway.installation_manager import prepare; root=Path(sys.argv[1]); wheel=sdk(); (root/'sdk.whl').write_bytes(wheel); (root/'config.json').write_text('{}'); print(json.dumps(prepare(destination=root/'private.json', platform_url=sys.argv[2], lab_id=sys.argv[3], gateway_id=sys.argv[4], package=root/'synthetic.zip', sdk_wheel=root/'sdk.whl', trusted_sdk_digest=sha256(wheel), config=root/'config.json', root=root)))", directory, api, fixtures.lab.id, gateway.id], { env, encoding: "utf8" }))
       await page.setViewportSize({ width: 390, height: 844 })
-      await page.goto(`/labs/${fixtures.lab.uid}/resources/gateways`)
+      await page.goto(instrumentWorkspaceUrl(fixtures.lab.uid, gateway.id, equipment.id, "install"))
       await page.locator(".gateway-card__main").filter({ hasText: gateway.name }).click()
       const panel = page.getByTestId("instrument-installations-panel")
       await panel.getByRole("button", { name: "Authorize an installation" }).click()

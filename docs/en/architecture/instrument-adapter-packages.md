@@ -76,7 +76,7 @@ Receipts explicitly carry `platform_authorized: false`, `hardware_authorized: fa
 
 ### Private import and source review
 
-In **Lab → resource library → Instrument Gateways → Lab adapter packages**, an Owner/Manager can select the locally tested ZIP, preview its commands/provenance/file hashes and confirm the exact content and Lab destination. The API performs no imports, builds or driver execution. Files are Lab-visible to members, not public; never package credentials, workstation configuration secrets or unapproved customer material.
+In **Lab → resource library → Instrument Gateways → select Gateway → Prepare adapter → Find or import a package**, an Owner/Manager can select the locally tested ZIP, preview its commands/provenance/file hashes and confirm the exact content and Lab destination. Lab packages are also accessible before selecting a Gateway. The API performs no imports, builds or driver execution. Files are Lab-visible to members, not public; never package credentials, workstation configuration secrets or unapproved customer material.
 
 The preview binds the authenticated actor, Lab, import identity and archive/manifest hashes. Confirmation repeats inspection and permissions. Concurrent imports of the same Lab/package/version reuse one immutable release and logical ResearchFile; different content requires a new version. A lost-response retry does not duplicate quota or revive a revoked version. Package lists are paginated.
 

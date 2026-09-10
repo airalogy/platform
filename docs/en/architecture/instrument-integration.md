@@ -10,9 +10,22 @@ Observation, navigation/launch, physical changes, installation and qualification
 
 ## Available workflow
 
-In **Lab → resource library → Instrument Gateways**, select a Gateway and use **Equipment software integration**. The API requires both Lab Owner/Manager access and `equipment.service` on the active equipment. Drafts and history are not public, including when a Project is public.
+In **Lab → resource library → Instrument Gateways**, select a Gateway to open the shared equipment workspace. Choose the equipment once. The selector searches authorized, active, bookable resources by name or code, with explicit pagination; unrelated resources on the first library page cannot hide equipment. Only a genuinely unique option is automatically inherited. A missing or inaccessible saved selection is cleared with a warning, never substituted silently.
 
-1. Select equipment and enter the goal. A unique equipment option is inherited.
+| Stage | Purpose |
+| --- | --- |
+| Connection | Pair the workstation and compare identities. |
+| Prepare adapter | Find/import a package, understand software, develop source, explore a bounded interface or rehearse a GUI draft. |
+| Install & qualify | Authorize the exact installation, inspect its receipt and perform independent qualification/activation from its details. |
+| Commands | Inspect/manage exact command versions for this equipment. Research execution still uses the existing Task, environment, booking and approval flow. |
+
+These are navigation stages, **not completion badges**. Visiting a stage grants no authority and does not establish hardware readiness. Package reuse is Lab-scoped; other tools inherit the selected equipment. Previously visited preparation tools retain their local forms while switching tools. Changing equipment or Gateway warns that unsaved forms will close; saved work stays with its original scope. The URL records only Gateway/equipment/stage/tool identifiers, not credentials, drafts or permissions, and is revalidated by the API on reload.
+
+Installation and rehearsal lists filter by selected equipment before pagination. Clear the equipment selection in **Install & qualify** to inspect Gateway-wide installation history, including archived or retired equipment; new authorization is disabled until current equipment is selected. No AI call, driver launch, installation or device action is caused by navigation. This workspace does not replace local workstation installation or real-instrument qualification.
+
+For a GUI draft, choose **Prepare adapter → Rehearse a GUI draft**. The API requires both Lab Owner/Manager access and `equipment.service` on the active equipment. Drafts and history are not public, including when a Project is public.
+
+1. Enter the goal using the shared equipment context.
 2. Load the synthetic example or import JSON (256 KiB maximum): exact application/version/OS/language, literal steps, source declarations, limitations and independently supplied observations/expected outputs.
 3. Optionally ask Aira to edit from those observations and authorized notes. Processing consent is mandatory; the deployment model may be external. One call is limited to 60 seconds, with no model-selected tools, browsing, code execution or iterative retries. Permissions are checked before and after generation. This is not autonomous desktop exploration. Imported source labels are user declarations, not cryptographic attestations.
 4. Rehearse and preview. The API interprets data only: exact window/target, interactive session, control ownership, blocking dialogs, unique controls, state continuity, parameter readback and expected outputs. Every command needs a passing scenario for an overall pass. Failures can be saved for diagnosis without being labelled successful.

@@ -3310,6 +3310,33 @@ declare namespace I18n {
           interrupted: string
         }
       }
+      instrumentOnboarding: {
+        title: string
+        hint: string
+        boundary: string
+        selectEquipment: string
+        unavailable: string
+        changeTitle: string
+        changeHint: string
+        connectHint: string
+        prepareHint: string
+        installHint: string
+        allHistory: string
+        useHint: string
+        steps: {
+          connect: string
+          prepare: string
+          install: string
+          use: string
+        }
+        tools: {
+          reuse: string
+          survey: string
+          author: string
+          explore: string
+          rehearse: string
+        }
+      }
       instrumentIntegration: {
         title: string
         subtitle: string

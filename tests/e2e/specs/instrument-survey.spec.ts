@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises"
 import { expect, test } from "@playwright/test"
-import { loadFixtures, selectVisibleOption } from "./fixtures"
+import { instrumentWorkspaceUrl, loadFixtures, selectVisibleOption } from "./fixtures"
 
 for (const variant of ["browser", "native", "candidates"]) {
   const native = variant === "native"
@@ -86,7 +86,7 @@ for (const variant of ["browser", "native", "candidates"]) {
       }
     })
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto(`/labs/${fixtures.lab.uid}/resources/gateways`)
+    await page.goto(instrumentWorkspaceUrl(fixtures.lab.uid, gateway.id, equipment.id, "prepare", "survey"))
     await page.locator(".gateway-card__main").filter({ hasText: gateway.name }).click()
     const panel = page.getByTestId("instrument-survey-panel")
     await panel.locator(".n-select").click()

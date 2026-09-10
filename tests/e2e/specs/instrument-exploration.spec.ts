@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import { expect, test } from "@playwright/test"
-import { loadFixtures, selectVisibleOption } from "./fixtures"
+import { instrumentWorkspaceUrl, loadFixtures, selectVisibleOption } from "./fixtures"
 
 for (const native of [false, true]) {
   test(`exploration UI fixtures ${native ? "native" : "browser"}: private request rejection, reviewed actions, history and AI-off`, async ({ page, request }, testInfo) => {
@@ -64,7 +64,7 @@ for (const native of [false, true]) {
       }
     })
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto(`/labs/${fixtures.lab.uid}/resources/gateways`)
+    await page.goto(instrumentWorkspaceUrl(fixtures.lab.uid, gateway.id, equipment.id, "prepare", "explore"))
     await page.locator(".gateway-card__main").filter({ hasText: gateway.name }).click()
     const panel = page.getByTestId("instrument-exploration-panel")
     await panel.getByRole("button", { name: "Authorize interface exploration", exact: true }).click()

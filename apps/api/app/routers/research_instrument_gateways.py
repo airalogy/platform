@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.database import DBSession
 from app.models.lab import Lab, LabRole, LabUser
@@ -354,6 +354,77 @@ async def _equipment_context(
             status_code=422, detail="Resource is not governed equipment"
         )
     return resource, revision
+
+
+def equipment_options_query(lab_id, *, q="", resource_id=None):
+    # Filter governed equipment before pagination: unrelated samples must not
+    # hide an instrument beyond the first resource-library page.
+    statement = (
+        select(Resource)
+        .join(ResourceRevision, Resource.current_revision_id == ResourceRevision.id)
+        .join(
+            ResourceTypeRevision,
+            ResourceRevision.resource_type_revision_id == ResourceTypeRevision.id,
+        )
+        .where(
+            Resource.lab_id == lab_id,
+            Resource.archived_at.is_(None),
+            Resource.status == ResourceStatus.ACTIVE.value,
+            ResourceTypeRevision.capabilities["booking"].as_boolean().is_(True),
+        )
+    )
+    if resource_id is not None:
+        statement = statement.where(Resource.id == resource_id)
+    if q:
+        pattern = f"%{q.replace('!', '!!').replace('%', '!%').replace('_', '!_')}%"
+        statement = statement.where(
+            or_(
+                Resource.name.ilike(pattern, escape="!"),
+                Resource.code.ilike(pattern, escape="!"),
+            )
+        )
+    return statement.order_by(Resource.name, Resource.id)
+
+
+@router.get("/{gateway_id}/equipment-options")
+async def equipment_options(
+    gateway_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+    q: str = Query("", max_length=100),
+    resource_id: UUID | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(30, ge=1, le=100),
+):
+    gateway = await _gateway_context(db_session, current_user, gateway_id, lock=False)
+    rows = (
+        await db_session.scalars(
+            equipment_options_query(
+                gateway.lab_id, q=q.strip(), resource_id=resource_id
+            )
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    ).all()
+    items = []
+    for row in rows[:limit]:
+        try:
+            await _equipment_context(
+                db_session,
+                current_user=current_user,
+                gateway=gateway,
+                resource_id=row.id,
+            )
+        except HTTPException as error:
+            if error.status_code not in {403, 404, 422}:
+                raise
+            continue
+        items.append({"id": str(row.id), "name": row.name, "code": row.code})
+    return {
+        "items": items,
+        "has_more": len(rows) > limit,
+        "next_offset": offset + min(len(rows), limit),
+    }
 
 
 def _audit(

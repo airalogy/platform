@@ -14,11 +14,10 @@
       {{ $t("page.resourceLibrary.instrumentGatewaySecurityHint") }}
     </n-alert>
 
-    <instrument-packages-panel :key="labId" :lab-id="labId" />
-
+    <n-select v-if="gateways.length > 1" :value="selectedGatewayId" :options="gateways.map(item => ({ label: item.name, value: item.id }))" filterable :aria-label="$t('page.resourceLibrary.instrumentGateways')" data-testid="onboarding-gateway" @update:value="value => selectGateway(gateways.find(item => item.id === value)!)" />
     <div v-if="gateways.length" class="gateway-grid">
       <article
-        v-for="gateway in gateways"
+        v-for="gateway in selectedGateway ? [selectedGateway] : gateways"
         :key="gateway.id"
         class="gateway-card"
         :class="{ 'gateway-card--selected': gateway.id === selectedGatewayId }"
@@ -61,51 +60,38 @@
       class="py-12"
     />
 
-    <section v-if="selectedGateway" class="command-panel">
-      <div class="panel-heading">
-        <div>
-          <h3>{{ $t("page.resourceLibrary.allowedCommands") }}</h3>
-          <p>
-            {{
-              $t("page.resourceLibrary.allowedCommandsHint", { gateway: selectedGateway.name })
-            }}
-          </p>
-        </div>
-        <n-button type="primary" :disabled="!selectedGateway.enabled" @click="openCommandCreate">
-          {{ $t("page.resourceLibrary.addAllowedCommand") }}
-        </n-button>
-      </div>
-      <n-data-table
-        :columns="commandColumns"
-        :data="commands"
-        :bordered="false"
-        :single-line="false"
-        :scroll-x="980"
-      />
-      <n-empty
-        v-if="!commands.length && !loadingCommands"
-        :description="$t('page.resourceLibrary.noAllowedCommands')"
-        class="py-12"
-      />
-    </section>
-
-    <instrument-pairing-panel v-if="selectedGateway" :key="`pair-${selectedGateway.id}`" :gateway="selectedGateway" @updated="loadGateways" />
-
-    <instrument-installations-panel v-if="selectedGateway" :key="`install-${selectedGateway.id}`" :lab-id="labId" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
-
-    <instrument-authoring-panel v-if="selectedGateway" :key="`author-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
-
-    <instrument-survey-panel v-if="selectedGateway" :key="`survey-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
-
-    <instrument-exploration-panel v-if="selectedGateway" :key="`explore-${selectedGateway.id}`" :gateway-id="selectedGateway.id" :equipment-options="equipmentOptions" />
-
-    <instrument-integration-panel
-      v-if="selectedGateway"
-      :key="selectedGateway.id"
-      :gateway-id="selectedGateway.id"
-      :gateway-name="selectedGateway.name"
-      :equipment-options="equipmentOptions"
-    />
+    <instrument-onboarding-workspace v-if="selectedGateway" :key="selectedGateway.id" ref="workspace" :lab-id="labId" :gateway="selectedGateway" @updated="loadGateways">
+      <template #commands="{ resourceId, equipmentOptions: selectedOptions }">
+        <section class="command-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>{{ $t("page.resourceLibrary.allowedCommands") }}</h3>
+              <p>
+                {{
+                  $t("page.resourceLibrary.allowedCommandsHint", { gateway: selectedGateway.name })
+                }}
+              </p>
+            </div>
+            <n-button type="primary" :disabled="!selectedGateway.enabled" @click="openCommandCreate(resourceId, selectedOptions)">
+              {{ $t("page.resourceLibrary.addAllowedCommand") }}
+            </n-button>
+          </div>
+          <n-data-table
+            :columns="commandColumns"
+            :data="commands.filter(item => item.resource_id === resourceId)"
+            :bordered="false"
+            :single-line="false"
+            :scroll-x="980"
+          />
+          <n-empty
+            v-if="!commands.some(item => item.resource_id === resourceId) && !loadingCommands"
+            :description="$t('page.resourceLibrary.noAllowedCommands')"
+            class="py-12"
+          />
+        </section>
+      </template>
+    </instrument-onboarding-workspace>
+    <instrument-packages-panel v-else :key="labId" :lab-id="labId" />
 
     <n-modal
       v-model:show="gatewayModalVisible"
@@ -236,7 +222,7 @@
           <n-select
             v-model:value="commandDraft.resource_id"
             filterable
-            :options="equipmentOptions"
+            :options="commandEquipmentOptions"
             :disabled="!!commandPreview"
           />
         </n-form-item>
@@ -396,18 +382,17 @@ import {
 } from "@/service/api/research-instruments"
 import { $t } from "@airalogy/shared/locales"
 import { NButton, NSpace, NTag } from "naive-ui"
-import InstrumentAuthoringPanel from "./instrument-authoring-panel.vue"
-import InstrumentExplorationPanel from "./instrument-exploration-panel.vue"
-import InstrumentInstallationsPanel from "./instrument-installations-panel.vue"
-import InstrumentIntegrationPanel from "./instrument-integration-panel.vue"
+import InstrumentOnboardingWorkspace from "./instrument-onboarding-workspace.vue"
 import InstrumentPackagesPanel from "./instrument-packages-panel.vue"
-import InstrumentPairingPanel from "./instrument-pairing-panel.vue"
-import InstrumentSurveyPanel from "./instrument-survey-panel.vue"
 
 const props = defineProps<{
   labId: string
   equipmentOptions: Array<{ label: string, value: string }>
 }>()
+const route = useRoute()
+const router = useRouter()
+const workspace = ref<InstanceType<typeof InstrumentOnboardingWorkspace>>()
+const commandEquipmentOptions = ref(props.equipmentOptions)
 
 const loading = ref(false)
 const loadingCommands = ref(false)
@@ -418,6 +403,7 @@ const selectedGatewayId = ref<string | null>(null)
 const selectedGateway = computed(
   () => gateways.value.find(item => item.id === selectedGatewayId.value) || null,
 )
+let gatewayGeneration = 0
 
 const gatewayModalVisible = ref(false)
 const editingGateway = ref<InstrumentGateway | null>(null)
@@ -470,7 +456,8 @@ function formatDate(value: string) {
 }
 
 function resourceName(resourceId: string) {
-  return props.equipmentOptions.find(item => item.value === resourceId)?.label || resourceId
+  return workspace.value?.equipmentOptions.find(item => item.value === resourceId)?.label
+    || props.equipmentOptions.find(item => item.value === resourceId)?.label || resourceId
 }
 
 function riskType(risk: InstrumentCommand["risk"]) {
@@ -560,20 +547,27 @@ async function loadGateways() {
   if (!props.labId)
     return
   loading.value = true
+  const current = ++gatewayGeneration
   try {
-    gateways.value = (await fetchInstrumentGateways(props.labId)).items
+    const response = await fetchInstrumentGateways(props.labId)
+    if (current !== gatewayGeneration)
+      return
+    gateways.value = response.items
     if (
       selectedGatewayId.value
       && !gateways.value.some(item => item.id === selectedGatewayId.value)
     ) {
       selectedGatewayId.value = null
     }
-    if (!selectedGatewayId.value && gateways.value.length)
-      selectedGatewayId.value = gateways.value[0].id
+    if (!selectedGatewayId.value) {
+      const requested = gateways.value.find(item => item.id === route.query.instrument_gateway)
+      selectedGatewayId.value = requested?.id || (!route.query.instrument_gateway && gateways.value.length === 1 ? gateways.value[0].id : null)
+    }
     await loadCommands()
   }
   finally {
-    loading.value = false
+    if (current === gatewayGeneration)
+      loading.value = false
   }
 }
 
@@ -583,16 +577,26 @@ async function loadCommands() {
     return
   }
   loadingCommands.value = true
+  const gatewayId = selectedGatewayId.value
   try {
-    commands.value = (await fetchInstrumentCommands(selectedGatewayId.value)).items
+    const response = await fetchInstrumentCommands(gatewayId)
+    if (gatewayId === selectedGatewayId.value)
+      commands.value = response.items
   }
   finally {
-    loadingCommands.value = false
+    if (gatewayId === selectedGatewayId.value)
+      loadingCommands.value = false
   }
 }
 
 async function selectGateway(gateway: InstrumentGateway) {
+  if (selectedGatewayId.value === gateway.id)
+    return
+  if (workspace.value && !await workspace.value.confirmLeave())
+    return
   selectedGatewayId.value = gateway.id
+  commands.value = []
+  await router.replace({ path: route.path, query: { ...route.query, instrument_gateway: gateway.id, instrument_resource: undefined, instrument_step: undefined, instrument_tool: undefined } })
   await loadCommands()
 }
 
@@ -746,8 +750,10 @@ function resetCommandDraft(command?: InstrumentCommand) {
   commandJsonError.value = ""
 }
 
-function openCommandCreate() {
+function openCommandCreate(resourceId?: string, options = props.equipmentOptions) {
   resetCommandDraft()
+  commandEquipmentOptions.value = options
+  commandDraft.resource_id = resourceId || null
   commandModalVisible.value = true
 }
 
@@ -880,7 +886,16 @@ async function toggleCommand(command: InstrumentCommand) {
   })
 }
 
-watch(() => props.labId, loadGateways, { immediate: true })
+watch(() => props.labId, () => {
+  gatewayGeneration++
+  selectedGatewayId.value = null
+  gateways.value = []
+  commands.value = []
+  void loadGateways()
+}, { immediate: true })
+onBeforeUnmount(() => {
+  gatewayGeneration++
+})
 </script>
 
 <style scoped>

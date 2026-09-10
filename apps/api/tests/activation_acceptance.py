@@ -11,6 +11,7 @@ from app.database import sessionmanager
 from app.main import app
 from app.models.instrument_activation import InstrumentJobActivation
 from app.models.research_execution import ResearchInstrumentJob
+from app.models.resource import Resource
 from app.services.research_instruments import (
     gateway_token_digest,
     generate_gateway_token,
@@ -202,6 +203,33 @@ def exercise_managed_activation(
             },
         )
         binding_url = f"/instrument-installations/{public['id']}"
+        listing = f"/instrument-installations?gateway_id={gateway['id']}&resource_id={resource['id']}"
+        assert [
+            item["id"] for item in (await runtime.json("GET", listing))["items"]
+        ] == [public["id"]]
+        # Archived equipment stays manageable in history; it is not a new target.
+        async with sessionmanager.session() as db:
+            row = await db.get(Resource, UUID(resource["id"]))
+            row.archived_at = datetime.now(UTC)
+            await db.commit()
+        try:
+            assert [
+                item["id"] for item in (await runtime.json("GET", listing))["items"]
+            ] == [public["id"]]
+            choices = await runtime.json(
+                "GET",
+                f"/research-instrument-gateways/{gateway['id']}/equipment-options?resource_id={resource['id']}",
+            )
+            assert choices["items"] == []
+            unscoped = await runtime.json(
+                "GET", f"/instrument-installations?gateway_id={gateway['id']}"
+            )
+            assert [item["id"] for item in unscoped["items"]] == [public["id"]]
+        finally:
+            async with sessionmanager.session() as db:
+                row = await db.get(Resource, UUID(resource["id"]))
+                row.archived_at = None
+                await db.commit()
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as local:
