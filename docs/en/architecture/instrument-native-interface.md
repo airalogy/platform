@@ -121,6 +121,8 @@ pnpm gateway:native read --definition /absolute/private/drafts/interface-ID/defi
 
 Assembly verifies the retained capture/analysis digests and creates a fresh editable `airalogy.native-read-definition.v1`, copied evidence and empty plan. It does **not** require the original application to remain open. Execution does require its pinned process and identity anchor to match, and selects only the reviewed readbacks. After restarting/upgrading software, explicitly prepare a new selection and review its identity before reusing mappings; old process pins never silently attach to a replacement. Definitions cannot add click/fill or input-value consent.
 
+For reviewed installed adapters, the separate [native read worker](./instrument-interface-worker.md#installed-native-read-adapters) connects this read-only definition to existing Instrument Jobs and receipt recovery. It does not launch or retarget an application, upgrade the definition to actions or establish vendor qualification. Graphical installed/API acceptance is explicitly opt-in and separate from compile-only checks.
+
 ## Separately reviewed owned-simulator actions
 
 After explicitly opening the returned `simulator_app` in an authorized graphical session, select its actual PID. The following preparation reads metadata only and writes editable definition, plan and policy files; it does not open or operate the app:

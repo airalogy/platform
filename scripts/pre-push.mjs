@@ -42,6 +42,7 @@ const checks = {
     label: "research API and persistent-worker integration",
     command: "corepack",
     args: ["pnpm", "research:integration"],
+    env: { RUN_INSTRUMENT_NATIVE_JOB_TESTS: "0" },
   },
   gatewayTests: {
     id: "gateway-tests",
@@ -54,6 +55,14 @@ const checks = {
     label: "bounded browser interface and private evidence tests",
     command: "corepack",
     args: ["pnpm", "gateway:interface-test"],
+    env: { RUN_INTERFACE_NATIVE_TESTS: "0", RUN_INTERFACE_NATIVE_BUILD_TESTS: "0" },
+  },
+  nativeBuildTests: {
+    id: "native-build-tests",
+    label: "macOS native build and installed-SDK integrity checks (no app launch)",
+    command: "node",
+    args: ["--test", "apps/instrument-interface/tests/native.test.mjs"],
+    env: { RUN_INTERFACE_NATIVE_BUILD_TESTS: "1", RUN_INTERFACE_NATIVE_TESTS: "0", RUN_INSTRUMENT_NATIVE_JOB_TESTS: "0" },
   },
   computeRunnerTests: {
     id: "compute-runner-tests",
@@ -130,7 +139,7 @@ function hasPath(files, exactFiles, prefixes = []) {
   )
 }
 
-export function buildCheckPlan(files, fullRequested = false) {
+export function buildCheckPlan(files, fullRequested = false, hostPlatform = process.platform) {
   const plan = [checks.lint, checks.types, checks.apiCompile]
 
   if (fullRequested || files.some(file =>
@@ -177,11 +186,20 @@ export function buildCheckPlan(files, fullRequested = false) {
     "scripts/instrument-interface-example.mjs",
     "scripts/instrument-interface-worker-example.mjs",
     "apps/instrument-gateway/examples/simulated-reader.html",
+    "apps/instrument-gateway/src/airalogy_instrument_gateway/interface_process.py",
     "package.json",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
   ]), ["apps/instrument-interface/"])) {
     plan.push(checks.interfaceTests)
+  }
+
+  if (hostPlatform === "darwin" && (fullRequested || files.some(file =>
+    /^apps\/instrument-interface\/(?:src\/(?:native|macos\/|worker-runtime)|tests\/native)/.test(file)
+    || file === "apps/instrument-gateway/src/airalogy_instrument_gateway/interface_process.py"
+    || /^apps\/instrument-gateway\/tests\/native_read/.test(file),
+  ))) {
+    plan.push(checks.nativeBuildTests)
   }
 
   if (hasPath(files, COMPUTE_RUNNER_FILES, ["apps/compute-runner/"])) {

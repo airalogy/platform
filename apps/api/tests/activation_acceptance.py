@@ -88,11 +88,21 @@ def exercise_managed_activation(
         from airalogy_instrument_gateway.package_contract import canonical
         from interface_worker_fixture import package as interface_package
 
+        if interface_worker.get("native_read"):
+            from native_read_fixture import package as interface_package
+
         raw, target = (
             interface_package(physical_policy=True),
             interface_worker["target"],
         )
-        command_key, arguments = "interface.workflow.run", {}
+        command_key, arguments = (
+            (
+                "native.status.read"
+                if interface_worker.get("native_read")
+                else "interface.workflow.run"
+            ),
+            {},
+        )
         platform_url = interface_worker["platform_url"]
         configuration = canonical(interface_worker["config"])
     root.mkdir(mode=0o700)
@@ -300,7 +310,9 @@ def exercise_managed_activation(
                 physical_tests_authorized=True,
             )
             qdraft["commands"][0]["key"] = command_key
-            if http_controlled or interface_worker:
+            if http_controlled or (
+                interface_worker and not interface_worker.get("native_read")
+            ):
                 # Exercise the full controlled qualification policy using owned
                 # synthetic observations only, never a hardware acceptance record.
                 qdraft["scope"] = "controlled"

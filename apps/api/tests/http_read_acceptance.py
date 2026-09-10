@@ -36,6 +36,12 @@ def exercise_interface_worker(runtime, tmp_path, monkeypatch):
     return _exercise_reader(runtime, tmp_path, monkeypatch, interface_worker=True)
 
 
+def exercise_native_read(runtime, tmp_path, monkeypatch):
+    return _exercise_reader(
+        runtime, tmp_path, monkeypatch, interface_worker=True, native_read=True
+    )
+
+
 def _exercise_reader(
     runtime,
     tmp_path,
@@ -44,6 +50,7 @@ def _exercise_reader(
     export_files=False,
     http_controlled=False,
     interface_worker=False,
+    native_read=False,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -128,9 +135,15 @@ def _exercise_reader(
                 "sdk_root": sdk_root,
                 "http_controlled": http_controlled,
                 "interface_worker": interface_worker,
+                "native_read": native_read,
             }
             if interface_worker:
                 from interface_worker_fixture import prepare_worker
+
+                if native_read:
+                    from native_read_fixture import (
+                        prepare_native_reader as prepare_worker,
+                    )
 
                 fixture.update(prepare_worker())
             if export_files:
@@ -187,6 +200,24 @@ def _exercise_reader(
 
 async def run_installed_http_reader(runtime, root, activation, token, job, fixture):
     return await run_installed_reader(runtime, root, activation, token, job, fixture)
+
+
+def expected_interface_result(job_id, fixture):
+    if fixture.get("native_read"):
+        return {
+            "operation_id": job_id,
+            "definition_digest": fixture["definition_digest"],
+            "values": {"reader.status": "Ready", "reader.result": "No result"},
+            "observation_only": True,
+            "simulation_only": True,
+        }
+    return {
+        "operation_id": job_id,
+        "workflow_digest": fixture["workflow_digest"],
+        "value": 0.84,
+        "unit": "synthetic_unit",
+        "simulation_only": True,
+    }
 
 
 async def run_installed_reader(runtime, root, activation, token, job, fixture):
@@ -271,13 +302,7 @@ async def run_installed_reader(runtime, root, activation, token, job, fixture):
     if "export_root" in fixture:
         expected = fixture["expected_result"]
     if fixture.get("interface_worker"):
-        expected = {
-            "operation_id": job["id"],
-            "workflow_digest": fixture["workflow_digest"],
-            "value": 0.84,
-            "unit": "synthetic_unit",
-            "simulation_only": True,
-        }
+        expected = expected_interface_result(job["id"], fixture)
     assert store.load().result == expected
     async with sessionmanager.session() as db:
         saved = await db.get(ResearchInstrumentJob, UUID(job["id"]))

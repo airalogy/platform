@@ -121,6 +121,8 @@ pnpm gateway:native read --definition /absolute/private/drafts/interface-ID/defi
 
 生成时核对保留的采集/分析摘要，写入新的可编辑 `airalogy.native-read-definition.v1`、证据副本和空计划；不要求原应用仍打开。执行则重新核对准确进程及身份文本，仅保存已审核的读数。应用重启或升级后，必须明确准备并审核新目标，再复用映射；旧 PID 不会自动改绑。定义不能新增点击/填写或输入值同意。
 
+独立的[原生只读执行器](./instrument-interface-worker.md#已安装原生只读适配包)可将此读取定义接到已审核安装的适配包、现有 Instrument Job 和回执恢复；不启动或重选应用，不把读取定义升级为动作，也不代表厂商验收。图形会话中的独立安装/API 验收需明确授权，与仅编译检查分开。
+
 ## 单独审核的自建模拟器操作
 
 在获授权的图形会话中明确打开构建返回的 `simulator_app` 后，选择其真实 PID。下面的准备只读取元数据，生成可编辑定义、计划与策略文件，不打开或操作应用：

@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { buildCheckPlan } from "./pre-push.mjs"
 
-function checkIds(files, fullRequested = false) {
-  return buildCheckPlan(files, fullRequested).map(check => check.id)
+function checkIds(files, fullRequested = false, host = "linux") {
+  return buildCheckPlan(files, fullRequested, host).map(check => check.id)
 }
 
 test("documentation changes add the documentation build", () => {
@@ -74,6 +74,20 @@ test("E2E infrastructure changes run the full browser suite", () => {
 
 test("the explicit full mode runs the full browser suite", () => {
   assert.deepEqual(checkIds(["README.md"], true), ["lint", "types", "api-compile", "release-metadata", "research-integration", "interface-tests", "full-e2e"])
+})
+
+test("native changes compile on macOS without ever opting into graphical tests", () => {
+  const files = ["apps/instrument-gateway/src/airalogy_instrument_gateway/interface_process.py"]
+  const plan = buildCheckPlan(files, false, "darwin")
+  assert.ok(plan.some(check => check.id === "interface-tests"))
+  const native = plan.find(check => check.id === "native-build-tests")
+  assert.equal(native.env.RUN_INTERFACE_NATIVE_BUILD_TESTS, "1")
+  assert.equal(native.env.RUN_INTERFACE_NATIVE_TESTS, "0")
+  assert.equal(native.env.RUN_INSTRUMENT_NATIVE_JOB_TESTS, "0")
+  assert.equal(plan.find(check => check.id === "research-integration").env.RUN_INSTRUMENT_NATIVE_JOB_TESTS, "0")
+  assert.equal(plan.find(check => check.id === "interface-tests").env.RUN_INTERFACE_NATIVE_TESTS, "0")
+  assert.ok(!checkIds(files, false, "linux").includes("native-build-tests"))
+  assert.ok(checkIds(["README.md"], true, "darwin").includes("native-build-tests"))
 })
 
 test("interface runtime, demo and pinned browser dependencies select actual browser checks", () => {

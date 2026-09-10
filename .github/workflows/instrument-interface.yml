@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "apps/instrument-interface/**"
+      - "apps/instrument-gateway/src/**"
+      - "apps/instrument-gateway/tests/native_read*.py"
       - "apps/api/app/services/instrument_survey.schema.json"
       - "apps/api/app/services/instrument_exploration.schema.json"
       - "apps/api/app/services/instrument_application_selection.schema.json"
@@ -19,6 +21,8 @@ on:
   pull_request:
     paths:
       - "apps/instrument-interface/**"
+      - "apps/instrument-gateway/src/**"
+      - "apps/instrument-gateway/tests/native_read*.py"
       - "apps/api/app/services/instrument_survey.schema.json"
       - "apps/api/app/services/instrument_exploration.schema.json"
       - "apps/api/app/services/instrument_application_selection.schema.json"
@@ -51,6 +55,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
+      - uses: actions/setup-python@v6
+        if: runner.os == 'macOS'
+        with:
+          python-version: "3.13"
       - name: Install pinned dependencies
         run: |
           corepack enable

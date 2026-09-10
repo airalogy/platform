@@ -60,6 +60,9 @@ def invocations(fixture):
         path = directory / "preview.json"
         if directory.is_dir() and path.is_file():
             value = json.loads(path.read_bytes())
-            if value.get("schema") == "airalogy.interface-worker-request.v1":
+            if value.get("schema") in {
+                "airalogy.interface-worker-request.v1",
+                "airalogy.native-read-worker-request.v1",
+            }:
                 values.append((directory.name, value["operation"], value["job_id"]))
     return sorted(values)

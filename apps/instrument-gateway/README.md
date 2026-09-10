@@ -12,6 +12,8 @@ It intentionally has no remote shell, script evaluation, or Platform-delivered a
 
 Actual software acceptance covers installed Instrument Job execution and receipt-only recovery without reopening the browser. The included reference is owned simulation only; physical stop is deliberately unqualified and failures retain the Gateway reconciliation lock. Native/visual production control and OS installation are not supplied by this bridge.
 
+`NativeReadProcessClient` uses a separate macOS read-only configuration/worker for independently reviewed `airalogy.native-read-definition.v1` files. It reuses the same bounded transport and drift checks, pins the native helper build and selected process/window, and never starts the selected app or requests click/fill/screenshot operations. See [native read preparation and acceptance](../../docs/en/architecture/instrument-interface-worker.md#installed-native-read-adapters). The owned reference and opt-in graphical tests are not vendor or physical qualification.
+
 ### Integration rehearsal (no hardware)
 
 The equipment workbench stores versioned `airalogy.gui-rehearsal.v1` bundles: observations and bounded literal steps, **not executable Adapter Packages**. They never enter Instrument Jobs or grant device authority. From the repository root:

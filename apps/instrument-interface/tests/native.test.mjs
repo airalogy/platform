@@ -14,6 +14,7 @@ import { prepareExploration, runExploration, syncExploration } from "../src/expl
 import { validateNativeDefinition, validateNativeSelection } from "../src/native-contract.mjs"
 import { nativeDiscoveryResult, prepareNativeDiscovery, runNativeDiscovery } from "../src/native-discovery.mjs"
 import { nativeLaunchStatus, prepareNativeLaunch, runNativeLaunch, validateLaunchPreview } from "../src/native-launch.mjs"
+import { prepareNativeReadRuntime, previewNativeReadRuntime } from "../src/native-read-worker-runtime.mjs"
 import { NativeInterfaceSession, previewNativeInterface, validateNativeInterface } from "../src/native-session.mjs"
 import { previewNativeRead, runNativeRead, selectNative } from "../src/native-survey.mjs"
 import { nativeSimulationTemplate } from "../src/native-template.mjs"
@@ -21,6 +22,7 @@ import { buildNative, nativeCall, validateNativeBuild } from "../src/native-tran
 import { assembleSurveyDefinition, validateSurveyAnalysis, validateSurveyReport } from "../src/survey-contract.mjs"
 import { assemblePreparedSurvey, prepareSurvey, runPreparedSurvey } from "../src/survey-workspace.mjs"
 import { focusOwnedFixture } from "./native-fixture.mjs"
+import { ownedReadDefinition, prepareOwnedReadRuntime, verifyIndependentNativeInstalls } from "./native-worker-fixture.mjs"
 
 function fixture() {
   const selection = {
@@ -178,6 +180,28 @@ test("actual macOS build, integrity and permission diagnostic without app launch
   assert.equal(inspected.bundle.bundle_id, inventory.applications[0].declared.bundle_id)
   assert.deepEqual(inspected.running, [])
   assert.equal(inventory.signature_verified, false)
+  // Runtime preparation checks real compiled bytes without starting an app or
+  // touching AX. A fabricated process selection must fail when probed.
+  const fakeSelection = fixture().selection
+  fakeSelection.build_file = built.build_file
+  fakeSelection.target.source.pin.bundle = inspected.bundle
+  fakeSelection.target.version = inspected.bundle.version
+  fakeSelection.target.application = inspected.bundle.bundle_id
+  const readInput = await Evidence.create(root, { owned_metadata_only: true })
+  const readFilePath = join(readInput.directory, "definition.json")
+  await readInput.write("definition.json", Buffer.from(canonical(ownedReadDefinition(fakeSelection))))
+  const workerPreview = await previewNativeReadRuntime(readFilePath, root)
+  assert.equal(workerPreview.application_opened, false)
+  assert.equal(workerPreview.interface_read, false)
+  assert.equal(workerPreview.actions_authorized, false)
+  assert.ok(!Object.hasOwn(workerPreview.runtime, "browser"))
+  await assert.rejects(prepareNativeReadRuntime(readFilePath, { evidenceRoot: root, workspace: root, confirmation: "0".repeat(64) }), /confirm/)
+  const workerConfig = await prepareNativeReadRuntime(readFilePath, { evidenceRoot: root, workspace: root, confirmation: workerPreview.sha256 })
+  assert.equal((await lstat(workerConfig.config_file)).mode & 0o777, 0o600)
+  const sdk = fileURLToPath(new URL("../../instrument-gateway", import.meta.url))
+  const metadataCheck = "import sys;from pathlib import Path;from airalogy_instrument_gateway.interface_process import NativeReadProcessClient,verify_native_read_runtime,InterfaceProcessError;c=NativeReadProcessClient.from_file(Path(sys.argv[1]));assert verify_native_read_runtime(c.config)['schema']=='airalogy.native-read-worker-runtime.v1';\ntry:c.call('probe')\nexcept InterfaceProcessError:pass\nelse:raise AssertionError('Fabricated process must never attach')"
+  await promisify(execFile)("python3", ["-c", metadataCheck, workerConfig.config_file], { env: { ...process.env, PYTHONPATH: join(sdk, "src") }, timeout: 15000 })
+  assert.deepEqual((await nativeCall(built.build_file, { operation: "inspect_application", bundle_path: built.simulator_app })).running, [])
   await assert.rejects(nativeCall(built.build_file, { operation: "click", target: "arbitrary" }), /invalid_request/)
   await assert.rejects(nativeCall(built.build_file, { operation: "doctor", prompt: true }), /invalid_request/)
   if (!doctor.interactive_session.ready) {
@@ -246,6 +270,8 @@ test("actual macOS build, integrity and permission diagnostic without app launch
       assert.equal(cliPreview.sha256, preview.sha256)
       const cliRead = JSON.parse((await promisify(execFile)(process.execPath, [cli, "read", "--definition", assembled.definition_file, "--confirm", preview.sha256, "--evidence", root, "--ack-new-read"], { timeout: 45000 })).stdout)
       assert.equal(JSON.parse(await readFile(cliRead.readback_file, "utf8"))[status.id], "Ready")
+      const installedRead = await prepareOwnedReadRuntime(built, child.pid, root)
+      await verifyIndependentNativeInstalls(installedRead.config_file)
       const valueSelection = { ...selection, capture_values: true }
       const capture = await prepareSurvey(valueSelection, root)
       const values = await runPreparedSurvey(capture.request_file, capture.local_preview_digest)

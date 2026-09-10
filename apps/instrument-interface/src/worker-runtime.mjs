@@ -12,7 +12,7 @@ import { validateWorkflow } from "./workflow.mjs"
 const packageRoot = fileURLToPath(new URL("../", import.meta.url))
 const inside = (root, path) => path === root || path.startsWith(`${root}${sep}`)
 
-async function filePin(path) {
+export async function filePin(path) {
   const before = await lstat(path)
   if (!before.isFile() || (before.mode & 0o022) || before.size > 536870912)
     throw new Error("Runtime files must be regular, bounded and not group/world writable")
@@ -25,7 +25,7 @@ async function filePin(path) {
   return { path, size: after.size, sha256: hash.digest("hex") }
 }
 
-async function treePin(root, excludeNodeModules = false) {
+export async function treePin(root, excludeNodeModules = false) {
   root = await realpath(root)
   const files = {}
   const links = {}
@@ -59,7 +59,7 @@ async function treePin(root, excludeNodeModules = false) {
   return { root, exclude_node_modules: excludeNodeModules, files, links }
 }
 
-async function modulePins() {
+export async function modulePins() {
   const roots = new Map()
   const resolutions = []
   const unavailable = []

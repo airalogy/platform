@@ -13,13 +13,14 @@ import selectors
 import signal
 import stat
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 from uuid import UUID
 
 from .credentials import _parent, read_private_json
-from .package_contract import strict_json
+from .package_contract import canonical, strict_json
 
 
 class InterfaceProcessError(RuntimeError):
@@ -144,8 +145,21 @@ def _verify_tree(tree, guard):
 
 
 def verify_runtime(config, *, guard=lambda: None):
+    return _verify_runtime(config, guard=guard, native_read=False)
+
+
+def verify_native_read_runtime(config, *, guard=lambda: None):
+    return _verify_runtime(config, guard=guard, native_read=True)
+
+
+def _verify_runtime(config, *, guard, native_read):
+    prefix = "native-read-worker" if native_read else "interface-worker"
     _keys(config, ("schema", "runtime_file", "runtime_sha256"))
-    if os.name != "posix" or config["schema"] != "airalogy.interface-worker-config.v1":
+    if (
+        os.name != "posix"
+        or (native_read and sys.platform != "darwin")
+        or config["schema"] != f"airalogy.{prefix}-config.v1"
+    ):
         raise ValueError("Select a supported private interface worker configuration")
     path = _path(config["runtime_file"])
     raw = _private_bytes(path, 2097152)
@@ -158,17 +172,17 @@ def verify_runtime(config, *, guard=lambda: None):
             "schema",
             "node",
             "entry",
-            "browser",
+            *(("native_build",) if native_read else ("browser",)),
             "package",
             "trees",
             "resolutions",
             "unavailable",
-            "workflow",
+            "definition" if native_read else "workflow",
             "evidence_root",
         ),
     )
     if (
-        value["schema"] != "airalogy.interface-worker-runtime.v1"
+        value["schema"] != f"airalogy.{prefix}-runtime.v1"
         or not isinstance(value["trees"], list)
         or not 3 <= len(value["trees"]) <= 32
         or not isinstance(value["resolutions"], list)
@@ -203,22 +217,50 @@ def verify_runtime(config, *, guard=lambda: None):
             key: pin[key] for key in ("size", "sha256")
         }:
             raise ValueError("Runtime executable or package metadata changed")
+    entry = "native-read-worker.mjs" if native_read else "worker.mjs"
     if (
-        _path(value["entry"]) != roots[0] / "worker.mjs"
-        or "worker.mjs" not in value["trees"][0]["files"]
-        or not _path(value["browser"]).is_relative_to(roots[-1])
+        _path(value["entry"]) != roots[0] / entry
+        or entry not in value["trees"][0]["files"]
+    ):
+        raise ValueError("Select the exact inventoried worker")
+    if native_read:
+        if _path(value["native_build"]) != roots[-1] / "native-build.json" or not {
+            "native-build.json",
+            "helper",
+            "main.swift",
+        }.issubset(value["trees"][-1]["files"]):
+            raise ValueError("Select the exact inventoried native helper build")
+    elif (
+        not _path(value["browser"]).is_relative_to(roots[-1])
         or _path(value["browser"]).relative_to(roots[-1]).as_posix()
         not in value["trees"][-1]["files"]
         or value["browser"] != str(_path(value["browser"]).resolve(strict=True))
     ):
         raise ValueError("Select the exact inventoried worker and browser")
-    _keys(value["workflow"], ("path", "sha256", "workflow_digest"))
-    workflow = value["workflow"]
-    selected = _private_bytes(_path(workflow["path"]), 524288)
-    if hashlib.sha256(selected).hexdigest() != _hash(workflow["sha256"]) or strict_json(
-        selected
-    ).get("sha256") != _hash(workflow["workflow_digest"]):
-        raise ValueError("Reviewed workflow changed")
+    digest_field = "definition_digest" if native_read else "workflow_digest"
+    selection = value["definition" if native_read else "workflow"]
+    _keys(selection, ("path", "sha256", digest_field))
+    selected = _private_bytes(
+        _path(selection["path"]), 131072 if native_read else 524288
+    )
+    document = strict_json(selected)
+    if not isinstance(document, dict):
+        raise TypeError("Select a reviewed interface document")
+    selected_digest = (
+        hashlib.sha256(canonical(document)).hexdigest()
+        if native_read
+        else document.get("sha256")
+    )
+    if hashlib.sha256(selected).hexdigest() != _hash(
+        selection["sha256"]
+    ) or selected_digest != _hash(selection[digest_field]):
+        raise ValueError("Reviewed interface document changed")
+    if native_read and (
+        document.get("schema") != "airalogy.native-read-definition.v1"
+        or not isinstance(document.get("selection"), dict)
+        or document.get("selection", {}).get("build_file") != value["native_build"]
+    ):
+        raise ValueError("Native worker requires its exact read-only definition")
     evidence = _path(value["evidence_root"])
     info = evidence.lstat()
     if (
@@ -251,6 +293,13 @@ def _terminate(child, *, force=False):
 
 class InterfaceProcessClient:
     """One-shot trusted worker with no shell, shared profile or automatic retry."""
+
+    _schema_prefix = "interface-worker"
+    _selection_field = "workflow"
+    _digest_field = "workflow_digest"
+
+    def _verify(self, guard):
+        return verify_runtime(self.config, guard=guard)
 
     def __init__(self, config):
         self.config = json.loads(json.dumps(config))
@@ -296,14 +345,14 @@ class InterfaceProcessClient:
         try:
             if operation == "execute" and job_id in self._attempted_jobs:
                 raise InterfaceProcessError("Do not replay an attempted interface job")
-            runtime = verify_runtime(self.config, guard=guard)
+            runtime = self._verify(guard)
             request = {
-                "schema": "airalogy.interface-worker-request.v1",
+                "schema": f"airalogy.{self._schema_prefix}-request.v1",
                 "operation": operation,
                 "job_id": job_id,
                 "runtime_file": self.config["runtime_file"],
                 "runtime_sha256": self.config["runtime_sha256"],
-                "workflow_digest": runtime["workflow"]["workflow_digest"],
+                self._digest_field: runtime[self._selection_field][self._digest_field],
             }
             payload = json.dumps(request, separators=(",", ":")).encode()
             if len(payload) > 8192:
@@ -369,20 +418,20 @@ class InterfaceProcessClient:
                     "operation",
                     "job_id",
                     "runtime_sha256",
-                    "workflow_digest",
+                    self._digest_field,
                     "data",
                     "hardware_qualified",
                 ),
             )
             if (
-                value["schema"] != "airalogy.interface-worker-response.v1"
+                value["schema"] != f"airalogy.{self._schema_prefix}-response.v1"
                 or any(
                     value[key] != request[key]
                     for key in (
                         "operation",
                         "job_id",
                         "runtime_sha256",
-                        "workflow_digest",
+                        self._digest_field,
                     )
                 )
                 or value["hardware_qualified"] is not False
@@ -419,3 +468,14 @@ class InterfaceProcessClient:
                             stream.close()
             finally:
                 self._lock.release()
+
+
+class NativeReadProcessClient(InterfaceProcessClient):
+    """Read-only macOS helper transport, with no application launch or UI actions."""
+
+    _schema_prefix = "native-read-worker"
+    _selection_field = "definition"
+    _digest_field = "definition_digest"
+
+    def _verify(self, guard):
+        return verify_native_read_runtime(self.config, guard=guard)

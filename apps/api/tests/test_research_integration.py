@@ -205,6 +205,18 @@ def test_interface_worker_installed_browser_execution_and_receipt_only_recovery(
     exercise_interface_worker(runtime, tmp_path, monkeypatch)
 
 
+@pytest.mark.skipif(
+    os.getenv("RUN_INSTRUMENT_NATIVE_JOB_TESTS") != "1",
+    reason="Operator-authorized owned native graphical session required",
+)
+def test_native_read_installed_job_and_receipt_only_recovery(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.http_read_acceptance import exercise_native_read
+
+    exercise_native_read(runtime, tmp_path, monkeypatch)
+
+
 def test_source_authoring_real_api_local_resume_and_private_permissions(
     runtime, tmp_path, monkeypatch
 ):

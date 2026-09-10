@@ -2,7 +2,7 @@
 
 Gateway SDK 的 `InterfaceProcessClient` 将**独立审核并安装的 Python 适配包**接到现有固定浏览器流程后端。通过一次有界的本地标准输入/输出进程调用连接，不新增 HTTP 监听、远程桌面、Shell 接口或第二套 Platform 控制系统。任务不携带代码、URL、控件选择器或新参数值；执行权限仍来自 Platform 权限、预约、准确启用版本、本地检查、租约及持久任务日志。
 
-这补齐了一段软件连接：已安装适配包可以执行选定的[固定流程](./instrument-interface-workflow.md)，把实际读数作为 Instrument Job 结果返回；完成回执丢失后，恢复时**不重新加载驱动、不再启动 Node/Chromium**。参考实现和验收均使用自建模拟 HTML，不代表厂商软件或真实仪器已经通过验收；原生/视觉界面的正式执行连接仍待完成。
+这补齐了一段软件连接：已安装适配包可以执行选定的[固定流程](./instrument-interface-workflow.md)，把实际读数作为 Instrument Job 结果返回；完成回执丢失后，恢复时**不重新加载驱动、不再启动 Node/Chromium**。参考实现和验收均使用自建模拟 HTML，不代表厂商软件或真实仪器已经通过验收；原生/视觉控制仍待完成，独立的原生只读连接见下文。
 
 ## 独立准备运行环境
 
@@ -51,3 +51,35 @@ pnpm gateway:package build \
 终止 Node/Chromium **不代表物理安全停止**。参考包刻意让 `safe_stop` 报错：失败或不确定操作必须保留 Gateway 的停止/核对锁，不能把回执、进程退出或窗口关闭当作真实仪器安全证明。生产厂商适配包仍需独立验收停止和人工接管行为。
 
 测试覆盖源码/依赖/浏览器变化、新增模块（包括原本不存在的更优先解析位置和可选依赖）、解析变化、主动注入的测试凭据/动态加载设置不被继承、非法响应、取消、输出限制、超时/子进程清理、两份独立安装复用、真实无网络容器中的固定测试，以及实际 API/数据库/已安装 Python/Node/无头浏览器执行。丢失完成回执的验收核对仅执行一次，恢复不新增界面进程调用。这些是软件测试，不是实机验证、付费模型质量评测、跨平台安装器、厂商原生控制或系统级沙箱。
+
+## 已安装原生只读适配包
+
+`NativeReadProcessClient` 将已安装适配包接到现有 [macOS 读取定义](./instrument-native-interface.md#审核及复用)后端，使用独立的 `airalogy.native-read-worker-config.v1` 配置、运行清单及请求/响应契约。浏览器流程配置不能选择它，读取定义不能包含动作计划。这是只读软件连接，不代表厂商验收或原生生产控制已完成。
+
+先准备准确的本地助手构建和独立审核的 `airalogy.native-read-definition.v1`。仍需要 Node/依赖；原生执行器不使用 Chromium 或浏览器配置。证据和清单目录应在原生构建目录之外，且仅所有者可访问：
+
+```bash
+pnpm gateway:interface-runtime preview \
+  --native-read-definition /absolute/private/definition.json \
+  --evidence /absolute/private/native-read-evidence
+pnpm gateway:interface-runtime prepare \
+  --native-read-definition /absolute/private/definition.json \
+  --evidence /absolute/private/native-read-evidence \
+  --workspace /absolute/private/native-read-descriptors \
+  --confirm <已审核的预览摘要>
+```
+
+准备阶段只核对源码/助手字节并记录完整构建清单，不执行助手、不枚举应用、不读取界面，也不证明所选进程当前存在。每次调用前，已安装 SDK 独立核对运行文件、助手、依赖解析和定义字节，再由执行器实施原有的准确应用/代码身份、进程生命周期、窗口、唯一控件、身份锚点、隐私和活动会话检查。应用重启后必须重新选择、审核配置并完成正常验收/启用，不能静默附着到新进程。没有 TCC 授权、启动、抢焦点、点击/填写、截图、任意助手操作、模型调用或重试；它仍是可信主机上的进程连接，不是系统沙箱。
+
+`probe` 仅检查准确进程元数据及已有读取权限/会话诊断，不采集窗口内容。`execute` 关联 Job UUID，只返回选定字符串读数及零动作/仅观察标记。可访问性内容是软件报告的文本，**不证明实验完成、物理就绪、单位或科学正确性**。沿用 8 KiB 请求、64 KiB 响应和有界不重试约束；输出超限时失败，不截断。终止助手不会关闭操作者应用，也不证明物理安全停止；不确定任务保留原核对流程。
+
+源码参考位于 `apps/instrument-gateway/examples/native-read`，工厂为 `native_read:create_adapter`，入口为 `synthetic.native-read`。使用同一包构建工具打包源码、固定测试和仓库许可证。它只提供参数为空的 `native.status.read@1.0.0`，读取准确构建内置模拟器的两个静态文本控件，始终返回 `observation_only: true`、`simulation_only: true`。即使通用读取后端能观察其他应用，此参考包也会拒绝。厂商适配包须独立说明映射、固定测试和具体设备资格，不能删除模拟标记来宣称支持。
+
+无需前台的检查覆盖真实 Swift 构建、独立 Python 清单核验、过期预览、虚构进程拒绝、通信/契约/变更，以及真实隔离容器中的固定包测试。完整的已安装读取与 API/回执丢失验收需要**明确授权的图形会话**和已有的可访问性权限：
+
+```bash
+RUN_INSTRUMENT_NATIVE_JOB_TESTS=1 node apps/instrument-interface/tests/native-worker-fixture.mjs --installed
+RUN_INSTRUMENT_NATIVE_JOB_TESTS=1 node apps/instrument-interface/tests/native-worker-fixture.mjs --api
+```
+
+这些测试命令只构建、打开自己的 AppKit 模拟器并在结束后关闭，不接受目标覆盖，不自动设置系统权限。`--installed` 使用两份独立安装的 Python 适配包读取；`--api` 使用临时数据库并检查恢复时不再调用界面进程。公开模拟包仍不能用于硬件启用；API 测试使用另外明确标注为合成的策略样例。未主动选择时跳过图形测试；不能把编译通过报告成原生读取通过。真实厂商/硬件、视觉控制、Windows/Linux 原生后端和系统安装验收仍待完成。

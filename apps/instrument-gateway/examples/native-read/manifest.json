@@ -1,0 +1,85 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.synthetic-native-read",
+  "version": "1.0.0",
+  "entry_point": "synthetic.native-read",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Owned AppKit read through an independently pinned local worker",
+    "sources": ["Public native read contract and independent fake-client tests"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "Synthetic",
+        "model": "Native status reader",
+        "firmware": "not_applicable",
+        "application": "org.airalogy.InstrumentInterfaceSimulator",
+        "application_version": "1.0",
+        "os": "macOS",
+        "architecture": "arm64 or x64"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "native.status.read",
+      "version": "1.0.0",
+      "name": "Read selected owned native status",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "operation_id": { "type": "string", "format": "uuid" },
+          "definition_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "values": {
+            "type": "object",
+            "properties": {
+              "reader.status": { "type": "string", "maxLength": 4096 },
+              "reader.result": { "type": "string", "maxLength": 4096 }
+            },
+            "required": ["reader.status", "reader.result"],
+            "additionalProperties": false
+          },
+          "observation_only": { "const": true },
+          "simulation_only": { "const": true }
+        },
+        "required": [
+          "operation_id",
+          "definition_digest",
+          "values",
+          "observation_only",
+          "simulation_only"
+        ],
+        "additionalProperties": false
+      },
+      "risk": "read_only",
+      "device_confirmation_required": false,
+      "safety_contract": {
+        "required_interlocks": ["native.read_access"],
+        "operator_presence_required": false,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 30,
+      "units": [],
+      "effects": [
+        "Read two reviewed static text controls in the exact already-running owned simulator; no application launch or UI writes"
+      ],
+      "completion": "Exact Job/definition correlation and current process, window, identity and selected readbacks; not experiment completion",
+      "stop": "Bounded local helper termination only; preserve uncertainty without certifying physical stop",
+      "retry": "never",
+      "outputs": []
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "Owned simulation only; ineligible for real hardware activation",
+    "No application startup, click/fill, screenshots, model call or automatic process replacement",
+    "No vendor qualification, scientific inference or Windows/Linux native support"
+  ]
+}

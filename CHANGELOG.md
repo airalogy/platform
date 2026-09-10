@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Connect separately reviewed macOS read definitions to installed adapters through a dedicated native read worker, reusing pinned runtime verification, bounded local IPC and Instrument Job receipt recovery. Add an owned source package, real-build/no-launch checks and opt-in graphical independent-install/API acceptance. No application launch, UI writes, screenshots, physical-stop claim or vendor qualification is granted.
+
 - Connect reviewed installed Python adapters to fixed browser workflows through a byte-pinned local Node/dependency/Chromium process bridge, without another remote-control API. Include a source-included owned reference, bounded cancellable non-retrying I/O, independent-install reuse and actual Instrument Job/lost-receipt recovery with no browser replay. Preserve simulation, permission, activation and physical-stop boundaries.
 
 - Add private, reviewed fixed workflows from fully successful interface exploration: validate complete event/step evidence, retain initial conditions, predeclared success and lineage, and reuse the existing deterministic backend without further model calls. Include stale-safe export/run previews, failure rejection and actual headless/API acceptance; no hardware authorization, managed GUI execution or simulation-boundary expansion.
