@@ -3,6 +3,9 @@
 import asyncio
 import copy
 import json
+import os
+import subprocess
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -342,3 +345,115 @@ def exercise_authoring(runtime, tmp_path, monkeypatch):
         assert commands["items"] == []
 
     runtime.run(policies())
+    gate = None
+    exercise_authoring_browser(runtime, tmp_path, monkeypatch, draft, sdk_root)
+
+
+def exercise_authoring_browser(runtime, tmp_path, monkeypatch, draft, sdk_root):
+    """Actual browser/local server/API/DB; only model and sandbox outcomes injected."""
+    from airalogy_instrument_gateway import authoring
+    from airalogy_instrument_gateway.authoring_workspace import AuthoringWorkspace
+    from airalogy_instrument_gateway.package_contract import sha256
+    from airalogy_instrument_gateway.setup_cli import SetupServer
+    from test_package_authoring import fixture_test, spec
+    from test_package_installation import sdk
+
+    root = tmp_path.resolve() / "private-authoring-browser"
+    root.mkdir(mode=0o700)
+    wheel = sdk()
+    (root / "sdk.whl").write_bytes(wheel)
+    (root / "spec.json").write_text(json.dumps(spec()))
+    workspace = AuthoringWorkspace(root)
+    server = SetupServer(workspace)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    repository = sdk_root.parents[1]
+
+    def browser(stage):
+        value = {
+            "stage": stage,
+            "root": str(root),
+            "url": server.url,
+            "screenshot": str(root / "synthetic-development-mobile.png"),
+            "fields": {
+                "platform_url": "http://127.0.0.1/api",
+                "gateway_id": draft["request"]["gateway_id"],
+                "resource_id": draft["request"]["resource_id"],
+                "trusted_sdk_digest": sha256(wheel),
+                "image": "sha256:" + "1" * 64,
+                "max_iterations": 3,
+                "duration_seconds": 900,
+                "timeout_seconds": 30,
+            },
+            "files": {
+                "spec": str(root / "spec.json"),
+                "sdk_wheel": str(root / "sdk.whl"),
+            },
+        }
+        result = subprocess.run(
+            ["node", "tests/e2e/scripts/local-authoring-browser.mjs"],
+            cwd=repository,
+            env={**os.environ, "AIRALOGY_SYNTHETIC_BROWSER_INPUT": json.dumps(value)},
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)
+
+    try:
+        request = browser("prepare")
+        runtime.run(
+            runtime.confirm("/instrument-authoring", {**draft, "request": request})
+        )
+        path = root / request["id"] / "request.json"
+        content = authoring.read_request(path)
+
+        class APIClient:
+            def call(self, operation, payload=None, *, turn_id=None):
+                async def send():
+                    suffix = (
+                        f"turns/{turn_id}/report"
+                        if operation == "report"
+                        else operation
+                    )
+                    async with httpx.AsyncClient(
+                        transport=httpx.ASGITransport(app=app), base_url="http://test"
+                    ) as client:
+                        response = await client.post(
+                            f"/instrument-authoring/{request['id']}/{suffix}",
+                            headers={
+                                "X-Airalogy-Authoring-Token": content["authoring_token"]
+                            },
+                            json=payload or {},
+                        )
+                    assert response.status_code == 200, response.text
+                    return response.json()
+
+                return runtime.run(send())
+
+        original = authoring.run
+        with monkeypatch.context() as local:
+            local.setattr(authoring, "AuthoringClient", lambda _: APIClient())
+            local.setattr(
+                authoring,
+                "run",
+                lambda path, **kwargs: original(
+                    path, client=APIClient(), tester=fixture_test, **kwargs
+                ),
+            )
+            downloaded = browser("run")
+        workspace.worker.join(timeout=5)
+        assert not workspace.worker.is_alive()
+        snapshot = runtime.run(
+            runtime.json("GET", f"/instrument-authoring/{request['id']}")
+        )
+        assert len(snapshot["turns"]) == 1
+        assert snapshot["turns"][0]["report"]["archive_digest"] == downloaded["sha256"]
+        assert not snapshot["hardware_authorized"]
+    finally:
+        workspace.pause()
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)

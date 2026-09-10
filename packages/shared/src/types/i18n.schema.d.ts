@@ -3275,6 +3275,7 @@ declare namespace I18n {
         }
       }
       instrumentAuthoring: {
+        browserGuide: string
         title: string
         boundary: string
         authorize: string

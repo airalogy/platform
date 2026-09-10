@@ -3271,6 +3271,7 @@
       }
     },
     "instrumentAuthoring": {
+      "browserGuide": "本地浏览器开发向导（独立凭据与审批）",
       "title": "本地适配器开发",
       "boundary": "Aira 可生成源码，并根据固定的离线测试迭代修正。开发授权与安装、验收和仪器控制相互独立。",
       "authorize": "授权 Aira 开发",

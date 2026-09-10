@@ -50,18 +50,80 @@ def prepare(
     max_iterations=3,
     duration_seconds=900,
     timeout_seconds=60,
+    expected_preview_digest=None,
 ):
+    preview = prepare_preview(
+        workspace=workspace,
+        platform_url=platform_url,
+        gateway_id=gateway_id,
+        resource_id=resource_id,
+        spec=spec,
+        sdk_wheel=sdk_wheel,
+        trusted_sdk_digest=trusted_sdk_digest,
+        image=image,
+        max_iterations=max_iterations,
+        duration_seconds=duration_seconds,
+        timeout_seconds=timeout_seconds,
+    )
+    if (
+        expected_preview_digest is not None
+        and preview["preview_digest"] != expected_preview_digest
+    ):
+        raise ValueError("Authoring inputs changed after preview")
+    parent = Path(preview["workspace"])
+    token = "aiauthor_" + secrets.token_urlsafe(32)
+    request = {
+        **preview["request_template"],
+        "id": str(uuid4()),
+        "credential_digest": sha256(token.encode()),
+    }
+    request["fingerprint"] = fingerprint(request)
+    validate_request(request)
+    content = {
+        "schema": "airalogy.private-authoring.v1",
+        "request": request,
+        "platform_url": preview["platform_url"],
+        "authoring_token": token,
+        "sdk_wheel": preview["sdk_wheel"],
+    }
+    root = parent / request["id"]
+    root.mkdir(mode=0o700)
+    _save(root / "request.json", canonical(content))
+    # Bearer-free, not public: selected manuals/source/tests remain private Lab data.
+    _save(root / "authorization.json", canonical(request))
+    return {
+        "request_file": str(root / "request.json"),
+        "authorization_file": str(root / "authorization.json"),
+        "fingerprint": request["fingerprint"],
+        "hardware_authorized": False,
+    }
+
+
+def prepare_preview(
+    *,
+    workspace,
+    platform_url,
+    gateway_id,
+    resource_id,
+    spec,
+    sdk_wheel,
+    trusted_sdk_digest,
+    image,
+    max_iterations=3,
+    duration_seconds=900,
+    timeout_seconds=60,
+):
+    """Inspect selected inputs without credentials, writes, network or code import."""
     parent = _private_root(Path(workspace))
     spec = validate_spec(strict_json(read_selected(Path(spec), limit=131072)))
     if sha256(read_selected(Path(sdk_wheel))) != trusted_sdk_digest:
         raise ValueError("Selected SDK does not match its independent digest")
-    token = "aiauthor_" + secrets.token_urlsafe(32)
     request = {
         "schema": REQUEST_SCHEMA,
-        "id": str(uuid4()),
+        "id": "00000000-0000-4000-8000-000000000001",
         "gateway_id": str(UUID(gateway_id)),
         "resource_id": str(UUID(resource_id)),
-        "credential_digest": sha256(token.encode()),
+        "credential_digest": "0" * 64,
         "spec": spec,
         "max_iterations": max_iterations,
         "duration_seconds": duration_seconds,
@@ -73,22 +135,17 @@ def prepare(
     }
     request["fingerprint"] = fingerprint(request)
     validate_request(request)
+    for key in ("id", "credential_digest", "fingerprint"):
+        request.pop(key)
     content = {
-        "schema": "airalogy.private-authoring.v1",
-        "request": request,
+        "workspace": str(parent),
+        "request_template": request,
         "platform_url": validate_platform_url(platform_url),
-        "authoring_token": token,
         "sdk_wheel": str(Path(sdk_wheel).absolute()),
     }
-    root = parent / request["id"]
-    root.mkdir(mode=0o700)
-    _save(root / "request.json", canonical(content))
-    # Bearer-free, not public: selected manuals/source/tests remain private Lab data.
-    _save(root / "authorization.json", canonical(request))
     return {
-        "request_file": str(root / "request.json"),
-        "authorization_file": str(root / "authorization.json"),
-        "fingerprint": request["fingerprint"],
+        **content,
+        "preview_digest": sha256(canonical(content)),
         "hardware_authorized": False,
     }
 
@@ -323,7 +380,16 @@ def _test_turn(root, request, turn, sdk, *, tester, reconcile, expires_at):
     return report
 
 
-def run(path, *, client=None, tester=test_package, reconcile=False):
+def run(
+    path,
+    *,
+    client=None,
+    tester=test_package,
+    reconcile=False,
+    reconcile_turn_ids=None,
+    pause_requested=lambda: False,
+    progress=lambda phase: None,
+):
     content = read_request(path)
     root, request = Path(path).absolute().parent, content["request"]
     client = client or AuthoringClient(content)
@@ -332,6 +398,9 @@ def run(path, *, client=None, tester=test_package, reconcile=False):
         raise ValueError("SDK changed; authoring cannot continue")
     with StateStore(root / "authoring.json").exclusive():
         for _ in range(request["max_iterations"] + 1):
+            if pause_requested():
+                return {"state": "locally_paused", "hardware_authorized": False}
+            progress("checking_authorization")
             status = client.call("status")
             active = _open(status, request)
             turns = status["turns"]
@@ -353,6 +422,19 @@ def run(path, *, client=None, tester=test_package, reconcile=False):
                         "state": "authorization_ended",
                         "hardware_authorized": False,
                     }
+                if pause_requested():
+                    return {"state": "locally_paused", "hardware_authorized": False}
+                if (
+                    reconcile
+                    and reconcile_turn_ids is not None
+                    and (root / f"{UUID(turn['id'])}.sandbox.json").exists()
+                    and not (root / f"{UUID(turn['id'])}.report.json").exists()
+                    and turn["id"] not in reconcile_turn_ids
+                ):
+                    raise ValueError(
+                        "Interrupted test was not included in the confirmed preview"
+                    )
+                progress("checking_or_testing_candidate")
                 report = _test_turn(
                     root,
                     request,
@@ -368,6 +450,7 @@ def run(path, *, client=None, tester=test_package, reconcile=False):
                         "questions": turn["proposal"]["missing_information"],
                         "hardware_authorized": False,
                     }
+                progress("confirming_test_receipt")
                 result = client.call("report", report, turn_id=turn["id"])
                 if result.get("turn", {}).get("report") != report:
                     raise GatewayAPIError(
@@ -396,6 +479,9 @@ def run(path, *, client=None, tester=test_package, reconcile=False):
             if call["previous_id"] != (turn["id"] if turn else None):
                 raise ValueError("Saved model attempt differs from remote history")
             _save(call_path, canonical(call))
+            if pause_requested():
+                return {"state": "locally_paused", "hardware_authorized": False}
+            progress("requesting_source")
             client.call(
                 "turns", call
             )  # Status, not this possibly lost response, is authoritative.

@@ -7,12 +7,20 @@ import secrets
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .client import GatewayAPIError
-from .package_contract import MAX_ARCHIVE_BYTES, strict_json
+from .package_contract import strict_json
 from .setup_workspace import SetupWorkspace, fields
+
+
+@dataclass(frozen=True)
+class LocalDownload:
+    content: bytes
+    name: str
+    media_type: str
 
 
 class SetupServer(ThreadingHTTPServer):
@@ -58,15 +66,20 @@ class SetupHandler(BaseHTTPRequestHandler):
         # No URLs, pairing codes, token headers, paths or remote bodies in logs.
         pass
 
-    def _send(self, code, value, content_type="application/json"):
+    def _send(self, code, value, content_type="application/json", filename=None):
         raw = (
             json.dumps(value, ensure_ascii=True).encode()
-            if content_type == "application/json"
+            if content_type == "application/json" and not isinstance(value, bytes)
             else value
         )
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(raw)))
+        if filename is not None:
+            # Generated server-side names only; never selected paths or remote names.
+            self.send_header(
+                "Content-Disposition", f'attachment; filename="{filename}"'
+            )
         self.send_header("Cache-Control", "no-store")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -94,7 +107,10 @@ class SetupHandler(BaseHTTPRequestHandler):
             self._send(404, {"error": "Not found"})
             return
         name, mime = assets[self.path]
-        self._send(200, (Path(__file__).parent / "setup_ui" / name).read_bytes(), mime)
+        directory = (
+            "setup_ui" if name == "style.css" else self.server.workspace.ui_directory
+        )
+        self._send(200, (Path(__file__).parent / directory / name).read_bytes(), mime)
 
     def do_POST(self):
         if not self._host() or self.headers.get_all("Origin") != [self.server.origin]:
@@ -117,9 +133,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             )
             return
         kind = {
-            "/upload/package": "package",
-            "/upload/sdk_wheel": "sdk_wheel",
-            "/upload/config": "config",
+            f"/upload/{key}": key for key in self.server.workspace.upload_limits
         }.get(self.path)
         expected_type = "application/octet-stream" if kind else "application/json"
         if (
@@ -131,9 +145,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             return
         try:
             lengths = self.headers.get_all("Content-Length", [])
-            limit = (
-                (16384 if kind == "config" else MAX_ARCHIVE_BYTES) if kind else 32768
-            )
+            limit = self.server.workspace.upload_limits[kind] if kind else 32768
             if (
                 len(lengths) != 1
                 or not lengths[0].isdigit()
@@ -150,7 +162,10 @@ class SetupHandler(BaseHTTPRequestHandler):
             body = strict_json(raw)
             fields(body, ["operation", "data"])
             result = self.server.workspace.dispatch(body["operation"], body["data"])
-            self._send(200, result)
+            if isinstance(result, LocalDownload):
+                self._send(200, result.content, result.media_type, result.name)
+            else:
+                self._send(200, result)
         except GatewayAPIError:
             # API error bodies may contain arbitrary/private details. Do not
             # forward them, transport exceptions, or credentials to the browser.

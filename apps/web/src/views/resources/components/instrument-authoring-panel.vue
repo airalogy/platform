@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import type { AuthoringRequest, AuthoringSession, AuthoringSummary } from "@/service/api/instrument-authoring"
 import { cancelAuthoring, confirmAuthoring, fetchAuthoringSession, fetchAuthoringSessions, previewAuthoring } from "@/service/api/instrument-authoring"
+import { useAppStore } from "@/store/modules/app"
 import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
+import { documentationPageUrl } from "@airalogy/shared/utils"
 
 const props = defineProps<{ gatewayId: string, equipmentOptions: Array<{ label: string, value: string }> }>()
 const instance = useInstanceStore()
+const appStore = useAppStore()
+const guide = computed(() => documentationPageUrl(instance.documentationUrl, appStore.locale, `architecture/instrument-source-authoring#${appStore.locale === "zh-CN" ? "本地浏览器开发向导" : "local-browser-development-guide"}`))
 const resourceId = ref(props.equipmentOptions.length === 1 ? props.equipmentOptions[0].value : "")
 const items = ref<AuthoringSummary[]>([])
 const more = ref(false)
@@ -118,6 +122,9 @@ async function cancel() {
     <h3>{{ $t("page.instrumentAuthoring.title") }}</h3>
     <p class="my-3">
       {{ $t("page.instrumentAuthoring.boundary") }}
+    </p>
+    <p class="mb-3">
+      <a :href="guide" target="_blank" rel="noopener noreferrer" class="underline" data-testid="authoring-local-guide">{{ $t("page.instrumentAuthoring.browserGuide") }}</a>
     </p>
     <n-space class="mb-3">
       <n-button v-if="instance.aiEnabled" :disabled="busy" @click="openCreate">

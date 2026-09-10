@@ -75,6 +75,7 @@ test("authoring UI contract fixtures: private-file rejection, confirmation, hist
   await page.goto(instrumentWorkspaceUrl(fixtures.lab.uid, gateway.id, equipment.id, "prepare", "author"))
   await page.locator(".gateway-card__main").filter({ hasText: gateway.name }).click()
   const panel = page.getByTestId("instrument-authoring-panel")
+  await expect(panel.getByTestId("authoring-local-guide")).toHaveAttribute("href", /\/docs\/en\/architecture\/instrument-source-authoring#local-browser-development-guide$/)
   await panel.getByRole("button", { name: "Authorize Aira development", exact: true }).click()
   let modal = page.getByRole("dialog").last()
   const input = page.getByTestId("authoring-request").locator("textarea")

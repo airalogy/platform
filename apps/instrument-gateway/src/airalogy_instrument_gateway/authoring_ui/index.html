@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Airalogy · Local Adapter Development</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header
+      ><strong>Airalogy</strong
+      ><label
+        ><span data-i18n="language">Language</span
+        ><select id="language"
+          ><option value="en">English</option
+          ><option value="zh">中文</option></select
+        ></label
+      ></header
+    >
+    <main>
+      <h1 data-i18n="title">Local adapter development</h1>
+      <p class="notice" data-i18n="boundary"></p>
+      <p
+        ><span data-i18n="directory">Private development directory</span>: <code id="root"></code
+      ></p>
+      <div id="error" role="alert" hidden></div><p id="activity" role="status"></p>
+      <section>
+        <details id="new-session" open>
+          <summary data-i18n="prepare">1. Review selected development inputs</summary>
+          <p data-i18n="inputHint"></p>
+          <form id="prepare-form" class="grid">
+            <label
+              >Platform API URL<input
+                name="platform_url"
+                type="url"
+                placeholder="https://lab.example.edu/api"
+                required
+            /></label>
+            <label>Gateway ID<input name="gateway_id" maxlength="36" required /></label>
+            <label>Resource ID<input name="resource_id" maxlength="36" required /></label>
+            <label
+              ><span data-i18n="spec">Reviewed specification JSON</span
+              ><input type="file" data-kind="spec" accept=".json" required /><small
+                id="spec-info"
+              ></small
+            ></label>
+            <label
+              ><span data-i18n="sdk">Trusted SDK wheel</span
+              ><input type="file" data-kind="sdk_wheel" accept=".whl" required /><small
+                id="sdk_wheel-info"
+              ></small
+            ></label>
+            <label
+              ><span data-i18n="digest">Independent SDK SHA-256</span
+              ><input name="trusted_sdk_digest" pattern="[a-f0-9]{64}" maxlength="64" required
+            /></label>
+            <label
+              ><span data-i18n="image">Preinstalled trusted Docker image digest</span
+              ><input name="image" placeholder="python@sha256:…" required
+            /></label>
+            <label
+              ><span data-i18n="calls">Maximum model calls</span
+              ><input name="max_iterations" type="number" min="1" max="5" value="3" required
+            /></label>
+            <label
+              ><span data-i18n="duration">Authorization duration (seconds)</span
+              ><input
+                name="duration_seconds"
+                type="number"
+                min="60"
+                max="1800"
+                value="900"
+                required
+            /></label>
+            <label
+              ><span data-i18n="timeout">Per-test timeout (seconds)</span
+              ><input name="timeout_seconds" type="number" min="1" max="120" value="60" required
+            /></label>
+            <button type="submit" data-i18n="preview">Preview</button>
+          </form>
+        </details>
+      </section>
+      <section>
+        <h2 data-i18n="work">2. Approve, develop and resume</h2>
+        <p data-i18n="handoff"></p>
+        <div class="row"
+          ><label
+            ><span data-i18n="sessions">Saved development session</span
+            ><select id="sessions"></select></label
+          ><button id="inspect" data-i18n="inspect">Inspect saved inputs and results</button></div
+        >
+        <div class="row"
+          ><button id="authorization" data-i18n="authorization"
+            >Download PRIVATE authorization</button
+          ><button id="run" data-i18n="run">Check approval and preview run</button
+          ><button id="pause" data-i18n="pause">Pause local development</button></div
+        >
+        <label class="check"
+          ><input id="reconcile" type="checkbox" /><span data-i18n="reconcile"></span
+        ></label>
+        <p class="notice" data-i18n="pauseHint"></p>
+        <p id="worker" role="status"></p><pre id="job"></pre>
+        <details
+          ><summary data-i18n="privateInputs">Private selected inputs and local run history</summary
+          ><pre id="inspection"></pre>
+        </details>
+      </section>
+      <section>
+        <h2 data-i18n="results">3. Review the generated draft</h2>
+        <p data-i18n="resultHint"></p>
+        <div id="artifacts"></div>
+        <p class="notice" data-i18n="next"></p>
+      </section>
+    </main>
+    <dialog id="review" aria-labelledby="review-title"
+      ><h2 id="review-title" data-i18n="review">Review the exact impact</h2><pre id="impact"></pre
+      ><label class="check"
+        ><input id="reviewed" type="checkbox" /><span data-i18n="confirmHint"></span></label
+      ><div class="row"
+        ><button id="cancel" data-i18n="cancel">Cancel</button
+        ><button id="confirm" data-i18n="confirm">Confirm</button></div
+      ></dialog
+    >
+  </body>
+</html>

@@ -28,6 +28,8 @@ Executable adapters now have a separate source-included package format and a no-
 
 ### Local source authoring
 
+For the [private local browser guide](../../docs/en/architecture/instrument-source-authoring.md#local-browser-development-guide), run `airalogy-instrument-authoring serve --workspace /absolute/private/development` (source checkout: `pnpm gateway:author serve --workspace ...`). Use an existing `0700` POSIX development directory separate from runtime credentials/journals. The guide previews selected material, downloads a private bearer-free authorization, starts only explicitly confirmed bounded work and offers verified retained draft packages. It supports cooperative pause and same-request recovery; it never self-approves, installs or starts equipment. Closing the browser is not a pause; interrupted tests require separate confirmation to reconcile.
+
 The separate [source authoring assistant](../../docs/en/architecture/instrument-source-authoring.md) can use explicitly selected material and fixed tests to produce actual Python Adapter Packages through bounded Aira calls and offline sandbox repair. Run `airalogy-instrument-authoring --help` after installation. Its short-lived credential and private development journal are separate from this runtime; a tested draft does not authorize installation, software exploration or hardware control.
 
 ### Documented HTTP reads

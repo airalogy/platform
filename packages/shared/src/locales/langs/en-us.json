@@ -3271,6 +3271,7 @@
       }
     },
     "instrumentAuthoring": {
+      "browserGuide": "Local browser development guide (separate credentials and approvals)",
       "title": "Local adapter development",
       "boundary": "Aira can propose source code and iterate against fixed offline tests. Development is separate from installation, qualification and instrument control.",
       "authorize": "Authorize Aira development",

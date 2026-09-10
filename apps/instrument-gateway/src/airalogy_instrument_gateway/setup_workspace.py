@@ -11,6 +11,7 @@ import secrets
 import threading
 import time
 from pathlib import Path
+from typing import ClassVar
 from uuid import UUID, uuid4
 
 from .config import validate_platform_url
@@ -52,6 +53,13 @@ def selected_path(value):
 
 
 class SetupWorkspace:
+    ui_directory = "setup_ui"
+    upload_limits: ClassVar = {
+        "package": MAX_ARCHIVE_BYTES,
+        "sdk_wheel": MAX_ARCHIVE_BYTES,
+        "config": 16384,
+    }
+
     def __init__(self, root):
         self.root = _private_root(Path(root))
         info = self.root.stat()
@@ -65,9 +73,9 @@ class SetupWorkspace:
             raise ValueError("Workstation directory changed; stop and inspect it")
 
     def upload(self, kind, raw):
-        if kind not in {"package", "sdk_wheel", "config"}:
+        if kind not in self.upload_limits:
             raise ValueError("Unsupported setup file")
-        limit = 16384 if kind == "config" else MAX_ARCHIVE_BYTES
+        limit = self.upload_limits[kind]
         if not raw or len(raw) > limit:
             raise ValueError("Selected file exceeded its size limit")
         if not self.lock.acquire(blocking=False):

@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a private local browser guide for bounded adapter source development: byte-bound input previews, independent material/AI approval handoff, observed worker progress, cooperative pause, explicit interrupted-test reconciliation and verified draft/report downloads. Reuse the existing authoring coordinator, isolation and credential boundaries; refresh never starts work and saved tickets do not prove liveness. Cover real browser/API/database flow with synthetic provider/test outcomes separately from actual Docker tests.
+
 - Add an authenticated loopback equipment setup guide with bilingual destination/pairing review, private local file selection, stale-safe installation previews, public-request handoff and durable inactive-installation recovery. Package its UI in the Gateway SDK and verify both built-wheel serving and real-API browser acceptance. The guide never starts drivers or grants hardware authority; POSIX-only, with independent source/installation/qualification approvals preserved.
 
 - Add a shared equipment onboarding workspace with searchable authorized context, reloadable stage/tool links, guarded context switching and scoped installation/rehearsal history. Filter bookable resources before pagination and retain archived-equipment installation history; workflow navigation never grants installation, qualification or execution authority.
