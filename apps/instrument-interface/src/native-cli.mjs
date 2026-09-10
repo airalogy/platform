@@ -2,19 +2,20 @@
 import { parseArgs } from "node:util"
 import { canonical, digest } from "./contract.mjs"
 import { readPrivateSelection } from "./evidence.mjs"
+import { nativeLaunchStatus, prepareNativeLaunch, runNativeLaunch } from "./native-launch.mjs"
 import { NativeInterfaceSession, previewNativeInterface } from "./native-session.mjs"
 import { previewNativeRead, runNativeRead, selectNative } from "./native-survey.mjs"
 import { prepareNativeSimulation } from "./native-template.mjs"
-import { buildNative, nativeCall } from "./native-transport.mjs"
+import { buildNative, nativeCall, nativeFailureCode } from "./native-transport.mjs"
 import { prepareSurvey } from "./survey-workspace.mjs"
 
 async function main() {
-  const keys = ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "definition", "plan", "confirm", "evidence"]
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { ...Object.fromEntries(keys.map(key => [key, { type: "string" }])), "capture-values": { type: "boolean" }, "ack-new-read": { type: "boolean" }, "ack-new-run": { type: "boolean" } } })
+  const keys = ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "definition", "plan", "confirm", "evidence", "request", "reason", "duration-seconds"]
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { ...Object.fromEntries(keys.map(key => [key, { type: "string" }])), "capture-values": { type: "boolean" }, "ack-new-read": { type: "boolean" }, "ack-new-run": { type: "boolean" }, "ack-initialization": { type: "boolean" } } })
   if (positionals.length !== 1)
     throw new Error("Select exactly one native command")
   const command = positionals[0]
-  const allowed = { "build": ["workspace"], "doctor": ["build"], "prepare": ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], "simulation-template": ["workspace", "build", "pid"], "preview": ["definition", "plan"], "read": ["definition", "confirm", "evidence", "ack-new-read"], "run": ["definition", "plan", "confirm", "evidence", "ack-new-run"] }[command]
+  const allowed = { "build": ["workspace"], "doctor": ["build"], "inspect": ["build", "bundle"], "windows": ["build", "bundle", "pid"], "prepare": ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], "simulation-template": ["workspace", "build", "pid"], "preview": ["definition", "plan"], "read": ["definition", "confirm", "evidence", "ack-new-read"], "run": ["definition", "plan", "confirm", "evidence", "ack-new-run"], "prepare-launch": ["workspace", "build", "bundle", "reason", "duration-seconds"], "launch": ["request", "confirm", "ack-initialization"], "launch-status": ["request"] }[command]
   if (!allowed || Object.keys(values).some(key => !allowed.includes(key)))
     throw new Error("Unexpected native command option")
   let result
@@ -23,6 +24,24 @@ async function main() {
   }
   else if (command === "doctor") {
     result = await nativeCall(values.build, { operation: "doctor" })
+  }
+  else if (command === "inspect") {
+    result = await nativeCall(values.build, { operation: "inspect_application", bundle_path: values.bundle })
+  }
+  else if (command === "windows") {
+    if (!/^\d+$/.test(values.pid || ""))
+      throw new Error("Select the exact running application")
+    const pin = await nativeCall(values.build, { operation: "pin_process", bundle_path: values.bundle, pid: Number(values.pid) })
+    result = await nativeCall(values.build, { operation: "inspect_windows", pin })
+  }
+  else if (command === "prepare-launch") {
+    result = await prepareNativeLaunch({ buildFile: values.build, bundlePath: values.bundle, workspace: values.workspace, reason: values.reason, durationSeconds: Number(values["duration-seconds"] ?? 300) })
+  }
+  else if (command === "launch") {
+    result = await runNativeLaunch(values.request, { confirmation: values.confirm, acknowledgeInitialization: values["ack-initialization"] || false })
+  }
+  else if (command === "launch-status") {
+    result = await nativeLaunchStatus(values.request)
   }
   else if (command === "simulation-template") {
     if (!/^\d+$/.test(values.pid || ""))
@@ -65,8 +84,8 @@ async function main() {
   }
   process.stdout.write(`${canonical(result)}\n`)
 }
-main().catch(() => {
+main().catch((error) => {
   // Transport failures contain only fixed codes; do not expose app/OS error bodies.
-  process.stderr.write("Native operation stopped. Check the reviewed build, process, focused single window and policy. Retain private evidence: an attempted simulation write may be uncertain and must not be retried automatically. No hardware qualification or physical safe-stop is claimed.\n")
+  process.stderr.write(`Native operation stopped (${nativeFailureCode(error)}). Check the reviewed build, application/process, window and policy; use doctor for session/permission diagnostics. Retain private evidence: an attempted application launch or simulation write may be uncertain and must not be retried automatically. No hardware qualification or physical safe-stop is claimed.\n`)
   process.exitCode = 1
 })

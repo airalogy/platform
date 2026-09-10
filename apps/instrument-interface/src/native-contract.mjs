@@ -9,6 +9,36 @@ export function validateNativeLocator(locator) {
   return locator
 }
 
+export function validateNativePin(pin) {
+  checkObject(pin, ["bundle", "process"])
+  validateNativeBundle(pin.bundle)
+  checkObject(pin.process, ["pid", "uid", "started_seconds", "started_microseconds"])
+  for (const name of ["pid", "uid"]) {
+    if (!Number.isInteger(pin.process[name]) || pin.process[name] < (name === "pid" ? 1 : 0) || pin.process[name] > 2147483647)
+      throw new Error("Select an exact native process")
+  }
+  for (const name of ["started_seconds", "started_microseconds"]) {
+    if (typeof pin.process[name] !== "string" || !/^\d{1,20}$/.test(pin.process[name]))
+      throw new Error("Pin the process lifetime")
+  }
+  return pin
+}
+
+export function validateNativeBundle(bundle) {
+  checkObject(bundle, ["bundle_path", "bundle_id", "version", "executable_path", "executable_sha256", "code_directory_hash", "info_sha256"])
+  for (const name of ["bundle_path", "executable_path"])
+    checkText(bundle[name], 4096)
+  for (const name of ["bundle_id", "version"])
+    checkText(bundle[name])
+  for (const name of ["executable_sha256", "info_sha256"]) {
+    if (typeof bundle[name] !== "string" || !/^[a-f0-9]{64}$/.test(bundle[name]))
+      throw new Error("Pin native bundle bytes")
+  }
+  if (typeof bundle.code_directory_hash !== "string" || !/^[a-f0-9]{40}$/.test(bundle.code_directory_hash))
+    throw new Error("Pin native code identity")
+  return bundle
+}
+
 export function validateNativeSelection(value) {
   if (Buffer.byteLength(canonical(value)) > 131072)
     throw new Error("Native selection exceeds its bound")
@@ -24,27 +54,9 @@ export function validateNativeSelection(value) {
   if (value.target.source.kind !== "native_macos")
     throw new Error("Select a supported native transport")
   const { pin } = value.target.source
-  checkObject(pin, ["bundle", "process"])
-  checkObject(pin.bundle, ["bundle_path", "bundle_id", "version", "executable_path", "executable_sha256", "code_directory_hash", "info_sha256"])
-  for (const name of ["bundle_path", "executable_path"])
-    checkText(pin.bundle[name], 4096)
-  for (const name of ["bundle_id", "version"])
-    checkText(pin.bundle[name])
-  for (const name of ["executable_sha256", "info_sha256"]) {
-    if (!/^[a-f0-9]{64}$/.test(pin.bundle[name]))
-      throw new Error("Pin native bundle bytes")
-  }
-  if (!/^[a-f0-9]{40}$/.test(pin.bundle.code_directory_hash) || value.target.version !== pin.bundle.version)
+  validateNativePin(pin)
+  if (value.target.version !== pin.bundle.version)
     throw new Error("Native version and code identity must match the selected bundle")
-  checkObject(pin.process, ["pid", "uid", "started_seconds", "started_microseconds"])
-  for (const name of ["pid", "uid"]) {
-    if (!Number.isInteger(pin.process[name]) || pin.process[name] < (name === "pid" ? 1 : 0) || pin.process[name] > 2147483647)
-      throw new Error("Select an exact native process")
-  }
-  for (const name of ["started_seconds", "started_microseconds"]) {
-    if (typeof pin.process[name] !== "string" || !/^\d{1,20}$/.test(pin.process[name]))
-      throw new Error("Pin the process lifetime")
-  }
   if (!Array.isArray(value.redact_identifiers) || value.redact_identifiers.length > 32 || new Set(value.redact_identifiers).size !== value.redact_identifiers.length)
     throw new Error("Select at most 32 distinct private-region identifiers")
   value.redact_identifiers.forEach(name => checkText(name))

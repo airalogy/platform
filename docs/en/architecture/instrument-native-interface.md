@@ -1,6 +1,6 @@
 # Native macOS interface observation
 
-This is a **development backend**, not a production instrument controller. Surveys and assembled read definitions remain read-only for explicitly selected, already-running applications. A separate action definition permits bounded fill/press operations on **this build's owned simulator only**, not vendor software. It does not discover applications, launch vendor software, steal focus, use coordinates, execute scripts, capture screenshots or change system permissions. Windows/Linux native and visual backends remain separate work.
+This is a **development backend**, not a production instrument controller. Surveys and assembled read definitions remain read-only for explicitly selected, already-running applications. A separate action definition permits bounded fill/press operations on **this build's owned simulator only**, not vendor software. Application startup requires its own local single-use approval; a survey or Aira grant never authorizes launch. No automatic app discovery, coordinate/script actions, screenshots or system-permission changes. Windows/Linux native and visual backends remain separate work.
 
 ## Prepare, review, capture
 
@@ -15,7 +15,9 @@ Use the actual `build_file` returned by the build. It also builds an owned, ad-h
 
 `doctor` reports existing Accessibility authorization without prompting or changing it. If authorization is absent, the operator must decide separately whether to grant it through normal system settings. There is no alternate bypass. The implementation uses Apple's [Accessibility authorization](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions) and [bounded AX messaging](https://developer.apple.com/documentation/applicationservices/1459345-axuielementsetmessagingtimeout) interfaces; the timeout affects this helper process, not global permissions.
 
-Select the **POSIX-canonical absolute** `.app` path, its current same-user PID and exact window title. Opening any vendor application may initialize equipment; this tool neither opens it nor authorizes that initialization. Obtain local authorization first. Prepare a private JSON array of exact AX identifiers for regions to omit, if applicable:
+`doctor.interactive_session` also reports console/login, same-user and active-display indicators plus any OS-reported lock flag, never names or user IDs. Launch and AX operations refuse an inactive/reported-locked session with `interactive_session_required`; metadata inspection and saved receipt recovery remain usable. These signals are not authentication or physical-readiness evidence: the lock flag is an optional OS diagnostic, and exact AX window/role/focus checks still apply. The tool never unlocks or wakes a session. Unlock and keep the graphical test session active yourself before opting into GUI acceptance.
+
+Select the **POSIX-canonical absolute** `.app` path, its current same-user PID and exact window title. Opening any vendor application may initialize equipment; survey preparation neither opens it nor authorizes that initialization. Use the separately approved startup flow below only after obtaining local authority. Prepare a private JSON array of exact AX identifiers for regions to omit, if applicable:
 
 ```bash
 pnpm gateway:native prepare --build /absolute/private/native-builds/interface-ID/native-build.json --bundle /Applications/SelectedInstrument.app --pid 12345 --title 'Exact selected window' --redact /absolute/private/masks.json --workspace /absolute/private/surveys
@@ -25,6 +27,30 @@ pnpm gateway:survey run /absolute/private/surveys/interface-ID/request.json --co
 Preparation reads application metadata, not UI content. Review the private preview before `run`. The capture pins bundle identifier/version, code-directory integrity, executable/Info.plist hashes and process UID/start time, preventing PID reuse or app replacement from silently retargeting it. The public report includes only the declared application identity and observed control hints, not local paths/PIDs/build manifests.
 
 Capture requires exactly one non-minimized AX window with the selected title and role. Extra windows, dialogs, missing/ambiguous private masks, invalid geometry, target drift or unreadable attributes stop the run. A survey request retains `run.started` before observation and cannot be replayed. Refusal events retain a fixed reason code, not OS error bodies. Inspect the selected application's state and reconcile with the operator before preparing a new request; never delete the marker as recovery. Transient or inconsistent OS accessibility trees are refusals too, not a reason to accept another window or change permissions.
+
+## Application inspection and separately approved startup
+
+`inspect` reads only metadata for the explicitly selected `.app` and its matching same-user instances, not window contents. It reports unresolved conflicting/starting instances without attaching to them. Its output is private and can supply a verified PID for a new survey selection:
+
+```bash
+pnpm gateway:native inspect --build /absolute/private/native-builds/interface-ID/native-build.json --bundle /Applications/SelectedInstrument.app
+pnpm gateway:native prepare-launch --build /absolute/private/native-builds/interface-ID/native-build.json --bundle /Applications/SelectedInstrument.app --reason 'Locally authorized startup; initialization risks reviewed' --workspace /absolute/private/launches
+```
+
+After selecting a verified PID, `gateway:native windows --build BUILD_FILE --bundle APP_PATH --pid PID` explicitly reads up to eight window titles, roles, exact focus matches, minimized/geometry indicators and foreground state. It requires existing Accessibility access and an active session, reads no descendants or screenshots, and approves no actions. Titles can contain private project/file names; keep the output private. This helps select an exact window without guessing its title. Startup identity is not UI readiness: a missing or non-window AX object must be reconciled, never treated as a usable window.
+
+Preparation launches nothing. Read the returned private `preview_file`: exact bundle/version/signature and executable/Info.plist hashes, runtime, reason, expiry and effects. Default expiry is five minutes, configurable from 30–900 seconds. Code integrity does **not** prove vendor trust or safe initialization. Confirm only software you are authorized to run, with equipment startup/network/resource effects independently reviewed:
+
+```bash
+pnpm gateway:native launch --request /absolute/private/launches/interface-ID/request.json --confirm REVIEWED_LAUNCH_DIGEST --ack-initialization
+pnpm gateway:native launch-status --request /absolute/private/launches/interface-ID/request.json
+```
+
+The helper uses [Apple's application-opening API](<https://developer.apple.com/documentation/appkit/nsworkspace/openapplication(at:configuration:completionhandler:)>), with no supplied arguments, custom environment, documents, scripts, forced new instance or substitution of another installed copy. It requests no activation or recent-item entry. This is **not a sandbox**: the selected app/system may add environment variables, show its own UI, activate itself, initialize equipment, connect to a network or start background services. Gatekeeper is never bypassed; its UI may still appear and is not automatically dismissed.
+
+The runtime rechecks bundle/build/OS and expiry, durably records `launch.started` plus intent before dispatch, and serializes same-bundle-ID launches across this user's workspaces. Any existing matching bundle ID stops startup, including another installed copy. It checks the returned executable/bundle and process start time, refuses reuse/race ambiguity and leaves the app running. The helper waits at most 20 seconds; the parent bounds the call to 30 seconds. Timeout or lost receipts are uncertain, not permission to relaunch or kill the app. Never delete a marker to retry.
+
+`launch-status` reads saved receipts **offline**, even after helper upgrades or app exit. `reported_identity_verified` means identity was checked at startup, not that the app is currently running, ready or physically safe. `uncertain` means dispatch was recorded without a verified receipt. Use `inspect` with a current trusted build and reconcile with the operator; status never launches, focuses, terminates or retries software. Startup gives no UI-action or production Gateway authority. Survey capture still needs its own target/window/privacy confirmation.
 
 ## Privacy and bounded semantics
 
@@ -60,7 +86,7 @@ pnpm gateway:native run --definition /absolute/private/native-actions/interface-
 
 Use the returned file paths, review the exact preview, and leave the simulator's selected window focused. `airalogy.native-interface.v1` is distinct from the survey's read-only definition: it declares controls, literal operations, states and limits. The template fills two synthetic samples, presses the simulation button and checks both `Complete` and the independently specified result `0.84`. It never learns the expected result from its own output.
 
-The trusted builder seals the owned simulator's executable/Info.plist hashes into the helper. The helper also requires that exact sibling bundle path and the pinned process; a `simulation` label or same bundle ID cannot authorize another app. Rebuild older v1 manifests; builds now include sealed source and simulator identity. This is still an operator-owned development tool, not a boundary against malicious code running as that operator.
+The trusted builder seals the owned simulator's executable/Info.plist hashes into the helper. The helper also requires that exact sibling bundle path and the pinned process; a `simulation` label or same bundle ID cannot authorize another app. Rebuild older v1 manifests and rebuild/review after any native source update, even when the manifest schema has not changed. Builds include sealed source and simulator identity. This is still an operator-owned development tool, not a boundary against malicious code running as that operator.
 
 Every action durably records intent, rechecks the fresh snapshot in the helper, retains the exact AX control reference, checks focus/enabled state, uses only fixed AXValue/AXPress operations, and checks the post-state/readback. No focus stealing, arbitrary AX actions, script or coordinate fallback. An attempted action with missing/invalid results is uncertain and cannot be retried within that session. A new run is a new explicitly acknowledged operation, **not recovery**; preserve the evidence and reconcile first. Closing a session leaves the operator's app running and makes no physical safe-stop claim.
 
@@ -70,4 +96,4 @@ The owned fixture has synthetic labels, a secure field and an opt-in sample coun
 pnpm --filter @airalogy/instrument-interface test:native
 ```
 
-Hosted macOS CI compiles and checks the helper/signature/permission diagnostic without opening apps or granting TCC. Actual GUI tests fail, rather than silently skip, if explicitly requested on a host without authorization. Native production writes still need qualified vendor adapters, independent safety checks, Gateway booking/lease/stop integration and a real pilot. The owned-simulator action path does not complete automated equipment onboarding or qualify vendor control.
+Hosted macOS CI compiles and checks the helper/signature/permission diagnostic without opening apps or granting TCC. Actual GUI tests fail, rather than silently skip, if explicitly requested on a host without authorization. Their shared, test-only setup verifies and foregrounds the exact already-running owned simulator once; it is excluded from the installed package, accepts no vendor target and never recovers focus after a refused action. Keep that test window in the foreground during acceptance. Native production writes still need qualified vendor adapters, independent safety checks, Gateway booking/lease/stop integration and a real pilot. The owned-simulator action path does not complete automated equipment onboarding or qualify vendor control.

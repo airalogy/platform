@@ -18,6 +18,10 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add separately confirmed startup for an explicitly selected macOS application: metadata-only inspection, expiring bundle/runtime-pinned previews, explicit initialization-risk acknowledgment, durable single-use launch intents, cross-workspace launch serialization and verified returned process identity. Offline receipt inspection never relaunches or infers current readiness. Startup is not sandboxed and does not grant UI/hardware authority; acceptance opens only the owned simulator, with real vendor qualification still pending.
+
+- Add bounded native window-metadata inspection and explicit graphical-session diagnostics. Inactive/reported-locked sessions refuse AX operations and application startup without attempting unlock, wake or a permission change; existing role/focus checks remain authoritative. Native acceptance requires an operator-active graphical session instead of mistaking process startup for UI readiness.
+
 - Connect Aira's finite-action exploration to the exact owned macOS simulator through a static local backend, preserving source/hardware authority separation, fresh native checks and report-only recovery. Shared API contracts and bilingual review panels distinguish native simulation from vendor control; actual API/PostgreSQL/AppKit acceptance independently verifies results, privacy and cancellation. Native actions remain development-only, not production equipment qualification.
 
 - Add separately reviewed macOS native simulation actions with exact build-sealed owned-app identity, AX control/focus checks, durable intents, fresh readbacks and fail-closed uncertain results. A reviewable CLI template and independent actual AppKit tests cover fill/press/result verification without promoting read-only survey definitions or authorizing vendor/hardware control. Rebuild old native manifests; production GUI, visual control and real-instrument qualification remain open.

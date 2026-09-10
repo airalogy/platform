@@ -158,6 +158,7 @@ def exercise_exploration(runtime, tmp_path, monkeypatch, *, native=False):
                     native_cli, "doctor", "--build", built["build_file"]
                 )
                 assert doctor["accessibility_trusted"] is True
+                assert doctor["interactive_session"]["ready"] is True
                 assert doctor["permissions_changed"] is False
                 owned_process = await asyncio.to_thread(
                     subprocess.Popen,
@@ -169,6 +170,13 @@ def exercise_exploration(runtime, tmp_path, monkeypatch, *, native=False):
                     asyncio.to_thread(owned_process.stdout.readline), 10
                 )
                 assert ready.startswith(b"SIMULATOR_READY")
+                await node(
+                    "apps/instrument-interface/tests/native-fixture.mjs",
+                    "--build",
+                    built["build_file"],
+                    "--pid",
+                    owned_process.pid,
+                )
                 template = await node(
                     native_cli,
                     "simulation-template",

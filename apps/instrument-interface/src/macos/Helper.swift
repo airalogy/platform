@@ -8,7 +8,7 @@ import Foundation
 import Security
 
 // Replaced only by the trusted local builder after signing its owned simulator.
-// Direct compilation keeps non-hash placeholders and cannot authorize writes.
+// Direct compilation keeps non-hash placeholders and cannot authorize simulation UI writes.
 let ownedSimulatorHash = "__AIRALOGY_OWNED_SIMULATOR_SHA256__"
 let ownedSimulatorInfoHash = "__AIRALOGY_OWNED_SIMULATOR_INFO_SHA256__"
 
@@ -29,6 +29,10 @@ enum Refusal: String, Error {
     case staleObservation = "stale_observation"
     case focusChanged = "selected_window_not_focused"
     case controlChanged = "selected_control_changed"
+    case alreadyRunning = "application_already_running"
+    case launchBusy = "application_launch_in_progress"
+    case launchUncertain = "application_launch_uncertain"
+    case interactiveSessionRequired = "interactive_session_required"
 }
 
 func exact(_ value: [String: Any], _ keys: Set<String>) throws {
@@ -77,6 +81,24 @@ func physicalPath(_ path: String) throws -> String {
     return String(cString: resolved)
 }
 
+func interactiveSession() -> [String: Bool] {
+    let session = CGSessionCopyCurrentDictionary() as? [String: Any] ?? [:]
+    let onConsole = session[kCGSessionOnConsoleKey as String] as? Bool == true
+    let loginDone = session[kCGSessionLoginDoneKey as String] as? Bool == true
+    let sameUser = (session[kCGSessionUserIDKey as String] as? NSNumber)?.uint32Value == geteuid()
+    let displayActive = CGDisplayIsActive(CGMainDisplayID()) != 0
+    // This optional OS-reported flag is diagnostic, not an authentication API.
+    // Absence is not proof of unlock. Actual AX role/window/focus gates remain.
+    let reportedLocked = session["CGSSessionScreenIsLocked"] as? Bool == true
+    return ["on_console": onConsole, "login_complete": loginDone, "same_user": sameUser,
+            "display_active": displayActive, "reported_locked": reportedLocked,
+            "ready": onConsole && loginDone && sameUser && displayActive && !reportedLocked]
+}
+
+func requireInteractiveSession() throws {
+    guard interactiveSession()["ready"] == true else { throw Refusal.interactiveSessionRequired }
+}
+
 func bundleIdentity(_ path: String) throws -> [String: Any] {
     guard path.hasPrefix("/"), path.hasSuffix(".app") else { throw Refusal.invalidRequest }
     let url = URL(fileURLWithPath: path)
@@ -118,6 +140,98 @@ func processIdentity(_ pid: pid_t, bundle: [String: Any]) throws -> [String: Any
             "started_seconds": String(info.pbi_start_tvsec), "started_microseconds": String(info.pbi_start_tvusec)]
 }
 
+func launchProbe(_ path: String) throws -> [String: Any] {
+    let bundle = try bundleIdentity(path)
+    let identifier = try string(bundle["bundle_id"])
+    guard NSRunningApplication.runningApplications(withBundleIdentifier: identifier).isEmpty
+    else { throw Refusal.alreadyRunning }
+    return bundle
+}
+
+func inspectApplication(_ path: String) throws -> [String: Any] {
+    let bundle = try bundleIdentity(path)
+    let applications = NSRunningApplication.runningApplications(withBundleIdentifier: try string(bundle["bundle_id"]))
+    guard applications.count <= 8 else { throw Refusal.boundExceeded }
+    var running: [[String: Any]] = []
+    var unresolved = 0
+    for app in applications {
+        // Report only identities which match the explicitly selected bundle.
+        // Other copies/users or a launch in progress need operator reconciliation.
+        if let process = try? processIdentity(app.processIdentifier, bundle: bundle) {
+            running.append(["bundle": bundle, "process": process])
+        } else { unresolved += 1 }
+    }
+    return ["bundle": bundle, "running": running, "unresolved_instances": unresolved,
+            "applications_opened": false, "ui_observed": false]
+}
+
+func launchApplication(_ expected: [String: Any]) throws -> [String: Any] {
+    try requireInteractiveSession()
+    let identifier = try string(expected["bundle_id"])
+    let path = try string(expected["bundle_path"], limit: 4096)
+    // Serialize this operator's launches across workspaces and bundle copies.
+    // The persistent lock is not a receipt; flock is released on helper exit.
+    let key = SHA256.hash(data: Data(identifier.utf8)).map { String(format: "%02x", $0) }.joined()
+    let lockPath = "/private/tmp/airalogy-native-launch-\(geteuid())-\(key).lock"
+    let descriptor = open(lockPath, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, S_IRUSR | S_IWUSR)
+    guard descriptor >= 0 else { throw Refusal.launchBusy }
+    defer { close(descriptor) }
+    var info = stat()
+    guard fstat(descriptor, &info) == 0, info.st_uid == geteuid(), info.st_nlink == 1,
+          (info.st_mode & S_IFMT) == S_IFREG, (info.st_mode & 0o077) == 0,
+          flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { throw Refusal.launchBusy }
+    let bundle = try launchProbe(path)
+    guard try sameJSON(expected, bundle) else { throw Refusal.targetChanged }
+    try requireInteractiveSession()
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = false
+    configuration.hides = false
+    configuration.hidesOthers = false
+    configuration.addsToRecentItems = false
+    configuration.promptsUserIfNeeded = false
+    configuration.createsNewApplicationInstance = false
+    configuration.allowsRunningApplicationSubstitution = false
+    configuration.arguments = []
+    configuration.environment = [:]
+    // Gatekeeper is deliberately not bypassed. The selected application may
+    // initialize devices, open network connections or present its own UI.
+    var started = timeval()
+    guard gettimeofday(&started, nil) == 0 else { throw Refusal.launchUncertain }
+    let startMicros = UInt64(started.tv_sec) * 1_000_000 + UInt64(started.tv_usec)
+    let deadline = ProcessInfo.processInfo.systemUptime + 20
+    var completed = false
+    var launched: NSRunningApplication?
+    NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: configuration) { app, error in
+        // Completion may arrive off the main thread. Confine result state to
+        // the same main run loop which is waiting for this one launch.
+        DispatchQueue.main.async {
+            if error == nil { launched = app }
+            completed = true
+        }
+    }
+    while !completed && ProcessInfo.processInfo.systemUptime < deadline {
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+    }
+    guard completed, let app = launched else { throw Refusal.launchUncertain }
+    while !app.isFinishedLaunching && !app.isTerminated && ProcessInfo.processInfo.systemUptime < deadline {
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+    }
+    let currentBundle = try bundleIdentity(path)
+    guard try sameJSON(bundle, currentBundle) else { throw Refusal.launchUncertain }
+    let process = try processIdentity(app.processIdentifier, bundle: currentBundle)
+    guard let seconds = UInt64(try string(process["started_seconds"])),
+          let micros = UInt64(try string(process["started_microseconds"])),
+          seconds <= UInt64.max / 1_000_000, micros < 1_000_000,
+          seconds * 1_000_000 + micros >= startMicros
+    else { throw Refusal.launchUncertain }
+    let instances = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+    guard instances.count == 1, instances[0].processIdentifier == app.processIdentifier
+    else { throw Refusal.launchUncertain }
+    return ["pin": ["bundle": currentBundle, "process": process],
+            "identity_verified": true, "hardware_qualified": false,
+            "ui_actions_approved": false, "application_left_running": true]
+}
+
 func sameJSON(_ left: Any, _ right: Any) throws -> Bool {
     try JSONSerialization.data(withJSONObject: left, options: [.sortedKeys]) ==
         JSONSerialization.data(withJSONObject: right, options: [.sortedKeys])
@@ -133,10 +247,27 @@ func pinnedApplication(_ pin: [String: Any]) throws -> AXUIElement {
     guard try sameJSON(bundle, currentBundle), try sameJSON(process, processIdentity(pid, bundle: currentBundle))
     else { throw Refusal.targetChanged }
     guard AXIsProcessTrusted() else { throw Refusal.permissionRequired }
+    try requireInteractiveSession()
     // This changes only this transport process's IPC timeout, not system settings.
     guard AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 2) == .success
     else { throw Refusal.accessibilityFailure }
     return AXUIElementCreateApplication(pid)
+}
+
+func inspectWindows(_ pin: [String: Any]) throws -> [String: Any] {
+    let app = try pinnedApplication(pin)
+    let focused = try attribute(app, kAXFocusedWindowAttribute as CFString)
+    var result: [[String: Any]] = []
+    for window in try elements(app, kAXWindowsAttribute as CFString, limit: 8) {
+        result.append(["role": try axText(window, kAXRoleAttribute) ?? "AXUnknown",
+                       "title": try axText(window, kAXTitleAttribute) ?? "",
+                       "focused": focused.map { CFGetTypeID($0) == AXUIElementGetTypeID() && CFEqual($0, window) } ?? false,
+                       "minimized": try axBool(window, kAXMinimizedAttribute) as Any? ?? NSNull(),
+                       "has_geometry": try frame(window) != nil])
+    }
+    _ = try pinnedApplication(pin)
+    return ["windows": result, "frontmost": try axBool(app, kAXFrontmostAttribute) as Any? ?? NSNull(),
+            "ui_actions_approved": false, "screenshots_captured": false]
 }
 
 func attribute(_ element: AXUIElement, _ name: CFString) throws -> CFTypeRef? {
@@ -377,7 +508,7 @@ func handle(_ request: [String: Any]) throws -> [String: Any] {
         // Never set kAXTrustedCheckOptionPrompt or change system privacy settings.
         return ["schema": "airalogy.native-macos-doctor.v1", "accessibility_trusted": AXIsProcessTrusted(),
                 "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-                "helper_version": 2, "permissions_changed": false]
+                "helper_version": 3, "interactive_session": interactiveSession(), "permissions_changed": false]
     case "inspect_bundle":
         try exact(request, ["operation", "bundle_path"])
         return try bundleIdentity(string(request["bundle_path"], limit: 4096))
@@ -386,6 +517,20 @@ func handle(_ request: [String: Any]) throws -> [String: Any] {
         let bundle = try bundleIdentity(string(request["bundle_path"], limit: 4096))
         let pid = pid_t(try number(request["pid"], low: 1, high: Int(Int32.max)))
         return ["bundle": bundle, "process": try processIdentity(pid, bundle: bundle)]
+    case "launch_probe":
+        try exact(request, ["operation", "bundle_path"])
+        return try launchProbe(string(request["bundle_path"], limit: 4096))
+    case "inspect_application":
+        try exact(request, ["operation", "bundle_path"])
+        return try inspectApplication(string(request["bundle_path"], limit: 4096))
+    case "inspect_windows":
+        try exact(request, ["operation", "pin"])
+        guard let pin = request["pin"] as? [String: Any] else { throw Refusal.invalidRequest }
+        return try inspectWindows(pin)
+    case "launch_application":
+        try exact(request, ["operation", "bundle"])
+        guard let bundle = request["bundle"] as? [String: Any] else { throw Refusal.invalidRequest }
+        return try launchApplication(bundle)
     case "snapshot":
         return try capture(request).report
     case "simulation_step":

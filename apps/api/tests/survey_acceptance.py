@@ -100,6 +100,7 @@ def exercise_survey(runtime, tmp_path, monkeypatch, *, native=False):
             built = await node(native_cli, "build", "--workspace", tmp_path)
             doctor = await node(native_cli, "doctor", "--build", built["build_file"])
             assert doctor["accessibility_trusted"] is True
+            assert doctor["interactive_session"]["ready"] is True
             assert doctor["permissions_changed"] is False
             # Only the fixed, just-built, no-network/no-hardware synthetic app.
             owned_process = await asyncio.to_thread(
@@ -112,6 +113,13 @@ def exercise_survey(runtime, tmp_path, monkeypatch, *, native=False):
                 asyncio.to_thread(owned_process.stdout.readline), 10
             )
             assert ready.startswith(b"SIMULATOR_READY")
+            await node(
+                ROOT / "apps/instrument-interface/tests/native-fixture.mjs",
+                "--build",
+                built["build_file"],
+                "--pid",
+                owned_process.pid,
+            )
             masks = tmp_path / "private-masks.json"
             masks.write_text('["private.note"]')
             masks.chmod(0o600)

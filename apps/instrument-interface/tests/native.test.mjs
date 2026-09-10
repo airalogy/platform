@@ -4,19 +4,22 @@ import { Buffer } from "node:buffer"
 import { execFile, spawn } from "node:child_process"
 import { once } from "node:events"
 import { chmod, lstat, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { canonical, digest } from "../src/contract.mjs"
+import { Evidence } from "../src/evidence.mjs"
 import { prepareExploration, runExploration, syncExploration } from "../src/exploration.mjs"
 import { validateNativeDefinition, validateNativeSelection } from "../src/native-contract.mjs"
+import { nativeLaunchStatus, prepareNativeLaunch, runNativeLaunch, validateLaunchPreview } from "../src/native-launch.mjs"
 import { NativeInterfaceSession, previewNativeInterface, validateNativeInterface } from "../src/native-session.mjs"
 import { previewNativeRead, runNativeRead, selectNative } from "../src/native-survey.mjs"
 import { nativeSimulationTemplate } from "../src/native-template.mjs"
 import { buildNative, nativeCall, validateNativeBuild } from "../src/native-transport.mjs"
 import { assembleSurveyDefinition, validateSurveyAnalysis, validateSurveyReport } from "../src/survey-contract.mjs"
 import { assemblePreparedSurvey, prepareSurvey, runPreparedSurvey } from "../src/survey-workspace.mjs"
+import { focusOwnedFixture } from "./native-fixture.mjs"
 
 function fixture() {
   const selection = {
@@ -42,6 +45,41 @@ function fixture() {
   }
   const analysis = { summary: "Synthetic fixture", features: [], read_controls: ["control_1"], identity_control: "control_1", route: "native_accessibility", limitations: ["No actions tested"], missing_information: [] }
   return { selection, report, analysis }
+}
+
+async function closeOwnedLaunch(built) {
+  const inspection = await nativeCall(built.build_file, { operation: "inspect_application", bundle_path: built.simulator_app })
+  for (const pin of inspection.running) {
+    assert.equal(pin.bundle.bundle_path, built.simulator_app)
+    assert.equal(pin.bundle.bundle_id, "org.airalogy.InstrumentInterfaceSimulator")
+    process.kill(pin.process.pid, "SIGTERM")
+  }
+  for (let index = 0; index < 50; index++) {
+    try {
+      await nativeCall(built.build_file, { operation: "launch_probe", bundle_path: built.simulator_app })
+      return
+    }
+    catch (error) {
+      if (error.message !== "application_already_running")
+        throw error
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+  throw new Error("Owned simulator did not exit; retain its selected identity for cleanup")
+}
+
+async function waitForOwnedWindow(built, pin) {
+  let observed
+  // Fixture setup waits for actual OS-reported UI metadata before preparing a
+  // new capture. It never retries a survey request, action or launch.
+  for (let index = 0; index < 30; index++) {
+    observed = await nativeCall(built.build_file, { operation: "inspect_windows", pin })
+    if (observed.windows.length === 1 && observed.windows[0].role === "AXWindow" && observed.windows[0].title === "Airalogy Native Reader — Simulation" && observed.windows[0].has_geometry && observed.windows[0].minimized === false)
+      return observed
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  // All output is from the owned synthetic fixture only, never vendor metadata.
+  assert.fail(`Owned fixture UI did not become ready: ${canonical(observed)}`)
 }
 
 test("native survey transport, roles, privacy and read-only assembly agree", () => {
@@ -123,10 +161,30 @@ test("actual macOS build, integrity and permission diagnostic without app launch
   assert.equal((await lstat(built.build_file)).mode & 0o777, 0o600)
   const doctor = await nativeCall(built.build_file, { operation: "doctor" })
   assert.equal(typeof doctor.accessibility_trusted, "boolean")
+  assert.equal(typeof doctor.interactive_session.ready, "boolean")
   assert.equal(doctor.permissions_changed, false)
+  await assert.rejects(focusOwnedFixture(built.build_file, process.pid), /target_changed/)
   assert.equal((await nativeCall(built.build_file, { operation: "inspect_bundle", bundle_path: built.simulator_app })).bundle_id, "org.airalogy.InstrumentInterfaceSimulator")
   await assert.rejects(nativeCall(built.build_file, { operation: "click", target: "arbitrary" }), /invalid_request/)
   await assert.rejects(nativeCall(built.build_file, { operation: "doctor", prompt: true }), /invalid_request/)
+  if (!doctor.interactive_session.ready) {
+    const bundle = await nativeCall(built.build_file, { operation: "inspect_bundle", bundle_path: built.simulator_app })
+    await assert.rejects(nativeCall(built.build_file, { operation: "launch_application", bundle }), /interactive_session_required/)
+    const request = await prepareNativeLaunch({ buildFile: built.build_file, bundlePath: built.simulator_app, reason: "Verify inactive-session refusal on the owned fixture", workspace: root })
+    await assert.rejects(runNativeLaunch(request.request_file, { confirmation: request.preview_digest, acknowledgeInitialization: true }), /interactive_session_required/)
+    assert.equal((await nativeLaunchStatus(request.request_file)).state, "not_started")
+    const cli = fileURLToPath(new URL("../src/native-cli.mjs", import.meta.url))
+    await assert.rejects(promisify(execFile)(process.execPath, [cli, "launch", "--request", request.request_file, "--confirm", request.preview_digest, "--ack-initialization"], { timeout: 15000 }), (error) => {
+      assert.match(error.stderr, /interactive_session_required/)
+      assert.ok(!error.stderr.includes(root))
+      return true
+    })
+    assert.equal((await nativeLaunchStatus(request.request_file)).state, "not_started")
+    const inspection = await nativeCall(built.build_file, { operation: "inspect_application", bundle_path: built.simulator_app })
+    assert.deepEqual(inspection.running, [])
+  }
+  if (real)
+    assert.equal(doctor.interactive_session.ready, true, "Unlock and keep the operator graphical session active before GUI acceptance; tests never unlock or wake it")
 
   await t.test("actual owned AppKit survey, private evidence, assembly and independent readback", { skip: !real, timeout: 120000 }, async () => {
     assert.equal(doctor.accessibility_trusted, true, "An operator must explicitly enable Accessibility for the test host; tests never change TCC")
@@ -142,7 +200,9 @@ test("actual macOS build, integrity and permission diagnostic without app launch
         })
         child.once("error", reject)
       })
+      await focusOwnedFixture(built.build_file, child.pid)
       const selection = await selectNative({ buildFile: built.build_file, bundlePath: built.simulator_app, pid: child.pid, title: "Airalogy Native Reader — Simulation", redactIdentifiers: ["private.note"] })
+      await waitForOwnedWindow(built, selection.target.source.pin)
       const prepared = await prepareSurvey(selection, root)
       await assert.rejects(runPreparedSurvey(prepared.request_file, "0".repeat(64)), /Confirm/)
       const result = await runPreparedSurvey(prepared.request_file, prepared.local_preview_digest)
@@ -299,6 +359,99 @@ test("actual macOS build, integrity and permission diagnostic without app launch
         await exited
       }
     }
+  })
+  await t.test("confirmed LaunchServices startup, immutable receipt and separate read-only survey", { skip: !real, timeout: 120000 }, async () => {
+    const prepared = await prepareNativeLaunch({ buildFile: built.build_file, bundlePath: built.simulator_app, reason: "Only launch this owned synthetic test fixture", workspace: root })
+    const request = JSON.parse(await readFile(prepared.request_file))
+    const preview = validateLaunchPreview(request.preview)
+    assert.equal(prepared.applications_opened, false)
+    assert.equal((await nativeLaunchStatus(prepared.request_file)).state, "not_started")
+    for (const mutate of [
+      value => value.effects.activates = true,
+      value => value.effects.ui_actions_approved = true,
+      value => value.effects.arguments = ["--arbitrary"],
+      value => value.arguments = ["--arbitrary"],
+      value => value.bundle.executable_sha256 = "changed",
+      value => value.expires_at = "tomorrow",
+    ]) {
+      const invalid = structuredClone(preview)
+      mutate(invalid)
+      assert.throws(() => validateLaunchPreview(invalid))
+    }
+    await assert.rejects(runNativeLaunch(prepared.request_file, { confirmation: prepared.preview_digest }), /acknowledge/)
+    await assert.rejects(runNativeLaunch(prepared.request_file, { confirmation: "0".repeat(64), acknowledgeInitialization: true }), /Confirm/)
+    assert.ok(!(await readdir(dirname(prepared.request_file))).includes("launch.started"))
+    const expired = { ...preview, expires_at: new Date(Date.now() - 1000).toISOString() }
+    const expiredDirectory = await Evidence.create(root, expired)
+    await expiredDirectory.write("request.json", Buffer.from(canonical({ preview: expired, preview_digest: digest(expired) })))
+    await assert.rejects(runNativeLaunch(join(expiredDirectory.directory, "request.json"), { confirmation: digest(expired), acknowledgeInitialization: true }), /expired/)
+    for (const changed of [
+      { ...preview, bundle: { ...preview.bundle, version: "unreviewed" } },
+      { ...preview, engine: { ...preview.engine, os_version: "changed runtime" } },
+    ]) {
+      const files = await Evidence.create(root, changed)
+      await files.write("request.json", Buffer.from(canonical({ preview: changed, preview_digest: digest(changed) })))
+      await assert.rejects(runNativeLaunch(join(files.directory, "request.json"), { confirmation: digest(changed), acknowledgeInitialization: true }), /changed/)
+      assert.ok(!(await readdir(files.directory)).includes("launch.started"))
+    }
+    await chmod(prepared.request_file, 0o644)
+    await assert.rejects(runNativeLaunch(prepared.request_file, { confirmation: prepared.preview_digest, acknowledgeInitialization: true }), /owner-only/)
+    await chmod(prepared.request_file, 0o600)
+    const cli = fileURLToPath(new URL("../src/native-cli.mjs", import.meta.url))
+    let launched = null
+    try {
+      launched = JSON.parse((await promisify(execFile)(process.execPath, [cli, "launch", "--request", prepared.request_file, "--confirm", prepared.preview_digest, "--ack-initialization"], { timeout: 45000 })).stdout)
+      assert.equal(launched.pin.bundle.bundle_path, built.simulator_app)
+      assert.equal(launched.identity_verified, true)
+      assert.equal(launched.ui_actions_approved, false)
+      assert.equal(launched.hardware_qualified, false)
+      assert.equal(launched.application_left_running, true)
+      await assert.rejects(prepareNativeLaunch({ buildFile: built.build_file, bundlePath: built.simulator_app, reason: "Duplicate", workspace: root }), /already_running/)
+      const status = JSON.parse((await promisify(execFile)(process.execPath, [cli, "launch-status", "--request", prepared.request_file], { timeout: 5000 })).stdout)
+      assert.equal(status.state, "reported_identity_verified")
+      assert.equal(status.current_process_state, "not_checked")
+      assert.equal(status.applications_opened, false)
+      const inspection = JSON.parse((await promisify(execFile)(process.execPath, [cli, "inspect", "--build", built.build_file, "--bundle", built.simulator_app], { timeout: 15000 })).stdout)
+      assert.deepEqual(inspection.running, [launched.pin])
+      assert.equal(inspection.unresolved_instances, 0)
+      assert.equal(inspection.ui_observed, false)
+      const selected = await selectNative({ buildFile: built.build_file, bundlePath: built.simulator_app, pid: launched.pin.process.pid, title: "Airalogy Native Reader — Simulation", redactIdentifiers: ["private.note"] })
+      await waitForOwnedWindow(built, selected.target.source.pin)
+      const survey = await prepareSurvey(selected, root)
+      const captured = await runPreparedSurvey(survey.request_file, survey.local_preview_digest)
+      const report = JSON.parse(await readFile(captured.report_file))
+      assert.equal(report.controls.find(control => control.locator?.name === "reader.status").value, "Ready")
+      assert.equal(captured.actions_executed, 0)
+      assert.ok(!canonical(report).includes("SYNTHETIC_PRIVATE") && !canonical(report).includes("SYNTHETIC_PASSWORD"))
+    }
+    finally {
+      // Only this newly built owned fixture. Never use a generic app-name kill.
+      await closeOwnedLaunch(built)
+    }
+    assert.equal((await nativeLaunchStatus(prepared.request_file)).state, "reported_identity_verified")
+    await assert.rejects(runNativeLaunch(prepared.request_file, { confirmation: prepared.preview_digest, acknowledgeInitialization: true }), /EEXIST/)
+    const uncertain = await Evidence.create(root, preview)
+    await uncertain.write("request.json", Buffer.from(canonical(request)))
+    await uncertain.write("launch.started", Buffer.from(prepared.preview_digest))
+    assert.equal((await nativeLaunchStatus(join(uncertain.directory, "request.json"))).state, "uncertain")
+    await assert.rejects(runNativeLaunch(join(uncertain.directory, "request.json"), { confirmation: prepared.preview_digest, acknowledgeInitialization: true }), /EEXIST/)
+    // Receipt inspection works without executing the now-inapplicable old helper.
+    await chmod(built.helper, 0o744)
+    assert.equal((await nativeLaunchStatus(prepared.request_file)).state, "reported_identity_verified")
+    await chmod(built.helper, 0o700)
+    t.diagnostic(`Private launch receipt: ${launched.receipt_file}`)
+  })
+  await t.test("separate concurrently approved requests cannot start duplicate owned instances", { skip: !real, timeout: 60000 }, async () => {
+    const requests = await Promise.all(["first", "second"].map(reason => prepareNativeLaunch({ buildFile: built.build_file, bundlePath: built.simulator_app, reason: `Synthetic concurrency ${reason}`, workspace: root })))
+    try {
+      const outcomes = await Promise.allSettled(requests.map(request => runNativeLaunch(request.request_file, { confirmation: request.preview_digest, acknowledgeInitialization: true })))
+      assert.equal(outcomes.filter(item => item.status === "fulfilled").length, 1)
+      assert.equal(outcomes.filter(item => item.status === "rejected").length, 1)
+      const inspection = await nativeCall(built.build_file, { operation: "inspect_application", bundle_path: built.simulator_app })
+      assert.equal(inspection.running.length, 1)
+      assert.equal(inspection.unresolved_instances, 0)
+    }
+    finally { await closeOwnedLaunch(built) }
   })
   // These are owned synthetic build files only; retain every artifact for inspection.
   await chmod(built.helper, 0o744)

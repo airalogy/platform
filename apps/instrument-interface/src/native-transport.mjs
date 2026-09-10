@@ -10,7 +10,7 @@ import { Evidence, readPrivateSelection, syncDirectory } from "./evidence.mjs"
 const sources = ["Helper.swift", "Simulator.swift", "Info.plist"]
 const sourceRoot = fileURLToPath(new URL("./macos/", import.meta.url))
 const manifestSchema = "airalogy.native-macos-build.v2"
-const allowedErrors = new Set(["invalid_request", "accessibility_permission_required", "target_changed", "selected_window_changed", "requires_one_window", "window_title_changed", "window_hidden_or_unmeasurable", "private_region_missing_or_ambiguous", "unexpected_dialog", "unsupported_target", "bound_exceeded", "accessibility_failure", "native_transport_failure", "owned_simulation_required", "stale_observation", "selected_window_not_focused", "selected_control_changed"])
+const allowedErrors = new Set(["invalid_request", "accessibility_permission_required", "target_changed", "selected_window_changed", "requires_one_window", "window_title_changed", "window_hidden_or_unmeasurable", "private_region_missing_or_ambiguous", "unexpected_dialog", "unsupported_target", "bound_exceeded", "accessibility_failure", "native_transport_failure", "owned_simulation_required", "stale_observation", "selected_window_not_focused", "selected_control_changed", "application_already_running", "application_launch_in_progress", "application_launch_uncertain", "interactive_session_required"])
 
 export function nativeFailureCode(error) {
   return allowedErrors.has(error?.message) ? error.message : "native_validation_or_transport_failure"
