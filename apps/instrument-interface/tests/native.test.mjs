@@ -9,6 +9,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { canonical, digest } from "../src/contract.mjs"
+import { prepareExploration, runExploration, syncExploration } from "../src/exploration.mjs"
 import { validateNativeDefinition, validateNativeSelection } from "../src/native-contract.mjs"
 import { NativeInterfaceSession, previewNativeInterface, validateNativeInterface } from "../src/native-session.mjs"
 import { previewNativeRead, runNativeRead, selectNative } from "../src/native-survey.mjs"
@@ -218,6 +219,56 @@ test("actual macOS build, integrity and permission diagnostic without app launch
       await assert.rejects(nativeCall(built.build_file, { operation: "simulation_step", snapshot: { ...snapshot, capture_values: true }, expected: rawBefore, step: { operation: "click", locator: actionTemplate.definition.controls[1].locator } }), /stale_observation/)
       // A fresh replay cannot silently ignore the changed Ready precondition.
       await assert.rejects(promisify(execFile)(process.execPath, [...runArgs, "--ack-new-run"], { timeout: 45000 }))
+      for (const mode of ["ai_off", "cancel", "invalid", "lost_receipt"]) {
+        const policy = { goal: "Verify governed synthetic parameter re-entry", actions: [{ operation: "fill", control_id: "sample_count", value: "2", before: "complete", after: "complete" }], success: [{ control_id: "result", equals: "0.84" }] }
+        const files = await prepareExploration({ definition: actionTemplate.definition, policy, workspace: root, platformUrl: "http://127.0.0.1/", gatewayId: "11111111-1111-1111-1111-111111111111", resourceId: "22222222-2222-2222-2222-222222222222" })
+        const request = JSON.parse(await readFile(files.authorization_file))
+        assert.equal(request.spec.target.kind, "native_macos_simulation")
+        assert.ok(!canonical(request).includes(built.build_file) && !canonical(request).includes("started_seconds"))
+        let allowed = mode !== "ai_off"
+        let proposals = 0
+        let savedReport = null
+        let calls = 0
+        const client = { async call(operation, payload = {}) {
+          if (operation === "status")
+            return { can_proceed: allowed, effective_state: allowed ? "open" : "cancelled", request, turns: [], expires_at: new Date(Date.now() + 600000).toISOString() }
+          if (operation === "turns") {
+            proposals += 1
+            if (mode === "cancel")
+              allowed = false
+            const proposal = { kind: "act", action_index: mode === "invalid" ? 63 : 0, summary: "Synthetic action choice", missing_information: [] }
+            return { id: payload.id, previous_id: payload.previous_id, input: { observation: payload.observation, evidence_digest: payload.evidence_digest }, state: "generated", proposal, candidate_digest: digest(proposal) }
+          }
+          if (operation === "report") {
+            calls += 1
+            if (savedReport)
+              assert.deepEqual(payload.report, savedReport)
+            savedReport = payload.report
+            if (calls === 1)
+              throw new Error("Synthetic lost action receipt")
+            return {}
+          }
+          throw new Error("Unexpected model operation")
+        } }
+        await assert.rejects(runExploration(files.request_file, { confirmation: files.local_preview_digest, client }))
+        assert.equal(proposals, mode === "ai_off" ? 0 : 1)
+        if (mode === "lost_receipt") {
+          assert.equal(savedReport.outcome, "executed")
+          assert.equal(savedReport.after.values.sample_count, "2")
+          allowed = false
+          const synced = await syncExploration(files.request_file, { client })
+          assert.equal(synced.synced_reports, 1)
+          assert.equal(synced.native_actions_executed, false)
+          assert.equal(proposals, 1)
+        }
+        else { assert.equal(savedReport, null) }
+        // Even a server claiming a fresh empty history cannot bypass the local marker.
+        if (mode !== "ai_off") {
+          allowed = true
+          await assert.rejects(runExploration(files.request_file, { confirmation: files.local_preview_digest, client }), /EEXIST/)
+          assert.equal(proposals, 1)
+        }
+      }
       const badPlan = { schema: "airalogy.interface-plan.v1", steps: [{ operation: "click", control_id: "run", before: "complete", after: "ready" }] }
       const badPreview = await previewNativeInterface(actionTemplate.definition, badPlan)
       const uncertain = await NativeInterfaceSession.open({ definition: actionTemplate.definition, plan: badPlan, confirmation: badPreview.sha256, evidenceRoot: root })

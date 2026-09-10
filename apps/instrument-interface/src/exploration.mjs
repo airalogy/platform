@@ -2,10 +2,10 @@ import { Buffer } from "node:buffer"
 import { randomBytes, randomUUID } from "node:crypto"
 import { lstat, open, readdir } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { BrowserInterfaceSession, previewInterface } from "./browser-session.mjs"
 import { bytesDigest, canonical, digest, exactUrl } from "./contract.mjs"
 import { Evidence, readPrivateSelection, syncDirectory } from "./evidence.mjs"
 import { fingerprint, shape, validateObservation, validateProposal, validateRequest } from "./exploration-contract.mjs"
+import { openSelectedInterface, previewSelectedInterface } from "./interface-backend.mjs"
 
 const emptyPlan = { schema: "airalogy.interface-plan.v1", steps: [] }
 function platformBase(value) {
@@ -16,7 +16,7 @@ function platformBase(value) {
 }
 export async function prepareExploration({ definition, policy, workspace, platformUrl, gatewayId, resourceId, maxIterations = 5, durationSeconds = 600 }) {
   platformBase(platformUrl)
-  const preview = await previewInterface(definition, emptyPlan, policy)
+  const preview = await previewSelectedInterface(definition, emptyPlan, policy)
   const request = {
     schema: "airalogy.interface-exploration.v1",
     id: randomUUID(),
@@ -106,7 +106,7 @@ async function authorized(client, request) {
 export async function runExploration(path, { confirmation, client = null } = {}) {
   const content = await readRequest(path)
   const { request } = content
-  const preview = await previewInterface(content.definition, emptyPlan, content.policy)
+  const preview = await previewSelectedInterface(content.definition, emptyPlan, content.policy)
   if (confirmation !== preview.sha256 || preview.sha256 !== request.spec.local_preview_digest)
     throw new Error("Review and confirm the exact local application/action policy before launch")
   const controls = content.definition.controls.map(control => ({ id: control.id, label: control.locator.name || control.id, read: control.read }))
@@ -132,7 +132,7 @@ export async function runExploration(path, { confirmation, client = null } = {})
   let lastTurnId = null
   let result = "stopped"
   try {
-    session = await BrowserInterfaceSession.open({ definition: content.definition, plan: emptyPlan, policy: content.policy, confirmation, evidenceRoot: root })
+    session = await openSelectedInterface({ definition: content.definition, plan: emptyPlan, policy: content.policy, confirmation, evidenceRoot: root })
     for (let index = 0; index < request.max_iterations; index++) {
       await authorized(client, request)
       const observation = observed(session, request)
@@ -197,5 +197,5 @@ export async function syncExploration(path, { client = null } = {}) {
       synced += 1
     }
   }
-  return { synced_reports: synced, session: await client.call("status"), browser_opened: false }
+  return { synced_reports: synced, session: await client.call("status"), browser_opened: false, native_actions_executed: false }
 }

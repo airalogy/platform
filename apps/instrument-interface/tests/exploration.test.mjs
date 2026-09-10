@@ -6,7 +6,8 @@ import test from "node:test"
 import { BrowserInterfaceSession } from "../src/browser-session.mjs"
 import { digest } from "../src/contract.mjs"
 import { prepareExploration, runExploration, syncExploration } from "../src/exploration.mjs"
-import { validateProposal, validateRequest } from "../src/exploration-contract.mjs"
+import { fingerprint, validateProposal, validateRequest } from "../src/exploration-contract.mjs"
+import { previewSelectedInterface } from "../src/interface-backend.mjs"
 import { fixture, plan } from "./fixture.mjs"
 
 const policy = { goal: "Read two synthetic samples", actions: plan.steps, success: [{ control_id: "result", equals: "0.84" }] }
@@ -78,6 +79,23 @@ test("public exploration request excludes local paths, source bytes and bearer c
 test("shared API/Node golden request has identical canonical validation", async () => {
   const request = JSON.parse(await readFile(new URL("./exploration-fixture.json", import.meta.url)))
   assert.deepEqual(validateRequest(request), request)
+})
+
+test("native development grants are distinct from general native control and read-only surveys", async () => {
+  const request = JSON.parse(await readFile(new URL("./exploration-fixture.json", import.meta.url)))
+  request.spec.target.kind = "native_macos_simulation"
+  request.fingerprint = fingerprint(request)
+  validateRequest(request)
+  for (const kind of ["native_macos", "native_windows", "visual"]) {
+    const invalid = structuredClone(request)
+    invalid.spec.target.kind = kind
+    invalid.fingerprint = fingerprint(invalid)
+    assert.throws(() => validateRequest(invalid))
+  }
+  request.spec.controls[0].read = "checked"
+  request.fingerprint = fingerprint(request)
+  assert.throws(() => validateRequest(request))
+  assert.throws(() => previewSelectedInterface({ schema: "airalogy.native-read-definition.v1" }, { schema: "airalogy.interface-plan.v1", steps: [] }, policy), /read-only/)
 })
 
 test("API base rejects query-bearing endpoints before creating credentials", async () => {

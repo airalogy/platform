@@ -27,7 +27,7 @@ const parsed = computed<ExplorationRequest | null>(() => {
     if (new TextEncoder().encode(text.value).length > 131072 || /(?:aiinterface|aiauthor|aiinstall|aigw)_[\w-]{43}/.test(text.value))
       return null
     const value = JSON.parse(text.value)
-    if (!value || Object.keys(value).sort().join(",") !== "credential_digest,duration_seconds,fingerprint,gateway_id,id,max_iterations,resource_id,schema,spec" || value.schema !== "airalogy.interface-exploration.v1" || value.gateway_id !== props.gatewayId || !props.equipmentOptions.some(item => item.value === value.resource_id) || !value.spec?.goal || !Array.isArray(value.spec.actions))
+    if (!value || Object.keys(value).sort().join(",") !== "credential_digest,duration_seconds,fingerprint,gateway_id,id,max_iterations,resource_id,schema,spec" || value.schema !== "airalogy.interface-exploration.v1" || value.gateway_id !== props.gatewayId || !props.equipmentOptions.some(item => item.value === value.resource_id) || !value.spec?.goal || !["file", "url", "native_macos_simulation"].includes(value.spec?.target?.kind) || !Array.isArray(value.spec.actions))
       return null
     return value
   }
@@ -160,6 +160,9 @@ async function cancel() {
           </div>
         </n-form-item>
         <template v-if="parsed">
+          <n-alert v-if="parsed.spec.target.kind === 'native_macos_simulation'" type="warning" class="mb-3" data-testid="native-exploration-boundary">
+            {{ $t("page.instrumentExploration.nativeBoundary") }}
+          </n-alert>
           <p class="break-words">
             {{ parsed.spec.goal }}
           </p>
@@ -200,6 +203,9 @@ async function cancel() {
 
     <n-modal :show="!!selected" preset="card" class="aira-dialog" style="--aira-dialog-width: 56rem" :title="$t('page.instrumentExploration.history')" :mask-closable="false" :closable="!busy" :close-on-esc="!busy" @update:show="value => { if (!value) selected = null }">
       <template v-if="selected">
+        <n-alert v-if="selected.request.spec.target.kind === 'native_macos_simulation'" type="warning" class="mb-3" data-testid="native-exploration-boundary">
+          {{ $t("page.instrumentExploration.nativeBoundary") }}
+        </n-alert>
         <p>{{ selected.request.spec.goal }}</p>
         <code class="block break-all text-xs">{{ selected.request.fingerprint }}</code>
         <p>{{ $t(`page.instrumentExploration.state.${selected.effective_state}`) }} · {{ new Date(selected.expires_at).toLocaleString() }}</p>

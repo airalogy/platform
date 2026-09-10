@@ -1,8 +1,8 @@
 # 有界 Aira 界面探索
 
-本功能在[浏览器界面后端](./instrument-browser-interface.md)上增加**在预先审核的动作中动态选择下一步**。本地人员先选择应用、语义控件、可观察状态、固定动作和成功条件；Aira 根据选定的文字读回选择动作序号、提出缺失信息或建议结束。本地执行器独立校验每次选择及结果，不允许模型发明控件、参数值、网址或代码，也不自动发现任意软件。
+本功能在[浏览器界面后端](./instrument-browser-interface.md)及[自建 macOS 模拟器后端](./instrument-native-interface.md)上增加**在预先审核的动作中动态选择下一步**。本地人员先选择应用、语义控件、可观察状态、固定动作和成功条件；Aira 根据选定的文字读回选择动作序号、提出缺失信息或建议结束。本地执行器独立校验每次选择及结果，不允许模型发明控件、参数值、网址或代码，也不自动发现任意软件。
 
-这是开发证据，**不是生产设备控制或设备验收**。填写/点击仅支持隔离、审核过的模拟 HTML；真实 URL 仍然只能观察。加载页面或 GET 也可能初始化设备，仍须独立取得本地授权。尚未完成已有登录浏览器、原生桌面、截图理解或真实仪器验收；私有文件运行环境支持 Linux/macOS，Windows ACL 支持仍待实现。
+这是开发证据，**不是生产设备控制或设备验收**。填写/按按钮支持隔离且经审核的模拟 HTML，以及固定构建的自建 AppKit 模拟器（`native_macos_simulation`）；真实 URL 仍然只能观察。加载页面或 GET 也可能初始化设备，仍须独立取得本地授权。已有登录浏览器、厂商原生控制、截图理解和真实仪器均未验收；私有文件运行环境支持 Linux/macOS，Windows ACL 支持仍待实现。
 
 ## 准备本地动作策略
 
@@ -31,6 +31,8 @@
 ```
 
 使用生成的策略及其匹配的界面定义，控件/状态 ID 必须一致。审核 HTML 源码和每个动作，包括读取。模型可以在步数/调用限制内重复选择已审核动作；授权菜单不等于每个动作只能执行一次。不得把凭据或生产操作写入策略。
+
+原生模拟路径先按原生指南构建，并明确打开构建返回的自建模拟器；用真实 PID 执行 `gateway:native simulation-template`。把返回的 `definition_file` 与 `policy_file` 用于下面的探索准备命令。运行器不启动或切换软件焦点，执行时应保持选定模拟器窗口处于焦点；本地独立验证封入构建的程序、进程生命周期、窗口和每次 AX 操作。修改授权目标类型或使用同名应用不能绕过检查；勘察生成的 `airalogy.native-read-definition.v1` 不能直接用作动作定义。
 
 ```bash
 pnpm gateway:explore prepare \
@@ -80,4 +82,6 @@ pnpm gateway:explore sync /absolute/private/session/request.json
 
 `gateway:contract:check` 检查 Node 单一来源 JSON Schema 与 API 副本；固定样例验证两端摘要一致。`gateway:interface-test` 使用真实 Chromium 和合成模型选择。`research:integration` 进一步连接真实 API、一次性 PostgreSQL 与独立 Node/Chromium 进程，仅模型流为合成夹具。界面测试用明确标注的响应夹具验证预览确认、私有文件拒绝、输出转义、历史/取消和 AI 关闭。这些测试不证明付费模型质量、厂商软件或实机已验收。
 
-未知原生软件发现、获授权的原生/视觉 Computer Use、受管理生产 GUI 适配器、各操作系统运维以及有明确型号和负责人的实机试点仍待完成，仍属于整体接入目标。
+在已有授权的 macOS 图形会话中，`RUN_INTERFACE_NATIVE_TESTS=1 pnpm research:integration -k interface_exploration` 还会把自建 AppKit 模拟器接到真实 API 和一次性 PostgreSQL：实际 AX 填写/按按钮、三轮合成模型决策、API 历史、独立 CLI 结果核对及仅回传恢复。原生测试覆盖 AI 关闭、取消、越界建议和回执丢失后的禁止重放；窄屏 UI 显式夹具同时覆盖中英文及两种后端。这不代表付费模型质量、厂商软件或物理设备验收。
+
+未知应用发现/授权启动、合格厂商原生及视觉 Computer Use、受管理生产 GUI 适配器、各操作系统运维，以及有明确型号和负责人的实机试点仍待完成。自建模拟器探索不代表整体接入目标完成。

@@ -57,6 +57,10 @@ def validate_spec(spec):
     states = {item["id"] for item in spec["states"]}
     if len(controls) != len(spec["controls"]) or len(states) != len(spec["states"]):
         raise ValueError("Controls and states must be unique")
+    if spec["target"]["kind"] == "native_macos_simulation" and any(
+        control["read"] not in {"text", "value"} for control in spec["controls"]
+    ):
+        raise ValueError("Native simulation supports text/value readbacks only")
     for check in spec["success"] + [
         check for state in spec["states"] for check in state["checks"]
     ]:

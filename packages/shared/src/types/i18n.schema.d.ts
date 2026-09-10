@@ -3237,6 +3237,7 @@ declare namespace I18n {
       instrumentExploration: {
         title: string
         boundary: string
+        nativeBoundary: string
         authorize: string
         aiOff: string
         empty: string

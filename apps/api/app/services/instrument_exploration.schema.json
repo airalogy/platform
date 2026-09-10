@@ -104,7 +104,7 @@
               "maxLength": 512
             },
             "kind": {
-              "enum": ["file", "url"]
+              "enum": ["file", "url", "native_macos_simulation"]
             }
           },
           "required": ["application", "version", "kind"],

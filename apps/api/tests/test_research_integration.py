@@ -190,6 +190,18 @@ def test_interface_exploration_real_api_browser_and_scope(
     exercise_exploration(runtime, tmp_path, monkeypatch)
 
 
+@pytest.mark.skipif(
+    os.environ.get("RUN_INTERFACE_NATIVE_TESTS") != "1",
+    reason="Requires an explicitly authorized graphical macOS session",
+)
+def test_interface_exploration_real_api_native_and_scope(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.exploration_acceptance import exercise_exploration
+
+    exercise_exploration(runtime, tmp_path, monkeypatch, native=True)
+
+
 def test_interface_survey_real_browser_api_and_readonly_draft(
     runtime, tmp_path, monkeypatch
 ):

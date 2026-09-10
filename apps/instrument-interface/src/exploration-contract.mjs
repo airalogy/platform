@@ -43,6 +43,8 @@ export function validateSpec(spec) {
   const states = new Set(spec.states.map(item => item.id))
   if (controls.size !== spec.controls.length || states.size !== spec.states.length)
     throw new Error("Exploration controls and states must be unique")
+  if (spec.target.kind === "native_macos_simulation" && spec.controls.some(control => !["text", "value"].includes(control.read)))
+    throw new Error("Native simulation supports text/value readbacks only")
   for (const check of [...spec.success, ...spec.states.flatMap(item => item.checks)]) {
     const control = controls.get(check.control_id)
     if (!control || (control.read === "checked" ? typeof check.equals !== "boolean" : typeof check.equals !== "string"))

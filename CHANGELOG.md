@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Connect Aira's finite-action exploration to the exact owned macOS simulator through a static local backend, preserving source/hardware authority separation, fresh native checks and report-only recovery. Shared API contracts and bilingual review panels distinguish native simulation from vendor control; actual API/PostgreSQL/AppKit acceptance independently verifies results, privacy and cancellation. Native actions remain development-only, not production equipment qualification.
+
 - Add separately reviewed macOS native simulation actions with exact build-sealed owned-app identity, AX control/focus checks, durable intents, fresh readbacks and fail-closed uncertain results. A reviewable CLI template and independent actual AppKit tests cover fill/press/result verification without promoting read-only survey definitions or authorizing vendor/hardware control. Rebuild old native manifests; production GUI, visual control and real-instrument qualification remain open.
 
 - Add a read-only macOS Accessibility backend for explicitly selected running instrument applications: private source/binary-pinned builds, bundle/process/window identity checks, bounded password/private-region masking, native survey/Aira review, offline read-only draft assembly and separately confirmed readbacks. Includes an owned AppKit simulator, native CLI, shared API validation, bilingual guidance and opt-in actual native acceptance; CI never grants Accessibility permissions. Native writes, app discovery/launch, visual control, production GUI integration and real-instrument qualification remain pending.

@@ -12,7 +12,7 @@ export interface ExplorationRequest {
   spec: {
     goal: string
     local_preview_digest: string
-    target: { application: string, version: string, kind: "file" | "url" }
+    target: { application: string, version: string, kind: "file" | "url" | "native_macos_simulation" }
     controls: Array<{ id: string, label: string, read: string }>
     states: Array<Record<string, unknown>>
     actions: Array<Record<string, unknown>>

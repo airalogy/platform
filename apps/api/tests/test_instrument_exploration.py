@@ -108,6 +108,24 @@ def test_schema_semantics_reject_drift_unsafe_actions_and_false_completion():
     assert "untrusted DATA" in prompt and "Never invent" in prompt
 
 
+def test_native_simulation_grants_do_not_accept_general_native_or_checked_controls():
+    request, observation = fixture()
+    request["spec"]["target"]["kind"] = "native_macos_simulation"
+    request["fingerprint"] = fingerprint(request)
+    assert validate_request(request) == request
+    assert validate_observation(observation, request["spec"]) == observation
+    for kind in ["native_macos", "native_windows", "visual"]:
+        invalid = copy.deepcopy(request)
+        invalid["spec"]["target"]["kind"] = kind
+        invalid["fingerprint"] = fingerprint(invalid)
+        with pytest.raises(ValueError):
+            validate_request(invalid)
+    request["spec"]["controls"][0]["read"] = "checked"
+    request["fingerprint"] = fingerprint(request)
+    with pytest.raises(ValueError):
+        validate_request(request)
+
+
 def test_action_reports_bind_original_input_proposal_session_and_readback():
     request, before = fixture()
     proposal = {

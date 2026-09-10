@@ -15,7 +15,7 @@ async function main() {
   else if (positionals.length === 2 && ["run", "sync"].includes(positionals[0])) {
     result = positionals[0] === "run" ? await runExploration(positionals[1], { confirmation: values.confirm }) : await syncExploration(positionals[1])
     if (positionals[0] === "sync")
-      result = { synced_reports: result.synced_reports, state: result.session.effective_state, browser_opened: false }
+      result = { synced_reports: result.synced_reports, state: result.session.effective_state, browser_opened: false, native_actions_executed: false }
   }
   else {
     throw new Error("Use prepare with explicit definition/policy/workspace/platform/scope, run REQUEST --confirm LOCAL_PREVIEW_DIGEST, or sync REQUEST")

@@ -38,4 +38,6 @@ For manual library use, call `previewInterface`, then `BrowserInterfaceSession.o
 
 `pnpm gateway:gui-demo` exercises the same backend with only the bundled synthetic app and independently verifies its exported `airalogy.gui-rehearsal.v1` bundle. It accepts no target arguments. `pnpm gateway:interface-test` runs contract, actual browser, private-evidence and independent-process CLI tests. The package can be packed from its directory; install its pinned Playwright Chromium on the selected host.
 
+For Aira exploration on the owned macOS simulator, use the `definition_file` and `policy_file` returned by `gateway:native simulation-template` with `gateway:explore prepare`. The existing Platform review, local digest confirmation, finite action indexes and report-only recovery apply. Native scope is explicitly `native_macos_simulation`; source/build/process/focus checks remain local, and neither a remote grant nor a read-only survey promotes vendor software into an action target. No app is opened or closed by the native exploration runner.
+
 See the repository's bilingual **Browser interface backend** guide for the precise browser contract and privacy/network limits. Windows private-file ACL, vendor-native writes and visual/production GUI control are not implemented; synthetic CI does not qualify an instrument.
