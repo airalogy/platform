@@ -7,8 +7,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import cast, column, exists, func, select
+from sqlalchemy.dialects.postgresql import JSONB, insert
 
 from app.database import DBSession
 from app.libs.file_storage import (
@@ -26,6 +26,11 @@ from app.models.user import User
 from app.routers.depends import CurrentUser, get_current_user
 from app.routers.research_instrument_gateways import _membership
 from app.services.instrument_package_contract import MAX_ARCHIVE_BYTES, inspect_package
+from app.services.instrument_package_matching import (
+    MATCH_TRIM_CHARACTERS,
+    AdapterMatchRequest,
+    compare_package,
+)
 from app.services.knowledge import assert_research_file_upload_quota
 from app.services.research_instruments import validate_bounded_schema
 from app.services.research_runtime import canonical_digest
@@ -299,6 +304,88 @@ async def list_packages(
     }
 
 
+@router.post("/match")
+async def match_packages(
+    lab_id: UUID,
+    params: AdapterMatchRequest,
+    current_user: CurrentUser,
+    db_session: DBSession,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=20),
+):
+    await _authorize(db_session, current_user, lab_id)
+    # Filter inside the Lab-scoped query, before pagination. A match on two
+    # different declaration rows must not create a fictitious device model.
+    declarations = (
+        func.jsonb_array_elements(
+            cast(
+                InstrumentAdapterRelease.inspection["manifest"]["compatibility"][
+                    "declared"
+                ],
+                JSONB,
+            )
+        )
+        .table_valued(column("value", JSONB))
+        .alias("declaration")
+    )
+    has_model = exists(
+        select(1)
+        .select_from(declarations)
+        .where(
+            func.btrim(
+                declarations.c.value["manufacturer"].astext, MATCH_TRIM_CHARACTERS
+            )
+            == params.profile.manufacturer,
+            func.btrim(declarations.c.value["model"].astext, MATCH_TRIM_CHARACTERS)
+            == params.profile.model,
+        )
+    )
+    statement = select(InstrumentAdapterRelease).where(
+        InstrumentAdapterRelease.lab_id == lab_id, has_model
+    )
+    if not params.include_revoked:
+        statement = statement.where(InstrumentAdapterRelease.state != "revoked")
+    rows = (
+        await db_session.scalars(
+            statement.order_by(
+                InstrumentAdapterRelease.created_at.desc(),
+                InstrumentAdapterRelease.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    ).all()
+    items = []
+    for row in rows[:limit]:
+        manifest = row.inspection["manifest"]
+        items.append(
+            {
+                "release": {
+                    "id": str(row.id),
+                    "lab_id": str(row.lab_id),
+                    "package_key": row.package_key,
+                    "package_version": row.package_version,
+                    "archive_digest": row.archive_digest,
+                    "manifest_digest": row.manifest_digest,
+                    "state": row.state,
+                    "revision": row.revision,
+                },
+                "comparison": compare_package(manifest, params.profile),
+            }
+        )
+    # No model, file download, installation grant or new qualification is made.
+    return {
+        "profile": params.profile.model_dump(),
+        "items": items,
+        "has_more": len(rows) > limit,
+        "next_offset": offset + len(items),
+        "hardware_authorized": False,
+        "installation_authorized": False,
+        "qualification_checked": False,
+        "model_called": False,
+    }
+
+
 async def _release(db, user, release_id, *, lock=False):
     row = await db.get(InstrumentAdapterRelease, release_id)
     if row is None:
@@ -312,6 +399,14 @@ async def _release(db, user, release_id, *, lock=False):
             .execution_options(populate_existing=True)
         )
     return row
+
+
+@router.get("/{release_id}")
+async def get_package(
+    release_id: UUID, current_user: CurrentUser, db_session: DBSession
+):
+    # Search results are only a snapshot; inspect/review fresh state separately.
+    return (await _release(db_session, current_user, release_id)).as_dict()
 
 
 @router.get("/{release_id}/history")

@@ -84,6 +84,20 @@ Download the exact archive for independent code, origin, license and dependency 
 
 Migration `0050_instrument_adapter_packages` adds release and review records. Use normal backed-up deployment procedures; software acceptance uses only disposable databases. Downgrade removes catalog/history, not the stored ResearchFile archive and not any locally installed software.
 
+### Find and compare an existing Lab package
+
+Before authoring another adapter, select **Find reusable adapters** in the Lab package panel. Enter the exact manufacturer and model; optional firmware, control software/version, OS, architecture and Gateway/Python versions refine the comparison. Unknown optional values stay empty. Names are case-sensitive literals after trimming outer spaces; no fuzzy matching, aliases or version ranges are interpreted. This reads the private Lab catalogue, not equipment, installed applications or a public global catalogue. No model is called.
+
+The Lab-authorized `POST /instrument-adapter-packages/match?lab_id=...` accepts `profile` and a strict `include_revoked` boolean. Gateway versions are exact SemVer; Python uses exact `major.minor`. Manufacturer/model are filtered within the same declaration row **before pagination** (default 10, maximum 20 packages per page). The response includes `has_more` and `next_offset`; every matching combination is compared independently, never mixing firmware from one row with software from another.
+
+- **Declarations match**: all nine supplied fields match one combination and its declared runtimes, not equipment qualification.
+- **More information or review needed**: target details are missing, or declarations use broad/unknown values such as `any`, `all`, `unknown`, `unspecified` or `*`. These are not executable wildcards.
+- **Compatibility conflicts**: at least one supplied detail differs from the literal declaration.
+
+Results include archive identity, source-review snapshots, field differences and package-supplied test references. Even a non-simulation test claim is not independently verified here: `qualification_checked`, `hardware_authorized` and `installation_authorized` remain false. Revoked releases are excluded unless explicitly requested for inspection. Editing the target or reopening search clears old results.
+
+**Inspect and review** reloads the exact release through the scope-protected `GET /instrument-adapter-packages/{release_id}`. Search never selects a package, creates an installation grant or bypasses later revocation. Continue through the existing protected download, source review, device-specific qualification and installation workflow. No match means no corresponding declaration in this Lab, not proof that an adapter cannot exist; import a separately prepared package or use bounded source authoring. AI-disabled lookup is complete and no new migration is required.
+
 ### Platform-authorized installation and receipt synchronization
 
 Migration `0051_instrument_device_bindings` adds exact equipment/Gateway/release/configuration bindings, short-lived installation grants and revisioned audit records. Upgrade through normal backed-up deployment procedures. Downgrading removes these authorization records, not local software or physical actions.

@@ -82,6 +82,7 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | Native accessibility and visual control backends | [macOS native observation](./instrument-native-interface.md) supports identity-pinned running apps, private surveys, Aira/manual review and read-only definitions. Separately reviewed fill/press is verified on the exact owned AppKit simulator only. Vendor-native writes, Windows/Linux and visual control remain open; real acceptance needs an explicit target |
 | Source-included package build, integrity inspection, isolated tests | Implemented; package tests are not hardware evidence |
 | Private package import, source review/revocation, protected download | Implemented; not installation or qualification |
+| Find reusable packages in the Lab catalogue | [Exact declaration comparison](./instrument-adapter-packages.md#find-and-compare-an-existing-lab-package), paginated candidates and fresh source review implemented; no automatic selection, public catalogue or qualification |
 | Inactive pure-Python offline installation and local receipts | Implemented, POSIX; no activation or remote authorization |
 | Exact device/package/config binding, independent installation grants and receipt synchronization | Implemented; inactive POSIX pure-Python copies only |
 | Bounded source generation and test repair | Implemented through the [local authoring assistant](./instrument-source-authoring.md); fixed human-selected contracts/tests, synthetic acceptance only |

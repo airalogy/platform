@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { AdapterImportPreview, AdapterRelease, AdapterReview } from "@/service/api/instrument-packages"
-import { confirmAdapterImport, confirmAdapterReview, fetchAdapterHistory, fetchAdapterPackages, previewAdapterImport, previewAdapterReview } from "@/service/api/instrument-packages"
+import { confirmAdapterImport, confirmAdapterReview, fetchAdapterHistory, fetchAdapterPackage, fetchAdapterPackages, previewAdapterImport, previewAdapterReview } from "@/service/api/instrument-packages"
 import { fetchResearchFile } from "@/service/api/knowledge"
 import { $t } from "@airalogy/shared/locales"
+import InstrumentPackageMatcher from "./instrument-package-matcher.vue"
 
 const props = defineProps<{ labId: string }>()
 const items = ref<AdapterRelease[]>([])
@@ -106,6 +107,7 @@ onMounted(() => guarded(() => refresh()))
       {{ $t("page.resourceLibrary.adapterPackagesHint") }}
     </p>
     <n-space class="mb-3">
+      <instrument-package-matcher :lab-id="labId" :disabled="busy" @inspect="id => guarded(async () => openRelease(await fetchAdapterPackage(id)))" @import="openImport" />
       <n-button :disabled="busy" @click="openImport">
         {{ $t("page.resourceLibrary.adapterImport") }}
       </n-button>

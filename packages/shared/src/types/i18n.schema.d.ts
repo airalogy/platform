@@ -3341,6 +3341,45 @@ declare namespace I18n {
         types: string
         instrumentGateways: string
         adapterPackagesTitle: string
+        adapterMatchTitle: string
+        adapterMatchHint: string
+        adapterMatchDetails: string
+        adapterMatchUnknown: string
+        adapterMatchSearch: string
+        adapterMatchIncludeRevoked: string
+        adapterMatchAuthority: string
+        adapterMatchEmpty: string
+        adapterMatchRetry: string
+        adapterMatchCombination: string
+        adapterMatchSupplied: string
+        adapterMatchDeclared: string
+        adapterMatchTestClaims: string
+        adapterMatchNoTests: string
+        adapterMatchSimulation: string
+        adapterMatchUnverifiedClaim: string
+        adapterMatchFields: {
+          manufacturer: string
+          model: string
+          firmware: string
+          application: string
+          application_version: string
+          os: string
+          architecture: string
+          gateway_version: string
+          python_version: string
+        }
+        adapterMatchStatus: {
+          declaration_match: string
+          needs_information: string
+          conflicts: string
+          no_declared_model: string
+        }
+        adapterMatchCheck: {
+          matches: string
+          not_supplied: string
+          unresolved_declaration: string
+          conflicts: string
+        }
         adapterPackagesHint: string
         adapterImport: string
         adapterEmpty: string

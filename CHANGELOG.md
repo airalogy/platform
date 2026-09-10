@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add Lab-private adapter reuse lookup with exact manufacturer/model filtering before pagination and per-combination firmware, software and runtime comparisons. Bilingual review distinguishes missing information, conflicts and package-supplied test claims without granting installation or device authority. Revoked versions are excluded by default; inspection reloads current source-review state and AI-disabled lookup remains available.
+
 - Add separately confirmed startup for an explicitly selected macOS application: metadata-only inspection, expiring bundle/runtime-pinned previews, explicit initialization-risk acknowledgment, durable single-use launch intents, cross-workspace launch serialization and verified returned process identity. Offline receipt inspection never relaunches or infers current readiness. Startup is not sandboxed and does not grant UI/hardware authority; acceptance opens only the owned simulator, with real vendor qualification still pending.
 
 - Add bounded native window-metadata inspection and explicit graphical-session diagnostics. Inactive/reported-locked sessions refuse AX operations and application startup without attempting unlock, wake or a permission change; existing role/focus checks remain authoritative. Native acceptance requires an operator-active graphical session instead of mistaking process startup for UI readiness.

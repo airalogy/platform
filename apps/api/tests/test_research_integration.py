@@ -492,6 +492,15 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
     example = gateway / "examples/adapter-package"
     manifest = json.loads((example / "manifest.json").read_text())
     manifest["id"] = "synthetic." + uuid4().hex
+    manifest["compatibility"]["declared"][0]["manufacturer"] = (
+        " \u00a0Synthetic-" + uuid4().hex + "\u3000 "
+    )
+    manifest["compatibility"]["declared"][0]["architecture"] = "arm64"
+    target = {
+        **manifest["compatibility"]["declared"][0],
+        "gateway_version": "0.1.0",
+        "python_version": "3.12",
+    }
     payloads = {
         name: (example / name).read_bytes()
         for name in [
@@ -519,6 +528,19 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
 
     async def exercise():
         request_id = str(uuid4())
+        match_url = (
+            f"/instrument-adapter-packages/match?lab_id={runtime.seed['lab']['id']}"
+        )
+
+        async def matches(profile=target, include_revoked=False, suffix="", status=200):
+            return await runtime.json(
+                "POST",
+                match_url + suffix,
+                {"profile": profile, "include_revoked": include_revoked},
+                status=status,
+            )
+
+        assert (await matches())["items"] == []
         preview = await upload("/preview", raw, request_id)
         assert (
             not preview["hardware_authorized"]
@@ -527,6 +549,31 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
         await upload("", raw, request_id, "a" * 64, status=409)
         saved = await upload("", raw, request_id, preview["preview_digest"])
         assert saved["state"] == "imported" and saved["id"] == request_id
+        found = await matches()
+        assert not found["model_called"] and not found["qualification_checked"]
+        assert found["items"][0]["release"]["id"] == request_id
+        assert found["items"][0]["comparison"]["status"] == "declaration_match"
+        assert found["items"][0]["release"]["state"] == "imported"
+        assert not found["items"][0]["comparison"]["hardware_authorized"]
+        assert (
+            await matches(
+                {"manufacturer": target["manufacturer"], "model": target["model"]}
+            )
+        )["items"][0]["comparison"]["status"] == "needs_information"
+        assert (await matches({**target, "application_version": "different"}))["items"][
+            0
+        ]["comparison"]["status"] == "conflicts"
+        assert (await matches({**target, "model": "Missing model"}))["items"] == []
+        await matches({**target, "hardware_authorized": True}, status=422)
+        assert (
+            await runtime.json("GET", f"/instrument-adapter-packages/{request_id}")
+        )["archive_digest"] == saved["archive_digest"]
+        await runtime.json(
+            "POST",
+            f"/instrument-adapter-packages/match?lab_id={uuid4()}",
+            {"profile": target},
+            status=404,
+        )
         assert (await upload("", raw, request_id, preview["preview_digest"]))[
             "id"
         ] == request_id
@@ -547,6 +594,7 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
         review_url = f"/instrument-adapter-packages/{request_id}/review"
         reviewed = await runtime.confirm(review_url, review)
         assert reviewed["state"] == "approved" and reviewed["revision"] == 2
+        assert (await matches())["items"][0]["release"]["state"] == "approved"
         await runtime.json("POST", review_url + "/preview", review, status=409)
         token = await runtime.json(
             "POST",
@@ -567,6 +615,13 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
             },
         )
         assert revoked["state"] == "revoked"
+        assert (await matches())["items"] == []
+        assert (await matches(include_revoked=True))["items"][0]["release"][
+            "state"
+        ] == "revoked"
+        assert (
+            await runtime.json("GET", f"/instrument-adapter-packages/{request_id}")
+        )["state"] == "revoked"
         # Neither a lost import response nor re-import revives a revoked release.
         assert (await upload("", raw, request_id, preview["preview_digest"]))[
             "state"
@@ -615,6 +670,16 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
             )
         )
         assert results[0]["id"] == results[1]["id"]
+        first = await matches(include_revoked=True, suffix="&limit=1")
+        second = await matches(
+            include_revoked=True, suffix=f"&limit=1&offset={first['next_offset']}"
+        )
+        assert first["has_more"] and not second["has_more"]
+        assert {
+            first["items"][0]["release"]["id"],
+            second["items"][0]["release"]["id"],
+        } == {request_id, results[0]["id"]}
+        assert len((await matches())["items"]) == 1
         async with sessionmanager.session() as db:
             releases = (
                 await db.scalars(
@@ -624,6 +689,32 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
                 )
             ).all()
             assert len(releases) == 2
+        # A newer unrelated package must not hide matching rows before pagination.
+        # Manufacturer and model on different declaration rows never combine.
+        split_compatibility = {
+            **manifest["compatibility"],
+            "declared": [
+                {
+                    **manifest["compatibility"]["declared"][0],
+                    "manufacturer": "Different manufacturer",
+                },
+                {
+                    **manifest["compatibility"]["declared"][0],
+                    "model": "Different model",
+                },
+            ],
+        }
+        split_raw, _ = build_package(
+            {**manifest, "version": "1.0.2", "compatibility": split_compatibility},
+            factory="synthetic_reader:create_adapter",
+            payloads=payloads,
+        )
+        split_id = str(uuid4())
+        split_preview = await upload("/preview", split_raw, split_id)
+        await upload("", split_raw, split_id, split_preview["preview_digest"])
+        filtered = await matches(suffix="&limit=1")
+        assert not filtered["has_more"]
+        assert filtered["items"][0]["release"]["id"] == results[0]["id"]
         original_auth = runtime.client.headers["Auth-Token"]
         viewer = next(
             account
@@ -637,6 +728,10 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
         )
         try:
             runtime.client.headers["Auth-Token"] = auth["token"]
+            await matches(status=403)
+            await runtime.json(
+                "GET", f"/instrument-adapter-packages/{request_id}", status=403
+            )
             await runtime.json(
                 "GET",
                 f"/instrument-adapter-packages?lab_id={runtime.seed['lab']['id']}",
@@ -652,6 +747,12 @@ def test_instrument_package_import_review_revoke_and_private_file_roundtrip(
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as anonymous:
+            assert (
+                await anonymous.post(match_url, json={"profile": target})
+            ).status_code == 401
+            assert (
+                await anonymous.get(f"/instrument-adapter-packages/{request_id}")
+            ).status_code == 401
             assert (
                 await anonymous.get(
                     f"/instrument-adapter-packages?lab_id={runtime.seed['lab']['id']}"
