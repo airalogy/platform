@@ -27,6 +27,7 @@ def exercise_managed_activation(
     cancel_before_finalize=False,
     sdk_delivery=False,
     http_reader=None,
+    http_controlled=None,
     export_reader=None,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
@@ -72,6 +73,15 @@ def exercise_managed_activation(
         }
         platform_url = export_reader["platform_url"]
         configuration = canonical(export_config(export_reader["export_root"]))
+    if http_controlled:
+        from airalogy_instrument_gateway.package_contract import canonical
+        from http_controlled_fixture import TARGET as CONTROL_TARGET
+        from http_controlled_fixture import config as control_config
+        from http_controlled_fixture import package as control_package
+
+        raw, target = control_package(physical_policy=True), CONTROL_TARGET
+        platform_url = http_controlled["platform_url"]
+        configuration = canonical(control_config(http_controlled["port"]))
     root = tmp_path.resolve() / "managed-station"
     root.mkdir(mode=0o700)
     for name, value in (
@@ -278,6 +288,19 @@ def exercise_managed_activation(
                 physical_tests_authorized=True,
             )
             qdraft["commands"][0]["key"] = command_key
+            if http_controlled:
+                # Exercise the full controlled qualification policy using owned
+                # synthetic observations only, never a hardware acceptance record.
+                qdraft["scope"] = "controlled"
+                qdraft["commands"][0]["checks"].extend(
+                    {**qdraft["commands"][0]["checks"][0], "kind": kind}
+                    for kind in (
+                        "parameter_readback",
+                        "safe_stop",
+                        "manual_takeover",
+                        "interlocks",
+                    )
+                )
             qualified = await runtime.confirm(binding_url + "/qualifications", qdraft)
             assert qualified["effective_state"] == "qualified"
             activation_url = binding_url + "/activations"
@@ -364,6 +387,13 @@ def exercise_managed_activation(
 
             created = await queue()
             job = created["instrument_job"]
+            if http_controlled:
+                from tests.http_read_acceptance import run_installed_reader
+
+                await run_installed_reader(
+                    runtime, root, snapshot["activation"], token, job, http_controlled
+                )
+                return
             if export_reader:
                 from tests.http_read_acceptance import run_installed_reader
 

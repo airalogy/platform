@@ -68,6 +68,7 @@ class HttpReadResult:
     raw: bytes = field(repr=False)
     sha256: str
     received_at: str
+    status: int = 200
 
 
 def validate_http_read_config(value):
@@ -271,8 +272,26 @@ class HttpReadClient:
             raise HttpReadError("invalid_operation")
         if stop_event is not None and not isinstance(stop_event, threading.Event):
             raise HttpReadError("invalid_stop_event")
+        return self._exchange(
+            contract, query, timeout_seconds=timeout_seconds, stop_event=stop_event
+        )
+
+    def _exchange(
+        self,
+        contract,
+        query,
+        *,
+        timeout_seconds,
+        stop_event,
+        method="GET",
+        body=None,
+        statuses=(200,),
+        error=HttpReadError,
+    ):
+        # Shared transport for the separately configured control client. This is
+        # private implementation, not authority to contact or operate equipment.
         if not self._lock.acquire(blocking=False):
-            raise HttpReadError("busy")
+            raise error("busy")
         finished = threading.Event()
         deadline = time.monotonic() + timeout_seconds
         connection = _PinnedConnection(self._config, timeout_seconds)
@@ -280,9 +299,9 @@ class HttpReadClient:
 
         def check():
             if stop_event is not None and stop_event.is_set():
-                raise HttpReadError("cancelled", request_may_have_been_sent=sent)
+                raise error("cancelled", request_may_have_been_sent=sent)
             if time.monotonic() >= deadline:
-                raise HttpReadError("deadline", request_may_have_been_sent=sent)
+                raise error("deadline", request_may_have_been_sent=sent)
 
         def watch():
             while not finished.wait(0.02):
@@ -306,15 +325,18 @@ class HttpReadClient:
                 "Connection": "close",
                 "Host": urlsplit(self._config["origin"]).netloc,
             }
+            if body is not None:
+                headers["Content-Type"] = "application/json"
+                headers["Content-Length"] = str(len(body))
             watcher.start()
             connection.connect()
             check()
-            sent = True  # Conservative: errors do not prove that GET was unsent.
-            connection.request("GET", path, headers=headers)
+            sent = True  # Conservative: a lost response never permits a retry.
+            connection.request(method, path, body=body, headers=headers)
             with connection.getresponse() as response:
                 check()
-                if response.status != 200:
-                    raise HttpReadError("http_status", request_may_have_been_sent=True)
+                if response.status not in statuses:
+                    raise error("http_status", request_may_have_been_sent=True)
                 content_type = response.headers.get_all("Content-Type", [])
                 lengths = response.headers.get_all("Content-Length", [])
                 transfer = response.headers.get_all("Transfer-Encoding", [])
@@ -337,9 +359,7 @@ class HttpReadClient:
                     or (transfer and (transfer != ["chunked"] or lengths))
                     or (encoding and encoding != ["identity"])
                 ):
-                    raise HttpReadError(
-                        "response_headers", request_may_have_been_sent=True
-                    )
+                    raise error("response_headers", request_may_have_been_sent=True)
                 raw = bytearray()
                 while True:
                     check()
@@ -350,24 +370,24 @@ class HttpReadClient:
                         break
                     raw.extend(chunk)
                     if len(raw) > contract.max_response_bytes:
-                        raise HttpReadError(
-                            "response_size", request_may_have_been_sent=True
-                        )
+                        raise error("response_size", request_may_have_been_sent=True)
                 check()
                 if lengths and len(raw) != int(lengths[0]):
-                    raise HttpReadError(
-                        "response_incomplete", request_may_have_been_sent=True
-                    )
+                    raise error("response_incomplete", request_may_have_been_sent=True)
                 result = _json_result(bytes(raw))
                 check()
                 return HttpReadResult(
-                    result, bytes(raw), sha256(raw), datetime.now(UTC).isoformat()
+                    result,
+                    bytes(raw),
+                    sha256(raw),
+                    datetime.now(UTC).isoformat(),
+                    response.status,
                 )
-        except HttpReadError:
+        except error:
             raise
         except (ValueError, UnicodeError, OSError, http.client.HTTPException):
             check()
-            raise HttpReadError(
+            raise error(
                 "invalid_or_unavailable_response", request_may_have_been_sent=sent
             ) from None
         finally:

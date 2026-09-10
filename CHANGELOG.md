@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add separately configured, fixed-operation HTTP JSON control for reviewed adapters, reusing pinned TLS, bounded responses and non-retrying I/O without broadening read-only configuration. Include a stateful loopback source package with exact Job correlation, independent completion/stop readback, fixed offline tests, independent installation reuse and actual Platform receipt-recovery acceptance; all equipment observations remain synthetic.
+
 - Extend source-only Aira adapter development to fixed non-read-only command contracts with separate strict development consent, visible risk/effect/completion/stop review and durable authorization audit. Preserve all package safety requirements and independent runtime gates. Add an owned stateful control reference, independent fake-transport tests, actual isolated fail/repair acceptance, bilingual mobile review and API/local-browser coverage; simulation remains ineligible for real-equipment activation.
 
 - Add read-only, exact-export inbox collection with pinned POSIX source identity, explicit producer completion/sample evidence, original byte hashes and bounded cancellable reads. Include a source-included CSV/receipt collector, fixed offline tests, optional Aira authoring inputs and bilingual guidance. Reuse governed installed execution and scoped draft DataAsset intake; actual API/storage tests verify original bytes and lost-receipt recovery without rereading the source. Vendor export-completion bridges and real-device qualification remain separate.

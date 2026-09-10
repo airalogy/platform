@@ -28,11 +28,20 @@ def exercise_export_reader(runtime, tmp_path, monkeypatch):
     return _exercise_reader(runtime, tmp_path, monkeypatch, export_files=True)
 
 
-def _exercise_reader(runtime, tmp_path, monkeypatch, *, export_files=False):
+def exercise_http_controlled_reader(runtime, tmp_path, monkeypatch):
+    return _exercise_reader(runtime, tmp_path, monkeypatch, http_controlled=True)
+
+
+def _exercise_reader(
+    runtime, tmp_path, monkeypatch, *, export_files=False, http_controlled=False
+):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
     monkeypatch.syspath_prepend(str(sdk_root / "tests"))
     from http_reader_fixture import serve
+
+    if http_controlled:
+        from http_controlled_fixture import serve
 
     from tests.activation_acceptance import exercise_managed_activation
 
@@ -103,6 +112,7 @@ def _exercise_reader(runtime, tmp_path, monkeypatch, *, export_files=False):
                 "calls": calls,
                 "paths": paths,
                 "sdk_root": sdk_root,
+                "http_controlled": http_controlled,
             }
             if export_files:
                 from test_export_read import publish
@@ -135,7 +145,13 @@ def _exercise_reader(runtime, tmp_path, monkeypatch, *, export_files=False):
                 runtime,
                 tmp_path,
                 monkeypatch,
-                **{"export_reader" if export_files else "http_reader": fixture},
+                **{
+                    "export_reader"
+                    if export_files
+                    else "http_controlled"
+                    if http_controlled
+                    else "http_reader": fixture
+                },
             )
             assert lost[0]
     finally:
@@ -223,6 +239,14 @@ async def run_installed_reader(runtime, root, activation, token, job, fixture):
     store = StateStore(root / "state.json")
     assert store.load().phase == "completion_pending"
     expected = RESULT
+    if fixture.get("http_controlled"):
+        expected = {
+            "operation_id": job["id"],
+            "sample_count": 2,
+            "value": 1.25,
+            "unit": "synthetic_unit",
+            "simulation_only": True,
+        }
     if "export_root" in fixture:
         expected = fixture["expected_result"]
     assert store.load().result == expected
@@ -238,6 +262,13 @@ async def run_installed_reader(runtime, root, activation, token, job, fixture):
             (directory / name).unlink()  # Owned fixture, never a user's export.
         directory.rmdir()
         source.rmdir()
+    elif fixture.get("http_controlled"):
+        assert before.count(("PUT", "/v1/parameters")) == 1
+        assert before.count(("POST", "/v1/start")) == 1
+        assert any(
+            method == "GET" and path.startswith("/v1/result?")
+            for method, path in before
+        )
     else:
         assert sum(path.startswith("/v1/result?") for path, _ in before) == 1
         assert any(path == "/v1/identity" for path, _ in before)

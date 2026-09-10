@@ -121,6 +121,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 原生可访问性及视觉控制后端 | [macOS 原生观察](./instrument-native-interface.md)支持身份固定的运行中应用、私有勘察、Aira/手工审核及只读定义。独立审核的填写/按按钮仅在准确的自建 AppKit 模拟器通过验证。厂商原生写操作、Windows/Linux 和视觉控制仍待实现；实机验收须明确目标 |
 | 含源码适配包构建、完整性检查、隔离测试 | 已实现，包内测试不是实机证据 |
 | 可复用的正式 HTTP GET/JSON 读取 | [固定操作 SDK 后端](./instrument-http-interface.md)、自建服务与含源码参考包；实际安装/API/结果恢复已通过合成验收，不代表厂商设备验收 |
+| 经审核的 HTTP JSON 控制 | [独立固定操作控制后端](./instrument-http-control.md)、关联作业的有状态回环参考、独立包测试及安装后的 Job/回执恢复；不代表实机验收 |
 | 只读采集已完成的导出文件 | [准确批次本地读取器](./instrument-export-interface.md)、含源码包、固定测试及安装后的原始文件接入/恢复；须有独立审核的导出完成生产方，不是任意文件夹发现或厂商实机验收 |
 | 私有包导入、来源批准/撤销、受保护下载 | 已实现，不代表安装或实机资格 |
 | 查找实验室内可复用适配包 | [准确声明比较](./instrument-adapter-packages.md#查找并比较实验室已有适配包)、候选分页及当前来源审核已实现；不自动选包，不代表公共目录或实机资格 |

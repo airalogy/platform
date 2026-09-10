@@ -49,6 +49,9 @@ def server(responder, *, tls=None):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
+        do_POST = do_GET
+        do_PUT = do_GET
+
     instance = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     instance.daemon_threads = True
     if tls:

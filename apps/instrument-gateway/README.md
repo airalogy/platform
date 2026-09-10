@@ -34,7 +34,9 @@ The separate [source authoring assistant](../../docs/en/architecture/instrument-
 
 Non-read-only source drafts require additional explicit Platform consent and visible command effects/completion/stop review. The owned `examples/controlled-reader` reference exercises parameter readback, single start, takeover and uncertain stopping with independent fake transports; it has no production configuration and remains simulation-only. This expands source development, not device access or execution authority.
 
-### Documented HTTP reads
+### Documented HTTP interfaces
+
+For independently documented parameter/start/stop APIs, the separate [reviewed HTTP control backend](../../docs/en/architecture/instrument-http-control.md) fixes methods/paths/body fields in approved code and selects enabled operation names in a separate private configuration. It shares pinned TLS and non-retrying bounded I/O with the read client. The owned `examples/http-controlled-reader` package demonstrates correlated completion, single start, stopping and installed receipt recovery; it is simulation-only and grants no real device authority.
 
 The SDK's [bounded HTTP read backend](../../docs/en/architecture/instrument-http-interface.md) provides fixed GET/JSON operations, private explicit origin/IP/authentication configuration, verified TLS, response/deadline limits and cancellation without redirects or retries. The source-included `examples/http-reader` reference and its loopback simulator exercise reuse, independent package tests and installed result recovery. It is not a generic network tool, real-device adapter or physical safe-stop implementation. Manual development remains available without AI.
 

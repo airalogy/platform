@@ -1,0 +1,95 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.synthetic-http-controlled-reader",
+  "version": "1.0.0",
+  "entry_point": "synthetic.http-controlled-reader",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Owned loopback stateful service only, no vendor or physical device",
+    "sources": ["Public fixed HTTP controlled-reader contract and independent fake-transport tests"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "Synthetic",
+        "model": "HTTP stateful reader",
+        "firmware": "simulation-1",
+        "application": "owned-controlled-service",
+        "application_version": "1.0.0",
+        "os": "synthetic-service-v1",
+        "architecture": "any"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "reader.measure",
+      "version": "1.0.0",
+      "name": "Owned HTTP controlled measurement",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sample_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 96
+          }
+        },
+        "required": ["sample_count"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sample_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 96
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "const": "synthetic_unit"
+          },
+          "simulation_only": {
+            "const": true
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["sample_count", "value", "unit", "simulation_only", "operation_id"],
+        "additionalProperties": false
+      },
+      "risk": "medium",
+      "device_confirmation_required": true,
+      "safety_contract": {
+        "required_interlocks": ["reader.ready"],
+        "operator_presence_required": true,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 30,
+      "units": ["value: synthetic_unit"],
+      "effects": [
+        "Configure/start the explicitly selected owned loopback simulation; never contact physical equipment"
+      ],
+      "completion": "Observed complete state and original result with exact operation UUID, matching parameter readback/count and synthetic units; 202 acceptance is not completion",
+      "stop": "Stop only the same operation UUID, then observe stopped; lost or mismatched receipts remain uncertain",
+      "retry": "never",
+      "outputs": []
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "Owned loopback simulation only; never eligible for real hardware activation",
+    "One acquisition per fresh service; no implicit reset or retry",
+    "No vendor protocol, physical interlocks or hardware safe-stop evidence"
+  ]
+}

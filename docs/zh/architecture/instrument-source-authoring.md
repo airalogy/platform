@@ -57,6 +57,8 @@ node scripts/instrument-authoring-example.mjs /absolute/private/controlled-spec.
 
 真实受控实现仍须有独立明确的参数读回、完成、接管和设备特定停止语义，以及独立测试。缺少信息须返回 `missing_information`，不能编造接口、空操作停止或把模拟改名为硬件。测试通过的草稿仍须源码审核、准确安装、覆盖受控指令的非模拟实机验收、启用授权、预约及本地启动/操作条件。此改动不授权模型或开发进程接触真实设备。
 
+如需自建 HTTP 参考，可改用 `--http-controlled-reader`，使用[独立配置的 JSON 控制后端](./instrument-http-control.md)、准确 SDK `job.job_id` 关联、独立参数/完成读回和模拟停止确认。固定离线测试使用假客户端；源码开发不会连接服务或设备。
+
 真实说明文件是 JSON，字段固定为 `goal`、`manifest`、`factory`、`materials`、`tests`、`licenses`、`initial_sources`。manifest 是尚未构建的适配包模板（`files: []`、`provenance.kind: "aira"`、无已测试真机声明）；factory 固定为 Python `module:function`。materials 是 1–16 项显式选定的 `{name, text}`，名称不含本地目录；测试、许可和初始源码分别是 `tests/*.py`、`licenses/*`、`source/*.py` 到文本的映射。初始源码可以为空，总上下文最多 128 KiB。这里不执行 PDF/OCR、目录采集或软件发现；需要时请在许可范围内提供明确审阅过的文本摘录。
 
 准备前请检查机密、个人数据、分发许可及模型处理权限。已知 Platform 凭证格式会被拒绝，但没有任何此类扫描能够保证所有秘密都已清除。

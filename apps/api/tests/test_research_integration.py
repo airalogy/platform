@@ -189,6 +189,14 @@ def test_http_reader_installed_runtime_actual_api_and_lost_receipt(
     exercise_http_reader(runtime, tmp_path, monkeypatch)
 
 
+def test_http_controlled_reader_installed_start_readback_and_receipt_recovery(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.http_read_acceptance import exercise_http_controlled_reader
+
+    exercise_http_controlled_reader(runtime, tmp_path, monkeypatch)
+
+
 def test_source_authoring_real_api_local_resume_and_private_permissions(
     runtime, tmp_path, monkeypatch
 ):
