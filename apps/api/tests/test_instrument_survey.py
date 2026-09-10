@@ -149,6 +149,10 @@ def test_confirmation_pins_exact_report_reason_scope_and_explicit_processing():
 
 def test_only_confirming_current_authorized_user_can_start_once(monkeypatch):
     monkeypatch.setattr(config, "AI_ENABLED", True)
+    # Exercise authority with an explicit fake provider, not a developer's .env.
+    monkeypatch.setattr(config, "DASHSCOPE_API_KEY", "synthetic-survey-test-key")
+    monkeypatch.setattr(config, "MASTERBRAIN_CALL_MODE", "package")
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     user = SimpleNamespace(id=uuid4())
     row = SimpleNamespace(
         created_by_user_id=user.id,
@@ -170,6 +174,10 @@ def test_only_confirming_current_authorized_user_can_start_once(monkeypatch):
                 SimpleNamespace(**{**vars(row), **change}), user, {"model": "pinned"}
             )
     monkeypatch.setattr(config, "AI_ENABLED", False)
+    with pytest.raises(HTTPException):
+        can_generate(row, user, row.scope_pin)
+    monkeypatch.setattr(config, "AI_ENABLED", True)
+    monkeypatch.setattr(config, "DASHSCOPE_API_KEY", "")
     with pytest.raises(HTTPException):
         can_generate(row, user, row.scope_pin)
 

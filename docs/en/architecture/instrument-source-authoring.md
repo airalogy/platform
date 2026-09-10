@@ -2,17 +2,19 @@
 
 The local assistant can request actual Python source from the configured Aira model, assemble a source-included Adapter Package, run its **fixed** tests in the existing isolated Docker sandbox, and send bounded failure diagnostics back for another source proposal. It does not execute model code in Platform or on the host. It does not open instrument software, discover a workstation, install a driver, approve source, qualify equipment or activate commands.
 
-This is one implementation slice of RFC #5, not completion of autonomous instrument onboarding. Separately authorized [bounded browser exploration](./instrument-interface-exploration.md) is available for reviewed controls/actions. Native/visual Computer Use, unknown-app discovery, supported-OS operations and a real pilot remain pending. The first source author accepts read-only command drafts, pure Python and the trusted SDK/standard library only; no dependency download, native build, arbitrary tools or physical experiment is available to the model. Human-reviewed material, command contracts and independent tests are still required.
+This is one implementation slice of RFC #5, not completion of autonomous instrument onboarding. Separately authorized [bounded browser exploration](./instrument-interface-exploration.md), [scoped macOS discovery/observation and owned-simulator actions](./instrument-native-interface.md), and [documented HTTP reads](./instrument-http-interface.md) are available. Vendor-native/visual control, cross-platform operations and a real pilot remain pending. The first source author accepts read-only command drafts, pure Python and the trusted SDK/standard library only; no dependency download, native build, arbitrary tools or physical experiment is available to the model. Human-reviewed material, command contracts and independent tests are still required.
 
 ## Prepare selected inputs locally
 
 Use a maintained POSIX test workstation and an existing physical, owner-only (`0700`) directory without symlink ancestors. Obtain and independently verify a Gateway SDK wheel and a preinstalled digest-pinned Python Docker image as described in [Adapter Packages](./instrument-adapter-packages.md). Keep this development workspace separate from Gateway runtime credentials and its journal. Windows credential/ACL setup is not yet supported.
 
-For a **synthetic demonstration only**, generate a specification from the repository's one reference fixture, choosing a new absolute filename:
+For a **synthetic demonstration only**, generate a specification from a repository reference fixture, choosing a new absolute filename:
 
 ```bash
 node scripts/instrument-authoring-example.mjs /absolute/private/synthetic-spec.json
 ```
+
+Add `--http-reader` to select the documented HTTP reference with its independently fixed sample/schema tests. The model prompt describes the reusable SDK transport; it does not grant network authority. Choose the exact SDK wheel containing `HttpReadClient`. Neither reference generator contacts equipment or a model.
 
 A real specification is a JSON object with exactly `goal`, `manifest`, `factory`, `materials`, `tests`, `licenses`, and `initial_sources`. The manifest is an unbuilt Adapter Package template (`files: []`, `provenance.kind: "aira"`, no claimed tested hardware). `factory` is a fixed Python `module:function`. Materials are 1–16 explicitly selected `{name, text}` items, named without local directory paths; tests/licenses/initial sources are maps from portable `tests/*.py`, `licenses/*`, `source/*.py` paths to text. Initial sources may be empty. The context is limited to 128 KiB. PDF/OCR, directory collection and software discovery are not performed here; provide an explicitly reviewed text extract when permitted.
 

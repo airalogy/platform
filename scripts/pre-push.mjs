@@ -120,6 +120,7 @@ const GATEWAY_FILES = new Set([
   "apps/api/app/services/instrument_output_contract.py",
   "apps/api/app/services/instrument_authoring_contract.py",
   "scripts/sync-instrument-contract.mjs",
+  "scripts/instrument-authoring-example.mjs",
 ])
 const COMPUTE_RUNNER_FILES = new Set([".github/workflows/compute-runner.yml"])
 
@@ -147,8 +148,8 @@ export function buildCheckPlan(files, fullRequested = false) {
   if (fullRequested || files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
-    || /^apps\/api\/tests\/(?:activation|instrument_output|authoring|exploration)_acceptance\.py$/.test(file)
-    || /^apps\/instrument-gateway\/(?:src|tests)\//.test(file)
+    || /^apps\/api\/tests\/(?:activation|instrument_output|http_read|authoring|exploration)_acceptance\.py$/.test(file)
+    || /^apps\/instrument-gateway\/(?:src|tests|examples)\//.test(file)
     || file.startsWith("apps/instrument-interface/")
     || /^apps\/api\/migrations\/versions\/\d+_instrument/.test(file)
     || [

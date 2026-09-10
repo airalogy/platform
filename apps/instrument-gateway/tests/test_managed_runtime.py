@@ -349,6 +349,9 @@ class ManagedRuntimeTests(unittest.TestCase):
             )
         )
         self.revoked = True
+        self.assertFalse(
+            self.preview(recover=True)[0]["startup_may_initialize_equipment"]
+        )
         run = self.run_child(recover=True)
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertEqual(self.result["result"], result)

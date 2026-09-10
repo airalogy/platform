@@ -53,7 +53,9 @@ def write_credentials(path: Path, content: dict) -> None:
         os.close(parent_fd)
 
 
-def read_private_json(path: Path, *, max_bytes: int = 16384) -> dict:
+def read_private_json(
+    path: Path, *, max_bytes: int = 16384, strict: bool = False
+) -> dict:
     parent_fd = _parent(path)
     try:
         fd = os.open(
@@ -74,7 +76,12 @@ def read_private_json(path: Path, *, max_bytes: int = 16384) -> dict:
             raw = source.read(max_bytes + 1)
             if len(raw) > max_bytes:
                 raise ValueError("Private document exceeded its size limit")
-            content = json.loads(raw)
+            if strict:
+                from .package_contract import strict_json
+
+                content = strict_json(raw)
+            else:
+                content = json.loads(raw)
     finally:
         os.close(parent_fd)
     if not isinstance(content, dict):

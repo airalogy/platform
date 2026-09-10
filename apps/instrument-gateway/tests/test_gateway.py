@@ -12,7 +12,7 @@ from airalogy_instrument_gateway.adapters import InstrumentAdapter, MockAdapter
 from airalogy_instrument_gateway.client import GatewayAPIError
 from airalogy_instrument_gateway.config import GatewayConfig
 from airalogy_instrument_gateway.models import InstrumentJobEnvelope
-from airalogy_instrument_gateway.runtime import GatewayRuntime
+from airalogy_instrument_gateway.runtime import GatewayHaltError, GatewayRuntime
 from airalogy_instrument_gateway.security import (
     expected_job_signature,
     verify_job_signature,
@@ -371,23 +371,17 @@ class GatewayTests(unittest.TestCase):
             )
             StateStore(state_file).save(state)
             client = FakeClient()
-            adapter = MockAdapter(
-                [
-                    {
-                        "key": "mock.measure",
-                        "version": "1",
-                        "result": {"value": 0},
-                    }
-                ]
-            )
             runtime = GatewayRuntime(
-                config(state_file), client, adapter, StateStore(state_file)
+                config(state_file), client, None, StateStore(state_file)
             )
 
             self.assertTrue(runtime.recover_pending())
 
             self.assertEqual(client.calls, [("complete", {"value": 42})])
             self.assertFalse(state_file.exists())
+            with self.assertRaisesRegex(GatewayHaltError, "Receipt-only"):
+                runtime.run_once()
+            self.assertEqual(client.calls, [("complete", {"value": 42})])
 
     def test_mock_execution_can_be_stopped(self):
         raw = envelope()

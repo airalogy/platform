@@ -31,11 +31,10 @@ def authorize_source(root, state_file):
 
 
 def receipt_only(state):
-    return (
-        state is not None
-        and state.phase in RECEIPT_PHASES
-        and ("file_outputs" in state.envelope or state.phase == "completion_unresolved")
-    )
+    # Both plain JSON and file-producing acquisitions have already finished.
+    # Importing a driver merely to acknowledge either result could initialize
+    # equipment. Invalid/missing completion data must halt without loading it.
+    return state is not None and state.phase in RECEIPT_PHASES
 
 
 def _uuid(value):

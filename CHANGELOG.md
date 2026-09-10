@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add a reusable fixed-operation Instrument HTTP GET/JSON backend with private origin/IP/authentication binding, verified TLS, bounded responses and cancellation without automatic retries. Include a source-included synthetic reader, loopback simulator, Aira authoring inputs, independent offline package tests and installed-driver/real-API result recovery acceptance; no vendor equipment qualification is implied.
+
 - Add explicitly selected software-candidate reports, one-shot Aira recommendations and private local resolution to current signed application identity. Reuse scoped survey consent/history and reject invented candidates, evidence fields and paths; retain manual selection with AI disabled. Suggestions never start software or grant UI/equipment control.
 
 - Add separately confirmed macOS application discovery in an explicit directory/depth, with private expiring previews, bounded metadata-only scans, visible exclusions/partial results and offline snapshots. Candidate paths feed current identity inspection; discovery never launches apps, reads UI, uploads a workstation inventory or grants equipment authority.
@@ -172,6 +174,8 @@ Target initial version: `0.1.0`.
 - Raised the production Web build heap default to 6 GB after the complete application build exceeded the former 4 GB limit.
 
 ### Fixed
+
+- Recover plain JSON instrument completion receipts without loading or initializing the adapter, matching file-result recovery. Invalid completion records halt for reconciliation; acknowledged acquisitions are not repeated and receipt-only recovery cannot lease new work.
 
 - Distinguish saved interface-survey analysis from generated adapter source in both languages; the review panel no longer labels an interpretation as a saved source draft.
 

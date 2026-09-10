@@ -30,6 +30,10 @@ Executable adapters now have a separate source-included package format and a no-
 
 The separate [source authoring assistant](../../docs/en/architecture/instrument-source-authoring.md) can use explicitly selected material and fixed tests to produce actual Python Adapter Packages through bounded Aira calls and offline sandbox repair. Run `airalogy-instrument-authoring --help` after installation. Its short-lived credential and private development journal are separate from this runtime; a tested draft does not authorize installation, software exploration or hardware control.
 
+### Documented HTTP reads
+
+The SDK's [bounded HTTP read backend](../../docs/en/architecture/instrument-http-interface.md) provides fixed GET/JSON operations, private explicit origin/IP/authentication configuration, verified TLS, response/deadline limits and cancellation without redirects or retries. The source-included `examples/http-reader` reference and its loopback simulator exercise reuse, independent package tests and installed result recovery. It is not a generic network tool, real-device adapter or physical safe-stop implementation. Manual development remains available without AI.
+
 ### Local pairing
 
 Instead of copying a long-lived token through the browser, a Lab administrator can create a ten-minute code for a **disabled** Gateway. The local assistant generates its credential in an exclusive private file, claims the code and displays an identity fingerprint. Only after comparing that fingerprint does the administrator approve replacement of the old credential. The Gateway remains disabled; pairing does not load adapters, poll jobs or qualify hardware.

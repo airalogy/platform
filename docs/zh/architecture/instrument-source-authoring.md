@@ -2,17 +2,19 @@
 
 本地助手可通过当前配置的 Aira 模型生成真实 Python 源码，构建包含源码的适配包，在已有 Docker 隔离环境中运行**固定测试**，再根据有限长度的失败诊断修正源码。模型代码不会在 Platform 或宿主机上执行。这个流程不会打开仪器软件、扫描工作站、安装或批准驱动、验收设备或启用指令。
 
-这只是 RFC #5 的一个实现阶段，不代表自主设备接入全部完成。已提供独立授权的[有界浏览器探索](./instrument-interface-exploration.md)，仅选择审核过的控件/动作；原生/视觉 Computer Use、未知软件发现、各操作系统运维和真实试点仍待完成。首版源码开发只接受只读指令草稿、纯 Python、可信 SDK 和标准库，不向模型开放依赖下载、原生编译、任意工具或物理实验。仍需人工确认资料、指令契约和独立测试。
+这只是 RFC #5 的一个实现阶段，不代表自主设备接入全部完成。已提供独立授权的[有界浏览器探索](./instrument-interface-exploration.md)、[限定范围的 macOS 发现/观察与自建模拟器动作](./instrument-native-interface.md)，以及[正式 HTTP 接口读取](./instrument-http-interface.md)。厂商原生/视觉控制、跨平台运维和真实试点仍待完成。首版源码开发只接受只读指令草稿、纯 Python、可信 SDK 和标准库，不向模型开放依赖下载、原生编译、任意工具或物理实验。仍需人工确认资料、指令契约和独立测试。
 
 ## 本地准备选定资料
 
 使用维护良好的 POSIX 测试工作站和已存在的真实私有目录（`0700`，祖先路径无符号链接）。按[适配包说明](./instrument-adapter-packages.md)独立获取并校验 Gateway SDK wheel 和预装的摘要固定 Python Docker 镜像。开发目录与 Gateway 运行凭证、运行日志分开；尚不支持 Windows 凭证与 ACL 配置。
 
-若仅需**合成演示**，可从仓库唯一的参考样例生成说明文件，选择一个新的绝对路径：
+若仅需**合成演示**，可从仓库参考样例生成说明文件，选择一个新的绝对路径：
 
 ```bash
 node scripts/instrument-authoring-example.mjs /absolute/private/synthetic-spec.json
 ```
+
+添加 `--http-reader` 可选择正式 HTTP 参考接口及其独立固定的样本/Schema 测试。模型提示会说明可复用的 SDK 通信工具，但不授予联网权限；应选择确实包含 `HttpReadClient` 的准确 SDK wheel。两种示例生成器都不访问设备或模型。
 
 真实说明文件是 JSON，字段固定为 `goal`、`manifest`、`factory`、`materials`、`tests`、`licenses`、`initial_sources`。manifest 是尚未构建的适配包模板（`files: []`、`provenance.kind: "aira"`、无已测试真机声明）；factory 固定为 Python `module:function`。materials 是 1–16 项显式选定的 `{name, text}`，名称不含本地目录；测试、许可和初始源码分别是 `tests/*.py`、`licenses/*`、`source/*.py` 到文本的映射。初始源码可以为空，总上下文最多 128 KiB。这里不执行 PDF/OCR、目录采集或软件发现；需要时请在许可范围内提供明确审阅过的文本摘录。
 

@@ -175,6 +175,14 @@ def test_managed_activation_real_api_and_installed_copy(runtime, tmp_path, monke
     exercise_managed_activation(runtime, tmp_path, monkeypatch)
 
 
+def test_http_reader_installed_runtime_actual_api_and_lost_receipt(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.http_read_acceptance import exercise_http_reader
+
+    exercise_http_reader(runtime, tmp_path, monkeypatch)
+
+
 def test_source_authoring_real_api_local_resume_and_private_permissions(
     runtime, tmp_path, monkeypatch
 ):

@@ -94,12 +94,15 @@ test("migration and release changes require release metadata checks", () => {
 })
 
 test("research runtime changes require real database integration", () => {
+  assert.deepEqual(checkIds(["apps/instrument-gateway/examples/http-reader/manifest.json"]), ["lint", "types", "api-compile", "research-integration", "gateway-tests"])
+  assert.deepEqual(checkIds(["apps/api/tests/http_read_acceptance.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration"])
   for (const file of ["apps/api/app/services/research_tools.py", "apps/api/app/services/persistent_jobs.py", "apps/api/tests/test_research_integration.py", "apps/api/app/routers/instrument_integrations.py", "apps/api/tests/activation_acceptance.py", "apps/api/tests/instrument_output_acceptance.py"]) {
     assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "api-tests", "research-integration"])
   }
 })
 
 test("generated instrument contract changes run both API and Gateway tests", () => {
+  assert.deepEqual(checkIds(["scripts/instrument-authoring-example.mjs"]), ["lint", "types", "api-compile", "gateway-tests"])
   assert.deepEqual(checkIds(["apps/api/app/services/instrument_adapter_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])
   assert.deepEqual(checkIds(["apps/api/app/services/instrument_package_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])
   assert.deepEqual(checkIds(["apps/api/app/services/instrument_installation_contract.py"]), ["lint", "types", "api-compile", "api-tests", "research-integration", "gateway-tests"])

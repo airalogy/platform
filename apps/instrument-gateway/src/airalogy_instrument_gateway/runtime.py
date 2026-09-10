@@ -264,9 +264,6 @@ class GatewayRuntime:
             raise GatewayHaltError(
                 "Pending job has no matching local adapter; do not accept new work"
             )
-        if state.phase == "completion_pending" and state.result is not None:
-            self._complete(job, state)
-            return True
         if state.phase in {"failure_pending", "stop_unconfirmed"} and state.error:
             if not state.metadata.get("safe_for_new_work"):
                 try:

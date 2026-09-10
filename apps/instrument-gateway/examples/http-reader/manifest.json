@@ -1,0 +1,76 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.http-reader-reference",
+  "version": "1.0.0",
+  "entry_point": "synthetic.http-reader",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Source-included HTTP reader reference; owned loopback simulator only",
+    "sources": ["Public http-reader API specification and independent fixed sample expectations"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "Synthetic",
+        "model": "HTTP reader fixture",
+        "firmware": "synthetic-1",
+        "application": "owned-http-reader",
+        "application_version": "1.0.0",
+        "os": "POSIX",
+        "architecture": "any"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "reader.result.read",
+      "version": "1.0.0",
+      "name": "Read a pre-existing synthetic result",
+      "input_schema": {
+        "type": "object",
+        "properties": { "sample_id": { "enum": ["sample-A", "sample-B"] } },
+        "required": ["sample_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sample_id": { "enum": ["sample-A", "sample-B"] },
+          "value": { "type": "number", "minimum": 0, "maximum": 100 },
+          "unit": { "const": "synthetic_unit" },
+          "simulation_only": { "const": true }
+        },
+        "required": ["sample_id", "value", "unit", "simulation_only"],
+        "additionalProperties": false
+      },
+      "risk": "read_only",
+      "device_confirmation_required": false,
+      "safety_contract": {
+        "required_interlocks": [],
+        "operator_presence_required": false,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 10,
+      "units": ["value: synthetic_unit"],
+      "effects": [
+        "GET of a pre-existing constant from the explicitly selected owned loopback simulator"
+      ],
+      "completion": "Valid JSON object matching the selected sample, fixed units and synthetic schema",
+      "stop": "Cancellation interrupts local HTTP I/O; the owned fixture has no physical process. Not a generic hardware stop.",
+      "retry": "never",
+      "outputs": []
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "Not a real equipment adapter or hardware qualification",
+    "No sampling, start, configuration changes or generic hardware safe stop",
+    "GET does not establish read-only semantics for an unknown vendor endpoint",
+    "Only the documented owned loopback fixture is in scope; result parsing must be independently adapted for real equipment"
+  ]
+}

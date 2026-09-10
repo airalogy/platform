@@ -11,6 +11,7 @@ on:
       - "apps/api/app/services/instrument_output_contract.py"
       - "apps/api/app/services/instrument_authoring_contract.py"
       - "scripts/sync-instrument-contract.mjs"
+      - "scripts/instrument-authoring-example.mjs"
       - ".github/workflows/instrument-gateway.yml"
   pull_request:
     paths:
@@ -22,6 +23,7 @@ on:
       - "apps/api/app/services/instrument_output_contract.py"
       - "apps/api/app/services/instrument_authoring_contract.py"
       - "scripts/sync-instrument-contract.mjs"
+      - "scripts/instrument-authoring-example.mjs"
       - ".github/workflows/instrument-gateway.yml"
 
 concurrency:
@@ -42,6 +44,10 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.4"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
       - name: Set up Python
         uses: actions/setup-python@v6

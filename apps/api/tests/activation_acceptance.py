@@ -25,6 +25,7 @@ def exercise_managed_activation(
     file_outputs=False,
     cancel_before_finalize=False,
     sdk_delivery=False,
+    http_reader=None,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -42,14 +43,28 @@ def exercise_managed_activation(
     from tests.test_instrument_qualifications import report
 
     raw, wheel = package(physical_policy=True, file_outputs=file_outputs), sdk()
+    target = TARGET
+    command_key, arguments = "reader.measure", {"sample_count": 2}
+    platform_url, configuration = "http://127.0.0.1", b"{}"
+    if http_reader:
+        from airalogy_instrument_gateway.package_contract import canonical
+        from http_reader_fixture import TARGET as HTTP_TARGET
+        from http_reader_fixture import package as http_package
+        from test_http_read import config as http_config
+
+        raw, target = http_package(physical_policy=True), HTTP_TARGET
+        command_key, arguments = "reader.result.read", {"sample_id": "sample-A"}
+        platform_url = http_reader["platform_url"]
+        configuration = canonical(http_config(http_reader["port"]))
     root = tmp_path.resolve() / "managed-station"
     root.mkdir(mode=0o700)
     for name, value in (
         ("package.zip", raw),
         ("sdk.whl", wheel),
-        ("config.json", b"{}"),
+        ("config.json", configuration),
     ):
         (root / name).write_bytes(value)
+    (root / "config.json").chmod(0o600)
 
     async def exercise():
         lab = runtime.seed["lab"]["id"]
@@ -167,7 +182,7 @@ def exercise_managed_activation(
         path = root / "private.json"
         public = prepare(
             destination=path,
-            platform_url="http://127.0.0.1",
+            platform_url=platform_url,
             lab_id=lab,
             gateway_id=gateway["id"],
             package=root / "package.zip",
@@ -215,11 +230,11 @@ def exercise_managed_activation(
             qdraft = report()
             qdraft.update(
                 scope="read_only",
-                target=TARGET,
+                target=target,
                 independent_review_confirmed=True,
                 physical_tests_authorized=True,
             )
-            qdraft["commands"][0]["key"] = "reader.measure"
+            qdraft["commands"][0]["key"] = command_key
             qualified = await runtime.confirm(binding_url + "/qualifications", qdraft)
             assert qualified["effective_state"] == "qualified"
             activation_url = binding_url + "/activations"
@@ -229,7 +244,7 @@ def exercise_managed_activation(
                     "id": str(uuid4()),
                     "qualification_id": qualified["id"],
                     "expected_active_id": previous,
-                    "commands": ["reader.measure@1.0.0"],
+                    "commands": [f"{command_key}@1.0.0"],
                     "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
                     "reason": "Synthetic software activation test, no hardware",
                     "activation_confirmed": True,
@@ -299,13 +314,20 @@ def exercise_managed_activation(
                     {
                         "command_id": active["commands"][0]["id"],
                         "equipment_booking_id": booking["id"],
-                        "arguments": {"sample_count": 2},
+                        "arguments": arguments,
                         "idempotency_key": uuid4().hex,
                     },
                 )
 
             created = await queue()
             job = created["instrument_job"]
+            if http_reader:
+                from tests.http_read_acceptance import run_installed_http_reader
+
+                await run_installed_http_reader(
+                    runtime, root, snapshot["activation"], token, job, http_reader
+                )
+                return
             if sdk_delivery:
                 from tests.instrument_output_acceptance import exercise_sdk_delivery
 
