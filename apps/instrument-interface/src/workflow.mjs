@@ -207,14 +207,14 @@ export async function previewWorkflow(input) {
   return { ...value, sha256: digest(value) }
 }
 
-export async function runWorkflow(input, { confirmation, evidenceRoot, acknowledgeNewRun = false }) {
+export async function runWorkflow(input, { confirmation, evidenceRoot, acknowledgeNewRun = false, browserExecutable = null }) {
   const preview = await previewWorkflow(input)
   if (!acknowledgeNewRun || confirmation !== preview.sha256)
     throw new Error("A new workflow run requires exact preview confirmation and acknowledgement")
   const { workflow } = preview
   // Reuse the existing fixed backend and its safety gates. No model, remote
   // grant, dynamic code, new transport or authority is introduced here.
-  const session = await openSelectedInterface({ definition: workflow.definition, plan: workflow.plan, confirmation: preview.interface_preview_digest, evidenceRoot })
+  const session = await openSelectedInterface({ definition: workflow.definition, plan: workflow.plan, confirmation: preview.interface_preview_digest, evidenceRoot, browserExecutable })
   try {
     await session.evidence.append("workflow_intent", { workflow_digest: workflow.sha256, source: workflow.source, run_preview_digest: preview.sha256 })
     if (!same(stateOf(session.lastObservation), workflow.initial))

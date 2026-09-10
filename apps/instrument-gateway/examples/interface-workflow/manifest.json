@@ -1,0 +1,71 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.synthetic-interface-workflow",
+  "version": "1.0.0",
+  "entry_point": "synthetic.interface-workflow",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Reviewed owned HTML workflow through an independently pinned local worker",
+    "sources": ["Public interface workflow contract and independent fake-worker tests"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "Synthetic",
+        "model": "Interface workflow reader",
+        "firmware": "not_applicable",
+        "application": "Airalogy Simulated Reader",
+        "application_version": "1.0",
+        "os": "POSIX",
+        "architecture": "any"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "interface.workflow.run",
+      "version": "1.0.0",
+      "name": "Run reviewed owned interface workflow",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "operation_id": { "type": "string", "format": "uuid" },
+          "workflow_digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "value": { "type": "number" },
+          "unit": { "const": "synthetic_unit" },
+          "simulation_only": { "const": true }
+        },
+        "required": ["operation_id", "workflow_digest", "value", "unit", "simulation_only"],
+        "additionalProperties": false
+      },
+      "risk": "low",
+      "device_confirmation_required": false,
+      "safety_contract": {
+        "required_interlocks": ["interface.initial"],
+        "operator_presence_required": false,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 30,
+      "units": ["value: synthetic_unit"],
+      "effects": [
+        "Open the explicitly reviewed, network-disabled owned simulation HTML and execute its fixed steps"
+      ],
+      "completion": "Worker returns exact Job/workflow correlation after fresh state, parameter and predeclared success readback",
+      "stop": "Terminate bounded local worker only; no physical safe-stop proof, keep unresolved operations locked for reconciliation",
+      "retry": "never",
+      "outputs": []
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "Owned simulation only; not eligible for real hardware activation",
+    "No vendor-native, authenticated-profile, Windows or visual execution",
+    "Independent Node/browser runtime inventory is not an installer, sandbox or physical qualification"
+  ]
+}

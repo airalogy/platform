@@ -29,6 +29,7 @@ def exercise_managed_activation(
     http_reader=None,
     http_controlled=None,
     export_reader=None,
+    interface_worker=None,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -83,6 +84,17 @@ def exercise_managed_activation(
         platform_url = http_controlled["platform_url"]
         configuration = canonical(control_config(http_controlled["port"]))
     root = tmp_path.resolve() / "managed-station"
+    if interface_worker:
+        from airalogy_instrument_gateway.package_contract import canonical
+        from interface_worker_fixture import package as interface_package
+
+        raw, target = (
+            interface_package(physical_policy=True),
+            interface_worker["target"],
+        )
+        command_key, arguments = "interface.workflow.run", {}
+        platform_url = interface_worker["platform_url"]
+        configuration = canonical(interface_worker["config"])
     root.mkdir(mode=0o700)
     for name, value in (
         ("package.zip", raw),
@@ -288,7 +300,7 @@ def exercise_managed_activation(
                 physical_tests_authorized=True,
             )
             qdraft["commands"][0]["key"] = command_key
-            if http_controlled:
+            if http_controlled or interface_worker:
                 # Exercise the full controlled qualification policy using owned
                 # synthetic observations only, never a hardware acceptance record.
                 qdraft["scope"] = "controlled"
@@ -387,6 +399,13 @@ def exercise_managed_activation(
 
             created = await queue()
             job = created["instrument_job"]
+            if interface_worker:
+                from tests.http_read_acceptance import run_installed_reader
+
+                await run_installed_reader(
+                    runtime, root, snapshot["activation"], token, job, interface_worker
+                )
+                return
             if http_controlled:
                 from tests.http_read_acceptance import run_installed_reader
 

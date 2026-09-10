@@ -32,8 +32,18 @@ def exercise_http_controlled_reader(runtime, tmp_path, monkeypatch):
     return _exercise_reader(runtime, tmp_path, monkeypatch, http_controlled=True)
 
 
+def exercise_interface_worker(runtime, tmp_path, monkeypatch):
+    return _exercise_reader(runtime, tmp_path, monkeypatch, interface_worker=True)
+
+
 def _exercise_reader(
-    runtime, tmp_path, monkeypatch, *, export_files=False, http_controlled=False
+    runtime,
+    tmp_path,
+    monkeypatch,
+    *,
+    export_files=False,
+    http_controlled=False,
+    interface_worker=False,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -105,7 +115,11 @@ def _exercise_reader(
 
     task = runtime.run(start())
     try:
-        with nullcontext((None, [])) if export_files else serve() as (port, calls):
+        with (
+            nullcontext((None, []))
+            if export_files or interface_worker
+            else serve() as (port, calls)
+        ):
             fixture = {
                 "port": port,
                 "platform_url": origin,
@@ -113,7 +127,12 @@ def _exercise_reader(
                 "paths": paths,
                 "sdk_root": sdk_root,
                 "http_controlled": http_controlled,
+                "interface_worker": interface_worker,
             }
+            if interface_worker:
+                from interface_worker_fixture import prepare_worker
+
+                fixture.update(prepare_worker())
             if export_files:
                 from test_export_read import publish
 
@@ -146,7 +165,9 @@ def _exercise_reader(
                 tmp_path,
                 monkeypatch,
                 **{
-                    "export_reader"
+                    "interface_worker"
+                    if interface_worker
+                    else "export_reader"
                     if export_files
                     else "http_controlled"
                     if http_controlled
@@ -249,6 +270,14 @@ async def run_installed_reader(runtime, root, activation, token, job, fixture):
         }
     if "export_root" in fixture:
         expected = fixture["expected_result"]
+    if fixture.get("interface_worker"):
+        expected = {
+            "operation_id": job["id"],
+            "workflow_digest": fixture["workflow_digest"],
+            "value": 0.84,
+            "unit": "synthetic_unit",
+            "simulation_only": True,
+        }
     assert store.load().result == expected
     async with sessionmanager.session() as db:
         saved = await db.get(ResearchInstrumentJob, UUID(job["id"]))
@@ -262,6 +291,13 @@ async def run_installed_reader(runtime, root, activation, token, job, fixture):
             (directory / name).unlink()  # Owned fixture, never a user's export.
         directory.rmdir()
         source.rmdir()
+    elif fixture.get("interface_worker"):
+        from interface_worker_fixture import invocations
+
+        worker_before = invocations(fixture)
+        executed = [item for item in worker_before if item[1] == "execute"]
+        assert len(executed) == 1 and executed[0][2] == job["id"]
+        assert any(item[1] == "probe" for item in worker_before)
     elif fixture.get("http_controlled"):
         assert before.count(("PUT", "/v1/parameters")) == 1
         assert before.count(("POST", "/v1/start")) == 1
@@ -284,6 +320,10 @@ async def run_installed_reader(runtime, root, activation, token, job, fixture):
     )
     assert store.load() is None
     assert fixture["calls"] == before  # No HTTP reread or identity/driver startup.
+    if fixture.get("interface_worker"):
+        assert (
+            invocations(fixture) == worker_before
+        )  # No Node/browser launch or action replay.
     if "export_root" in fixture:
         from app.models.knowledge import ResearchFile
         from app.models.research_asset import DataAsset, DataAssetVersion

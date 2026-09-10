@@ -79,7 +79,7 @@ test("the explicit full mode runs the full browser suite", () => {
 test("interface runtime, demo and pinned browser dependencies select actual browser checks", () => {
   for (const file of [".github/workflows/instrument-interface.yml", "scripts/instrument-gui-demo.mjs"])
     assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "interface-tests"])
-  for (const file of ["apps/instrument-interface/src/browser-session.mjs", "scripts/instrument-interface-example.mjs"])
+  for (const file of ["apps/instrument-interface/src/browser-session.mjs", "scripts/instrument-interface-example.mjs", "scripts/instrument-interface-worker-example.mjs"])
     assert.deepEqual(checkIds([file]), ["lint", "types", "api-compile", "research-integration", "interface-tests"])
   for (const file of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"])
     assert.ok(checkIds([file]).includes("interface-tests"))

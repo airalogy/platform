@@ -40,12 +40,15 @@ function locate(root, spec) {
 }
 
 export class BrowserInterfaceSession extends BrowserRuntime {
-  static async open({ definition, plan, policy = null, confirmation, evidenceRoot }) {
+  static async open({ definition, plan, policy = null, confirmation, evidenceRoot, browserExecutable = null }) {
     const preview = await previewInterface(definition, plan, policy)
     if (confirmation !== preview.sha256)
       throw new Error("Confirm the exact current preview before opening the application")
     const evidence = await Evidence.create(evidenceRoot, preview)
     const session = new BrowserInterfaceSession(preview, evidence)
+    // Trusted local runtime selection only; CLI/model definitions cannot supply
+    // this. The managed process bridge pins the complete browser tree first.
+    session.browserExecutable = browserExecutable
     try {
       await session.start()
       return session

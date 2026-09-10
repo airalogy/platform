@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Connect reviewed installed Python adapters to fixed browser workflows through a byte-pinned local Node/dependency/Chromium process bridge, without another remote-control API. Include a source-included owned reference, bounded cancellable non-retrying I/O, independent-install reuse and actual Instrument Job/lost-receipt recovery with no browser replay. Preserve simulation, permission, activation and physical-stop boundaries.
+
 - Add private, reviewed fixed workflows from fully successful interface exploration: validate complete event/step evidence, retain initial conditions, predeclared success and lineage, and reuse the existing deterministic backend without further model calls. Include stale-safe export/run previews, failure rejection and actual headless/API acceptance; no hardware authorization, managed GUI execution or simulation-boundary expansion.
 
 - Add separately configured, fixed-operation HTTP JSON control for reviewed adapters, reusing pinned TLS, bounded responses and non-retrying I/O without broadening read-only configuration. Include a stateful loopback source package with exact Job correlation, independent completion/stop readback, fixed offline tests, independent installation reuse and actual Platform receipt-recovery acceptance; all equipment observations remain synthetic.

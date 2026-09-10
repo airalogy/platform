@@ -37,7 +37,7 @@ export class BrowserRuntime {
 
   async start() {
     await this.evidence.append("opening", { session_id: this.sessionId, confirmation: this.preview.sha256 })
-    this.browser = await chromium.launch({ headless: true, chromiumSandbox: true, timeout: this.remaining() })
+    this.browser = await chromium.launch({ headless: true, chromiumSandbox: true, timeout: this.remaining(), ...(this.browserExecutable ? { executablePath: this.browserExecutable } : {}) })
     this.timer = setTimeout(() => {
       this.stop("Session deadline reached")
       void this.context?.close().catch(() => {})

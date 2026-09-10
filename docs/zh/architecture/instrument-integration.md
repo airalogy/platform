@@ -116,6 +116,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | 私有草稿/修订、导入导出、预览确认 | 已实现 |
 | 离线重放和合成软件浏览器演示 | 已实现，不代表实机证据 |
 | 保存并复用成功探索 | [审核后的本地固定流程](./instrument-interface-workflow.md)保留实际步骤、初始条件、原成功标准和来源；确定性重放需重新确认，无需再次调用模型，不代表受治理 GUI 执行或实机验收 |
+| 已安装适配包调用浏览器流程 | [按字节固定的本地进程连接](./instrument-interface-worker.md)、自建源码参考、独立安装及真实 Instrument Job/回执恢复；不新增远程 Shell、控制端点或物理/原生/视觉验收 |
 | 选定浏览器应用观察及有界模拟探索 | [本地勘察](./instrument-interface-survey.md)自动识别选定范围内的可见控件提示；[浏览器后端](./instrument-browser-interface.md)及独立授权的[Aira 动作选择](./instrument-interface-exploration.md)使用已审核定义/策略。不扫描已安装应用，不提供真实 URL 写操作 |
 | 限于已有目标/控件/状态的可选 Aira 编辑 | 已实现，真实模型调用依赖部署配置 |
 | 发现、启动和探索仪器软件 | [有界 macOS 查找](./instrument-native-interface.md#在选定目录中查找软件)在确认目录/深度后读取元数据。[Aira 候选比较](./instrument-native-interface.md#用-aira-比较候选-或手工选择)仅分析显式选中的元数据，由人选择软件，再独立核验当前身份。选定软件启动有独立短时授权与单次回执；`windows` 提供有界元数据。自主选择软件、厂商动作验收及跨平台后端仍待完成 |

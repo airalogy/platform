@@ -1,5 +1,7 @@
 # Instrument Interface
 
+`gateway:interface-runtime` / `airalogy-interface-runtime` prepares an independently reviewed, byte-pinned local Node/dependency/headless-Chromium/workflow inventory. The installed Python SDK's `InterfaceProcessClient` verifies it before each fixed stdin/stdout worker invocation. The source-included owned reference exercises existing managed Instrument Jobs and receipt-only recovery, without a new network control endpoint or model call. See **Installed interface execution** in the bilingual docs; native/visual production control, physical safe stop and OS installation are not supplied by this bridge.
+
 `pnpm gateway:workflow` (installed: `airalogy-interface-workflow`) adds offline `prepare`/digest-confirmed `export` of successful exploration evidence, then independently confirmed `preview`/`run` for fixed development reuse without AI. It checks complete event/step receipts, preserves predeclared success and exact initial conditions, and never copies credentials, model turns or screenshots. This private intermediate artifact is not an Adapter Package or managed Instrument Job. Existing URL observation-only and owned-native-simulator gates remain unchanged; see the bilingual **Reuse interface workflows** guide.
 
 Local, bounded Chromium observation and supervised **synthetic HTML** replay for instrument-adapter development. This is a development tool, not a remote equipment controller or hardware qualification.

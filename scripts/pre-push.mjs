@@ -161,6 +161,7 @@ export function buildCheckPlan(files, fullRequested = false) {
       "tests/e2e/scripts/research-integration.sh",
       ".github/workflows/research-integration.yml",
       "scripts/instrument-interface-example.mjs",
+      "scripts/instrument-interface-worker-example.mjs",
     ].includes(file),
   )) {
     plan.push(checks.researchIntegration)
@@ -174,6 +175,7 @@ export function buildCheckPlan(files, fullRequested = false) {
     ".github/workflows/instrument-interface.yml",
     "scripts/instrument-gui-demo.mjs",
     "scripts/instrument-interface-example.mjs",
+    "scripts/instrument-interface-worker-example.mjs",
     "apps/instrument-gateway/examples/simulated-reader.html",
     "package.json",
     "pnpm-workspace.yaml",

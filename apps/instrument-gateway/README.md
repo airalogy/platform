@@ -6,6 +6,12 @@ It intentionally has no remote shell, script evaluation, or Platform-delivered a
 
 ## Install
 
+### Installed browser workflow bridge
+
+`airalogy_instrument_gateway.interface_process.InterfaceProcessClient` runs a separately prepared, byte-pinned local Node/headless-Chromium worker through fixed stdin/stdout requests. Review the [runtime preparation and source-included reference](../../docs/en/architecture/instrument-interface-worker.md) before using its private configuration in the existing installation/qualification/activation flow. Node, dependencies, browser, workflow and module resolution are reverified before each invocation; no remote shell, listener, model credential or job-delivered code is added.
+
+Actual software acceptance covers installed Instrument Job execution and receipt-only recovery without reopening the browser. The included reference is owned simulation only; physical stop is deliberately unqualified and failures retain the Gateway reconciliation lock. Native/visual production control and OS installation are not supplied by this bridge.
+
 ### Integration rehearsal (no hardware)
 
 The equipment workbench stores versioned `airalogy.gui-rehearsal.v1` bundles: observations and bounded literal steps, **not executable Adapter Packages**. They never enter Instrument Jobs or grant device authority. From the repository root:
