@@ -27,6 +27,7 @@ def exercise_managed_activation(
     cancel_before_finalize=False,
     sdk_delivery=False,
     http_reader=None,
+    export_reader=None,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -57,6 +58,20 @@ def exercise_managed_activation(
         command_key, arguments = "reader.result.read", {"sample_id": "sample-A"}
         platform_url = http_reader["platform_url"]
         configuration = canonical(http_config(http_reader["port"]))
+    if export_reader:
+        from airalogy_instrument_gateway.package_contract import canonical
+        from export_reader_fixture import package as export_package
+        from export_reader_fixture import target as export_target
+        from test_export_read import config as export_config
+
+        raw, target = export_package(), export_target(export_reader["export_root"])
+        command_key = "export.files.collect"
+        arguments = {
+            "export_id": export_reader["export_id"],
+            "sample_reference": "sample-A",
+        }
+        platform_url = export_reader["platform_url"]
+        configuration = canonical(export_config(export_reader["export_root"]))
     root = tmp_path.resolve() / "managed-station"
     root.mkdir(mode=0o700)
     for name, value in (
@@ -349,6 +364,13 @@ def exercise_managed_activation(
 
             created = await queue()
             job = created["instrument_job"]
+            if export_reader:
+                from tests.http_read_acceptance import run_installed_reader
+
+                await run_installed_reader(
+                    runtime, root, snapshot["activation"], token, job, export_reader
+                )
+                return
             if http_reader:
                 from tests.http_read_acceptance import run_installed_http_reader
 

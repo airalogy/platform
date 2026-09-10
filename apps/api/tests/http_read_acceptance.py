@@ -1,15 +1,17 @@
-"""Installed Gateway -> owned HTTP fixture -> real Platform, with receipt recovery.
+"""Installed Gateway -> owned HTTP/export fixture -> real Platform and recovery.
 
 Synthetic policy rows in a disposable DB, never real hardware qualification.
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import socket
 import sys
+from contextlib import nullcontext
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import uvicorn
 
@@ -19,6 +21,14 @@ from app.models.research_execution import ResearchInstrumentJob
 
 
 def exercise_http_reader(runtime, tmp_path, monkeypatch):
+    return _exercise_reader(runtime, tmp_path, monkeypatch)
+
+
+def exercise_export_reader(runtime, tmp_path, monkeypatch):
+    return _exercise_reader(runtime, tmp_path, monkeypatch, export_files=True)
+
+
+def _exercise_reader(runtime, tmp_path, monkeypatch, *, export_files=False):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
     monkeypatch.syspath_prepend(str(sdk_root / "tests"))
@@ -86,18 +96,46 @@ def exercise_http_reader(runtime, tmp_path, monkeypatch):
 
     task = runtime.run(start())
     try:
-        with serve() as (port, calls):
+        with nullcontext((None, [])) if export_files else serve() as (port, calls):
+            fixture = {
+                "port": port,
+                "platform_url": origin,
+                "calls": calls,
+                "paths": paths,
+                "sdk_root": sdk_root,
+            }
+            if export_files:
+                from test_export_read import publish
+
+                source = tmp_path.resolve() / "owned-export-inbox"
+                source.mkdir(mode=0o700)
+                export_id = str(uuid4())
+                publish(source, export_id)
+                raw_files = {
+                    name: (source / export_id / name).read_bytes()
+                    for name in ("result.csv", "export.json")
+                }
+                fixture.update(
+                    export_root=source,
+                    export_id=export_id,
+                    raw_files=raw_files,
+                    expected_result={
+                        "export_id": export_id,
+                        "sample_reference": "sample-A",
+                        "source_kind": "file_export",
+                        "scientific_validation": False,
+                        "file_count": 2,
+                        "byte_size": sum(len(raw) for raw in raw_files.values()),
+                        "manifest_sha256": hashlib.sha256(
+                            raw_files["export.json"]
+                        ).hexdigest(),
+                    },
+                )
             exercise_managed_activation(
                 runtime,
                 tmp_path,
                 monkeypatch,
-                http_reader={
-                    "port": port,
-                    "platform_url": origin,
-                    "calls": calls,
-                    "paths": paths,
-                    "sdk_root": sdk_root,
-                },
+                **{"export_reader" if export_files else "http_reader": fixture},
             )
             assert lost[0]
     finally:
@@ -111,6 +149,10 @@ def exercise_http_reader(runtime, tmp_path, monkeypatch):
 
 
 async def run_installed_http_reader(runtime, root, activation, token, job, fixture):
+    return await run_installed_reader(runtime, root, activation, token, job, fixture)
+
+
+async def run_installed_reader(runtime, root, activation, token, job, fixture):
     from airalogy_instrument_gateway.credentials import write_credentials
     from airalogy_instrument_gateway.state import StateStore
     from http_reader_fixture import RESULT
@@ -145,6 +187,11 @@ async def run_installed_http_reader(runtime, root, activation, token, job, fixtu
             str(credential_path),
             "--activation",
             activation["pin"]["id"],
+            *(
+                ["--output-root", str(fixture["export_root"])]
+                if "export_root" in fixture
+                else []
+            ),
             *extra,
             env=environment,
             cwd=root,
@@ -175,14 +222,25 @@ async def run_installed_http_reader(runtime, root, activation, token, job, fixtu
     )
     store = StateStore(root / "state.json")
     assert store.load().phase == "completion_pending"
-    assert store.load().result == RESULT
+    expected = RESULT
+    if "export_root" in fixture:
+        expected = fixture["expected_result"]
+    assert store.load().result == expected
     async with sessionmanager.session() as db:
         saved = await db.get(ResearchInstrumentJob, UUID(job["id"]))
         assert saved.status == "completed"
-        assert saved.result == RESULT
+        assert saved.result == expected
     before = list(fixture["calls"])
-    assert sum(path.startswith("/v1/result?") for path, _ in before) == 1
-    assert any(path == "/v1/identity" for path, _ in before)
+    if "export_root" in fixture:
+        source = fixture["export_root"]
+        directory = source / fixture["export_id"]
+        for name in ("result.csv", "export.json"):
+            (directory / name).unlink()  # Owned fixture, never a user's export.
+        directory.rmdir()
+        source.rmdir()
+    else:
+        assert sum(path.startswith("/v1/result?") for path, _ in before) == 1
+        assert any(path == "/v1/identity" for path, _ in before)
     recovery = await command("preview", "--recover")
     assert not recovery["startup_may_initialize_equipment"]
     await command(
@@ -195,6 +253,48 @@ async def run_installed_http_reader(runtime, root, activation, token, job, fixtu
     )
     assert store.load() is None
     assert fixture["calls"] == before  # No HTTP reread or identity/driver startup.
+    if "export_root" in fixture:
+        from app.models.knowledge import ResearchFile
+        from app.models.research_asset import DataAsset, DataAssetVersion
+
+        delivered = await runtime.json(
+            "GET", f"/research-instrument-jobs/{job['id']}/outputs"
+        )
+        assert delivered["state"] == "delivered"
+        assert {item["name"] for item in delivered["items"]} == {
+            "result.csv",
+            "export.json",
+        }
+        async with sessionmanager.session() as db:
+            for item in delivered["items"]:
+                asset = await db.get(DataAsset, UUID(item["data_asset_id"]))
+                assert (
+                    asset.status == "draft"
+                    and str(asset.project_id) == runtime.seed["project"]["id"]
+                )
+                raw = fixture["raw_files"][item["name"]]
+                version = await db.get(
+                    DataAssetVersion, UUID(item["data_asset_version_id"])
+                )
+                assert version.checksum == hashlib.sha256(raw).hexdigest()
+                assert version.byte_size == len(raw)
+                assert version.source["job_id"] == job["id"]
+                file = await db.get(ResearchFile, version.research_file_id)
+                assert file.visibility == "project"
+                assert str(file.project_id) == runtime.seed["project"]["id"]
+                if item["name"] == "result.csv":
+                    assert version.version_metadata["captured_at"] == (
+                        "2026-09-11T12:29:00+08:00"
+                    )
+                    assert version.version_metadata["original_units"] == [
+                        "signal: synthetic_unit"
+                    ]
+                    assert version.version_metadata["conversion_rules"] == []
+                token = await runtime.json(
+                    "POST", f"/knowledge/files/{file.id}/token", {"mode": "preview"}
+                )
+                response = await runtime.client.get(token["url"])
+                assert response.status_code == 200 and response.content == raw
     paths = fixture["paths"]
     assert sum(path.endswith("/lease") for path in paths) == 1
     assert sum(path.endswith("/start") for path in paths) == 1

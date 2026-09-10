@@ -197,6 +197,14 @@ def test_source_authoring_real_api_local_resume_and_private_permissions(
     exercise_authoring(runtime, tmp_path, monkeypatch)
 
 
+def test_export_reader_installed_runtime_actual_intake_and_lost_receipt(
+    runtime, tmp_path, monkeypatch
+):
+    from tests.http_read_acceptance import exercise_export_reader
+
+    exercise_export_reader(runtime, tmp_path, monkeypatch)
+
+
 def test_interface_exploration_real_api_browser_and_scope(
     runtime, tmp_path, monkeypatch
 ):

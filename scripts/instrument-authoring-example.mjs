@@ -2,20 +2,21 @@
 import { closeSync, fsyncSync, openSync, readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
-const httpReader = process.argv[3] === "--http-reader"
-if (process.argv.length !== (httpReader ? 4 : 3))
-  throw new Error("Usage: node scripts/instrument-authoring-example.mjs /absolute/new-spec.json [--http-reader]")
-const root = new URL(`../apps/instrument-gateway/examples/${httpReader ? "http-reader" : "adapter-package"}/`, import.meta.url)
+const mode = process.argv[3]
+if (process.argv.length !== (mode ? 4 : 3) || (mode && !["--http-reader", "--export-reader"].includes(mode)))
+  throw new Error("Usage: node scripts/instrument-authoring-example.mjs /absolute/new-spec.json [--http-reader | --export-reader]")
+const reference = mode ? mode.slice(2) : "adapter-package"
+const root = new URL(`../apps/instrument-gateway/examples/${reference}/`, import.meta.url)
 const selected = name => readFileSync(new URL(name, root), "utf8")
 const manifest = JSON.parse(selected("manifest.json"))
 manifest.provenance.kind = "aira"
-const spec = httpReader
+const spec = mode
   ? {
-      goal: "Implement only the documented owned HTTP reader fixture; no real equipment or implicit network authority",
+      goal: `Implement only the documented ${reference} contract using owned synthetic test data; no real equipment or implicit file/network authority`,
       manifest,
-      factory: "http_reader:create_adapter",
-      materials: [{ name: "http-reader-api.txt", text: selected("api-specification.md") }],
-      tests: { "tests/test_http_reader.py": selected("tests/test_http_reader.py") },
+      factory: `${reference.replaceAll("-", "_")}:create_adapter`,
+      materials: [{ name: `${reference}-api.txt`, text: selected("api-specification.md") }],
+      tests: { [`tests/test_${reference.replaceAll("-", "_")}.py`]: selected(`tests/test_${reference.replaceAll("-", "_")}.py`) },
       licenses: { "licenses/LICENSE.txt": readFileSync(new URL("../LICENSE", import.meta.url), "utf8") },
       initial_sources: {},
     }

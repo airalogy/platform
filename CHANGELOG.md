@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add read-only, exact-export inbox collection with pinned POSIX source identity, explicit producer completion/sample evidence, original byte hashes and bounded cancellable reads. Include a source-included CSV/receipt collector, fixed offline tests, optional Aira authoring inputs and bilingual guidance. Reuse governed installed execution and scoped draft DataAsset intake; actual API/storage tests verify original bytes and lost-receipt recovery without rereading the source. Vendor export-completion bridges and real-device qualification remain separate.
+
 - Add a standalone, explicitly confirmed POSIX SDK bootstrap with exact official-release provenance checks, offline proof/root support, bounded wheel extraction, immutable-directory receipts and isolated named entry-point launch. It never starts drivers or changes existing runtime data. Include the bootstrap/attestation bundle in releases and gate official release installation with the real verifier; keep synthetic positive tests distinct from cryptographic and hardware acceptance.
 
 - Add a private local browser guide for bounded adapter source development: byte-bound input previews, independent material/AI approval handoff, observed worker progress, cooperative pause, explicit interrupted-test reconciliation and verified draft/report downloads. Reuse the existing authoring coordinator, isolation and credential boundaries; refresh never starts work and saved tickets do not prove liveness. Cover real browser/API/database flow with synthetic provider/test outcomes separately from actual Docker tests.

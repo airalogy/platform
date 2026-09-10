@@ -1,0 +1,132 @@
+{
+  "schema": "airalogy.adapter-package.v1",
+  "id": "airalogy.export-inbox-reader",
+  "version": "1.0.0",
+  "entry_point": "airalogy.export-reader",
+  "provenance": {
+    "author": "Airalogy",
+    "kind": "manual",
+    "license": "Apache-2.0",
+    "build_reference": "Source-included data-only export inbox reader; not a vendor control adapter",
+    "sources": ["Public export-completion.v1 specification; independent synthetic file acceptance"]
+  },
+  "compatibility": {
+    "gateway_versions": ["0.1.0"],
+    "python_versions": ["3.11", "3.12", "3.13", "3.14"],
+    "declared": [
+      {
+        "manufacturer": "File export producer",
+        "model": "Reviewed local export inbox",
+        "firmware": "not-observed",
+        "application": "airalogy-export-inbox",
+        "application_version": "1.0.0",
+        "os": "POSIX",
+        "architecture": "any"
+      }
+    ],
+    "tested": []
+  },
+  "commands": [
+    {
+      "key": "export.files.collect",
+      "version": "1.0.0",
+      "name": "Collect a specifically identified completed file export",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sample_reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": ["export_id", "sample_reference"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sample_reference": {
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "file_count": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 2
+          },
+          "byte_size": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1179648
+          },
+          "source_kind": {
+            "const": "file_export"
+          },
+          "scientific_validation": {
+            "const": false
+          }
+        },
+        "required": [
+          "export_id",
+          "sample_reference",
+          "manifest_sha256",
+          "file_count",
+          "byte_size",
+          "source_kind",
+          "scientific_validation"
+        ],
+        "additionalProperties": false
+      },
+      "risk": "read_only",
+      "device_confirmation_required": false,
+      "safety_contract": {
+        "required_interlocks": [],
+        "operator_presence_required": false,
+        "emergency_stop_required": false
+      },
+      "timeout_seconds": 30,
+      "units": [],
+      "effects": [
+        "Read only the selected export UUID directory and its fixed result.csv/export.json files",
+        "Copy raw bytes through the preapproved Platform draft asset intake; no source file modification"
+      ],
+      "completion": "The exact producer completion receipt, sample reference, original byte sizes and SHA-256 digests match; this is file collection, not experimental success",
+      "stop": "Stop waiting/reading locally; no physical process is controlled. The Gateway separately confirms the read worker exited.",
+      "retry": "never",
+      "outputs": [
+        {
+          "name": "result.csv",
+          "media_type": "text/csv",
+          "max_bytes": 1048576,
+          "required": true
+        },
+        {
+          "name": "export.json",
+          "media_type": "application/json",
+          "max_bytes": 131072,
+          "required": true
+        }
+      ]
+    }
+  ],
+  "files": [],
+  "limitations": [
+    "No vendor API, hardware startup, configuration or physical stop implementation",
+    "Qualification identifies the selected local inbox/reader, not live instrument firmware or scientific validity",
+    "A reviewed producer or explicit operator handoff must close files and atomically publish the completion receipt last",
+    "No latest-file guessing, arbitrary directory scanning, automatic format conversion or Record submission",
+    "POSIX local storage under the dedicated account only; Windows ACLs and network filesystems are not qualified"
+  ]
+}

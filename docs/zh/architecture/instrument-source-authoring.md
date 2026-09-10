@@ -37,6 +37,8 @@ node scripts/instrument-authoring-example.mjs /absolute/private/synthetic-spec.j
 
 添加 `--http-reader` 可选择正式 HTTP 参考接口及其独立固定的样本/Schema 测试。模型提示会说明可复用的 SDK 通信工具，但不授予联网权限；应选择确实包含 `HttpReadClient` 的准确 SDK wheel。两种示例生成器都不访问设备或模型。
 
+也可添加 `--export-reader`，选择[已完成导出文件采集](./instrument-export-interface.md)的公开契约和独立合成文件测试。须使用包含 `ExportReadClient` 的准确 SDK wheel；这不会授权读取真实导出目录，也不会自动生成厂商完成桥接。AI 关闭时仍可使用手写含源码包。
+
 真实说明文件是 JSON，字段固定为 `goal`、`manifest`、`factory`、`materials`、`tests`、`licenses`、`initial_sources`。manifest 是尚未构建的适配包模板（`files: []`、`provenance.kind: "aira"`、无已测试真机声明）；factory 固定为 Python `module:function`。materials 是 1–16 项显式选定的 `{name, text}`，名称不含本地目录；测试、许可和初始源码分别是 `tests/*.py`、`licenses/*`、`source/*.py` 到文本的映射。初始源码可以为空，总上下文最多 128 KiB。这里不执行 PDF/OCR、目录采集或软件发现；需要时请在许可范围内提供明确审阅过的文本摘录。
 
 准备前请检查机密、个人数据、分发许可及模型处理权限。已知 Platform 凭证格式会被拒绝，但没有任何此类扫描能够保证所有秘密都已清除。

@@ -36,6 +36,10 @@ The separate [source authoring assistant](../../docs/en/architecture/instrument-
 
 The SDK's [bounded HTTP read backend](../../docs/en/architecture/instrument-http-interface.md) provides fixed GET/JSON operations, private explicit origin/IP/authentication configuration, verified TLS, response/deadline limits and cancellation without redirects or retries. The source-included `examples/http-reader` reference and its loopback simulator exercise reuse, independent package tests and installed result recovery. It is not a generic network tool, real-device adapter or physical safe-stop implementation. Manual development remains available without AI.
 
+### Completed file exports
+
+For file-only workflows, the [read-only export inbox backend](../../docs/en/architecture/instrument-export-interface.md) reads a selected export UUID only after an independently reviewed producer publishes its completion manifest. The source-included `examples/export-reader` collects original CSV/receipt bytes, preserves sample/units/timezone evidence, and uses existing scoped draft asset delivery with receipt-only recovery. It neither scans arbitrary folders nor claims experiment success or live hardware identity. See the guide for producer prerequisites, POSIX configuration, manual packaging and optional Aira inputs.
+
 ### Local browser setup
 
 First install a reviewed SDK using the [provenance-checked isolated bootstrap](../../docs/en/architecture/instrument-sdk-installation.md), or the existing trusted manual package workflow. The standalone bootstrap is attached to official releases and does not need an already installed Gateway. Trust the bootstrap itself independently before execution; it does not install Python/GitHub CLI, configure services or qualify equipment.
