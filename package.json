@@ -21,6 +21,7 @@
     "gateway:interface-test": "pnpm --filter @airalogy/instrument-interface test:browser",
     "gateway:contract:check": "node scripts/sync-instrument-contract.mjs --check",
     "gateway:pair": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.pairing_cli",
+    "gateway:setup": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.setup_cli",
     "gateway:package": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.package_cli",
     "gateway:author": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.authoring_cli",
     "gateway:install": "PYTHONPATH=apps/instrument-gateway/src python3 -m airalogy_instrument_gateway.installation_cli",

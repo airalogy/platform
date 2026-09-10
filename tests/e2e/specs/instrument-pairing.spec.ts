@@ -18,6 +18,7 @@ test("pairing requires local identity review and never enables instrument comman
   await page.locator(".gateway-card__main").filter({ hasText: draft.name }).click()
   const panel = page.getByTestId("instrument-pairing-panel")
   await expect(panel).toBeVisible()
+  await expect(panel.getByTestId("pairing-local-guide")).toHaveAttribute("href", /\/docs\/en\/architecture\/instrument-integration#local-browser-setup$/)
   expect((await panel.boundingBox())!.width).toBeLessThanOrEqual(390)
   await panel.getByRole("button", { name: "Create pairing code" }).click()
   let modal = page.getByRole("dialog").last()

@@ -2,7 +2,10 @@
 import type { InstrumentPairing } from "@/service/api/instrument-pairings"
 import type { InstrumentGateway } from "@/service/api/research-instruments"
 import { cancelPairing, confirmPairing, createPairing, fetchPairings, previewPairing, previewPairingConfirmation } from "@/service/api/instrument-pairings"
+import { useAppStore } from "@/store/modules/app"
+import { useInstanceStore } from "@/store/modules/instance"
 import { $t } from "@airalogy/shared/locales"
+import { documentationPageUrl } from "@airalogy/shared/utils"
 
 const props = defineProps<{ gateway: InstrumentGateway }>()
 const emit = defineEmits<{ updated: [] }>()
@@ -15,6 +18,13 @@ const code = ref("")
 const issued = ref<InstrumentPairing | null>(null)
 const confirmation = ref<{ pairing: InstrumentPairing, preview_digest: string } | null>(null)
 const matched = ref(false)
+const appStore = useAppStore()
+const instanceStore = useInstanceStore()
+const setupGuide = computed(() => documentationPageUrl(
+  instanceStore.documentationUrl,
+  appStore.locale,
+  `architecture/instrument-integration#${appStore.locale === "zh-CN" ? "本地浏览器接入向导" : "local-browser-setup"}`,
+))
 
 async function guarded(action: () => Promise<void>) {
   if (busy.value)
@@ -86,6 +96,12 @@ watch(show, (visible) => {
     </h3>
     <n-alert type="info" :bordered="false" class="mb-3">
       {{ $t("page.resourceLibrary.pairingHint") }}
+      <p class="mt-2">
+        {{ $t("page.resourceLibrary.pairingLocalGuideHint") }}
+      </p>
+      <a :href="setupGuide" target="_blank" rel="noopener noreferrer" class="mt-2 inline-block underline" data-testid="pairing-local-guide">
+        {{ $t("page.resourceLibrary.pairingLocalGuide") }}
+      </a>
     </n-alert>
     <n-space class="mb-3">
       <n-button :disabled="gateway.enabled || busy" @click="open">

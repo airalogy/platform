@@ -59,6 +59,30 @@ pnpm gateway:gui-demo
 
 This operates only the bundled synthetic reader through the shared [browser interface backend](./instrument-browser-interface.md): fill sample count, click simulation, read result. Network requests are denied. The expected result is fixed independently of observations. It prints a bundle for import and saves private local evidence. The separate `gateway:interface` CLI supports selected, digest-confirmed simulation HTML and observation-only URL targets; it is not a native Windows backend or production instrument controller.
 
+### Local browser setup
+
+On an authorized POSIX workstation with the reviewed Gateway SDK already installed:
+
+```bash
+airalogy-instrument-setup --root /absolute/private/service-directory
+```
+
+From the source checkout use `pnpm gateway:setup --root /absolute/private/service-directory`. Replace the example with an existing service-account-owned, real `0700` directory. **Use the same service directory as the existing Gateway journal**; never create another directory to bypass an unresolved job. This is not a bootstrap SDK installer or an unattended service. Python 3.11+ is required; Windows ACL storage and vendor/native installation are unsupported.
+
+Open the exact private address printed by the command in the workstation's browser. Nothing opens automatically. The bilingual guide provides:
+
+1. **Destination review:** confirm the deployed API URL, exact Lab/Gateway IDs and workstation name. Confirmation creates `gateway.json` exclusively with mode `0600`; an existing identity is reused, never overwritten. No Platform request occurs yet.
+2. **Pairing:** enter the short-lived code from Platform, compare the full fingerprint and independently approve in Platform. The code is not saved. Saved pairing receipts support status checks after a reload; the Gateway remains disabled.
+3. **Selected local files:** choose a tested Adapter Package ZIP, a trusted SDK wheel and private JSON configuration. Selection copies each file into private `setup-inputs` on this workstation only. Supply the SDK SHA-256 from an independent trusted source; the UI does not turn a file's own checksum into evidence of trust.
+4. **Preview and confirm:** inspect the pinned package/SDK/config/environment and destination. Five-minute, single-use confirmation rechecks the input digest and identity before creating the private installation request. Download **only the PUBLIC request** for Platform's **Install & qualify** workspace. It excludes runtime/installer credentials, local paths and configuration content.
+5. **Independent approval and installation:** approve package source and exact equipment installation in Platform, then check approval in the local guide. Review source/dependencies and explicitly confirm the inactive installation. The shared installation manager rechecks current grants and bytes, locks the existing job journal and retains durable local receipts before Platform acknowledgment. It never imports/launches the driver or enables the Gateway. Continue independent qualification, active-version approval and the separate local activation launcher afterwards.
+
+Refreshing restores ordinary private metadata, not permission to repeat an action. If a pairing response is lost before its receipt was saved, submit the same code with the existing identity while valid, or use the pairing CLI's status/resume workflow below; do not generate another credential. After uncertain installation, select the same saved request and check status before confirming reconciliation. A durable installed receipt is resent without reinstalling or starting the driver. Expired/revoked grants and unresolved job/stop journals fail closed. Restarting the assistant invalidates outstanding previews, not saved requests; an expired session needs a new launch with the **same directory**. Ctrl-C closes the assistant, not an independently running Gateway.
+
+Security boundary: the server listens only on `127.0.0.1`, rejects other Host/Origin values and requires an unguessable one-hour session token on every API/file-copy request. The token remains in the private URL fragment so reload works; it is not sent in URL requests, logs or referrers. Do not share/bookmark/synchronize that address or use a shared browser profile. There is no CORS, remote asset loading, model call, shell endpoint, arbitrary file-serving route or persistent browser storage. This is not isolation from malware or other programs running as the same OS user; use a dedicated service account. Public request handoff is a manual file download/upload, not cross-origin control of the local server by Platform.
+
+Limits: JSON configuration 16 KiB; each package/SDK 64 MiB; retained copies 64 files / 256 MiB; directory metadata scan 1,000 entries. Files stay in the private directory for audit/recovery. The guide never deletes them automatically; inspect references and retention requirements before manual cleanup. The existing CLI remains available for advanced inspection. No data is silently discarded or reported as installed after an uncertain response.
+
 ## Contract and remaining delivery
 
 ### Local installation pairing
@@ -102,6 +126,7 @@ Actual Python drivers can now be built, inspected without execution, tested in a
 | Bounded source generation and test repair | Implemented through the [local authoring assistant](./instrument-source-authoring.md); fixed human-selected contracts/tests, synthetic acceptance only |
 | Autonomous application exploration and signed distribution | Not implemented |
 | Two-sided identity review, one-time pairing, private credential storage | Implemented, POSIX software acceptance |
+| Local browser setup, public-request handoff and installation recovery | Implemented, authenticated loopback/POSIX; no bootstrap distribution, driver startup or hardware qualification |
 | Independent scoped acceptance records, expiry and revocation | Implemented; human assertions, simulation kept separate |
 | Enforced active-version selection, rollback and local target drift checks | Implemented, POSIX/pure-Python; reviewed driver observations, not hardware attestation |
 | Prevent manual execution bypass after installation claim | Implemented; exact managed grant required, stop/result reconciliation preserved |

@@ -3566,6 +3566,8 @@ declare namespace I18n {
           revoked: string
         }
         pairingTitle: string
+        pairingLocalGuide: string
+        pairingLocalGuideHint: string
         pairingHint: string
         pairingCreate: string
         pairingImpact: string

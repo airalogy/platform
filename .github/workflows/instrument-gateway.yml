@@ -72,6 +72,7 @@ jobs:
           "$RUNNER_TEMP/instrument-gateway-wheel/bin/pip" install --no-deps dist/*.whl
           "$RUNNER_TEMP/instrument-gateway-wheel/bin/python" -c \
             "import airalogy_instrument_gateway, importlib.metadata; print(importlib.metadata.version('airalogy-instrument-gateway'))"
+          "$RUNNER_TEMP/instrument-gateway-wheel/bin/python" tests/check_installed_setup.py
 
       - name: Exercise adapter package isolation and timeout
         env:

@@ -51,6 +51,7 @@ def prepare(
     trusted_sdk_digest,
     config,
     root,
+    expected_preview_digest=None,
 ):
     # No network, driver imports or credential-file lookup during preparation.
     content = {
@@ -64,6 +65,11 @@ def prepare(
         "installation_token": "aiinstall_" + secrets.token_urlsafe(32),
     }
     preview = installation_preview(read_selected(Path(package)), **_inputs(content))
+    if (
+        expected_preview_digest is not None
+        and preview["preview_digest"] != expected_preview_digest
+    ):
+        raise ValueError("Installation inputs changed after preview; review them again")
     request = {
         "schema": "airalogy.installation-request.v1",
         "id": str(uuid4()),

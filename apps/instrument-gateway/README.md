@@ -34,6 +34,20 @@ The separate [source authoring assistant](../../docs/en/architecture/instrument-
 
 The SDK's [bounded HTTP read backend](../../docs/en/architecture/instrument-http-interface.md) provides fixed GET/JSON operations, private explicit origin/IP/authentication configuration, verified TLS, response/deadline limits and cancellation without redirects or retries. The source-included `examples/http-reader` reference and its loopback simulator exercise reuse, independent package tests and installed result recovery. It is not a generic network tool, real-device adapter or physical safe-stop implementation. Manual development remains available without AI.
 
+### Local browser setup
+
+After installing the reviewed Gateway SDK on an authorized POSIX workstation, run:
+
+```bash
+airalogy-instrument-setup --root /absolute/private/service-directory
+```
+
+From this source checkout, use `pnpm gateway:setup --root /absolute/private/service-directory`. Replace the example with an existing service-account-owned `0700` directory shared with the Gateway journal. The command prints a private, one-hour loopback address; open it manually in the local browser and do not share the address. It does not open applications automatically.
+
+The bilingual guide confirms the Platform destination, creates/reuses private identity, claims pairing codes, copies selected files locally, previews installation inputs, downloads only the public authorization request and applies independently approved **inactive** installations. Ordinary private files restore saved work after a refresh/restart; Gateway/installer secrets and configuration content are not returned to the browser or uploaded as part of the public request. The independent SDK checksum is still required, not inferred from the selected file.
+
+Read [the local setup workflow, recovery and security boundaries](../../docs/en/architecture/instrument-integration.md#local-browser-setup). This is not a signed bootstrap installer, automatic adapter generator, Windows/vendor installer or unattended service. Source development, qualification and activation remain separate. Existing command-line workflows below remain supported.
+
 ### Local pairing
 
 Instead of copying a long-lived token through the browser, a Lab administrator can create a ten-minute code for a **disabled** Gateway. The local assistant generates its credential in an exclusive private file, claims the code and displays an identity fingerprint. Only after comparing that fingerprint does the administrator approve replacement of the old credential. The Gateway remains disabled; pairing does not load adapters, poll jobs or qualify hardware.

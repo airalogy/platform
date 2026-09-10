@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add an authenticated loopback equipment setup guide with bilingual destination/pairing review, private local file selection, stale-safe installation previews, public-request handoff and durable inactive-installation recovery. Package its UI in the Gateway SDK and verify both built-wheel serving and real-API browser acceptance. The guide never starts drivers or grants hardware authority; POSIX-only, with independent source/installation/qualification approvals preserved.
+
 - Add a shared equipment onboarding workspace with searchable authorized context, reloadable stage/tool links, guarded context switching and scoped installation/rehearsal history. Filter bookable resources before pagination and retain archived-equipment installation history; workflow navigation never grants installation, qualification or execution authority.
 
 - Add a reusable fixed-operation Instrument HTTP GET/JSON backend with private origin/IP/authentication binding, verified TLS, bounded responses and cancellation without automatic retries. Include a source-included synthetic reader, loopback simulator, Aira authoring inputs, independent offline package tests and installed-driver/real-API result recovery acceptance; no vendor equipment qualification is implied.

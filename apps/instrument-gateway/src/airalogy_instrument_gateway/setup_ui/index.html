@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Airalogy · Local Setup</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header
+      ><strong>Airalogy</strong
+      ><label
+        ><span data-i18n="language">Language</span
+        ><select id="language"
+          ><option value="en">English</option
+          ><option value="zh">中文</option></select
+        ></label
+      ></header
+    >
+    <main>
+      <h1 data-i18n="title">Local equipment setup</h1>
+      <p data-i18n="intro"
+        >Pair this workstation, prepare a reviewed installation and return its receipt. This
+        assistant never launches an adapter or controls equipment.</p
+      >
+      <p class="notice" data-i18n="boundary"
+        >Local interface only. Pairing, source review, installation, qualification and startup are
+        separate approvals. POSIX / pure-Python installation only; Windows and vendor installation
+        remain unsupported.</p
+      >
+      <div id="error" role="alert" hidden></div>
+      <p id="activity" role="status"></p>
+      <section>
+        <h2 data-i18n="identity">1. Confirm the destination</h2>
+        <p data-i18n="identityHint"
+          >Use the API address of your deployed Platform and the exact Lab / Gateway IDs. The
+          service directory must be shared with the existing Gateway journal; do not create another
+          one to bypass running work.</p
+        >
+        <p><span data-i18n="directory">Service directory</span>: <code id="root"></code></p>
+        <form id="identity-form" class="grid">
+          <label
+            ><span>Platform API URL</span
+            ><input
+              name="platform_url"
+              type="url"
+              placeholder="https://lab.example.edu/api"
+              required
+          /></label>
+          <label
+            ><span data-i18n="station">Workstation name</span
+            ><input name="client_name" maxlength="200" required
+          /></label>
+          <label>Lab ID<input name="lab_id" maxlength="36" required /></label>
+          <label>Gateway ID<input name="gateway_id" maxlength="36" required /></label>
+          <button type="submit" data-i18n="reviewIdentity">Review local identity</button>
+        </form>
+        <pre id="scope" hidden></pre>
+      </section>
+      <section id="pair-section" hidden>
+        <h2 data-i18n="pairing">2. Pair with Platform</h2>
+        <p data-i18n="pairHint"
+          >Create a short-lived code for the disabled Gateway in Platform. Paste it here, then
+          compare the full fingerprint on both sides before approving in Platform. The code is never
+          saved.</p
+        >
+        <form id="pair-form"
+          ><label
+            ><span data-i18n="pairCode">Pairing code</span
+            ><input
+              id="pair-code"
+              type="password"
+              autocomplete="off"
+              maxlength="256"
+              required /></label
+          ><button type="submit" data-i18n="pair">Claim this code</button></form
+        >
+        <div class="row"
+          ><label
+            ><span data-i18n="pairHistory">Saved pairing receipt</span
+            ><select id="pairings"></select></label
+          ><button id="pair-status" type="button" data-i18n="refreshPairing"
+            >Check Platform pairing status</button
+          ></div
+        >
+        <pre id="pair-result" aria-live="polite"></pre>
+      </section>
+      <section id="install-section" hidden>
+        <h2 data-i18n="prepare">3. Prepare the exact installation</h2>
+        <p data-i18n="filesHint"
+          >Choose a locally tested Adapter Package, an independently trusted Gateway SDK wheel, and
+          the private JSON configuration. Selected files are copied only into this local service
+          directory, not sent to Platform. Copies are retained for review/recovery; this assistant
+          does not automatically delete them.</p
+        >
+        <form id="install-form" class="grid">
+          <label
+            ><span data-i18n="package">Adapter Package ZIP</span
+            ><input type="file" data-kind="package" accept=".zip" required /><small
+              id="package-info"
+            ></small
+          ></label>
+          <label
+            ><span data-i18n="sdk">Trusted Gateway SDK wheel</span
+            ><input type="file" data-kind="sdk_wheel" accept=".whl" required /><small
+              id="sdk_wheel-info"
+            ></small
+          ></label>
+          <label
+            ><span data-i18n="config">Private adapter configuration JSON</span
+            ><input type="file" data-kind="config" accept=".json" required /><small
+              id="config-info"
+            ></small
+          ></label>
+          <label
+            ><span data-i18n="sdkDigest">SDK SHA-256 from an independent trusted source</span
+            ><input
+              id="sdk-digest"
+              pattern="[a-f0-9]{64}"
+              minlength="64"
+              maxlength="64"
+              required
+            /><small data-i18n="digestHint"
+              >Do not trust a checksum supplied only by an unreviewed adapter or derive trust from
+              the downloaded file itself.</small
+            ></label
+          >
+          <button type="submit" data-i18n="previewInstall">Preview installation inputs</button>
+        </form>
+        <p data-i18n="handoff"
+          >Download the PUBLIC request below. In Platform → Instrument Gateways → Install & qualify,
+          select the equipment and approved package, compare the identity and authorize. Never
+          upload gateway.json or a private installation request.</p
+        >
+        <div class="row"
+          ><label
+            ><span data-i18n="requests">Saved installation request</span
+            ><select id="requests"></select></label
+          ><button id="download" type="button" data-i18n="download">Download PUBLIC request</button
+          ><button id="install-status" type="button" data-i18n="checkInstall"
+            >Check approval / review installation</button
+          ></div
+        >
+        <pre id="install-result" aria-live="polite"></pre>
+        <p class="notice" data-i18n="next"
+          >An installed receipt is not permission to control equipment. Continue independent
+          qualification and active-version review in Platform, then use the separately confirmed
+          local activation launcher. No startup or unattended service is installed by this
+          assistant.</p
+        >
+      </section>
+    </main>
+    <dialog id="review">
+      <h2 data-i18n="reviewTitle">Review the exact impact</h2>
+      <pre id="impact"></pre>
+      <label class="check"
+        ><input id="reviewed" type="checkbox" /><span id="review-label"></span
+      ></label>
+      <div class="row"
+        ><button id="cancel" type="button" data-i18n="cancel">Cancel</button
+        ><button id="confirm" type="button" data-i18n="confirm">Confirm</button></div
+      >
+    </dialog>
+  </body>
+</html>

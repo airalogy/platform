@@ -3562,6 +3562,8 @@
         "revoked": "Authorization revoked"
       },
       "pairingTitle": "Pair a local installation",
+      "pairingLocalGuide": "Local setup guide",
+      "pairingLocalGuideHint": "On the authorized workstation, the local browser assistant guides identity, pairing and reviewed installation. It needs the installed Gateway SDK and the same private service directory as the existing journal; nothing starts from this page.",
       "pairingHint": "First disable the Gateway and finish or safely stop active jobs. Pairing connects one local installation; it does not install a driver or authorize hardware control.",
       "pairingCreate": "Create pairing code",
       "pairingImpact": "Creates a ten-minute pairing code and cancels earlier pending codes for this Gateway. The current credential remains unchanged until you approve the local identity.",
