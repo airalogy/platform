@@ -14,6 +14,7 @@ on:
       - "scripts/instrument-interface-example.mjs"
       - "scripts/instrument-interface-worker-example.mjs"
       - "scripts/instrument-gui-demo.mjs"
+      - "scripts/prepare-instrument-ci*"
       - "package.json"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
@@ -31,6 +32,7 @@ on:
       - "scripts/instrument-interface-example.mjs"
       - "scripts/instrument-interface-worker-example.mjs"
       - "scripts/instrument-gui-demo.mjs"
+      - "scripts/prepare-instrument-ci*"
       - "package.json"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
@@ -70,6 +72,8 @@ jobs:
           pnpm gateway:contract:check
           pnpm --filter @airalogy/instrument-interface lint
           node --check apps/instrument-interface/src/cli.mjs
+      - name: Prepare trusted CI executables and sandboxed Chromium
+        run: node scripts/prepare-instrument-ci.mjs --executables --browser
       - name: Test bounded browser sessions and CLI
         run: pnpm gateway:interface-test
       - name: Compile native read transport and owned simulator without opening applications

@@ -17,6 +17,8 @@
 
 准备 Node 22+、仓库依赖和固定版本的 Playwright Chromium：
 
+必须启用 Chromium 沙箱。限制非特权用户命名空间的 Linux 主机（包括 Ubuntu 24.04）需要管理员为准确的已安装 Chromium 路径配置经过审核的沙箱环境，参见 [Chromium 的 AppArmor 说明](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)。不要通过关闭沙箱或全局限制来让会话运行。Node/Python 及受管理运行文件不可被组或其他用户写入。托管 CI 准备脚本不是工作站安装器，会拒绝本地及自托管环境执行。
+
 ```bash
 pnpm exec playwright install chromium
 pnpm gateway:interface-example

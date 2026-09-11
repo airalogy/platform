@@ -17,6 +17,8 @@ Opening a page or a GET request can initialize equipment. Neither the network me
 
 With Node 22+, repository dependencies and the pinned Playwright Chromium installed:
 
+Chromium sandboxing is required. On Linux hosts with restricted unprivileged user namespaces (including Ubuntu 24.04), an administrator must provision a reviewed sandbox configuration for the exact installed Chromium executable paths; see [Chromium's AppArmor guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md). Do not disable the sandbox or the host-wide restriction to make a session run. Node/Python and the managed runtime must not be group/world writable. The hosted-CI preparation script is not a workstation installer and refuses local/self-hosted execution.
+
 ```bash
 pnpm exec playwright install chromium
 pnpm gateway:interface-example

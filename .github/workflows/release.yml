@@ -44,6 +44,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: pnpm install --frozen-lockfile
+      - run: node --test scripts/prepare-instrument-ci.test.mjs
+      - run: node scripts/prepare-instrument-ci.mjs --executables
       - run: uv --directory apps/api sync --locked --dev
       - run: uv --directory apps/compute-runner lock --check
       - run: uv --directory apps/instrument-gateway lock --check
@@ -75,6 +77,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+      - run: node scripts/prepare-instrument-ci.mjs --executables
       - run: uv --directory apps/instrument-gateway lock --check
       - run: uv --directory apps/instrument-gateway build
       - name: Include independently verifiable SDK bootstrap

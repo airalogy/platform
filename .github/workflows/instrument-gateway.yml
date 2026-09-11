@@ -12,6 +12,7 @@ on:
       - "apps/api/app/services/instrument_authoring_contract.py"
       - "scripts/sync-instrument-contract.mjs"
       - "scripts/instrument-authoring-example.mjs"
+      - "scripts/prepare-instrument-ci*"
       - ".github/workflows/instrument-gateway.yml"
   pull_request:
     paths:
@@ -24,6 +25,7 @@ on:
       - "apps/api/app/services/instrument_authoring_contract.py"
       - "scripts/sync-instrument-contract.mjs"
       - "scripts/instrument-authoring-example.mjs"
+      - "scripts/prepare-instrument-ci*"
       - ".github/workflows/instrument-gateway.yml"
 
 concurrency:
@@ -56,6 +58,12 @@ jobs:
 
       - name: Verify lockfile
         run: uv lock --check
+
+      - name: Prepare trusted CI executables
+        working-directory: .
+        run: |
+          node --test scripts/prepare-instrument-ci.test.mjs
+          node scripts/prepare-instrument-ci.mjs --executables
 
       - name: Run tests
         run: RUN_BOOTSTRAP_ATTESTATION_TESTS=1 PYTHONPATH=src python -m unittest discover -s tests

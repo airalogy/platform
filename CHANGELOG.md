@@ -209,6 +209,8 @@ First formal Community Edition release. See the [release overview and qualificat
 
 ### Fixed
 
+- Prepare GitHub-hosted instrument CI with non-group-writable tool executables and exact-path Chromium AppArmor profiles. Preserve production integrity checks and Chromium sandboxing; do not change global namespace restrictions or local workstation settings.
+
 - Wait for initial Gateway context loading before exposing the fallback adapter import form, preventing delayed responses from destroying an open import dialog or selected file. Cover the race with a deliberately held Gateway response in browser acceptance.
 
 - Keep release smoke-test credentials, backups and runtime state outside the deployment archive; reject unexpected files and symbolic links before packaging. Gate the exact released images on account/permission acceptance, backup/restore and same-release upgrade/rollback rehearsals, and publish curated bilingual release notes.

@@ -11,6 +11,7 @@ on:
         "apps/instrument-interface/**",
         "scripts/instrument-interface-example.mjs",
         "scripts/instrument-interface-worker-example.mjs",
+        "scripts/prepare-instrument-ci*",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "tests/e2e/**",
@@ -28,6 +29,7 @@ on:
         "apps/instrument-interface/**",
         "scripts/instrument-interface-example.mjs",
         "scripts/instrument-interface-worker-example.mjs",
+        "scripts/prepare-instrument-ci*",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "tests/e2e/**",
@@ -61,6 +63,8 @@ jobs:
           cache-dependency-glob: apps/api/uv.lock
       - name: Install locked API dependencies
         run: uv --directory apps/api sync --locked
+      - name: Prepare trusted CI executables and sandboxed Chromium
+        run: node scripts/prepare-instrument-ci.mjs --executables --browser
       - name: Migrate isolated database and run real API/worker acceptance
         run: bash tests/e2e/scripts/research-integration.sh -q --tb=short
       - name: Upload diagnostics
