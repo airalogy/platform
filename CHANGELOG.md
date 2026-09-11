@@ -215,6 +215,10 @@ First formal Community Edition release. See the [release overview and qualificat
 
 - Keep release smoke-test credentials, backups and runtime state outside the deployment archive; reject unexpected files and symbolic links before packaging. Gate the exact released images on account/permission acceptance, backup/restore and same-release upgrade/rollback rehearsals, and publish curated bilingual release notes.
 
+- Require anonymous read access to all four immutable public container images before publishing the public GitHub Release; authenticated CI access alone is not sufficient.
+
+- Update fresh-deployment acceptance to require AI off and no advertised models without a configured provider, replacing the obsolete expectation of three default models.
+
 - Keep Record export dialogs within the shared responsive dialog layout: viewport gutters, a 760px width limit, scrollable content and an always-visible confirmation footer across Lab, Project and Protocol entry points.
 
 - Recover plain JSON instrument completion receipts without loading or initializing the adapter, matching file-result recovery. Invalid completion records halt for reconciliation; acknowledged acquisitions are not repeated and receipt-only recovery cannot lease new work.

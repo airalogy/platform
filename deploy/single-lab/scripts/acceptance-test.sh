@@ -31,7 +31,9 @@ request() {
 status="$(request "$api_url/instance")"
 [[ "$(jq -r '.single_lab' <<<"$status")" == "true" ]] || die "instance is not in single-Lab mode"
 [[ "$(jq -r '.lab_structure_mode' <<<"$status")" == "structured" ]] || die "structured Lab access is not enabled"
-jq -e '.enabled_chat_models == [1, 2, 3]' <<<"$status" >/dev/null || die "GPT model is unexpectedly enabled by default"
+# Fresh deployment fixtures have no model provider. An empty model list is the
+# intentional AI-off contract, not a GPT-only feature toggle.
+jq -e '.ai_enabled == false and .enabled_chat_models == []' <<<"$status" >/dev/null || die "AI is unexpectedly enabled in the provider-free acceptance deployment"
 [[ "$(jq -r '.initialized' <<<"$status")" == "false" ]] || die "acceptance test requires a fresh, uninitialized deployment"
 
 info "Bootstrapping owner account..."

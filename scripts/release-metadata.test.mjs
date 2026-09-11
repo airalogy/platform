@@ -1,5 +1,6 @@
 /* eslint-disable test/no-import-node-test */
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -8,6 +9,39 @@ import { checkReleaseStage } from "./check-release-stage.mjs"
 import { createReleaseMetadata } from "./release-metadata-lib.mjs"
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..")
+
+test("public release gate checks all exact images without logged-in Docker credentials", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "platform-public-gate-"))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const metadata = path.join(root, "image-metadata")
+  await mkdir(metadata)
+  const components = ["api", "web", "protocol-executor", "postgres"]
+  for (const component of components) {
+    await writeFile(path.join(metadata, `${component}.repository`), `ghcr.io/airalogy/platform-${component}\n`)
+    await writeFile(path.join(metadata, `${component}.digest`), `sha256:${"a".repeat(64)}\n`)
+  }
+  const docker = `#!/bin/bash
+set -eu
+test "$DOCKER_CONFIG" != "$AUTHENTICATED_CONFIG"
+test ! -e "$DOCKER_CONFIG/config.json"
+test "$1 $2 $3" = "buildx imagetools inspect"
+printf '%s\\n' "$4" >> "$GATE_CALLS"
+if [[ "$4" == *"platform-$PRIVATE_COMPONENT@"* ]]; then exit 1; fi
+`
+  await writeFile(path.join(root, "docker"), docker, { mode: 0o755 })
+  const workflow = await readFile(path.join(repositoryRoot, ".github/workflows/release.yml"), "utf8")
+  const gate = workflow.split("      - name: Verify public installation access\n")[1]?.split("      - name: Create GitHub release\n")[0]
+  assert.ok(gate, "public access must be checked before publication")
+  const shell = gate.split("        run: |\n")[1].split("\n").map(line => line.replace(/^ {10}/, "")).join("\n")
+  const calls = path.join(root, "calls")
+  const env = { ...process.env, PATH: `${root}:${process.env.PATH}`, RUNNER_TEMP: root, AUTHENTICATED_CONFIG: "/synthetic-authenticated-config", GATE_CALLS: calls }
+  const success = spawnSync("bash", ["-eu", "-o", "pipefail", "-c", shell], { cwd: root, env: { ...env, PRIVATE_COMPONENT: "none" }, encoding: "utf8" })
+  assert.equal(success.status, 0, success.stderr)
+  assert.equal((await readFile(calls, "utf8")).trim().split("\n").length, 4)
+  const failure = spawnSync("bash", ["-eu", "-o", "pipefail", "-c", shell], { cwd: root, env: { ...env, PRIVATE_COMPONENT: "web" }, encoding: "utf8" })
+  assert.notEqual(failure.status, 0)
+  assert.match(failure.stdout, /not anonymously readable/)
+})
 
 test("release packaging rejects smoke secrets, runtime data and links", async (t) => {
   const stage = await mkdtemp(path.join(os.tmpdir(), "platform-release-stage-"))
