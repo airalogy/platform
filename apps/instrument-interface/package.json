@@ -15,6 +15,7 @@
     "airalogy-instrument-interface": "./src/cli.mjs",
     "airalogy-interface-exploration": "./src/exploration-cli.mjs",
     "airalogy-interface-workflow": "./src/workflow-cli.mjs",
+    "airalogy-interface-demonstration": "./src/demonstration-cli.mjs",
     "airalogy-interface-runtime": "./src/worker-runtime-cli.mjs",
     "airalogy-interface-survey": "./src/survey-cli.mjs",
     "airalogy-interface-native": "./src/native-cli.mjs"

@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Record selected browser demonstration input events with private pre/post readbacks, exact action/success policies and distinct human-observation lineage; export through existing fixed workflows and reuse the same installed adapters and Instrument Job receipt recovery without AI. Include explicit visible-window confirmation, cancellation and failure rejection; owned offline HTML only, not desktop recording, vendor control or hardware qualification.
+
 - Connect fixed browser-workflow and native-read adapter references to source-only Aira development with public SDK contracts, immutable independent tests and private example specifications. Verify real isolated fail/repair and same-request recovery, preserving separate control consent, exact text/Job readback, simulation-only declarations and no desktop or hardware authority during development.
 
 - Connect separately reviewed macOS read definitions to installed adapters through a dedicated native read worker, reusing pinned runtime verification, bounded local IPC and Instrument Job receipt recovery. Add an owned source package, real-build/no-launch checks and opt-in graphical independent-install/API acceptance. No application launch, UI writes, screenshots, physical-stop claim or vendor qualification is granted.

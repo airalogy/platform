@@ -21,7 +21,7 @@ function definitionOf(value) {
   return value.schema === "airalogy.browser-interface.v1" ? validateDefinition(value) : validateNativeInterface(value)
 }
 
-function validateState(value, definition) {
+export function validateState(value, definition) {
   checkObject(value, ["state", "values", "enabled"])
   const ids = definition.controls.map(control => control.id)
   checkObject(value.values, ids)
@@ -57,7 +57,9 @@ export function validateWorkflow(input) {
   validateState(value.initial, value.definition)
   if (value.plan.steps[0].before !== value.initial.state)
     throw new Error("Workflow initial state differs from its first step")
-  checkObject(value.source, ["preview_digest", "last_event_digest", "event_count", "session_id"])
+  checkObject(value.source, ["preview_digest", "last_event_digest", "event_count", "session_id"], ["kind"])
+  if ("kind" in value.source && (value.source.kind !== "human_browser_events" || value.definition.schema !== "airalogy.browser-interface.v1" || value.definition.target.source.kind !== "file" || value.definition.network.length))
+    throw new Error("Unknown workflow evidence origin")
   if (![value.source.preview_digest, value.source.last_event_digest].every(hash => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash)) || !Number.isInteger(value.source.event_count) || value.source.event_count < 1 || value.source.event_count > 256 || typeof value.source.session_id !== "string" || !/^[a-f0-9-]{36}$/.test(value.source.session_id))
     throw new Error("Invalid workflow lineage")
   return value
@@ -83,11 +85,17 @@ export async function workflowFromEvidence(directory) {
   directory = await privateDirectory(directory)
   const previewBytes = await readSaved(join(directory, "preview.json"))
   const preview = JSON.parse(previewBytes)
-  checkObject(preview, ["schema", "engine", "definition", "plan", "policy", "sha256"])
+  checkObject(preview, ["schema", "engine", "definition", "plan", "policy", "sha256"], ["capture"])
   verifyDigest(preview)
   if (preview.schema !== "airalogy.interface-preview.v1" || preview.plan.steps?.length !== 0)
     throw new Error("Select a completed exploration evidence directory")
   const definition = definitionOf(preview.definition)
+  const demonstration = "capture" in preview
+  if (demonstration) {
+    checkObject(preview.capture, ["kind", "visible"])
+    if (preview.capture.kind !== "human_browser_events" || typeof preview.capture.visible !== "boolean" || definition.schema !== "airalogy.browser-interface.v1" || definition.target.source.kind !== "file" || definition.network.length)
+      throw new Error("Demonstration evidence requires the explicitly selected owned browser capture")
+  }
   validatePlan(preview.plan, definition)
   validatePolicy(preview.policy, definition)
   // Enumerate bounded names only; never read credentials, model turns, trees or
@@ -150,16 +158,16 @@ export async function workflowFromEvidence(directory) {
       afterSeen = pending !== null
       observation = { ...observed, sha256: hash }
     }
-    else if (event.kind === "step_intent") {
+    else if (event.kind === "step_intent" || event.kind === "demonstration_action") {
       checkObject(data, ["index", "step", "before"])
-      if (pending || !observation || data.index !== steps.length || data.before !== observation.sha256 || data.step.before !== observation.state || !observation.enabled[data.step.control_id] || !preview.policy.actions.some(step => same(step, data.step)))
+      if ((event.kind === "demonstration_action") !== demonstration || pending || !observation || data.index !== steps.length || data.before !== observation.sha256 || data.step.before !== observation.state || !observation.enabled[data.step.control_id] || !preview.policy.actions.some(step => same(step, data.step)))
         throw new Error("Step was not approved against its recorded observation")
       pending = data.step
       afterSeen = false
     }
-    else if (event.kind === "step_result") {
+    else if (event.kind === "step_result" || event.kind === "demonstration_readback") {
       checkObject(data, ["index", "after", "value"], ["hardware_qualified"])
-      if (!pending || !afterSeen || data.index !== steps.length || data.after !== observation.sha256 || observation.state !== pending.after || !same(data.value, observation.values[pending.control_id]) || (pending.operation === "fill" && observation.values[pending.control_id] !== pending.value))
+      if ((event.kind === "demonstration_readback") !== demonstration || !pending || !afterSeen || data.index !== steps.length || data.after !== observation.sha256 || observation.state !== pending.after || !same(data.value, observation.values[pending.control_id]) || (pending.operation === "fill" && observation.values[pending.control_id] !== pending.value))
         throw new Error("Step result or parameter readback is incomplete")
       steps.push(pending)
       pending = null
@@ -167,8 +175,14 @@ export async function workflowFromEvidence(directory) {
     }
     else if (event.kind === "exploration_result") {
       checkObject(data, ["result", "proposal", "hardware_qualified"])
-      if (pending || !observation || data.result !== "client_reported_success" || data.proposal?.kind !== "finish" || data.hardware_qualified !== false || !matches(preview.policy.success, observation))
+      if (demonstration || pending || !observation || data.result !== "client_reported_success" || data.proposal?.kind !== "finish" || data.hardware_qualified !== false || !matches(preview.policy.success, observation))
         throw new Error("Exploration did not meet the predeclared success checks")
+      finished = true
+    }
+    else if (event.kind === "demonstration_result") {
+      checkObject(data, ["result", "completed_steps", "hardware_qualified"])
+      if (!demonstration || pending || !observation || data.result !== "observed_success" || data.completed_steps !== steps.length || data.hardware_qualified !== false || !matches(preview.policy.success, observation))
+        throw new Error("Demonstration did not satisfy its recorded steps and original success checks")
       finished = true
     }
     else if (event.kind === "closed") {
@@ -182,6 +196,8 @@ export async function workflowFromEvidence(directory) {
       throw new Error("Exploration is not closed")
   }
   const workflow = { schema: "airalogy.interface-workflow.v1", definition, plan: { schema: "airalogy.interface-plan.v1", steps }, initial, success: preview.policy.success, source: { preview_digest: preview.sha256, last_event_digest: previous, event_count: names.length, session_id: sessionId }, hardware_qualified: false }
+  if (demonstration)
+    workflow.source.kind = "human_browser_events"
   return validateWorkflow({ ...workflow, sha256: digest(workflow) })
 }
 

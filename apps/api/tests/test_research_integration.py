@@ -197,12 +197,17 @@ def test_http_controlled_reader_installed_start_readback_and_receipt_recovery(
     exercise_http_controlled_reader(runtime, tmp_path, monkeypatch)
 
 
+@pytest.mark.parametrize(
+    "demonstration", [False, True], ids=["exploration", "demonstration"]
+)
 def test_interface_worker_installed_browser_execution_and_receipt_only_recovery(
-    runtime, tmp_path, monkeypatch
+    runtime, tmp_path, monkeypatch, demonstration
 ):
     from tests.http_read_acceptance import exercise_interface_worker
 
-    exercise_interface_worker(runtime, tmp_path, monkeypatch)
+    exercise_interface_worker(
+        runtime, tmp_path, monkeypatch, demonstration=demonstration
+    )
 
 
 @pytest.mark.skipif(

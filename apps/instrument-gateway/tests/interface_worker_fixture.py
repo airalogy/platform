@@ -34,9 +34,13 @@ def package(*, physical_policy=False):
     )[0]
 
 
-def prepare_worker():
+def prepare_worker(*, demonstration=False):
     result = subprocess.run(
-        ["node", str(PROJECT / "scripts/instrument-interface-worker-example.mjs")],
+        [
+            "node",
+            str(PROJECT / "scripts/instrument-interface-worker-example.mjs"),
+            *(["--demonstration"] if demonstration else []),
+        ],
         check=True,
         capture_output=True,
         timeout=45,
@@ -45,6 +49,9 @@ def prepare_worker():
     config = json.loads(Path(example["config_file"]).read_bytes())
     target = InterfaceProcessClient(config).call("probe")["data"]["target"]
     runtime = json.loads(Path(example["runtime_file"]).read_bytes())
+    if demonstration:
+        workflow = json.loads(Path(runtime["workflow"]["path"]).read_bytes())
+        assert workflow["source"]["kind"] == "human_browser_events"
     return {
         "config": config,
         "target": target,

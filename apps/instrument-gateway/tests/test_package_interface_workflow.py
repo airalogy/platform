@@ -44,7 +44,23 @@ class InterfacePackageTests(unittest.TestCase):
     def test_two_independent_installed_copies_use_same_adapter_without_source_checkout_imports(
         self,
     ):
-        fixture, raw, wheel = prepare_worker(), package(), sdk()
+        self._independent_copies(demonstration=False)
+
+    @unittest.skipUnless(
+        os.getenv("RUN_INTERFACE_PROCESS_TESTS") == "1",
+        "Explicit real Node/Chromium demonstration acceptance",
+    )
+    def test_recorded_demonstration_reuses_same_adapter_in_two_independent_installs(
+        self,
+    ):
+        self._independent_copies(demonstration=True)
+
+    def _independent_copies(self, *, demonstration):
+        fixture, raw, wheel = (
+            prepare_worker(demonstration=demonstration),
+            package(),
+            sdk(),
+        )
         with tempfile.TemporaryDirectory() as directory:
             for name in ("first", "second"):
                 root = Path(directory).resolve() / name

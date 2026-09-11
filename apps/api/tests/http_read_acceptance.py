@@ -32,8 +32,14 @@ def exercise_http_controlled_reader(runtime, tmp_path, monkeypatch):
     return _exercise_reader(runtime, tmp_path, monkeypatch, http_controlled=True)
 
 
-def exercise_interface_worker(runtime, tmp_path, monkeypatch):
-    return _exercise_reader(runtime, tmp_path, monkeypatch, interface_worker=True)
+def exercise_interface_worker(runtime, tmp_path, monkeypatch, *, demonstration=False):
+    return _exercise_reader(
+        runtime,
+        tmp_path,
+        monkeypatch,
+        interface_worker=True,
+        demonstration=demonstration,
+    )
 
 
 def exercise_native_read(runtime, tmp_path, monkeypatch):
@@ -51,6 +57,7 @@ def _exercise_reader(
     http_controlled=False,
     interface_worker=False,
     native_read=False,
+    demonstration=False,
 ):
     sdk_root = Path(__file__).resolve().parents[3] / "apps/instrument-gateway"
     monkeypatch.syspath_prepend(str(sdk_root / "src"))
@@ -145,7 +152,9 @@ def _exercise_reader(
                         prepare_native_reader as prepare_worker,
                     )
 
-                fixture.update(prepare_worker())
+                fixture.update(
+                    prepare_worker(**({"demonstration": True} if demonstration else {}))
+                )
             if export_files:
                 from test_export_read import publish
 

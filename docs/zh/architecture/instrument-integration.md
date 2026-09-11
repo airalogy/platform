@@ -115,6 +115,7 @@ pnpm gateway:pair --credential-file /private/service-directory/gateway.json --pl
 | --- | --- |
 | 私有草稿/修订、导入导出、预览确认 | 已实现 |
 | 离线重放和合成软件浏览器演示 | 已实现，不代表实机证据 |
+| 记录浏览器示范并复用 | [自建离线浏览器输入录制](./instrument-interface-workflow.md#browser-demonstration)、选定状态/动作证据、独立人员事件来源、固定导出及同一已安装适配包/Job 回执恢复；不提供原生/视觉录制或自动参数泛化，真人可见会话与实机验收仍须单独完成 |
 | 保存并复用成功探索 | [审核后的本地固定流程](./instrument-interface-workflow.md)保留实际步骤、初始条件、原成功标准和来源；确定性重放需重新确认，无需再次调用模型，不代表受治理 GUI 执行或实机验收 |
 | 已安装适配包调用浏览器流程 | [按字节固定的本地进程连接](./instrument-interface-worker.md)、自建源码参考、独立安装及真实 Instrument Job/回执恢复；不新增远程 Shell、控制端点或物理/原生/视觉验收 |
 | 已安装适配包调用原生读取定义 | [独立 macOS 只读执行器](./instrument-interface-worker.md#已安装原生只读适配包)，复用准确进程/窗口/隐私检查及自建源码参考；包含真实编译/不启动应用的检查和需授权的图形安装/API 验收，不含启动、界面写入、截图或厂商资格 |
