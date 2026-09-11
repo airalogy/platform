@@ -21,9 +21,7 @@ function freeze(value) {
   }
   return value
 }
-export async function previewSurvey(selection, options = {}) {
-  if (selection?.schema === "airalogy.native-survey-selection.v1")
-    return previewNativeSurvey(selection, options)
+export function validateSurveySelection(selection) {
   selection = JSON.parse(canonical(selection))
   if (Buffer.byteLength(canonical(selection)) > MAX_BYTES)
     throw new Error("Survey selection exceeds its limit")
@@ -36,6 +34,13 @@ export async function previewSurvey(selection, options = {}) {
     checkText(selection.target[name])
   validateLocator(selection.target.scope)
   validateBrowserEnvironment(selection)
+  return selection
+}
+
+export async function previewSurvey(selection, options = {}) {
+  if (selection?.schema === "airalogy.native-survey-selection.v1")
+    return previewNativeSurvey(selection, options)
+  selection = validateSurveySelection(selection)
   if (selection.target.source.kind === "file" && bytesDigest(await readPrivateSelection(selection.target.source.path, 1048576)) !== selection.target.source.sha256)
     throw new Error("Selected survey HTML changed")
   const data = { schema: "airalogy.interface-survey-preview.v1", engine: browserEngine, definition: selection }

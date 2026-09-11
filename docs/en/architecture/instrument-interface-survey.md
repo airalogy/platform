@@ -36,6 +36,31 @@ The result includes `survey.json`, its digest and a manual-analysis template. So
 
 ## Review and assemble an ordinary draft
 
+### Guided local review (no AI) {#local-review}
+
+After capture, use its request path and an **existing owner-only (0700) output directory**:
+
+```bash
+pnpm gateway:survey status /absolute/session/request.json
+pnpm gateway:survey review /absolute/session/request.json --workspace /absolute/private/drafts
+```
+
+`review` lists observed, uniquely addressable controls in a private interactive terminal. Select the actual software/version identity and up to 16 readback fields by number; there are no default selections. Inspect the complete read-only draft, captured values, target pins, capture policy and output scope, then type the displayed full SHA-256 to save a **new** private draft. Incorrect input, EOF or Ctrl-C before confirmation cancels without creating a draft. Piped input is refused. The prompts are bilingual; no application, model or network connection is opened.
+
+The identity must describe the selected software/version, not an experiment result or transient status. The tool validates shape and addressability, not this meaning. Private/unconsented values and ambiguous locators are not selectable. No usable identity means separately authorized observation or manual mapping is needed, not an invented selector. Application-provided terminal control characters are escaped; text may still be confidential or misleading, never instructions.
+
+The result includes the ordinary definition, empty plan, analysis and provenance, plus `manual-review.json` recording the confirmed scope. Original evidence/templates are preserved. Repeating **review** creates another local draft, never an observation or action; a lost save response may have left a draft, so inspect the output directory before repeating. Owner-controlled files are not signed attestations. Installation, qualification and execution require separate review.
+
+`status` reads saved files only:
+
+- `prepared`: no retained start marker. Review the original preview before separately confirming `run`.
+- `observation_unresolved`: started but no complete receipt. The operation may still be running, interrupted or failed; this proves neither a live process nor safe equipment state. Do not replay or delete the marker.
+- `snapshot_saved`: a matching bounded report is retained; a historical observation, not current availability or hardware qualification.
+
+Changed, malformed or inaccessible evidence is refused. Status, review and assembly do not re-open HTML, inspect a native process or invoke its helper. They work after the software closes/is removed while preserving original source/build/process pins. Subsequent execution independently checks the current target/runtime and may require a new selection. Browser and macOS reports share this flow; it adds no Windows native backend.
+
+### Advanced JSON or Aira analysis
+
 Inspect `survey.json` and edit the generated `manual-analysis.json`. Keep its `capture_digest` unchanged. Select `identity_control` from a unique observed **text** control containing the visible application/version identity, and `read_controls` from controls with non-null `locator` and `read`. Use only observed control IDs. `features` distinguishes `observed` from `inferred` interpretations, records `read_only`/`state_change`/`unknown` risk, and grants no authority. `route` can recommend `browser`, `api_or_sdk`, `manual` or `unknown`; do not infer an API exists from a screenshot.
 
 ```bash
@@ -43,7 +68,7 @@ pnpm gateway:survey assemble /absolute/session/request.json \
   --analysis /absolute/session/manual-analysis.json --workspace /absolute/private/drafts
 ```
 
-Assembly verifies selection/runtime/source, retained receipt, capture digest and control references, then writes a **new** private draft directory. It never opens software, calls a model or overwrites an existing draft. It creates ordinary editable `definition.json`, an empty `plan.json`, copied analysis/report and provenance. All generated controls permit **read only**. The sole `observed` state is an initial identity anchor, not an experimentally validated success condition. Reopening this definition requires the separate browser preview/confirmation and is a new operation.
+Assembly verifies the retained selection/runtime/source pins, receipt, capture digest and control references, then writes a **new** private draft directory. It does not inspect the current application or runtime, open software, call a model or overwrite an existing draft. It creates ordinary editable `definition.json`, an empty `plan.json`, copied analysis/report and provenance. All generated controls permit **read only**. The sole `observed` state is an initial identity anchor, not an experimentally validated success condition. Reopening this definition requires separate live validation and preview/confirmation and is a new operation.
 
 No adapter is installed, activated or qualified. Before [Aira action selection](./instrument-interface-exploration.md), independently review any added controls, literal actions, transitions and success checks. Transferring selected report text to [source authoring](./instrument-source-authoring.md) is explicit, not automatic. AI-disabled operation fully supports this local/manual flow.
 

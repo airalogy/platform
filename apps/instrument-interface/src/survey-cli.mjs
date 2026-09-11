@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util"
 import { bytesDigest, canonical } from "./contract.mjs"
 import { readPrivateSelection } from "./evidence.mjs"
-import { assemblePreparedSurvey, prepareSurvey, runPreparedSurvey } from "./survey-workspace.mjs"
+import { assemblePreparedSurvey, inspectPreparedSurvey, prepareSurvey, runPreparedSurvey } from "./survey-workspace.mjs"
 
 async function main() {
   const strings = ["selection", "file", "url", "application", "version", "title", "locale", "scope-role", "scope-name", "scope-test-id", "network", "redact", "workspace", "confirm", "analysis"]
@@ -44,8 +44,37 @@ async function main() {
       throw new Error("Assembly does not accept execution or capture options")
     result = await assemblePreparedSurvey(positionals[1], values.analysis, values.workspace)
   }
+  else if (positionals[0] === "status" && positionals.length === 2) {
+    if (Object.keys(values).some(key => !["capture-values", "screenshot"].includes(key)) || values["capture-values"] || values.screenshot)
+      throw new Error("Status reads saved evidence only, without overrides")
+    result = await inspectPreparedSurvey(positionals[1])
+  }
+  else if (positionals[0] === "review" && positionals.length === 2) {
+    if (!process.stdin.isTTY || !process.stderr.isTTY || Object.keys(values).some(key => !["workspace", "capture-values", "screenshot"].includes(key)) || values["capture-values"] || values.screenshot)
+      throw new Error("Review requires an interactive private terminal and output workspace only")
+    const { createInterface } = await import("node:readline/promises")
+    const { reviewSurvey } = await import("./survey-review.mjs")
+    const terminal = createInterface({ input: process.stdin, output: process.stderr })
+    const controller = new AbortController()
+    const cancel = () => controller.abort()
+    terminal.once("close", cancel)
+    terminal.once("SIGINT", cancel)
+    process.once("SIGINT", cancel)
+    process.once("SIGTERM", cancel)
+    try {
+      result = await reviewSurvey(positionals[1], values.workspace, {
+        write: value => process.stderr.write(value),
+        question: prompt => terminal.question(prompt, { signal: controller.signal }),
+      })
+    }
+    finally {
+      terminal.close()
+      process.removeListener("SIGINT", cancel)
+      process.removeListener("SIGTERM", cancel)
+    }
+  }
   else {
-    throw new Error("Use prepare with an explicit source, application/version/title, scope and private workspace; run REQUEST --confirm DIGEST; assemble REQUEST --analysis FILE --workspace PATH")
+    throw new Error("Use prepare; run REQUEST --confirm DIGEST; status REQUEST; review REQUEST --workspace PATH; or assemble REQUEST --analysis FILE --workspace PATH")
   }
   process.stdout.write(`${canonical(result)}\n`)
 }

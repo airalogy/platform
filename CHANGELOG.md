@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Add bilingual, AI-independent local survey review with numbered field selection, exact draft/output confirmation and retained review receipts. Add saved-state inspection for interrupted observations; history review and assembly no longer inspect current software or native helpers, while live execution retains target/runtime checks and separate authority.
+
 - Record selected browser demonstration input events with private pre/post readbacks, exact action/success policies and distinct human-observation lineage; export through existing fixed workflows and reuse the same installed adapters and Instrument Job receipt recovery without AI. Include explicit visible-window confirmation, cancellation and failure rejection; owned offline HTML only, not desktop recording, vendor control or hardware qualification.
 
 - Connect fixed browser-workflow and native-read adapter references to source-only Aira development with public SDK contracts, immutable independent tests and private example specifications. Verify real isolated fail/repair and same-request recovery, preserving separate control consent, exact text/Job readback, simulation-only declarations and no desktop or hardware authority during development.

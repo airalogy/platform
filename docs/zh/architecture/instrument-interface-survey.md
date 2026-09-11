@@ -36,6 +36,31 @@ pnpm gateway:survey run /absolute/session/request.json --confirm <审核后的�
 
 ## 审核并生成普通草稿
 
+### 无需 AI 的本地交互审核 {#local-review}
+
+采集后，使用返回的请求路径和一个**已经存在、仅本人可读写的输出目录（0700）**：
+
+```bash
+pnpm gateway:survey status /absolute/session/request.json
+pnpm gateway:survey review /absolute/session/request.json --workspace /absolute/private/drafts
+```
+
+`review` 在私有交互终端列出已观察、可唯一定位的控件。按序号选择软件/版本标识和至多 16 个读取字段，没有默认选择。检查完整只读草稿、已采集值、目标固定信息、采集策略与保存位置，再输入显示的完整 SHA-256，生成**新的**私有草稿。确认前输入错误、EOF 或 Ctrl-C 均取消，不生成草稿；不接受管道输入。提示中英文并列，不打开软件、不调用模型、不连接网络。
+
+标识应描述选定的软件及版本，不能使用实验结果或瞬时运行状态。工具只能校验格式与定位能力，不能代替人确认其含义。私有/未授权读取值和不唯一定位不能选择；没有可用标识时，需要另行授权观察或人工映射，不能编造选择器。软件提供的终端控制字符会转义，但文字仍可能包含机密或误导内容，不应视为指令。
+
+结果包含普通定义、空计划、分析与来源，以及记录确认范围的 `manual-review.json`；原证据和模板保留。重复 **review** 只生成另一个本地草稿，不会观察或操作软件；保存响应丢失时，输出目录可能已有草稿，应先检查。本人可改的文件不是签名证明；安装、资格验收和执行仍须分别审核。
+
+`status` 仅查看已保存文件：
+
+- `prepared`：没有留存的启动标记；另行确认 `run` 前先审核原始预览。
+- `observation_unresolved`：已有启动标记但没有完整回执。可能仍在运行、已中断或失败，不证明进程活跃或设备安全；不能重放或删除标记。
+- `snapshot_saved`：已保留匹配且有界的报告；只是历史观察，不代表当前可用或实机资格。
+
+证据被修改、损坏或无法安全读取时拒绝继续。状态查看、审核和组装不重新读取原 HTML、不检查原生进程、不调用辅助程序；软件关闭或移除后仍可使用，原始源码/构建/进程固定信息保持不变。后续执行独立校验当前目标与运行时，必要时重新选择。浏览器和 macOS 报告共用流程，不因此增加 Windows 原生后端。
+
+### 高级 JSON 或 Aira 分析
+
 查看 `survey.json`，编辑生成的 `manual-analysis.json`，保留原 `capture_digest`。从唯一、可读取的**文字**控件中选择显示应用/版本身份的 `identity_control`；`read_controls` 只能选择 `locator` 和 `read` 非空的已观察控件 ID。`features` 区分 `observed`（观察）与 `inferred`（推断），记录 `read_only`/`state_change`/`unknown` 风险，不授予任何执行权。`route` 可建议 `browser`、`api_or_sdk`、`manual` 或 `unknown`，不能仅凭界面推断 API 必然存在。
 
 ```bash
@@ -43,7 +68,7 @@ pnpm gateway:survey assemble /absolute/session/request.json \
   --analysis /absolute/session/manual-analysis.json --workspace /absolute/private/drafts
 ```
 
-生成前核对选定范围/运行时/源文件、保留回执、采集摘要及控件引用；只写入**新**私有目录，不启动软件、不调用模型、不覆盖已有草稿。输出普通可编辑的 `definition.json`、空 `plan.json`、分析/报告副本和来源记录。生成控件全部**只读**。唯一的 `observed` 状态只是初始身份锚点，不能作为经实验验证的成功条件。再次打开该定义，需要独立的浏览器预览确认，并视为一次新操作。
+生成前核对已保存的范围/运行时/源文件固定信息、保留回执、采集摘要及控件引用；不检查当前应用或运行环境，只写入**新**私有目录，不启动软件、不调用模型、不覆盖已有草稿。输出普通可编辑的 `definition.json`、空 `plan.json`、分析/报告副本和来源记录。生成控件全部**只读**。唯一的 `observed` 状态只是初始身份锚点，不能作为经实验验证的成功条件。再次打开该定义，需要独立的实时核验与预览确认，并视为一次新操作。
 
 不会安装、启用或认证适配器。进入 [Aira 动作选择](./instrument-interface-exploration.md)前，须独立审核新增控件、固定动作、状态转换及成功条件。向[源码开发](./instrument-source-authoring.md)转移选定报告文字也必须显式进行。关闭 AI 后，本地/手工流程完整可用。
 
