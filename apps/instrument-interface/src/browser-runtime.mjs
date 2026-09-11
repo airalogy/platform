@@ -19,6 +19,7 @@ export class BrowserRuntime {
     this.sessionId = randomUUID()
     this.deadline = performance.now() + this.definition.limits.duration_seconds * 1000
     this.closed = false
+    this.closePromise = null
     this.busy = false
     this.fault = null
     this.phase = "opening"
@@ -154,13 +155,16 @@ export class BrowserRuntime {
     return {}
   }
 
-  async close() {
-    if (this.closed)
-      return
+  close() {
+    if (this.closePromise)
+      return this.closePromise
     this.closed = true
     clearTimeout(this.timer)
-    await this.context?.close().catch(() => {})
-    await this.browser?.close().catch(() => {})
-    await this.evidence.append("closed", { ...this.closeSummary(), physical_stop_confirmed: false })
+    this.closePromise = (async () => {
+      await this.context?.close().catch(() => {})
+      await this.browser?.close().catch(() => {})
+      await this.evidence.append("closed", { ...this.closeSummary(), physical_stop_confirmed: false })
+    })()
+    return this.closePromise
   }
 }

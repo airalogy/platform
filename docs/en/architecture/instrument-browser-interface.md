@@ -52,6 +52,8 @@ Unexpected dialogs, windows, frames, downloads, sockets, denied requests, stale 
 
 ## Private evidence and model use
 
+Concurrent stop/close evidence is appended in order, and every close caller waits for the same durable receipt. A failed append stops subsequent writes; retain any partial evidence for inspection rather than retrying, overwriting or treating the session as successfully recorded.
+
 Evidence uses a new `0700` directory, exclusive `0600` files and a hash-linked event sequence. Intent is durably written before each action, followed by readback/result or uncertainty. Screenshots are opt-in, restricted to the selected scope and masked using declared page locators plus password inputs. Controls overlapping a mask are refused. When masks/password fields exist, the entire accessibility tree is omitted because its serializer has no redaction contract. Never put passwords into step values. Masks are not automatic secret detection; review dynamic application content before enabling capture. All displayed data may be sensitive even if it is not a password.
 
 The manual CLI uploads no screenshots, evidence or selected files. After local review, explicitly selected text observations may be included as `materials` in the separately authorized [source-authoring workflow](./instrument-source-authoring.md). For adaptive model choices, use the separately authorized [bounded interface exploration](./instrument-interface-exploration.md) workflow: only selected textual readbacks/actions reach Aira, and local actions still require an exact policy confirmation. Visual interpretation, unknown-app/native launch/discovery, managed GUI execution and real-equipment validation remain open RFC work.

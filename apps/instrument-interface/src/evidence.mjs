@@ -55,6 +55,7 @@ export class Evidence {
     this.directory = directory
     this.sequence = 0
     this.previous = null
+    this.appendTail = Promise.resolve()
   }
 
   async write(name, bytes) {
@@ -73,11 +74,20 @@ export class Evidence {
   }
 
   async append(kind, data) {
-    const event = { sequence: this.sequence, previous: this.previous, time: new Date().toISOString(), kind, data }
-    const sha256 = digest(event)
-    await this.write(`${String(this.sequence).padStart(4, "0")}.json`, Buffer.from(canonical({ ...event, sha256 })))
-    this.sequence += 1
-    this.previous = sha256
-    return sha256
+    // Capture caller-owned data before queueing. Stop/close callbacks may race,
+    // but each sequence and its predecessor are published by one writer only.
+    const selected = JSON.parse(canonical({ kind, data }))
+    const next = this.appendTail.then(async () => {
+      const event = { sequence: this.sequence, previous: this.previous, time: new Date().toISOString(), ...selected }
+      const sha256 = digest(event)
+      await this.write(`${String(this.sequence).padStart(4, "0")}.json`, Buffer.from(canonical({ ...event, sha256 })))
+      this.sequence += 1
+      this.previous = sha256
+      return sha256
+    })
+    // A partial/failed write poisons the chain; never retry its name, skip a
+    // sequence or acknowledge subsequent evidence as durably recorded.
+    this.appendTail = next
+    return next
   }
 }

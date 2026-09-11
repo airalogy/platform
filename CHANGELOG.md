@@ -209,6 +209,8 @@ First formal Community Edition release. See the [release overview and qualificat
 
 ### Fixed
 
+- Serialize private interface evidence appends and share browser-close completion across concurrent callers. Preserve ordered hash links, selected input snapshots and exclusive files; a failed write blocks subsequent evidence instead of overwriting or reporting a false completion. Add deterministic concurrency and persistence-failure regression coverage.
+
 - Make Linux SDK fixtures deterministic: drain HTTP request bodies before responding to prevent TCP resets from masking response-limit checks, and explicitly advance file timestamps in the injected mutation test. Keep production transport limits, redirect refusal, credential isolation and data hash checks unchanged.
 
 - Fix mutually exclusive GitHub CLI provenance selectors in the Instrument SDK bootstrap. Retain exact certificate workflow/tag identity, source/signer commits, issuer and hosted-runner requirements; exercise the real CLI so argument errors cannot pass as unsigned-proof rejection.
