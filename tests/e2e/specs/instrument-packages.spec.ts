@@ -33,9 +33,33 @@ test("private adapter import, protected download and source review do not qualif
     const original = await readFile(archive)
     const digest = createHash("sha256").update(original).digest("hex")
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto(instrumentWorkspaceUrl(fixture.lab.uid, gateway.id, "", "prepare"))
     const panel = page.getByTestId("instrument-packages-panel")
+    // A slow gateway lookup must not briefly expose a fallback import form and
+    // then destroy its selected file/dialog when the restored workspace mounts.
+    let releaseLookup!: () => void
+    let lookupStarted!: () => void
+    const lookupGate = new Promise<void>((resolve) => {
+      releaseLookup = resolve
+    })
+    const lookupObserved = new Promise<void>((resolve) => {
+      lookupStarted = resolve
+    })
+    const lookupUrl = (url: URL) => url.pathname.endsWith("/research-instrument-gateways")
+    await page.route(lookupUrl, async (route) => {
+      lookupStarted()
+      await lookupGate
+      await route.continue()
+    })
+    try {
+      await page.goto(instrumentWorkspaceUrl(fixture.lab.uid, gateway.id, "", "prepare"))
+      await lookupObserved
+      await expect(panel).toHaveCount(0)
+    }
+    finally {
+      releaseLookup()
+    }
     await expect(panel).toBeVisible()
+    await page.unroute(lookupUrl)
     expect((await panel.boundingBox())!.width).toBeLessThanOrEqual(390)
     await panel.getByRole("button", { name: "Import adapter package" }).click()
     await page.getByTestId("adapter-upload").setInputFiles(archive)

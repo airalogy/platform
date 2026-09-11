@@ -91,7 +91,9 @@
         </section>
       </template>
     </instrument-onboarding-workspace>
-    <instrument-packages-panel v-else :key="labId" :lab-id="labId" />
+    <!-- Do not expose a temporary form while restoring the gateway context:
+         resolving the selection would unmount it and discard an active import. -->
+    <instrument-packages-panel v-else-if="!loading" :key="labId" :lab-id="labId" />
 
     <n-modal
       v-model:show="gatewayModalVisible"
