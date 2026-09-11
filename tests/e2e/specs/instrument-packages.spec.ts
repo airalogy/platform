@@ -21,8 +21,10 @@ test("private adapter import, protected download and source review do not qualif
   try {
     const archive = path.join(directory, "synthetic.zip")
     const source = "apps/instrument-gateway/examples/adapter-package"
-    // Isolate matching from other tests' packages in this shared synthetic Lab.
+    // Both the immutable package identity and compatibility search must be
+    // isolated from other scenarios in this shared synthetic Lab.
     const manifest = JSON.parse(await readFile(`${source}/manifest.json`, "utf8"))
+    manifest.id = `${manifest.id}.${Date.now()}`
     const model = `Catalogue reader ${Date.now()}`
     manifest.compatibility.declared[0].model = model
     const manifestPath = path.join(directory, "manifest.json")
@@ -64,8 +66,11 @@ test("private adapter import, protected download and source review do not qualif
     await panel.getByRole("button", { name: "Import adapter package" }).click()
     await page.getByTestId("adapter-upload").setInputFiles(archive)
     let modal = page.getByRole("dialog").last()
+    const importPreviewResponse = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/instrument-adapter-packages/preview"))
     await modal.getByRole("button", { name: "Preview", exact: true }).click()
-    await expect(page.getByTestId("adapter-import-preview")).toContainText("synthetic.reader")
+    const importPreview = await importPreviewResponse
+    expect(importPreview.status(), "The uniquely identified package preview should succeed").toBe(200)
+    await expect(page.getByTestId("adapter-import-preview")).toContainText(manifest.id)
     await expect(modal).toContainText(digest)
     await modal.getByRole("button", { name: "Confirm", exact: true }).click()
     await expect(panel).toContainText("Awaiting source review")
