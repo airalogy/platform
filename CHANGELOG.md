@@ -209,6 +209,8 @@ First formal Community Edition release. See the [release overview and qualificat
 
 ### Fixed
 
+- Generate release database identity from literal Python migration ancestry, including unannotated declarations, instead of formatting-sensitive regular expressions. Reject ambiguous, missing or cyclic ancestry without importing migrations; retain strict runtime revision matching during installation and recovery.
+
 - Serialize private interface evidence appends and share browser-close completion across concurrent callers. Preserve ordered hash links, selected input snapshots and exclusive files; a failed write blocks subsequent evidence instead of overwriting or reporting a false completion. Add deterministic concurrency and persistence-failure regression coverage.
 
 - Make Linux SDK fixtures deterministic: drain HTTP request bodies before responding to prevent TCP resets from masking response-limit checks, and explicitly advance file timestamps in the injected mutation test. Keep production transport limits, redirect refusal, credential isolation and data hash checks unchanged.

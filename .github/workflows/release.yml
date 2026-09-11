@@ -255,7 +255,12 @@ jobs:
         with:
           name: platform-compute-runner-package
           path: compute-runner-package
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
       - name: Assemble immutable Platform release
+        # The migration reader uses Python's standard-library AST only; it does
+        # not import or execute migrations while assembling release metadata.
         run: |
           mkdir -p release-stage/deploy release-stage/docs/zh/releases release-stage/docs/en/releases
           cp -R deploy/single-lab release-stage/deploy/single-lab

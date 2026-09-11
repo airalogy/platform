@@ -31,6 +31,8 @@ Platform 不会默认将部署身份、客户信息或运行状态回传给 Aira
 
 源码 checkout 仍可用于本地开发和评估，但会标记 `BUILD_DIRTY` 且不具备正式发布清单的认证语义。
 
+生成发布清单需要 Node.js 和 Python 3.11+。标准库 AST 读取器识别带类型标注及普通的 Alembic 字面量声明，不执行迁移模块；检查继承关系、缺失父版本、重复版本和循环后才选择唯一最新版本。非字面量声明或 `depends_on` 关系需要明确扩展工具支持，否则阻止发布而非静默忽略。
+
 官方 `ghcr.io/airalogy/airalogy-engine:0.16.0` 镜像同时支持 `linux/amd64` 和 `linux/arm64`。Platform 固定其不可变 SHA-256 manifest 摘要，而不依赖 `latest`，因此两种架构都会解析到同一个已验证的发布身份。
 
 ## 部署、核验与支持

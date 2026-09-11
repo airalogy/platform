@@ -23,6 +23,8 @@ The tag-triggered Release workflow runs backend, frontend, Instrument Gateway, d
 
 A source checkout remains suitable for development and evaluation. It may be marked dirty and does not carry the verification meaning of a formal release manifest.
 
+Release metadata generation requires Node.js and Python 3.11+. The standard-library AST reader accepts annotated and ordinary literal Alembic declarations without executing migration modules. It checks ancestry, missing parents, duplicate revisions and cycles before selecting the single head. Non-literal declarations or `depends_on` relationships require explicit tooling support and block publication instead of being silently ignored.
+
 The official `ghcr.io/airalogy/airalogy-engine:0.16.0` image supports both `linux/amd64` and `linux/arm64`. Platform pins its immutable SHA-256 manifest digest instead of relying on `latest`, so deployments on both architectures resolve to the same verified release identity.
 
 ## Deployment and support

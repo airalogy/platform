@@ -62,6 +62,20 @@ activate_deployment_snapshot \
 [[ "$(env_value_from "$test_env" AIRALOGY_RELEASE_MANIFEST_FILE)" == "$release_dir/release-manifest.json" ]]
 [[ "$(env_value_from "$test_env" AIRALOGY_API_IMAGE)" == "$(metadata_value AIRALOGY_RELEASE_API_IMAGE)" ]]
 
+runtime_revision="$(metadata_value AIRALOGY_RELEASE_DATABASE_REVISION)"
+running_version_payload() {
+  printf '{"version":"%s","tag":"%s","commit":"%s","database_revision":"%s"}\n' \
+    "$(metadata_value AIRALOGY_RELEASE_PRODUCT_VERSION)" \
+    "$(metadata_value AIRALOGY_RELEASE_TAG)" \
+    "$(metadata_value AIRALOGY_RELEASE_COMMIT)" "$runtime_revision"
+}
+verify_running_release
+runtime_revision=fixture_old_revision
+if (verify_running_release) 2>"$TEST_DIR/revision-error"; then
+  die "runtime revision mismatch must stop deployment"
+fi
+grep -Fq "running database revision is fixture_old_revision; expected $(metadata_value AIRALOGY_RELEASE_DATABASE_REVISION)" "$TEST_DIR/revision-error"
+
 source_snapshot="$TEST_DIR/source-release.env"
 cat >"$source_snapshot" <<'EOF'
 PLATFORM_VERSION=0.1.0

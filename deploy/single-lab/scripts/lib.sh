@@ -339,7 +339,8 @@ verify_running_release() {
   [[ "$actual_version" == "$(release_value AIRALOGY_RELEASE_PRODUCT_VERSION)" ]] || die "running API version does not match release metadata"
   [[ "$actual_tag" == "$(release_value AIRALOGY_RELEASE_TAG)" ]] || die "running API tag does not match release metadata"
   [[ "$actual_commit" == "$(release_value AIRALOGY_RELEASE_COMMIT)" ]] || die "running API commit does not match release metadata"
-  [[ "$actual_revision" == "$(release_value AIRALOGY_RELEASE_DATABASE_REVISION)" ]] || die "running database revision does not match release metadata"
+  [[ "$actual_revision" == "$(release_value AIRALOGY_RELEASE_DATABASE_REVISION)" ]] || \
+    die "running database revision is ${actual_revision:-unavailable}; expected $(release_value AIRALOGY_RELEASE_DATABASE_REVISION)"
   info "Running Airalogy Platform release verified: $actual_version ($actual_commit)."
 }
 

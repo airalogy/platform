@@ -122,6 +122,36 @@ test("release metadata follows migration ancestry and rejects competing heads", 
   await assert.rejects(createReleaseMetadata(options), /Expected one Alembic head, found 2/)
 })
 
+test("release metadata includes unannotated migrations and ignores docstring lookalikes", async (t) => {
+  const options = await createFixture(t)
+  const migrations = path.join(options.repositoryRoot, "apps/api/migrations/versions")
+  await writeFile(path.join(migrations, "0000_unannotated.py"), `"""
+revision: str = "not_a_revision"
+down_revision: str | None = "not_a_parent"
+"""
+revision = 'fixture_latest'
+down_revision = 'fixture_head'
+depends_on = None
+raise RuntimeError('Migration source must not execute while creating release metadata')
+`)
+  const { manifest } = await createReleaseMetadata(options)
+  assert.equal(manifest.database.revision, "fixture_latest")
+})
+
+test("release metadata rejects unreadable or ambiguous migration lineage", async (t) => {
+  for (const [source, error] of [
+    ["revision = make_revision()\ndown_revision = 'fixture_head'\n", /literal/],
+    ["revision = 'fixture_latest'\n", /down_revision/],
+    ["revision = 'fixture_latest'\ndown_revision = 'missing_parent'\n", /Missing migration parent/],
+    ["revision = 'fixture_head'\ndown_revision = 'fixture_initial'\n", /Duplicate migration revision/],
+    ["revision = 'fixture_latest'\ndown_revision = 'fixture_head'\ndepends_on = 'fixture_initial'\n", /depends_on/],
+  ]) {
+    const options = await createFixture(t)
+    await writeFile(path.join(options.repositoryRoot, "apps/api/migrations/versions/next.py"), source)
+    await assert.rejects(createReleaseMetadata(options), error)
+  }
+})
+
 test("the checked-out release inputs produce a consistent manifest", async (t) => {
   const fixture = await createFixture(t)
   const version = (await readFile(path.join(repositoryRoot, "VERSION"), "utf8")).trim()
@@ -130,4 +160,15 @@ test("the checked-out release inputs produce a consistent manifest", async (t) =
   assert.match(manifest.database.revision, /^[a-z0-9_]+$/)
   const releaseEnv = await readFile(path.join(fixture.outputDirectory, "release-manifest.env"), "utf8")
   assert.ok(releaseEnv.includes(`AIRALOGY_RELEASE_DATABASE_REVISION=${manifest.database.revision}\n`))
+})
+
+test("release ancestry supports explicit merges and rejects disconnected cycles", async (t) => {
+  const options = await createFixture(t)
+  const migrations = path.join(options.repositoryRoot, "apps/api/migrations/versions")
+  await writeFile(path.join(migrations, "branch.py"), "revision = 'fixture_branch'\ndown_revision = 'fixture_initial'\n")
+  await writeFile(path.join(migrations, "merge.py"), "revision = 'fixture_merge'\ndown_revision = ('fixture_head', 'fixture_branch')\n")
+  assert.equal((await createReleaseMetadata(options)).manifest.database.revision, "fixture_merge")
+  await writeFile(path.join(migrations, "cycle_a.py"), "revision = 'cycle_a'\ndown_revision = 'cycle_b'\n")
+  await writeFile(path.join(migrations, "cycle_b.py"), "revision = 'cycle_b'\ndown_revision = 'cycle_a'\n")
+  await assert.rejects(createReleaseMetadata(options), /cycles/)
 })
