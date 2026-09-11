@@ -153,7 +153,11 @@ class ManagerTests(unittest.TestCase):
                 pass
 
             def do_POST(self):
-                received.append((self.path, dict(self.headers)))
+                # Consume the request before closing the HTTP/1.0 connection.
+                # Unread POST bytes can trigger a Linux TCP reset and truncate
+                # the oversized response before the client reaches its limit.
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                received.append((self.path, dict(self.headers), body))
                 if self.path.endswith("/claim"):
                     self.send_response(302)
                     self.send_header("Location", "/must-not-follow")
@@ -180,7 +184,8 @@ class ManagerTests(unittest.TestCase):
             with self.assertRaisesRegex(GatewayAPIError, "limit"):
                 client.call("receipt", {})
             self.assertEqual(len(received), 3)
-            for route, headers in received:
+            for route, headers, body in received:
+                self.assertEqual(body, b"{}")
                 self.assertTrue(route.startswith("/api/instrument-installations/"))
                 self.assertEqual(
                     headers["X-Airalogy-Installation-Token"],

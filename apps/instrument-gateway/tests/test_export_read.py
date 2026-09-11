@@ -145,7 +145,14 @@ class ExportReadTests(unittest.TestCase):
         def read_then_change(fd, length):
             raw = original(fd, length)
             if raw and os.fstat(fd).st_ino == inode:
+                before = selected.stat()
                 selected.write_bytes(b"x" * len(DATA))
+                # Make the injected mutation observable even when successive
+                # tmpfs writes fall within the same filesystem clock tick.
+                os.utime(
+                    selected,
+                    ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+                )
             return raw
 
         with (
