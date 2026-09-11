@@ -13,14 +13,16 @@ For example, after replacing the illustrative version, paths and commit:
 ```bash
 gh attestation verify /absolute/downloads/airalogy-instrument-bootstrap.py \
   --hostname github.com --repo airalogy/platform \
-  --signer-workflow airalogy/platform/.github/workflows/release.yml \
   --source-ref refs/tags/v0.1.0 --source-digest <40-character-release-commit> \
   --signer-digest <40-character-release-commit> \
   --cert-identity https://github.com/airalogy/platform/.github/workflows/release.yml@refs/tags/v0.1.0 \
-  --deny-self-hosted-runners
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --predicate-type https://slsa.dev/provenance/v1 --deny-self-hosted-runners
 ```
 
 The installer delegates signature verification to the [official GitHub CLI](https://cli.github.com/manual/gh_attestation_verify), enforcing repository, workflow, certificate identity/issuer, exact source ref/commit, signer commit, hosted runner and SLSA provenance. A hash identifies bytes; a verified signature establishes the specified build origin, not software quality, ongoing release approval or physical safety. Review release withdrawal/security notices independently; this tool has no automatic revocation feed.
+
+The exact `--cert-identity` already pins the workflow and tag. Do not combine it with `--signer-workflow`, `--signer-repo` or `--cert-identity-regex`: those selectors are mutually exclusive in the CLI.
 
 ## Preview and install
 

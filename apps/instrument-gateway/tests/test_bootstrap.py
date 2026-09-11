@@ -128,7 +128,6 @@ class BootstrapTests(unittest.TestCase):
         expected = {
             "--hostname": "github.com",
             "--repo": "airalogy/platform",
-            "--signer-workflow": "airalogy/platform/.github/workflows/release.yml",
             "--source-ref": "refs/tags/v0.1.0",
             "--source-digest": "a" * 40,
             "--signer-digest": "a" * 40,
@@ -140,6 +139,10 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(command[command.index(key) + 1], value)
         self.assertIn("--deny-self-hosted-runners", command)
         self.assertNotIn("--owner", command)
+        # Exact certificate identity already binds workflow + release ref. The
+        # CLI rejects combining it with any other certificate identity selector.
+        for flag in ("--signer-workflow", "--signer-repo", "--cert-identity-regex"):
+            self.assertNotIn(flag, command)
 
     def test_verifier_failure_missing_subject_and_timeout_never_install(self):
         plan = self.approve()
@@ -345,8 +348,30 @@ class BootstrapTests(unittest.TestCase):
         self.args.bundle, self.args.trusted_root = str(bundle), str(root)
         self.args.trusted_root_sha256 = bootstrap.digest(root.read_bytes())
         self.approve()
-        with self.assertRaisesRegex(ValueError, "provenance"):
-            bootstrap.install(self.args)
+
+        def real_verifier(command):
+            # Capture diagnostics only for this owned, unsigned offline fixture.
+            # A parser/flag error must not masquerade as cryptographic rejection.
+            result = subprocess.run(
+                command,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=30,
+                env={**os.environ, "GH_HOST": "github.com", "GH_PROMPT_DISABLED": "1"},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            diagnostics = result.stderr.decode(errors="replace").lower()
+            self.assertNotIn("unknown flag", diagnostics)
+            self.assertNotIn("none of the others can be", diagnostics)
+            self.assertRegex(
+                diagnostics, r"trusted root|bundle version|unsupported media type"
+            )
+            return result
+
+        with patch.object(bootstrap, "run_verifier", side_effect=real_verifier) as run:
+            with self.assertRaisesRegex(ValueError, "provenance"):
+                bootstrap.install(self.args)
+            run.assert_called_once()
         self.assertFalse(Path(self.args.destination).exists())
 
 

@@ -249,14 +249,14 @@ def verification_command(plan, wheel, proof):
         "github.com",
         "--repo",
         REPOSITORY,
-        "--signer-workflow",
-        WORKFLOW,
         "--signer-digest",
         plan["commit"],
         "--source-digest",
         plan["commit"],
         "--source-ref",
         f"refs/tags/{plan['release_tag']}",
+        # Exact identity binds workflow + ref; gh forbids also selecting a
+        # signer workflow/repository or certificate identity regex.
         "--cert-identity",
         f"https://github.com/{WORKFLOW}@refs/tags/{plan['release_tag']}",
         "--cert-oidc-issuer",

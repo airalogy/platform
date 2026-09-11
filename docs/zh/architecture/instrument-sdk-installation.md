@@ -13,14 +13,16 @@
 ```bash
 gh attestation verify /absolute/downloads/airalogy-instrument-bootstrap.py \
   --hostname github.com --repo airalogy/platform \
-  --signer-workflow airalogy/platform/.github/workflows/release.yml \
   --source-ref refs/tags/v0.1.0 --source-digest <40-character-release-commit> \
   --signer-digest <40-character-release-commit> \
   --cert-identity https://github.com/airalogy/platform/.github/workflows/release.yml@refs/tags/v0.1.0 \
-  --deny-self-hosted-runners
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --predicate-type https://slsa.dev/provenance/v1 --deny-self-hosted-runners
 ```
 
 引导使用 [GitHub 官方 CLI](https://cli.github.com/manual/gh_attestation_verify) 做密码学验证，固定仓库、工作流、证书身份/签发方、源码引用和提交、签名工作流提交、托管 runner 及 SLSA 来源类型。哈希标识字节，签名证明指定构建来源，不证明软件质量、当前仍获批准或物理安全。须独立核对撤回版本及安全公告，本工具没有自动撤销信息源。
+
+精确的 `--cert-identity` 已经固定工作流和标签。不要同时传入 `--signer-workflow`、`--signer-repo` 或 `--cert-identity-regex`；这些身份选择参数在 CLI 中互斥。
 
 ## 预览与安装
 

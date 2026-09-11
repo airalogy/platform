@@ -209,6 +209,8 @@ First formal Community Edition release. See the [release overview and qualificat
 
 ### Fixed
 
+- Fix mutually exclusive GitHub CLI provenance selectors in the Instrument SDK bootstrap. Retain exact certificate workflow/tag identity, source/signer commits, issuer and hosted-runner requirements; exercise the real CLI so argument errors cannot pass as unsigned-proof rejection.
+
 - Prepare GitHub-hosted instrument CI with non-group-writable tool executables and exact-path Chromium AppArmor profiles. Preserve production integrity checks and Chromium sandboxing; do not change global namespace restrictions or local workstation settings.
 
 - Wait for initial Gateway context loading before exposing the fallback adapter import form, preventing delayed responses from destroying an open import dialog or selected file. Cover the race with a deliberately held Gateway response in browser acceptance.
