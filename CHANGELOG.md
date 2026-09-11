@@ -18,7 +18,9 @@ Target initial version: `0.1.0`.
 
 ### Added
 
-- Adopt native **Show all columns** and **Restore default columns** in the Renderer column picker, including protocol fields and submission metadata. Preserve per-user/per-Protocol preferences, constrain the narrow-screen picker and retain horizontal scrolling without changing export scope. Until the upstream release is published, a version-locked pnpm patch carries the same component implementation; no Platform-specific field traversal or Python package change is needed.
+- Adopt native **Show all columns** and **Restore default columns** in the Renderer column picker, including protocol fields and submission metadata. Preserve per-user/per-Protocol preferences, constrain the narrow-screen picker and retain horizontal scrolling without changing export scope. Consume the published Renderer directly; no Platform-specific field traversal or Python package change is needed.
+
+- Pin the published AIMD Core 2.16.0, Editor 1.12.0 and Renderer 2.13.0 in one shared workspace catalog, including stable figure ID validation/authoring and native Record column controls. Align all direct consumers, remove the temporary Renderer patch, and check dependency consistency during type checks.
 
 - Join saved macOS application discovery, explicit code/process selection, separately acknowledged startup, window inspection, scoped survey and read-only review in one bilingual local terminal guide. Preserve original requests and stage-specific recovery without automatic retries, focus changes, model calls, installation or hardware qualification; include real signed-app/no-launch and opt-in owned-window acceptance.
 

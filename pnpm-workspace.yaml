@@ -11,6 +11,9 @@ packages:
   - '!**/.temp/**'
 
 catalog:
+  '@airalogy/aimd-core': 2.16.0
+  '@airalogy/aimd-editor': 1.12.0
+  '@airalogy/aimd-renderer': 2.13.0
   '@playwright/test': 1.62.0
   playwright: 1.62.0
   '@antfu/eslint-config': ^3.7.3

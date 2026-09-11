@@ -63,6 +63,6 @@ platform/
 
 列选择交互由 `@airalogy/aimd-renderer` 提供，包括原生“显示全部列”/“恢复默认列”菜单、默认列策略和中英文文案。Platform 绑定现有字段/metadata 选择事件，按用户与 Protocol 保存偏好，不在页面重复遍历 AIMD 字段。
 
-上游正式发布前，`patches/@airalogy__aimd-renderer@2.12.0.patch` 将 `airalogy/airalogy` 提交 `fb10659f2f19a445f021df5a0909b3545a97366b` 中的同一源码实现回移到准确的已发布 2.12.0 包。其公开入口已指向 `src`，不需要覆盖生成包或依赖本地相邻仓库；根清单和锁文件记录补丁及哈希。这不等于已发布新版本。待包含此功能的上游版本发布后，再升级依赖、删除此补丁注册与文件、重新生成锁文件，并重跑 Record 浏览器测试与生产构建。无需升级 Python `airalogy`。
+通过 `pnpm-workspace.yaml` 的默认版本目录使用正式发布的 AIMD 包：Core 2.16.0、Editor 1.12.0、Renderer 2.13.0。所有直接引用处声明 `catalog:`，工作区版本目录是唯一版本来源，锁文件记录解析结果与完整性校验。原 Renderer 2.12.0 补丁已移除，不需要本地源码覆盖、相邻仓库或升级 Python `airalogy`。以后升级时修改版本目录、重新生成锁文件，并针对实际发布包重跑浏览器测试与生产构建。`pnpm aimd:dependencies:test` 验证准确版本、直接依赖统一及不存在 Renderer 补丁，也会随 `pnpm type-check` 执行。
 
-执行 `pnpm e2e record-export.spec.ts record-columns.spec.ts` 验证中英文响应式导出弹窗、实际导出下载、原生列操作、隐藏提交信息恢复、键盘操作、宽表滚动和刷新后的偏好。列测试仅把展示用 Protocol 列模型扩展为合成字段，鉴权和 Record 读取仍走真实接口；另用 `AI_ENABLED=false` 重复验证。单次运行截图与日志不提交到 Git。
+执行 `pnpm e2e record-export.spec.ts record-columns.spec.ts` 验证中英文响应式导出弹窗、实际导出下载、原生列操作、隐藏提交信息恢复、键盘操作、宽表滚动和刷新后的偏好。升级 Core 或 Editor 时还应加入 `first-record.spec.ts` 和 `schema-governance.spec.ts`，验证 Protocol 创建、Record 提交/修订与历史版本证据。列测试仅把展示用 Protocol 列模型扩展为合成字段，鉴权和 Record 读取仍走真实接口；另用 `AI_ENABLED=false` 重复验证。单次运行截图与日志不提交到 Git。
