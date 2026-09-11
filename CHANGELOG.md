@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Join saved macOS application discovery, explicit code/process selection, separately acknowledged startup, window inspection, scoped survey and read-only review in one bilingual local terminal guide. Preserve original requests and stage-specific recovery without automatic retries, focus changes, model calls, installation or hardware qualification; include real signed-app/no-launch and opt-in owned-window acceptance.
+
 - Add bilingual, AI-independent local survey review with numbered field selection, exact draft/output confirmation and retained review receipts. Add saved-state inspection for interrupted observations; history review and assembly no longer inspect current software or native helpers, while live execution retains target/runtime checks and separate authority.
 
 - Record selected browser demonstration input events with private pre/post readbacks, exact action/success policies and distinct human-observation lineage; export through existing fixed workflows and reuse the same installed adapters and Instrument Job receipt recovery without AI. Include explicit visible-window confirmation, cancellation and failure rejection; owned offline HTML only, not desktop recording, vendor control or hardware qualification.

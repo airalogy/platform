@@ -20,6 +20,34 @@ async function main() {
     throw new Error("Select exactly one native command")
   const command = positionals[0]
   selectedCommand = command
+  if (command === "guide") {
+    if (process.platform !== "darwin" || !process.stdin.isTTY || !process.stderr.isTTY || Object.keys(values).some(key => !["request", "build", "workspace", "locale", "redact"].includes(key)))
+      throw new Error("The native guide requires a private macOS terminal and exact saved discovery/build")
+    const { createInterface } = await import("node:readline/promises")
+    const { guideNative } = await import("./native-guide.mjs")
+    const terminal = createInterface({ input: process.stdin, output: process.stderr })
+    const controller = new AbortController()
+    const cancel = () => controller.abort()
+    terminal.once("close", cancel)
+    terminal.once("SIGINT", cancel)
+    process.once("SIGINT", cancel)
+    process.once("SIGTERM", cancel)
+    try {
+      const result = await guideNative({ requestFile: values.request, buildFile: values.build, workspace: values.workspace, locale: values.locale || "en-US", redactIdentifiers: values.redact ? JSON.parse(await readPrivateSelection(values.redact)) : [] }, {
+        signal: controller.signal,
+        write: value => process.stderr.write(value),
+        question: prompt => terminal.question(prompt, { signal: controller.signal }),
+      })
+      process.stdout.write(`${canonical(result)}\n`)
+      process.exitCode = result.state === "draft_created" ? 0 : 1
+    }
+    finally {
+      terminal.close()
+      process.removeListener("SIGINT", cancel)
+      process.removeListener("SIGTERM", cancel)
+    }
+    return
+  }
   const allowed = { "build": ["workspace"], "doctor": ["build"], "inspect": ["build", "bundle"], "windows": ["build", "bundle", "pid"], "prepare": ["workspace", "build", "bundle", "pid", "title", "locale", "redact", "capture-values"], "simulation-template": ["workspace", "build", "pid"], "preview": ["definition", "plan"], "read": ["definition", "confirm", "evidence", "ack-new-read"], "run": ["definition", "plan", "confirm", "evidence", "ack-new-run"], "prepare-launch": ["workspace", "build", "bundle", "reason", "duration-seconds"], "launch": ["request", "confirm", "ack-initialization"], "launch-status": ["request"], "prepare-discovery": ["directory", "depth", "workspace"], "discover": ["request", "confirm"], "discovery-result": ["request"], "prepare-selection": ["request", "indices", "workspace"], "inspect-selection": ["selection", "candidate", "analysis", "build"] }[command]
   if (!allowed || Object.keys(values).some(key => !allowed.includes(key)))
     throw new Error("Unexpected native command option")

@@ -29,6 +29,31 @@ pnpm gateway:native discovery-result --request /absolute/private/discovery/inter
 
 ## 用 Aira 比较候选，或手工选择
 
+### 无需 AI 的本地接入引导 {#local-guide}
+
+输出目录须已经存在、仅本人可读写（0700），并位于软件发现目录**之外**；引导拒绝把证据写入发现目录或厂商应用包内部。
+
+完成前述独立确认的软件发现和后述辅助程序构建后，可用一个中英文终端引导连接现有步骤：
+
+```bash
+pnpm gateway:native guide --request /absolute/private/discovery/interface-ID/request.json --build /absolute/private/native-builds/interface-ID/native-build.json --workspace /absolute/private/onboarding --redact /absolute/private/masks.json
+```
+
+须使用获授权的私有 macOS 交互终端。`--request` 是**已完成的软件发现请求**，不是启动或观察请求。可选的 `--redact` 是准确私有区域 AX 标识符数组；省略表示没有额外声明遮盖。引导始终不采集输入值、不截图、不调用模型；语言环境不是 `en-US` 时用 `--locale` 明确指定。不接受管道输入或额外动作/采集选项。
+
+1. 查看历史候选并明确选择一个，确认检查其当前代码及进程元数据；重新核验原元数据摘要和已审核辅助程序构建。
+2. 选择准确的已有进程。如果软件未运行，填写独立获准的启动理由，审核单独的启动预览，再输入 **`INITIALIZE ` 加完整摘要**。启动可能初始化设备或访问网络，选择软件不等于获准启动；启动回执缺失或不确定时停止，不重试。
+3. 独立确认读取该进程的窗口标题、角色及几何状态。必须只有一个未最小化、可测量的 `AXWindow`。引导不会关闭弹窗、替换应用、抢占焦点、修改系统权限或修复会话。
+4. 审核并独立确认一次性限定观察。保留准确进程生命周期、构建、标题、私有区域和采集策略；所得历史报告进入[本地按序号审核](./instrument-interface-survey.md#local-review)，生成普通可编辑的只读草稿。
+
+私有引导目录保留阶段检查点、准确的子请求，以及最终 `guide-result.json` 或 `guide-stopped.json`。停止结果包含阶段、原恢复路径与下一步，不回显原始系统/应用错误。使用这些原请求执行 `launch-status` 或观察 `status`/`review`。**不能把重跑引导当作恢复**：它是新的接入过程，不是幂等重放。若进程在最终回执前崩溃，检查已存阶段记录；不得删除启动/观察标记。暂停的审核可以不再观察软件而继续。
+
+取消后引导也不会关闭应用，不声称应用仍存活或设备已停止。结果不是已安装适配包或实机资格；上传/可选 Aira 分析、源码开发、安装及受控执行仍有独立流程和权限。
+
+验证包括真实签名自建应用的发现/身份检查（**不打开应用**），以及独立启动确认、目标变化、取消和回执丢失的确定性流程测试。完整自建窗口引导属于可选图形回归，不能用仅编译 CI 代替；厂商软件、实机、Windows/Linux 原生及视觉控制仍须分别验收。
+
+### 可选 Aira 比较
+
 复用现有私有、单次勘察分析流程，新增独立的 `airalogy.application-candidates.v1` 报告及 `airalogy.application-selection-export.v1` 导出格式。不会把目录条目伪装成界面控件，也不授予本地开发或运行时凭据。
 
 ```bash

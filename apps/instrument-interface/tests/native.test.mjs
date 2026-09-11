@@ -13,6 +13,7 @@ import { Evidence } from "../src/evidence.mjs"
 import { prepareExploration, runExploration, syncExploration } from "../src/exploration.mjs"
 import { validateNativeDefinition, validateNativeSelection } from "../src/native-contract.mjs"
 import { nativeDiscoveryResult, prepareNativeDiscovery, runNativeDiscovery } from "../src/native-discovery.mjs"
+import { guideNative } from "../src/native-guide.mjs"
 import { nativeLaunchStatus, prepareNativeLaunch, runNativeLaunch, validateLaunchPreview } from "../src/native-launch.mjs"
 import { prepareNativeReadRuntime, previewNativeReadRuntime } from "../src/native-read-worker-runtime.mjs"
 import { NativeInterfaceSession, previewNativeInterface, validateNativeInterface } from "../src/native-session.mjs"
@@ -180,6 +181,25 @@ test("actual macOS build, integrity and permission diagnostic without app launch
   assert.equal(inspected.bundle.bundle_id, inventory.applications[0].declared.bundle_id)
   assert.deepEqual(inspected.running, [])
   assert.equal(inventory.signature_verified, false)
+  await t.test("guided native selection uses actual saved discovery/identity and stops before unauthorized startup", async () => {
+    let output = ""
+    const guided = await guideNative({ requestFile: discovery.request_file, buildFile: built.build_file, workspace: root, locale: "en-US", redactIdentifiers: ["private.note"] }, {
+      write: value => output = value,
+      question: async (prompt) => {
+        if (prompt.startsWith("Choose"))
+          return "1"
+        if (prompt.startsWith("Software"))
+          return ""
+        return output.trim().split("\n").at(-1)
+      },
+    })
+    assert.equal(guided.state, "needs_attention")
+    assert.equal(guided.stage, "prepare_launch")
+    assert.equal(guided.reason, "operator_cancelled")
+    assert.ok(guided.selection_file)
+    assert.ok(!guided.launch_request && !guided.survey_request)
+    assert.deepEqual((await nativeCall(built.build_file, { operation: "inspect_application", bundle_path: built.simulator_app })).running, [])
+  })
   // Runtime preparation checks real compiled bytes without starting an app or
   // touching AX. A fabricated process selection must fail when probed.
   const fakeSelection = fixture().selection
@@ -240,6 +260,28 @@ test("actual macOS build, integrity and permission diagnostic without app launch
       await focusOwnedFixture(built.build_file, child.pid)
       const selection = await selectNative({ buildFile: built.build_file, bundlePath: built.simulator_app, pid: child.pid, title: "Airalogy Native Reader — Simulation", redactIdentifiers: ["private.note"] })
       await waitForOwnedWindow(built, selection.target.source.pin)
+      let guidedOutput = ""
+      const guided = await guideNative({ requestFile: discovery.request_file, buildFile: built.build_file, workspace: root, locale: "en-US", redactIdentifiers: ["private.note"] }, {
+        write: value => guidedOutput += value,
+        question: async (prompt) => {
+          let answer
+          if (prompt.startsWith("Choose"))
+            answer = "1"
+          else if (prompt.startsWith("Identity number"))
+            answer = guidedOutput.match(/^(\d+)\. "app\.identity"/m)?.[1]
+          else if (prompt.startsWith("Readback numbers"))
+            answer = guidedOutput.match(/^(\d+)\. "reader\.status"/m)?.[1]
+          else
+            answer = guidedOutput.match(/确认摘要：([a-f0-9]{64})/)?.[1] || guidedOutput.trim().split("\n").at(-1)
+          guidedOutput = ""
+          assert.ok(answer, "Expected an explicitly observed owned-fixture control/confirmation")
+          return answer
+        },
+      })
+      assert.equal(guided.state, "draft_created")
+      assert.equal(guided.hardware_qualified, false)
+      assert.equal(JSON.parse(await readFile(guided.draft.definition_file)).schema, "airalogy.native-read-definition.v1")
+      assert.ok(!guided.launch_request)
       const prepared = await prepareSurvey(selection, root)
       await assert.rejects(runPreparedSurvey(prepared.request_file, "0".repeat(64)), /Confirm/)
       const result = await runPreparedSurvey(prepared.request_file, prepared.local_preview_digest)

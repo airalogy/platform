@@ -29,6 +29,31 @@ After reviewing a candidate, pass its exact `bundle_path` to **`inspect` below**
 
 ## Compare candidates with Aira or select manually
 
+### Guided local onboarding without AI {#local-guide}
+
+Choose an existing owner-only (0700) workspace **outside** the discovered application directory; the guide refuses to write evidence inside that directory or a vendor bundle.
+
+After the independently confirmed discovery above and helper build below, one bilingual terminal guide joins the existing stages:
+
+```bash
+pnpm gateway:native guide --request /absolute/private/discovery/interface-ID/request.json --build /absolute/private/native-builds/interface-ID/native-build.json --workspace /absolute/private/onboarding --redact /absolute/private/masks.json
+```
+
+Use an authorized private macOS terminal. `--request` is a **completed discovery request**, not an application launch or survey request. `--redact` is an optional array of exact private-region AX identifiers; omitted means no additional declared masks. The guide always excludes input values/screenshots and never calls a model. Select the exact locale with `--locale` if it differs from `en-US`. Piped input and extra action/capture options are refused.
+
+1. Inspect historical candidates and explicitly choose one. Confirm inspection of its current code/process metadata; the original metadata hash and reviewed helper build are rechecked.
+2. Select an existing exact process. If none is running, state an independently authorized startup reason, review the separate launch preview and type **`INITIALIZE ` followed by its complete digest**. Startup may initialize equipment or use the network. Choosing software does not grant this authority. A missing/uncertain launch receipt stops the guide without retrying.
+3. Separately confirm inspection of window titles, roles and geometry flags from that process. There must be one non-minimized, measurable `AXWindow`. The guide never closes dialogs, chooses an alternative app, takes focus, changes system permissions or repairs the session.
+4. Review and separately confirm the single-use scoped survey. Process lifetime, build, title, masks and capture policy remain pinned. The resulting historical report feeds the [local numbered readback review](./instrument-interface-survey.md#local-review), producing an ordinary editable read-only draft.
+
+The private guide directory contains stage checkpoints, the exact child requests and a final `guide-result.json` or `guide-stopped.json`. Stopped output names the stage, original recovery paths and next step; errors do not expose raw OS/application messages. Use `launch-status` or survey `status`/`review` on those saved requests. **Do not rerun the guide as recovery**: it is a new onboarding operation, not an idempotent replay. If the process crashes before a final receipt, inspect its retained stage checkpoints; never delete a launch/survey start marker. A paused review can continue without observing software again.
+
+No application is closed by the guide, including after cancellation; it does not assert that the application remains alive or that equipment has stopped. The result is neither an installed adapter nor hardware qualification. Upload/optional Aira interpretation, source authoring, installation and controlled execution retain their separate workflows and permissions.
+
+Verification includes actual signed owned-app discovery/inspection **without opening it**, plus deterministic orchestration tests for separate startup consent, target drift, cancellation and lost responses. The full owned-window guide is an opt-in graphical regression, not verified by compile-only CI. Vendor software, real instruments, Windows/Linux native and visual control still need their own acceptance.
+
+### Optional Aira comparison
+
 The existing private, one-shot survey-analysis workflow also accepts a distinct `airalogy.application-candidates.v1` report and exports `airalogy.application-selection-export.v1`. This does not turn directory entries into interface controls or grant a development/runtime bearer credential.
 
 ```bash
