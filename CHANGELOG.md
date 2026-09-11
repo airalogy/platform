@@ -18,6 +18,8 @@ Target initial version: `0.1.0`.
 
 ### Added
 
+- Adopt native **Show all columns** and **Restore default columns** in the Renderer column picker, including protocol fields and submission metadata. Preserve per-user/per-Protocol preferences, constrain the narrow-screen picker and retain horizontal scrolling without changing export scope. Until the upstream release is published, a version-locked pnpm patch carries the same component implementation; no Platform-specific field traversal or Python package change is needed.
+
 - Join saved macOS application discovery, explicit code/process selection, separately acknowledged startup, window inspection, scoped survey and read-only review in one bilingual local terminal guide. Preserve original requests and stage-specific recovery without automatic retries, focus changes, model calls, installation or hardware qualification; include real signed-app/no-launch and opt-in owned-window acceptance.
 
 - Add bilingual, AI-independent local survey review with numbered field selection, exact draft/output confirmation and retained review receipts. Add saved-state inspection for interrupted observations; history review and assembly no longer inspect current software or native helpers, while live execution retains target/runtime checks and separate authority.
@@ -202,6 +204,8 @@ Target initial version: `0.1.0`.
 - Raised the production Web build heap default to 6 GB after the complete application build exceeded the former 4 GB limit.
 
 ### Fixed
+
+- Keep Record export dialogs within the shared responsive dialog layout: viewport gutters, a 760px width limit, scrollable content and an always-visible confirmation footer across Lab, Project and Protocol entry points.
 
 - Recover plain JSON instrument completion receipts without loading or initializing the adapter, matching file-result recovery. Invalid completion records halt for reconciliation; acknowledged acquisitions are not repeated and receipt-only recovery cannot lease new work.
 

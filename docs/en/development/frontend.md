@@ -58,3 +58,11 @@ User-facing strings should live in the i18n locale files under `packages/shared/
 Product typography, layout and interaction rules are documented in `apps/web/src/styles/README.md`. Use the opt-in `aira-dialog` class for card modals, with an inline `--aira-dialog-width` when needed: headers and confirmation footers remain visible while long content scrolls. Optional fields use keyboard-operable disclosures; errors remain visible and preserve input. An interrupted confirmation must not be reported as a definitely failed write.
 
 Core navigation uses one set of destinations for desktop links and the compact current-module menu. APIs, not navigation visibility, enforce access. Extend `tests/e2e/specs/workspace-interactions.spec.ts` when changing these contracts; test small screens and the AI-disabled path as well as desktop.
+
+## Record table dependency boundary
+
+Column selection belongs to `@airalogy/aimd-renderer`, including its native **Show all columns** / **Restore default columns** menu, default-column policy and localized labels. Platform binds the existing field/metadata selection events and stores preferences per user and Protocol; do not duplicate AIMD field traversal in the page.
+
+Pending the upstream release, `patches/@airalogy__aimd-renderer@2.12.0.patch` backports the same source implementation from the `airalogy/airalogy` commit `fb10659f2f19a445f021df5a0909b3545a97366b` onto the exact published 2.12.0 package. Its public exports already point to `src`, so no generated bundle override or sibling checkout is required. The root manifest and lockfile record the patch and its hash. This is not a published new version. Once the upstream release containing the change is available, update the dependency, remove this patch registration/file, regenerate the lockfile and repeat the Record browser tests and production build. No Python `airalogy` upgrade is required.
+
+Run `pnpm e2e record-export.spec.ts record-columns.spec.ts` for responsive export dialogs, actual export/download, native column actions, hidden metadata restoration, keyboard use, wide-table scrolling and preference reloads in both languages. Column tests expand only the displayed Protocol catalogue with synthetic fields; authentication and Record loading remain real. Repeat with `AI_ENABLED=false`. Keep per-run screenshots and logs out of Git.

@@ -1,0 +1,228 @@
+diff --git a/src/locales.ts b/src/locales.ts
+index b02c145a523ac108126845703ada1283ff9efb85..ae04bc551d54ba3fdeb83e9d0561b96507d72494 100644
+--- a/src/locales.ts
++++ b/src/locales.ts
+@@ -72,6 +72,8 @@ export interface AimdRendererMessages {
+     record: string
+     field: string
+     columns: string
++    showAllColumns: string
++    restoreDefaultColumns: string
+     metadataColumns: string
+     protocolColumns: string
+     actions: string
+@@ -184,6 +186,8 @@ const EN_US_MESSAGES: AimdRendererMessages = {
+     record: "Record",
+     field: "Field",
+     columns: "Columns",
++    showAllColumns: "Show all columns",
++    restoreDefaultColumns: "Restore default columns",
+     metadataColumns: "Record information",
+     protocolColumns: "Protocol fields",
+     actions: "Actions",
+@@ -272,6 +276,8 @@ const ZH_CN_MESSAGES: AimdRendererMessages = {
+     record: "记录",
+     field: "字段",
+     columns: "选择列",
++    showAllColumns: "显示全部列",
++    restoreDefaultColumns: "恢复默认列",
+     metadataColumns: "记录信息",
+     protocolColumns: "协议字段",
+     actions: "操作",
+diff --git a/src/styles/renderer.css b/src/styles/renderer.css
+index 1126b4bd0dcbf3acc657deab1984c356d5d5b004..fd1210c2ca5fbcfcb707dd3f18b985a63dacbf5c 100644
+--- a/src/styles/renderer.css
++++ b/src/styles/renderer.css
+@@ -1727,6 +1727,46 @@
+   border-top: 1px solid #e4eaed;
+ }
+
++.aimd-record-table-view__field-actions {
++  position: sticky;
++  top: -6px;
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++  padding: 6px 0;
++  border-bottom: 1px solid #e4eaed;
++  background: #fff;
++  z-index: 1;
++}
++
++.aimd-record-table-view__field-actions > button {
++  flex: 1 1 120px;
++  min-height: 34px;
++  padding: 6px 8px;
++  border: 1px solid #cdd7dc;
++  border-radius: 4px;
++  background: #fff;
++  color: #32444c;
++  font: inherit;
++  font-size: 13px;
++  line-height: 1.4;
++  cursor: pointer;
++}
++
++.aimd-record-table-view__field-actions > button:hover:not(:disabled) {
++  background: #f1f6f5;
++}
++
++.aimd-record-table-view__field-actions > button:focus-visible {
++  outline: 2px solid #247a64;
++  outline-offset: 2px;
++}
++
++.aimd-record-table-view__field-actions > button:disabled {
++  opacity: 0.55;
++  cursor: default;
++}
++
+ .aimd-record-table-view__field-group-label {
+   padding: 5px 8px 3px;
+   color: #718087;
+@@ -2077,11 +2117,15 @@
+
+   .aimd-record-table-view__field-picker {
+     margin-left: 0;
++    flex-basis: 100%;
++    min-width: 0;
+   }
+
+   .aimd-record-table-view__field-menu {
+     right: auto;
+     left: 0;
++    width: min(320px, 100%);
++    box-sizing: border-box;
+   }
+
+   .aimd-record-table-view__table th,
+diff --git a/src/vue/record-views.ts b/src/vue/record-views.ts
+index 3024b6f0a16064452d89cea3d65f0f9e8dd1ba35..302c8a04019e3912b19e66ab6f1c775b1dc3bc7d 100644
+--- a/src/vue/record-views.ts
++++ b/src/vue/record-views.ts
+@@ -472,6 +472,14 @@ export const AimdRecordTable = defineComponent({
+       type: Array as PropType<string[]>,
+       default: undefined,
+     },
++    defaultFieldKeys: {
++      type: Array as PropType<string[]>,
++      default: undefined,
++    },
++    defaultMetadataColumnKeys: {
++      type: Array as PropType<string[]>,
++      default: undefined,
++    },
+     showFieldPicker: {
+       type: Boolean,
+       default: true,
+@@ -484,39 +492,65 @@ export const AimdRecordTable = defineComponent({
+     'open-record': (_record: unknown, _index: number) => true,
+   },
+   setup(props, { emit, expose, slots }) {
+-    const columns = computed(() => createAimdRecordViewColumns(parseAndExtract(props.aimd ?? ''), {
+-      defaultFieldKeys: props.fieldKeys,
+-      maxDefaultColumns: props.maxDefaultColumns,
+-    }))
++    const fields = computed(() => parseAndExtract(props.aimd ?? ''))
++    // Current v-model selections must not redefine the reset target.
++    const columns = computed(() => {
++      const defaults = createAimdRecordViewColumns(fields.value, {
++        defaultFieldKeys: props.defaultFieldKeys,
++        maxDefaultColumns: props.maxDefaultColumns,
++      })
++      return defaults.some(column => column.defaultVisible) || defaults.length === 0
++        ? defaults
++        : createAimdRecordViewColumns(fields.value, { maxDefaultColumns: props.maxDefaultColumns })
++    })
+     const internalFieldKeys = ref<string[]>([])
+     const internalMetadataColumnKeys = ref<string[]>([])
+     const rendererMessages = computed(() => createAimdRendererMessages(props.locale, props.messages))
++    const allFieldKeys = computed(() => columns.value.map(column => column.key))
++    const defaultFieldKeys = computed(() => getDefaultAimdRecordViewFieldKeys(columns.value))
++    const allMetadataColumnKeys = computed(() => props.metadataColumns.map(column => column.key))
++    const defaultMetadataColumnKeys = computed(() => props.defaultMetadataColumnKeys === undefined
++      ? allMetadataColumnKeys.value
++      : allMetadataColumnKeys.value.filter(key => props.defaultMetadataColumnKeys!.includes(key)))
++
++    function sameKeys(left: readonly string[], right: readonly string[]) {
++      return left.length === right.length && left.every((key, index) => key === right[index])
++    }
+
+-    watch(columns, (nextColumns) => {
+-      const availableKeys = new Set(nextColumns.map(column => column.key))
+-      const requested = props.fieldKeys?.filter(key => availableKeys.has(key))
+-      internalFieldKeys.value = requested?.length
+-        ? requested
+-        : getDefaultAimdRecordViewFieldKeys(nextColumns)
+-    }, { immediate: true })
+-
+-    watch(() => props.fieldKeys, (fieldKeys) => {
+-      if (fieldKeys?.length) {
+-        internalFieldKeys.value = fieldKeys.filter(key => columns.value.some(column => column.key === key))
+-      }
+-    }, { deep: true })
+-
++    watch([columns, () => props.fieldKeys], () => {
++      const requested = allFieldKeys.value.filter(key => props.fieldKeys?.includes(key))
++      const next = requested.length ? requested : defaultFieldKeys.value
++      if (!sameKeys(internalFieldKeys.value, next))
++        internalFieldKeys.value = [...next]
++    }, { immediate: true, deep: true })
+     watch(
+-      [() => props.metadataColumns, () => props.metadataColumnKeys],
+-      ([metadataColumns, metadataColumnKeys]) => {
+-        const availableKeys = new Set(metadataColumns.map(column => column.key))
+-        internalMetadataColumnKeys.value = metadataColumnKeys === undefined
+-          ? metadataColumns.map(column => column.key)
+-          : metadataColumnKeys.filter(key => availableKeys.has(key))
++      [allMetadataColumnKeys, defaultMetadataColumnKeys, () => props.metadataColumnKeys],
++      () => {
++        const next = props.metadataColumnKeys === undefined
++          ? defaultMetadataColumnKeys.value
++          : allMetadataColumnKeys.value.filter(key => props.metadataColumnKeys!.includes(key))
++        if (!sameKeys(internalMetadataColumnKeys.value, next))
++          internalMetadataColumnKeys.value = [...next]
+       },
+       { immediate: true, deep: true },
+     )
+
++    const allColumnsSelected = computed(() => sameKeys(internalFieldKeys.value, allFieldKeys.value)
++      && sameKeys(internalMetadataColumnKeys.value, allMetadataColumnKeys.value))
++    const defaultColumnsSelected = computed(() => sameKeys(internalFieldKeys.value, defaultFieldKeys.value)
++      && sameKeys(internalMetadataColumnKeys.value, defaultMetadataColumnKeys.value))
++
++    function selectColumns(fieldKeys: string[], metadataKeys: string[]) {
++      if (!sameKeys(internalFieldKeys.value, fieldKeys)) {
++        internalFieldKeys.value = [...fieldKeys]
++        emit('update:fieldKeys', [...fieldKeys])
++      }
++      if (!sameKeys(internalMetadataColumnKeys.value, metadataKeys)) {
++        internalMetadataColumnKeys.value = [...metadataKeys]
++        emit('update:metadataColumnKeys', [...metadataKeys])
++      }
++    }
++
+     const visibleColumns = computed(() => getVisibleColumns(columns.value, internalFieldKeys.value))
+     const visibleMetadataColumns = computed(() => props.metadataColumns.filter(column => (
+       internalMetadataColumnKeys.value.includes(column.key)
+@@ -597,6 +631,20 @@ export const AimdRecordTable = defineComponent({
+           ? h('details', { class: 'aimd-record-table-view__field-picker' }, [
+               h('summary', rendererMessages.value.recordView.columns),
+               h('div', { class: 'aimd-record-table-view__field-menu' }, [
++                h('div', { class: 'aimd-record-table-view__field-actions' }, [
++                  h('button', {
++                    type: 'button',
++                    'data-column-action': 'all',
++                    disabled: allColumnsSelected.value,
++                    onClick: () => selectColumns(allFieldKeys.value, allMetadataColumnKeys.value),
++                  }, rendererMessages.value.recordView.showAllColumns),
++                  h('button', {
++                    type: 'button',
++                    'data-column-action': 'default',
++                    disabled: defaultColumnsSelected.value,
++                    onClick: () => selectColumns(defaultFieldKeys.value, defaultMetadataColumnKeys.value),
++                  }, rendererMessages.value.recordView.restoreDefaultColumns),
++                ]),
+                 props.metadataColumns.length > 0
+                   ? h('div', { class: 'aimd-record-table-view__field-group' }, [
+                       h('div', { class: 'aimd-record-table-view__field-group-label' }, rendererMessages.value.recordView.metadataColumns),

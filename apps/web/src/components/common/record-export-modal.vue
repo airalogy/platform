@@ -10,7 +10,8 @@
     v-model:show="show"
     data-testid="record-export-modal"
     preset="card"
-    class="record-export-modal"
+    class="aira-dialog"
+    style="--aira-dialog-width: 760px"
     :title="$t('page.recordExport.title')"
     :bordered="false"
   >
@@ -95,19 +96,6 @@
         <n-alert v-if="preview?.warnings.length" type="warning" class="mt-4">
           {{ $t("page.recordExport.previewWarnings", { count: preview.warnings.length }) }}
         </n-alert>
-
-        <div class="mt-6 flex justify-end gap-3">
-          <n-button @click="show = false">{{ $t("common.cancel") }}</n-button>
-          <n-button
-            data-testid="record-export-start"
-            type="primary"
-            :loading="creating"
-            :disabled="!canCreate"
-            @click="handleCreate"
-          >
-            {{ $t("page.recordExport.start") }}
-          </n-button>
-        </div>
       </n-tab-pane>
 
       <n-tab-pane name="history" :tab="$t('page.recordExport.history')">
@@ -186,6 +174,20 @@
         </n-spin>
       </n-tab-pane>
     </n-tabs>
+    <template v-if="activeTab === 'create'" #footer>
+      <div class="flex flex-wrap justify-end gap-3">
+        <n-button @click="show = false">{{ $t("common.cancel") }}</n-button>
+        <n-button
+          data-testid="record-export-start"
+          type="primary"
+          :loading="creating"
+          :disabled="!canCreate"
+          @click="handleCreate"
+        >
+          {{ $t("page.recordExport.start") }}
+        </n-button>
+      </div>
+    </template>
   </n-modal>
 </template>
 
@@ -462,10 +464,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.record-export-modal {
-  width: min(760px, calc(100vw - 32px));
-}
-
 .record-export-modal__stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -503,6 +501,14 @@ onBeforeUnmount(() => {
 .record-export-modal__history {
   max-height: 520px;
   overflow-y: auto;
+}
+
+.record-export-modal__option > div {
+  min-width: 0;
+}
+
+.record-export-modal__option > .n-switch {
+  flex-shrink: 0;
 }
 
 .record-export-modal__warnings {

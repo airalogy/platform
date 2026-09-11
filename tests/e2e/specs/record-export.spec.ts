@@ -2,6 +2,45 @@ import { readFile } from "node:fs/promises"
 import { expect, test } from "@playwright/test"
 import { loadFixtures } from "./fixtures"
 
+for (const locale of ["en-US", "zh-CN"]) {
+  test(`Record export keeps gutters and reachable actions at every scope (${locale})`, async ({ page }, testInfo) => {
+    const fixtures = await loadFixtures()
+    await page.addInitScript(language => localStorage.setItem("lang", JSON.stringify({ data: language, expire: null })), locale)
+    const lab = `/labs/${fixtures.lab.uid}`
+    const project = `${lab}/projects/${fixtures.project.uid}`
+    const cases = [
+      { path: `${lab}/records`, width: 1440, height: 900 },
+      { path: `${project}/records`, width: 850, height: 400 },
+      { path: `${project}/protocols/${fixtures.schema_governance.protocol_uid}/records`, width: 320, height: 568 },
+    ]
+    for (const size of cases) {
+      await page.setViewportSize({ width: size.width, height: size.height })
+      await page.goto(size.path)
+      await page.getByTestId("record-export-trigger").click()
+      const dialog = page.getByTestId("record-export-modal")
+      await expect(dialog).toBeVisible()
+      await expect.poll(async () => (await dialog.boundingBox())?.width).toBeCloseTo(Math.min(760, size.width - 32), 0)
+      const box = (await dialog.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(15)
+      expect(box.x + box.width).toBeLessThanOrEqual(size.width - 15)
+      expect(box.y).toBeGreaterThanOrEqual(15)
+      expect(box.y + box.height).toBeLessThanOrEqual(size.height - 15)
+      const footer = dialog.locator(".n-card__footer")
+      await expect(footer).toBeInViewport({ ratio: 1 })
+      await expect(page.getByTestId("record-export-start")).toBeInViewport({ ratio: 1 })
+      expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+      await page.screenshot({ path: testInfo.outputPath(`record-export-${size.width}.png`) })
+      await dialog.locator(".n-tabs-tab").filter({ hasText: /Export history|导出历史/ }).click()
+      await expect(dialog.locator(".n-card__footer")).toHaveCount(0)
+      const historyBox = (await dialog.boundingBox())!
+      expect(historyBox.width).toBeLessThanOrEqual(761)
+      expect(historyBox.x).toBeGreaterThanOrEqual(15)
+      await page.keyboard.press("Escape")
+      await expect(dialog).toHaveCount(0)
+    }
+  })
+}
+
 test("Lab Owner can create and download a background Record export", async ({ page }) => {
   const fixtures = await loadFixtures()
   await page.goto(`/labs/${fixtures.lab.uid}/records`)

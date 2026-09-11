@@ -28,6 +28,8 @@ Uploaded files are stored through the configured storage backend while the Recor
 
 ## Review and reuse
 
+In a Protocol's Records table, open **Columns** and choose **Show all columns** to select all fields available in the current Protocol and all submission metadata, including previously hidden columns. Use horizontal scrolling for wide tables; individual fields remain selectable. **Restore default columns** returns to the compact AIMD selection and shows the submission metadata. These choices are remembered on this browser separately for each user and Protocol. They change only the view, not Record values, access permissions or the export scope. New fields added by later Protocol changes can be included with **Show all columns** again. Nested tables and complex values retain their existing cell/detail views rather than becoming duplicate Records.
+
 Use Project, Protocol, recorder, and time context when comparing Records. A field name shared by different Protocol versions does not by itself guarantee identical meaning or units.
 
 For moving existing tabular data into Records or producing an authorized archive, see [Import and export](./import-export).
