@@ -14,7 +14,9 @@ export function hardenExecutable(selected) {
     if (info.uid === process.getuid())
       chmodSync(path, info.mode & 0o777 & ~0o022)
     else
-      execFileSync("sudo", ["chmod", "go-w", "--", path], { stdio: "inherit" })
+      // realpath is absolute, so it cannot be parsed as an option. BSD chmod
+      // does not accept GNU's post-mode "--" argument.
+      execFileSync("sudo", ["chmod", "go-w", path], { stdio: "inherit" })
   }
   if (statSync(path).mode & 0o022)
     throw new Error("Executable permissions remain unsafe")

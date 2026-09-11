@@ -28,6 +28,12 @@ test("executable preparation removes only group/world write bits and rejects non
     assert.equal(statSync(executable).mode & 0o777, 0o755)
     hardenExecutable(executable)
     assert.equal(statSync(executable).mode & 0o777, 0o755)
+    // Exercise the same chmod operands used for root-owned hosted tool caches
+    // without sudo or changes to any actual system executable.
+    chmodSync(executable, 0o777)
+    const command = spawnSync("chmod", ["go-w", executable], { encoding: "utf8" })
+    assert.equal(command.status, 0, command.stderr)
+    assert.equal(statSync(executable).mode & 0o777, 0o755)
     chmodSync(executable, 0o600)
     assert.throws(() => hardenExecutable(executable), /independently installed executable/)
   }
