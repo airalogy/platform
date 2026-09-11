@@ -3,8 +3,9 @@ import { closeSync, fsyncSync, openSync, readFileSync, writeFileSync } from "nod
 import { fileURLToPath } from "node:url"
 
 const mode = process.argv[3]
-if (process.argv.length !== (mode ? 4 : 3) || (mode && !["--http-reader", "--export-reader", "--controlled-reader", "--http-controlled-reader"].includes(mode)))
-  throw new Error("Usage: node scripts/instrument-authoring-example.mjs /absolute/new-spec.json [--http-reader | --export-reader | --controlled-reader | --http-controlled-reader]")
+const modes = ["--http-reader", "--export-reader", "--controlled-reader", "--http-controlled-reader", "--interface-workflow", "--native-read"]
+if (process.argv.length !== (mode ? 4 : 3) || (mode && !modes.includes(mode)))
+  throw new Error(`Usage: node scripts/instrument-authoring-example.mjs /absolute/new-spec.json [${modes.join(" | ")}]`)
 const reference = mode ? mode.slice(2) : "adapter-package"
 const root = new URL(`../apps/instrument-gateway/examples/${reference}/`, import.meta.url)
 const selected = name => readFileSync(new URL(name, root), "utf8")

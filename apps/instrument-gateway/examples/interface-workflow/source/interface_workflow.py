@@ -58,7 +58,9 @@ class OwnedInterfaceWorkflow(InstrumentAdapter):
         if (
             response["job_id"] != job.job_id
             or data.get("source_kind") != "file"
-            or set(data.get("values", {})) != {"result.value"}
+            or not isinstance(data.get("values"), dict)
+            or set(data["values"]) != {"result.value"}
+            or not isinstance(data["values"]["result.value"], str)
         ):
             raise ValueError("Uncorrelated or unsupported workflow result")
         result = float(data["values"]["result.value"])

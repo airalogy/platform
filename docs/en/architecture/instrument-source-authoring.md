@@ -59,6 +59,28 @@ Real controlled implementations require independently documented parameter readb
 
 For an owned HTTP reference, select `--http-controlled-reader` instead. It uses the [separately configured JSON control backend](./instrument-http-control.md), exact SDK `job.job_id` correlation, independent parameter/completion readback and verified simulation stopping. Fixed offline tests use a fake client; source development never connects to the service or equipment.
 
+### Interface worker source drafts
+
+The same guide now accepts two additional **owned synthetic** specifications. Generate one into a new private file, then select it in the local browser guide above (or pass it to `gateway:author prepare`):
+
+```bash
+node scripts/instrument-authoring-example.mjs /absolute/private/browser-source-spec.json --interface-workflow
+node scripts/instrument-authoring-example.mjs /absolute/private/native-source-spec.json --native-read
+```
+
+| Reference | Installed SDK client | Fixed development contract |
+| --- | --- | --- |
+| `interface-workflow` | `interface_process.InterfaceProcessClient` | Low-risk fixed browser actions; separate controlled-source consent required |
+| `native-read` | `interface_process.NativeReadProcessClient` | Read-only selected macOS text; no application launch or UI actions |
+
+Both inputs include their public adapter contract, immutable manifest/factory, independent fake-client tests and license, with **empty initial source**. Aira proposes Python adapter source, not a worker, runtime configuration, GUI selectors or a replacement workflow. Use a newly verified SDK wheel containing these clients and the matching API source contract. The generator reads no private runtime, selected application, interface capture or model credential and never starts a browser/native process. These specifications do not convert arbitrary survey evidence into an adapter or replace missing vendor documentation.
+
+The fixed tests vary readbacks, preserve exact Job correlation and cancellation, reject fabricated/malformed results and check the separate SDK factory boundary. Native tests additionally require owned-target/read-access checks before capture and preserve text without scientific inference; browser tests reject non-text, non-finite results. Real network-disabled Docker acceptance first rejects a deliberately fabricated result and then accepts corrected source against unchanged tests, with same-request resume not repeating generation or tests. Model proposals in that acceptance are fixtures, not a paid-model benchmark. The offline tests need neither macOS nor a desktop; passing them does **not** establish native/physical execution support on another OS.
+
+After source review, the [installed worker guide](./instrument-interface-worker.md) separately prepares the pinned browser workflow or native read definition/runtime, binds private configuration and performs normal installation/qualification/activation. Do not paste worker configuration, application paths or raw UI evidence into a source specification. Both references retain `simulation_only: true` and no tested hardware; development consent never permits live control. AI-off users can build the same reviewed reference sources manually. A real vendor adapter still needs independently specified semantics, tests and explicit local acceptance.
+
+### Real selected specifications
+
 A real specification is a JSON object with exactly `goal`, `manifest`, `factory`, `materials`, `tests`, `licenses`, and `initial_sources`. The manifest is an unbuilt Adapter Package template (`files: []`, `provenance.kind: "aira"`, no claimed tested hardware). `factory` is a fixed Python `module:function`. Materials are 1–16 explicitly selected `{name, text}` items, named without local directory paths; tests/licenses/initial sources are maps from portable `tests/*.py`, `licenses/*`, `source/*.py` paths to text. Initial sources may be empty. The context is limited to 128 KiB. PDF/OCR, directory collection and software discovery are not performed here; provide an explicitly reviewed text extract when permitted.
 
 No secret detector is comprehensive. Review confidential information, personal data and redistribution/model-processing rights before preparing a request. Known Platform credential patterns are rejected, but this is not a guarantee that all secrets have been removed.

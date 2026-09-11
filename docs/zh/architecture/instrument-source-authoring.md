@@ -59,6 +59,28 @@ node scripts/instrument-authoring-example.mjs /absolute/private/controlled-spec.
 
 如需自建 HTTP 参考，可改用 `--http-controlled-reader`，使用[独立配置的 JSON 控制后端](./instrument-http-control.md)、准确 SDK `job.job_id` 关联、独立参数/完成读回和模拟停止确认。固定离线测试使用假客户端；源码开发不会连接服务或设备。
 
+### 界面执行器源码草稿
+
+同一开发向导现在支持两种额外的**自建合成**规范。先生成到新的私有文件，再在上方本地浏览器向导中选择，或传给 `gateway:author prepare`：
+
+```bash
+node scripts/instrument-authoring-example.mjs /absolute/private/browser-source-spec.json --interface-workflow
+node scripts/instrument-authoring-example.mjs /absolute/private/native-source-spec.json --native-read
+```
+
+| 参考规范 | 已安装 SDK 客户端 | 固定开发契约 |
+| --- | --- | --- |
+| `interface-workflow` | `interface_process.InterfaceProcessClient` | 低风险固定浏览器操作，须独立受控源码开发确认 |
+| `native-read` | `interface_process.NativeReadProcessClient` | 只读选定 macOS 文本，不启动应用或操作界面 |
+
+两种输入都包含公开适配契约、不可变 manifest/工厂、独立假客户端测试和许可，**初始源码为空**。Aira 只生成 Python 适配器源码，不生成执行器、运行配置、GUI 选择器或替代工作流。须使用包含这些客户端的新校验 SDK wheel，并配套更新 API 源码契约。生成器不读取私有运行配置、选定应用、界面捕获或模型凭据，不启动浏览器/原生进程；这些规范不会把任意勘察证据自动转换为适配包，也不能代替缺失的厂商说明。
+
+固定测试改变读回值，保留准确 Job 关联和取消，拒绝编造或格式错误的结果，并核对独立 SDK 工厂入口。原生测试另外要求捕获前核对自建目标及读取权限，原样保存文本、不作科学推断；浏览器测试拒绝非文本及非有限数值。实际断网 Docker 验收先拒绝一份故意编造结果的源码，再用不变的测试验收修正源码，恢复同一请求不重复生成或测试。该验收的模型提议使用测试替身，不是付费模型能力验证。离线测试不需要 macOS 或桌面；通过不代表其他操作系统已支持原生/实机执行。
+
+源码审核后，仍须按[已安装执行器指南](./instrument-interface-worker.md)独立准备固定浏览器流程或原生读取定义/运行环境、绑定私有配置，完成正常安装、验收与启用。不要把执行器配置、应用路径或原始界面证据粘贴进开发规范。两个参考包均保留 `simulation_only: true` 和空的实机测试声明；开发确认不授予真实控制权限。AI 关闭时仍可手工构建同一套已审核参考源码。真实厂商适配仍须独立明确语义、测试，并取得本地验收授权。
+
+### 真实选定规范
+
 真实说明文件是 JSON，字段固定为 `goal`、`manifest`、`factory`、`materials`、`tests`、`licenses`、`initial_sources`。manifest 是尚未构建的适配包模板（`files: []`、`provenance.kind: "aira"`、无已测试真机声明）；factory 固定为 Python `module:function`。materials 是 1–16 项显式选定的 `{name, text}`，名称不含本地目录；测试、许可和初始源码分别是 `tests/*.py`、`licenses/*`、`source/*.py` 到文本的映射。初始源码可以为空，总上下文最多 128 KiB。这里不执行 PDF/OCR、目录采集或软件发现；需要时请在许可范围内提供明确审阅过的文本摘录。
 
 准备前请检查机密、个人数据、分发许可及模型处理权限。已知 Platform 凭证格式会被拒绝，但没有任何此类扫描能够保证所有秘密都已清除。

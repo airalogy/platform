@@ -42,6 +42,8 @@ The separate [source authoring assistant](../../docs/en/architecture/instrument-
 
 Non-read-only source drafts require additional explicit Platform consent and visible command effects/completion/stop review. The owned `examples/controlled-reader` reference exercises parameter readback, single start, takeover and uncertain stopping with independent fake transports; it has no production configuration and remains simulation-only. This expands source development, not device access or execution authority.
 
+For [interface worker source drafts](../../docs/en/architecture/instrument-source-authoring.md#interface-worker-source-drafts), the reference-spec generator also accepts `--interface-workflow` and `--native-read`. Both supply public SDK contracts and fixed fake-client tests without reading private runtime/UI data. The browser reference requires controlled-source consent; native read never grants launch/actions. Actual isolated fail/repair tests require no desktop and establish neither paid-model quality nor physical qualification.
+
 ### Documented HTTP interfaces
 
 For independently documented parameter/start/stop APIs, the separate [reviewed HTTP control backend](../../docs/en/architecture/instrument-http-control.md) fixes methods/paths/body fields in approved code and selects enabled operation names in a separate private configuration. It shares pinned TLS and non-retrying bounded I/O with the read client. The owned `examples/http-controlled-reader` package demonstrates correlated completion, single start, stopping and installed receipt recovery; it is simulation-only and grants no real device authority.
