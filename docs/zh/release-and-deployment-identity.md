@@ -19,13 +19,15 @@ Platform 不会默认将部署身份、客户信息或运行状态回传给 Aira
 
 `VERSION` 是产品版本的唯一源。正式发布时：
 
-1. 根据兼容性选择 SemVer，同步 `VERSION`、API、Web、Instrument Gateway package 和根 workspace 版本。
+1. 根据兼容性选择 SemVer，同步 `VERSION`、API、Web、Compute Runner、Instrument Gateway、Instrument Interface package 和根 workspace 版本。
 2. 将中英文 Changelog 的 `Unreleased` 内容移入对应版本节。
 3. 在已验证且干净的提交上创建 annotated tag `v<version>` 并推送。
-4. Release workflow 运行后端、前端、Instrument Gateway、部署和发布检查，构建多架构镜像和同版本 Gateway wheel/源码包，生成 SBOM 与 provenance，并组装不可变发布包。
+4. Release workflow 运行后端、前端、Instrument Gateway、部署和发布检查，构建多架构镜像和同版本 Compute Runner、Gateway wheel/源码包，生成 SBOM 与 provenance，并组装不可变发布包。打包前对准确镜像集合执行账号权限、备份恢复及同版本升级回滚演练；测试配置、备份与状态留在包外，非预期文件或符号链接会阻止打包。
 5. 正式部署使用 `镜像:版本@sha256:摘要`，不使用 `latest` 作为唯一身份。
 
 科研设备主机应安装同一 GitHub Release 附带的 Gateway 包，在加入本地硬件适配器前核验其发布来源。
+
+首版功能与验收边界见 [v0.1.0 发布概览](./releases/v0.1.0.md)。
 
 源码 checkout 仍可用于本地开发和评估，但会标记 `BUILD_DIRTY` 且不具备正式发布清单的认证语义。
 

@@ -251,11 +251,13 @@ jobs:
           path: compute-runner-package
       - name: Assemble immutable Platform release
         run: |
-          mkdir -p release-stage/deploy release-stage/docs/zh release-stage/docs/en
+          mkdir -p release-stage/deploy release-stage/docs/zh/releases release-stage/docs/en/releases
           cp -R deploy/single-lab release-stage/deploy/single-lab
           cp README.md README.zh-CN.md LICENSE NOTICE TRADEMARKS.md SECURITY.md CHANGELOG.md CHANGELOG.zh-CN.md VERSION release-stage/
           cp docs/zh/single-lab-deployment.md docs/zh/release-and-deployment-identity.md release-stage/docs/zh/
           cp docs/en/single-lab-deployment.md docs/en/release-and-deployment-identity.md release-stage/docs/en/
+          cp "docs/zh/releases/${GITHUB_REF_NAME}.md" release-stage/docs/zh/releases/
+          cp "docs/en/releases/${GITHUB_REF_NAME}.md" release-stage/docs/en/releases/
           node scripts/create-release-metadata.mjs \
             --metadata-directory image-metadata \
             --output-directory release-stage/deploy/single-lab \
@@ -264,8 +266,8 @@ jobs:
             --git-commit "$GITHUB_SHA"
       - name: Smoke test the exact released component set
         run: |
-          smoke_env=$PWD/release-stage/deploy/single-lab/.env
           smoke_project=platform-release-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+          smoke_env=$RUNNER_TEMP/$smoke_project.env
           deployment_id=dep_$(openssl rand -hex 16)
           secret_key=$(openssl rand -hex 48)
           aes_key=$(openssl rand -hex 32)
@@ -286,6 +288,7 @@ jobs:
             -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$database_password/" \
             -e "s/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=$minio_password/" \
             -e "s|^AIRALOGY_STATE_DIR=.*|AIRALOGY_STATE_DIR=$RUNNER_TEMP/$smoke_project-state|" \
+            -e "s|^BACKUP_DIR=.*|BACKUP_DIR=$RUNNER_TEMP/$smoke_project-backups|" \
             "$smoke_env"
           chmod 600 "$smoke_env"
           cleanup() {
@@ -299,10 +302,20 @@ jobs:
           AIRALOGY_ENV_FILE="$smoke_env" release-stage/deploy/single-lab/platformctl install
           curl --fail --silent --show-error http://127.0.0.1:18080/api/health/ready
           curl --fail --silent --show-error http://127.0.0.1:18080/api/system/version
+          export AIRALOGY_ENV_FILE="$smoke_env"
+          release-stage/deploy/single-lab/scripts/acceptance-test.sh
+          backup_path="$(release-stage/deploy/single-lab/platformctl backup release-restore)"
+          release-stage/deploy/single-lab/platformctl restore "$backup_path" --yes
+          # First release: rehearse the upgrade/rollback mechanism, not a claimed
+          # cross-version compatibility test against a nonexistent older release.
+          release-stage/deploy/single-lab/platformctl upgrade --no-pull
+          release-stage/deploy/single-lab/platformctl rollback --yes
+          release-stage/deploy/single-lab/platformctl status
           cleanup
           trap - EXIT
       - name: Package deployment files
         run: |
+          node scripts/check-release-stage.mjs release-stage
           tar -czf "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" -C release-stage .
           sha256sum "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" > "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256"
           cp release-stage/deploy/single-lab/release-manifest.json "airalogy-platform-release-${GITHUB_REF_NAME}.json"
@@ -314,5 +327,7 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256" "airalogy-platform-release-${GITHUB_REF_NAME}.json" "airalogy-platform-release-${GITHUB_REF_NAME}.env" compute-runner-package/* instrument-gateway-package/* --generate-notes --verify-tag
+        run: |
+          release_notes=$RUNNER_TEMP/platform-release-notes.md
+          { cat "docs/zh/releases/${GITHUB_REF_NAME}.md"; printf '\n---\n\n'; cat "docs/en/releases/${GITHUB_REF_NAME}.md"; } > "$release_notes"
+          gh release create "$GITHUB_REF_NAME" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz" "airalogy-platform-deploy-${GITHUB_REF_NAME}.tar.gz.sha256" "airalogy-platform-release-${GITHUB_REF_NAME}.json" "airalogy-platform-release-${GITHUB_REF_NAME}.env" compute-runner-package/* instrument-gateway-package/* --title "Airalogy Platform $GITHUB_REF_NAME" --notes-file "$release_notes" --verify-tag

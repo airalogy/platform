@@ -1,12 +1,31 @@
 /* eslint-disable test/no-import-node-test */
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { checkReleaseStage } from "./check-release-stage.mjs"
 import { createReleaseMetadata } from "./release-metadata-lib.mjs"
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..")
+
+test("release packaging rejects smoke secrets, runtime data and links", async (t) => {
+  const stage = await mkdtemp(path.join(os.tmpdir(), "platform-release-stage-"))
+  t.after(() => rm(stage, { recursive: true, force: true }))
+  const allowed = new Set([".env.example", "VERSION"])
+  await writeFile(path.join(stage, ".env.example"), "SECRET_KEY=replace-me\n")
+  await writeFile(path.join(stage, "VERSION"), "0.1.0\n")
+  assert.equal(await checkReleaseStage(stage, allowed), 2)
+  await writeFile(path.join(stage, ".env"), "SECRET_KEY=private-test-value\n")
+  await assert.rejects(checkReleaseStage(stage, allowed), /Unexpected release file: .env/)
+  await rm(path.join(stage, ".env"))
+  await mkdir(path.join(stage, "backups"))
+  await assert.rejects(checkReleaseStage(stage, allowed), /Unexpected release directory: backups/)
+  await rm(path.join(stage, "backups"), { recursive: true })
+  await rm(path.join(stage, "VERSION"))
+  await symlink(".env.example", path.join(stage, "VERSION"))
+  await assert.rejects(checkReleaseStage(stage, allowed), /symbolic link: VERSION/)
+})
 
 async function createFixture(t) {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "platform-release-"))

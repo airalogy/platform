@@ -14,7 +14,9 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
-Target initial version: `0.1.0`.
+## [0.1.0] - 2026-09-11
+
+First formal Community Edition release. See the [release overview and qualification boundaries](docs/en/releases/v0.1.0.md). The detailed entries below record the implementation stages, including limitations that were subsequently addressed within this release.
 
 ### Added
 
@@ -206,6 +208,8 @@ Target initial version: `0.1.0`.
 - Raised the production Web build heap default to 6 GB after the complete application build exceeded the former 4 GB limit.
 
 ### Fixed
+
+- Keep release smoke-test credentials, backups and runtime state outside the deployment archive; reject unexpected files and symbolic links before packaging. Gate the exact released images on account/permission acceptance, backup/restore and same-release upgrade/rollback rehearsals, and publish curated bilingual release notes.
 
 - Keep Record export dialogs within the shared responsive dialog layout: viewport gutters, a 760px width limit, scrollable content and an always-visible confirmation footer across Lab, Project and Protocol entry points.
 
