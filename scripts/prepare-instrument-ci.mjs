@@ -4,6 +4,12 @@ import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 
 // CI preparation only. Never relax the runtime's executable integrity checks.
+export function chmodArguments(path) {
+  if (!path.startsWith("/") || path.includes("\0"))
+    throw new Error("chmod requires an absolute executable path")
+  return ["go-w", path]
+}
+
 export function hardenExecutable(selected) {
   const path = realpathSync(selected)
   const info = statSync(path)
@@ -16,7 +22,7 @@ export function hardenExecutable(selected) {
     else
       // realpath is absolute, so it cannot be parsed as an option. BSD chmod
       // does not accept GNU's post-mode "--" argument.
-      execFileSync("sudo", ["chmod", "go-w", path], { stdio: "inherit" })
+      execFileSync("sudo", ["chmod", ...chmodArguments(path)], { stdio: "inherit" })
   }
   if (statSync(path).mode & 0o022)
     throw new Error("Executable permissions remain unsafe")

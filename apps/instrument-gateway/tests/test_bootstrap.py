@@ -331,7 +331,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("steps.gateway_provenance.outputs.bundle-path", release)
         self.assertIn('--commit "$GITHUB_SHA" --verify-release', release)
         workflow = (root / ".github/workflows/instrument-gateway.yml").read_text()
-        self.assertIn("RUN_BOOTSTRAP_ATTESTATION_TESTS=1", workflow)
+        self.assertIn("node scripts/pre-push.mjs --check gateway-cli", workflow)
         self.assertIn("tests/check_bootstrap_install.py", workflow)
 
     @unittest.skipUnless(

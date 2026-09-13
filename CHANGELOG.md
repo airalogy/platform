@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Fixed
+
+- Share local pre-push and CI gates for instrument browser/native checks and real offline GitHub CLI verification. Add checksum-pinned workflow linting and Linux/macOS preflight regressions, test actual portable chmod operands, cover tooling/contract/identity changes, and make full mode execute every registered local gate. Keep pre-commit lightweight and desktop, hardware and release-only acceptance separate.
+
 ## [0.1.0] - 2026-09-11
 
 First formal Community Edition release. See the [release overview and qualification boundaries](docs/en/releases/v0.1.0.md). The detailed entries below record the implementation stages, including limitations that were subsequently addressed within this release.

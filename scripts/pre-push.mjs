@@ -6,7 +6,44 @@ import { fileURLToPath } from "node:url"
 const ZERO_SHA = "0".repeat(40)
 const AI_E2E_SPEC = "tests/e2e/specs/ai-protocol-editor.spec.ts"
 
-const checks = {
+export const checks = {
+  ci: {
+    id: "ci-config",
+    label: "workflow syntax, CI preparation and check-selection regression tests",
+    command: "corepack",
+    args: ["pnpm", "ci:check"],
+  },
+  version: {
+    id: "version",
+    label: "product and component version consistency",
+    command: "corepack",
+    args: ["pnpm", "version:check"],
+  },
+  gatewayCli: {
+    id: "gateway-cli",
+    label: "real GitHub CLI arguments and offline rejection (no credentials or publication)",
+    command: "python3",
+    args: ["-m", "unittest", "discover", "-s", "apps/instrument-gateway/tests", "-p", "test_bootstrap.py"],
+    env: { PYTHONPATH: "apps/instrument-gateway/src", RUN_BOOTSTRAP_ATTESTATION_TESTS: "1" },
+  },
+  apiLock: {
+    id: "api-lock",
+    label: "API locked dependencies",
+    command: "uv",
+    args: ["--directory", "apps/api", "lock", "--check"],
+  },
+  gatewayLock: {
+    id: "gateway-lock",
+    label: "Gateway locked dependencies",
+    command: "uv",
+    args: ["--directory", "apps/instrument-gateway", "lock", "--check"],
+  },
+  computeLock: {
+    id: "compute-lock",
+    label: "Compute Runner locked dependencies",
+    command: "uv",
+    args: ["--directory", "apps/compute-runner", "lock", "--check"],
+  },
   lint: {
     id: "lint",
     label: "workspace lint",
@@ -37,6 +74,18 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "release:metadata:test"],
   },
+  deploymentIdentity: {
+    id: "deployment-identity",
+    label: "deployment identity and release archive safety",
+    command: "corepack",
+    args: ["pnpm", "deployment:identity:test"],
+  },
+  instrumentContract: {
+    id: "instrument-contract",
+    label: "generated instrument contract consistency",
+    command: "corepack",
+    args: ["pnpm", "gateway:contract:check"],
+  },
   researchIntegration: {
     id: "research-integration",
     label: "research API and persistent-worker integration",
@@ -57,6 +106,12 @@ const checks = {
     args: ["pnpm", "gateway:interface-test"],
     env: { RUN_INTERFACE_NATIVE_TESTS: "0", RUN_INTERFACE_NATIVE_BUILD_TESTS: "0" },
   },
+  interfaceDemo: {
+    id: "interface-demo",
+    label: "owned browser rehearsal compatibility",
+    command: "corepack",
+    args: ["pnpm", "gateway:gui-demo"],
+  },
   nativeBuildTests: {
     id: "native-build-tests",
     label: "macOS native build and installed-SDK integrity checks (no app launch)",
@@ -76,6 +131,12 @@ const checks = {
     command: "corepack",
     args: ["pnpm", "docs:build"],
     env: { DOCS_BASE: "/docs/" },
+  },
+  build: {
+    id: "build",
+    label: "production Web and bundled documentation build",
+    command: "corepack",
+    args: ["pnpm", "build"],
   },
   aiE2e: {
     id: "ai-e2e",
@@ -140,21 +201,38 @@ function hasPath(files, exactFiles, prefixes = []) {
 }
 
 export function buildCheckPlan(files, fullRequested = false, hostPlatform = process.platform) {
-  const plan = [checks.lint, checks.types, checks.apiCompile]
+  if (fullRequested) {
+    // Full means every registered local gate, except the focused E2E subset
+    // (already in full-e2e) and macOS compilation on a non-macOS host.
+    return Object.values(checks).filter(check => check.id !== "ai-e2e"
+      && (hostPlatform === "darwin" || check.id !== "native-build-tests"))
+  }
+  const plan = [checks.version, checks.lint, checks.types, checks.apiCompile]
+  const toolingChanged = files.some(file => file.startsWith(".github/")
+    || /^scripts\/(?:actionlint|prepare-instrument-ci|pre-push|e2e-runner)/.test(file)
+    || file.startsWith(".husky/")
+    || ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"].includes(file))
+  if (toolingChanged)
+    plan.unshift(checks.ci)
+  for (const [directory, check] of [["api", checks.apiLock], ["instrument-gateway", checks.gatewayLock], ["compute-runner", checks.computeLock]]) {
+    if (files.some(file => [`apps/${directory}/pyproject.toml`, `apps/${directory}/uv.lock`, "VERSION", ".github/workflows/release.yml"].includes(file)))
+      plan.push(check)
+  }
 
-  if (fullRequested || files.some(file =>
-    ["VERSION", ".github/workflows/release.yml", "scripts/check-version.mjs"].includes(file)
+  if (files.some(file =>
+    ["VERSION", ".github/workflows/release.yml", "scripts/check-version.mjs", "scripts/create-release-metadata.mjs", "scripts/check-release-stage.mjs", "scripts/deployment-identity.test.sh"].includes(file)
     || file.startsWith("apps/api/migrations/")
     || file.startsWith("scripts/release-")
     || file.startsWith("deploy/"),
   )) {
     plan.push(checks.releaseMetadata)
+    plan.push(checks.deploymentIdentity)
   }
 
   if (files.some(file => file.startsWith("apps/api/"))) {
     plan.push(checks.apiTests)
   }
-  if (fullRequested || files.some(file =>
+  if (files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
     || /^apps\/api\/tests\/(?:activation|instrument_output|http_read|authoring|exploration)_acceptance\.py$/.test(file)
@@ -176,25 +254,35 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
     plan.push(checks.researchIntegration)
   }
 
-  if (hasPath(files, GATEWAY_FILES, ["apps/instrument-gateway/"])) {
-    plan.push(checks.gatewayTests)
-  }
-
-  if (fullRequested || hasPath(files, new Set([
+  const gatewayChanged = hasPath(files, GATEWAY_FILES, ["apps/instrument-gateway/"])
+  const interfaceChanged = hasPath(files, new Set([
     ".github/workflows/instrument-interface.yml",
     "scripts/instrument-gui-demo.mjs",
     "scripts/instrument-interface-example.mjs",
     "scripts/instrument-interface-worker-example.mjs",
+    "scripts/sync-instrument-contract.mjs",
     "apps/instrument-gateway/examples/simulated-reader.html",
-    "apps/instrument-gateway/src/airalogy_instrument_gateway/interface_process.py",
+    "apps/api/app/services/instrument_survey.schema.json",
+    "apps/api/app/services/instrument_exploration.schema.json",
+    "apps/api/app/services/instrument_application_selection.schema.json",
     "package.json",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
-  ]), ["apps/instrument-interface/"])) {
-    plan.push(checks.interfaceTests)
+  ]), ["apps/instrument-interface/", "apps/instrument-gateway/src/", "apps/instrument-gateway/tests/native_read"])
+  if (gatewayChanged || interfaceChanged || files.some(file => file.startsWith("scripts/prepare-instrument-ci") || file === ".github/workflows/release.yml"))
+    plan.splice(toolingChanged ? 2 : 1, 0, checks.gatewayCli)
+  if (gatewayChanged || interfaceChanged)
+    plan.push(checks.instrumentContract)
+  if (gatewayChanged) {
+    plan.push(checks.gatewayTests)
   }
 
-  if (hostPlatform === "darwin" && (fullRequested || files.some(file =>
+  if (interfaceChanged) {
+    plan.push(checks.interfaceTests)
+    plan.push(checks.interfaceDemo)
+  }
+
+  if (hostPlatform === "darwin" && (interfaceChanged || files.some(file =>
     /^apps\/instrument-interface\/(?:src\/(?:native|macos\/|worker-runtime)|tests\/native)/.test(file)
     || file === "apps/instrument-gateway/src/airalogy_instrument_gateway/interface_process.py"
     || /^apps\/instrument-gateway\/tests\/native_read/.test(file),
@@ -209,8 +297,12 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   if (hasPath(files, DOCS_FILES, ["docs/"])) {
     plan.push(checks.docs)
   }
+  if (files.some(file => file.startsWith("apps/web/") || file.startsWith("packages/")
+    || ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deploy/single-lab/web.Dockerfile"].includes(file))) {
+    plan.push(checks.build)
+  }
 
-  const needsFullE2e = fullRequested || hasPath(files, FULL_E2E_FILES, ["tests/e2e/"])
+  const needsFullE2e = hasPath(files, FULL_E2E_FILES, ["tests/e2e/"])
   if (needsFullE2e) {
     plan.push(checks.fullE2e)
   }
@@ -276,11 +368,11 @@ function readPushInput() {
   return readFileSync(0, "utf8")
 }
 
-function runCheck(check) {
+export function runCheck(check) {
   console.log(`\n[pre-push] ${check.label}`)
   const result = spawnSync(check.command, check.args, {
     cwd: process.cwd(),
-    env: { ...process.env, ...check.env },
+    env: { ...process.env, RUN_INTERFACE_NATIVE_TESTS: "0", RUN_INTERFACE_NATIVE_BUILD_TESTS: "0", RUN_INSTRUMENT_NATIVE_JOB_TESTS: "0", ...check.env },
     stdio: "inherit",
   })
 
@@ -293,6 +385,17 @@ function runCheck(check) {
 }
 
 function main() {
+  // CI invokes these same gates directly, without reading Git hook stdin or
+  // guessing a diff. Unknown identifiers/flags fail rather than silently skip.
+  if (process.argv[2] === "--check") {
+    const check = Object.values(checks).find(item => item.id === process.argv[3])
+    if (!check || process.argv.length !== 4)
+      throw new Error("Specify one registered check ID after --check")
+    runCheck(check)
+    return
+  }
+  if (process.argv.slice(2).some(arg => !["--full", "--plan"].includes(arg)))
+    throw new Error("Usage: pre-push.mjs [--full] [--plan], or --check <id>")
   const input = readPushInput()
   const files = input.trim() ? filesFromPushInput(input) : filesFromUpstream()
   const fullRequested = process.argv.includes("--full")
@@ -301,6 +404,8 @@ function main() {
   console.log(
     `[pre-push] ${files.length} pushed file(s); checks: ${plan.map(check => check.id).join(", ")}`,
   )
+  if (process.argv.includes("--plan"))
+    return
   for (const check of plan) {
     runCheck(check)
   }

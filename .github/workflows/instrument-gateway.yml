@@ -13,6 +13,7 @@ on:
       - "scripts/sync-instrument-contract.mjs"
       - "scripts/instrument-authoring-example.mjs"
       - "scripts/prepare-instrument-ci*"
+      - "scripts/pre-push*"
       - ".github/workflows/instrument-gateway.yml"
   pull_request:
     paths:
@@ -26,6 +27,7 @@ on:
       - "scripts/sync-instrument-contract.mjs"
       - "scripts/instrument-authoring-example.mjs"
       - "scripts/prepare-instrument-ci*"
+      - "scripts/pre-push*"
       - ".github/workflows/instrument-gateway.yml"
 
 concurrency:
@@ -66,7 +68,10 @@ jobs:
           node scripts/prepare-instrument-ci.mjs --executables
 
       - name: Run tests
-        run: RUN_BOOTSTRAP_ATTESTATION_TESTS=1 PYTHONPATH=src python -m unittest discover -s tests
+        working-directory: .
+        run: |
+          node scripts/pre-push.mjs --check gateway-cli
+          node scripts/pre-push.mjs --check gateway-tests
 
       - name: Compile package
         run: python -m compileall -q src tests bootstrap.py

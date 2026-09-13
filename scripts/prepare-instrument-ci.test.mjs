@@ -5,7 +5,7 @@ import { chmodSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
-import { browserProfile, hardenExecutable } from "./prepare-instrument-ci.mjs"
+import { browserProfile, chmodArguments, hardenExecutable } from "./prepare-instrument-ci.mjs"
 
 test("CI preparation refuses local and self-hosted environments before changing anything", () => {
   for (const environment of ["", "self-hosted"]) {
@@ -31,7 +31,7 @@ test("executable preparation removes only group/world write bits and rejects non
     // Exercise the same chmod operands used for root-owned hosted tool caches
     // without sudo or changes to any actual system executable.
     chmodSync(executable, 0o777)
-    const command = spawnSync("chmod", ["go-w", executable], { encoding: "utf8" })
+    const command = spawnSync("chmod", chmodArguments(executable), { encoding: "utf8" })
     assert.equal(command.status, 0, command.stderr)
     assert.equal(statSync(executable).mode & 0o777, 0o755)
     chmodSync(executable, 0o600)
@@ -40,6 +40,12 @@ test("executable preparation removes only group/world write bits and rejects non
   finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test("the actual privileged chmod operands are portable and cannot introduce options", () => {
+  assert.deepEqual(chmodArguments("/owned path/python3"), ["go-w", "/owned path/python3"])
+  for (const path of ["--reference=other", "relative", "/bad\0path"])
+    assert.throws(() => chmodArguments(path), /absolute/)
 })
 
 test("browser exception uses exact paths and rejects AppArmor pattern injection", () => {

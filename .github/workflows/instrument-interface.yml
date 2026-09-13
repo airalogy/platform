@@ -15,6 +15,7 @@ on:
       - "scripts/instrument-interface-worker-example.mjs"
       - "scripts/instrument-gui-demo.mjs"
       - "scripts/prepare-instrument-ci*"
+      - "scripts/pre-push*"
       - "package.json"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
@@ -33,6 +34,7 @@ on:
       - "scripts/instrument-interface-worker-example.mjs"
       - "scripts/instrument-gui-demo.mjs"
       - "scripts/prepare-instrument-ci*"
+      - "scripts/pre-push*"
       - "package.json"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
@@ -68,21 +70,23 @@ jobs:
           pnpm exec playwright install --with-deps chromium
       - name: Verify versions, syntax and lint
         run: |
-          pnpm version:check
-          pnpm gateway:contract:check
+          node scripts/pre-push.mjs --check version
+          node scripts/pre-push.mjs --check instrument-contract
           pnpm --filter @airalogy/instrument-interface lint
           node --check apps/instrument-interface/src/cli.mjs
       - name: Prepare trusted CI executables and sandboxed Chromium
-        run: node scripts/prepare-instrument-ci.mjs --executables --browser
+        run: |
+          node --test scripts/prepare-instrument-ci.test.mjs
+          node scripts/prepare-instrument-ci.mjs --executables --browser
       - name: Test bounded browser sessions and CLI
-        run: pnpm gateway:interface-test
+        run: node scripts/pre-push.mjs --check interface-tests
       - name: Compile native read transport and owned simulator without opening applications
         if: runner.os == 'macOS'
-        run: RUN_INTERFACE_NATIVE_BUILD_TESTS=1 node --test apps/instrument-interface/tests/native.test.mjs
+        run: node scripts/pre-push.mjs --check native-build-tests
       # Actual AX tests require an operator-authorized graphical macOS session.
       # Never grant TCC or silently turn a missing permission into a passing GUI test.
       - name: Verify existing rehearsal compatibility
-        run: pnpm gateway:gui-demo
+        run: node scripts/pre-push.mjs --check interface-demo
       - name: Build installable package
         run: pnpm --filter @airalogy/instrument-interface pack --pack-destination "$RUNNER_TEMP"
       # Local evidence is intentionally not uploaded; CI fixtures are synthetic too.

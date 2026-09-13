@@ -14,6 +14,10 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ## [未发布]
 
+### 修复
+
+- 统一本地 pre-push 与 CI 的仪器浏览器、原生编译和真实 GitHub CLI 离线验证入口；新增校验值固定的工作流检查器及 Linux/macOS 快速回归，测试实际 chmod 参数，补齐工具、契约与发布身份变更的触发规则，完整模式执行所有注册的本地检查。pre-commit 保持轻量，桌面、实机及正式发布验收仍独立执行。
+
 ## [0.1.0] - 2026-09-11
 
 Community Edition 首个正式版本。请先阅读[版本概览与验收边界](docs/zh/releases/v0.1.0.md)。下列详细条目保留各阶段实现记录，其中部分阶段性限制已在本版本后续改动中解决。

@@ -1,0 +1,57 @@
+name: CI Preflight
+
+on:
+  push:
+    paths:
+      - ".github/**"
+      - ".husky/**"
+      - "scripts/**"
+      - "apps/instrument-gateway/bootstrap.py"
+      - "apps/instrument-gateway/tests/test_bootstrap.py"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  pull_request:
+    paths:
+      - ".github/**"
+      - ".husky/**"
+      - "scripts/**"
+      - "apps/instrument-gateway/bootstrap.py"
+      - "apps/instrument-gateway/tests/test_bootstrap.py"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install locked development dependencies and verified lint tool
+        run: |
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm ci:tools:install
+      - name: Shared local and CI preflight
+        run: node scripts/pre-push.mjs --check ci-config
+      - name: Prepare disposable hosted executables
+        run: node scripts/prepare-instrument-ci.mjs --executables
+      - name: Real offline GitHub CLI compatibility
+        run: node scripts/pre-push.mjs --check gateway-cli
