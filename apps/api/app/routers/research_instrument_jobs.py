@@ -391,6 +391,8 @@ async def _active_task_context(
     }:
         raise HTTPException(status_code=409, detail="Active Research Run not found")
     if enforce_limits:
+        if (run.environment_snapshot or {}).get("manual_workflow"):
+            raise HTTPException(409, "Fixed Workflows cannot accept Actions outside their pinned graph")
         operational_limit = await reached_operational_limit(db_session, task=task)
         if operational_limit is not None:
             raise HTTPException(

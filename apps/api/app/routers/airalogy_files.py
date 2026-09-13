@@ -12,6 +12,12 @@ from app.models.project import Project
 from app.models.protocol import Protocol
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUIDStr
+from app.services.workflow_files import (
+    authorized_file,
+    file_reference_payload,
+    is_workflow_file,
+    stream_workflow_file,
+)
 
 from .depends import CurrentUser, get_current_user
 
@@ -70,6 +76,7 @@ async def _get_authorized_file(
         action="read_protocol",
         protocol=protocol,
     )
+    await authorized_file(db_session, file, current_user)
     return file
 
 
@@ -115,6 +122,10 @@ async def register_external_airalogy_file(
     db_session: DBSession,
     current_user: CurrentUser,
 ):
+    if params.storage_backend == "workflow_reference":
+        raise HTTPException(
+            422, "Workflow references are created only by confirmed file bindings"
+        )
     protocol = await Protocol.find(db_session, id=params.protocol_id)
     project = await Project.find(db_session, id=protocol.project_id)
     await check_user_permission(
@@ -153,8 +164,7 @@ async def get_airalogy_file_url(
     current_user: CurrentUser,
 ):
     file = await _get_authorized_file(id, db_session, current_user)
-    url = await file.local_url()
-    return file.reference_payload(url=url)
+    return await file_reference_payload(db_session, file, current_user)
 
 
 @router.get("/{id}/url")
@@ -165,6 +175,8 @@ async def resolve_airalogy_file_url(
     expires: int = 24,
 ):
     file = await _get_authorized_file(id, db_session, current_user)
+    if is_workflow_file(file):
+        return await file_reference_payload(db_session, file, current_user)
     url = await file.local_url(expires=expires)
     return file.reference_payload(url=url)
 
@@ -176,6 +188,8 @@ async def download_airalogy_file(
     current_user: CurrentUser,
 ):
     file = await _get_authorized_file(id, db_session, current_user)
+    if is_workflow_file(file):
+        return await stream_workflow_file(db_session, file, current_user)
     if file.external_uri:
         if file.external_uri.startswith(("http://", "https://")):
             return RedirectResponse(file.external_uri)
@@ -202,6 +216,24 @@ async def update_airalogy_file_url(
     file = await AiralogyFile.find(db_session, id=_normalize_airalogy_file_id(id))
     if file.user_id != current_user.id:
         raise HTTPException(status_code=400, detail="Permission denied")
+
+    from sqlalchemy import or_, select
+
+    from app.models.workflow_file import WorkflowFileBinding
+
+    if is_workflow_file(file) or await db_session.scalar(
+        select(WorkflowFileBinding.file_id)
+        .where(
+            or_(
+                WorkflowFileBinding.file_id == file.id,
+                WorkflowFileBinding.source_file_id == file.id,
+            )
+        )
+        .limit(1)
+    ):
+        raise HTTPException(
+            409, "Workflow-bound file metadata is immutable; upload a new file"
+        )
 
     file.filename = filename
     file.content_type = mimetypes.guess_type(filename)[0] or file.content_type

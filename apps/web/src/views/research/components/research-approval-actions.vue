@@ -1,5 +1,8 @@
 <template>
-  <div v-if="canDecide" class="flex flex-wrap gap-2">
+  <n-alert v-if="approval.workflow_data_restricted" type="warning">
+    {{ $t("page.workflowDefinitions.resolution.restrictedHint") }}
+  </n-alert>
+  <div v-else-if="canDecide" class="flex flex-wrap gap-2">
     <n-button
       secondary
       type="error"
@@ -74,7 +77,7 @@ const submitting = ref(false)
 const rejectVisible = ref(false)
 const rejectionReason = ref("")
 const canDecide = computed(() =>
-  String(props.approval.approver_user_id) === String(authStore.userInfo.id),
+  !props.approval.workflow_data_restricted && String(props.approval.approver_user_id) === String(authStore.userInfo.id),
 )
 
 function decisionPayload(reason: string) {

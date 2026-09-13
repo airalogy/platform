@@ -57,6 +57,7 @@ from app.models.user import User
 from app.services.access_control import resolve_structured_access
 from app.services.model_usage import create_usage_context
 from app.services.persistent_jobs import enqueue_job
+from app.services.research_action_contracts import ProtocolActionDraft
 from app.services.research_assets import research_asset_bundle
 from app.services.research_budget import (
     reached_operational_limit,
@@ -124,6 +125,10 @@ def evaluate_research_action_policy(
         return "deny", "The Action is prohibited by an explicit requirement."
     if source == "manual":
         return "allow", "The user confirmed the deterministic Action preview."
+    if source == "manual_workflow":
+        if approval_policy == "always_ask":
+            return "ask", "The pinned Workflow executor requires Action approval."
+        return "allow", "The user confirmed this exact fixed Workflow revision."
     if approval_policy == "always_ask":
         return "ask", "This Action requires an explicit preview and confirmation."
 
@@ -162,6 +167,8 @@ async def research_run_has_executable_ai_path(
     """Recheck dynamic permission and Runner state for a Compute-only AI path."""
 
     snapshot = run.environment_snapshot or {}
+    if snapshot.get("manual_workflow"):
+        return False
     if list(snapshot.get("protocols") or []):
         return True
     if any(
@@ -650,6 +657,8 @@ async def enqueue_research_advance(
     task: ResearchTask,
     run: ResearchRun,
 ) -> None:
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        raise ValueError("A fixed Workflow cannot enqueue an Aira planning step")
     run.advance_generation += 1
     await db_session.flush()
     await enqueue_job(
@@ -1203,9 +1212,17 @@ async def request_action_approval(
     action: ResearchAction,
     reason: str,
 ) -> ResearchApproval:
+    approver_user_id = task.owner_user_id
+    if (
+        action.kind == "analysis_run"
+        and action.input_data.get("analysis_kind") == "compute"
+    ):
+        from app.services.workflow_compute_runtime import governance
+
+        approver_user_id = UUID(governance(run, action)["approver_user_id"])
     approval = ResearchApproval(
         action_id=action.id,
-        approver_user_id=task.owner_user_id,
+        approver_user_id=approver_user_id,
         requested_by_user_id=run.requested_by_user_id,
         status=ResearchApprovalStatus.PENDING.value,
         preview_digest=action.preview_digest,
@@ -1234,6 +1251,41 @@ async def request_action_approval(
     return approval
 
 
+async def require_research_context_readable(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun | None,
+    current_user: User,
+) -> None:
+    """Authorize an indivisible scientific context for its actual consumer.
+
+    Task-level assets can originate in earlier Runs. Checking only the latest
+    Workflow is not sufficient, nor may a filtered package retain its seal.
+    Actorless background builders deliberately do not call this read boundary.
+    """
+    from app.services.research_asset_visibility import (
+        require_asset_snapshot_sources_readable,
+        require_task_asset_sources_readable,
+    )
+    from app.services.workflow_visibility import require_workflow_data_readable
+
+    if current_user is None:
+        raise HTTPException(403, "Research context requires an authorized reader")
+    await require_task_asset_sources_readable(
+        db_session, task_id=task.id, user=current_user
+    )
+    for package in (task.result_package, run.result_package if run else None):
+        if package:
+            await require_asset_snapshot_sources_readable(
+                db_session, task_id=task.id, payload=package, user=current_user
+            )
+    if run is not None:
+        await require_workflow_data_readable(
+            db_session, run=run, current_user=current_user
+        )
+
+
 async def _aira_planner_context(
     db_session: AsyncSession,
     *,
@@ -1242,6 +1294,10 @@ async def _aira_planner_context(
     rows: list[tuple[ResearchTaskProtocol, Protocol, ProtocolVersion]],
     actions: list[ResearchAction],
 ) -> dict[str, Any]:
+    requester = await db_session.get(User, run.requested_by_user_id)
+    await require_research_context_readable(
+        db_session, task=task, run=run, current_user=requester
+    )
     strategy = _latest_step(run.aira_state, "add_research_strategy")
     instrument_options = await available_instrument_command_options(
         db_session,
@@ -1253,7 +1309,6 @@ async def _aira_planner_context(
     compute_options: list[dict[str, Any]] = []
     compute_inputs: list[dict[str, Any]] = []
     project = await db_session.get(Project, task.project_id)
-    requester = await db_session.get(User, run.requested_by_user_id)
     from app.services.research_resources import resource_availability_for_planner
 
     resource_availability = await resource_availability_for_planner(
@@ -1396,12 +1451,12 @@ async def _aira_planner_context(
     }
 
 
-async def _materialize_aira_action(
+async def _materialize_governed_action(
     db_session: AsyncSession,
     *,
     task: ResearchTask,
     run: ResearchRun,
-    proposal: AiraActionProposal,
+    proposal: AiraActionProposal | ProtocolActionDraft,
     step_index: int,
     create_plan: bool = True,
     idempotency_key_override: str | None = None,
@@ -1409,8 +1464,14 @@ async def _materialize_aira_action(
     action_graph: dict[str, Any] | None = None,
     defer_activation: bool = False,
     specialist_context: dict[str, Any] | None = None,
+    source: str = "aira",
 ) -> ResearchAction:
-    """Turn one validated Aira decision into a governed typed Action."""
+    """Turn an explicitly sourced, validated draft into a governed typed Action."""
+
+    if source not in {"aira", "manual_workflow"}:
+        raise ValueError("Unsupported governed Action source")
+    if source == "manual_workflow" and not isinstance(proposal, ProtocolActionDraft):
+        raise ValueError("Manual Workflow execution currently supports Protocol cards")
 
     if proposal.decision not in {
         "protocol",
@@ -1426,7 +1487,7 @@ async def _materialize_aira_action(
     proposal_data = proposal.model_dump(mode="json", exclude_none=True)
     proposal_digest = canonical_digest(proposal_data)
     idempotency_key = idempotency_key_override or (
-        f"aira-planner:{step_index}:{proposal.decision}:{proposal_digest[:24]}"
+        f"{source}-planner:{step_index}:{proposal.decision}:{proposal_digest[:24]}"
     )
     existing = await ResearchAction.find_by(
         db_session,
@@ -1451,12 +1512,12 @@ async def _materialize_aira_action(
             db_session,
             task=task,
             run=run,
-            kind="aira",
+            kind=source,
             plan={
                 "action_proposal": proposal_data,
                 "previous_plan_version": run.plan_version,
             },
-            summary=proposal.thought or f"Aira proposed {proposal.decision}",
+            summary=proposal.thought or f"{source} proposed {proposal.decision}",
         )
 
     assignee_user_id: UUID | None = None
@@ -1470,6 +1531,11 @@ async def _materialize_aira_action(
                     (run.environment_snapshot or {}).get("protocols") or []
                 )
                 if str(item.get("id") or "") == str(proposal.protocol_id)
+                and (
+                    not isinstance(proposal, ProtocolActionDraft)
+                    or str(item.get("version_id") or "")
+                    == str(proposal.protocol_version_id)
+                )
             ),
             None,
         )
@@ -1478,6 +1544,12 @@ async def _materialize_aira_action(
             [
                 ResearchTaskProtocol.task_id == task.id,
                 ResearchTaskProtocol.protocol_id == proposal.protocol_id,
+                ResearchTaskProtocol.protocol_version_id
+                == (
+                    UUID(str(pinned_protocol["version_id"]))
+                    if pinned_protocol is not None
+                    else None
+                ),
             ],
         )
         if pinned_protocol is None or task_protocol is None:
@@ -1530,14 +1602,19 @@ async def _materialize_aira_action(
         }
         executor_type = "human"
         kind = ResearchActionKind.PROTOCOL_RUN.value
-        title = protocol.name
+        title = (
+            proposal.title.strip() or protocol.name
+            if isinstance(proposal, ProtocolActionDraft)
+            else protocol.name
+        )
         description = proposal.thought
         input_data = {
             "protocol_id": str(protocol.id),
+            "protocol_version_id": str(version.id),
             "protocol_version": version.version,
             "protocol_position": task_protocol.position,
             "initial_values": proposal.protocol_initial_values,
-            "source": "aira",
+            "source": source,
             "resume_run": True,
         }
     elif proposal.decision == "human":
@@ -2079,7 +2156,7 @@ async def _materialize_aira_action(
 
     policy_decision, policy_reason = evaluate_research_action_policy(
         autonomy_level=task.autonomy_level,
-        source="aira",
+        source=source,
         executor_type=executor_type,
         requirements=requirements,
         policy_snapshot=(run.environment_snapshot or {}).get("autonomy_policy"),
@@ -2096,6 +2173,8 @@ async def _materialize_aira_action(
         "input_data": input_data,
         "requirements": requirements,
     }
+    if source == "manual_workflow":
+        action_proposal["assignee_user_id"] = str(assignee_user_id)
     action = ResearchAction(
         run_id=run.id,
         sequence=await _next_action_sequence(db_session, run.id),
@@ -2314,15 +2393,15 @@ async def _materialize_aira_action(
         task_id=task.id,
         run_id=run.id,
         action_id=action.id,
-        kind="aira.action_proposed",
-        actor_user_id=None,
+        kind=f"{source}.action_proposed",
+        actor_user_id=None if source == "aira" else run.requested_by_user_id,
         payload={
             "decision": proposal.decision,
             "kind": kind,
             "plan_version": run.plan_version,
             "policy_decision": action.policy_decision,
         },
-        idempotency_key=f"action:{action.id}:aira-proposed",
+        idempotency_key=f"action:{action.id}:{source}-proposed",
     )
     if defer_activation:
         return action
@@ -2398,6 +2477,170 @@ async def _materialize_aira_action(
             "Aira Resource, Instrument, and Compute Actions require approval before activation"
         )
     return action
+
+
+async def _materialize_aira_action(
+    db_session: AsyncSession, **kwargs: Any
+) -> ResearchAction:
+    """Compatibility adapter for the existing model-originated planner."""
+
+    return await _materialize_governed_action(db_session, **kwargs, source="aira")
+
+
+async def materialize_manual_workflow(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    graph: Any,
+    workflow_revision_id: UUID,
+    workflow_digest: str,
+) -> list[ResearchAction]:
+    """Compile a confirmed fixed Workflow into the existing governed lifecycle.
+
+    Nodes are occurrences, while ResearchTaskProtocol rows are the reusable
+    environment catalog. No model proposal or alternate execution engine exists.
+    """
+    from app.services.workflow_contracts import (
+        validate_workflow_graph,
+        workflow_revision_digest,
+    )
+
+    graph = validate_workflow_graph(
+        graph.model_dump(mode="json") if hasattr(graph, "model_dump") else graph
+    )
+    marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
+    if (
+        marker.get("revision_id") != str(workflow_revision_id)
+        or marker.get("digest") != workflow_digest
+        or workflow_revision_digest(graph) != workflow_digest
+    ):
+        raise ValueError("The Workflow revision does not match this pinned Run")
+    if any(node.kind == "analysis" for node in graph.nodes) and marker.get(
+        "execution_contract_version"
+    ) not in {3, 4, 5}:
+        raise ValueError("Analysis cards require Workflow execution contract v3")
+    if not _workflow_resolution_v2(run) and (
+        graph.bindings or any(edge.condition is not None for edge in graph.edges)
+    ):
+        raise ValueError("Conditional edges and data bindings cannot execute yet")
+    if task.status != ResearchTaskStatus.ACTIVE.value:
+        raise ValueError("The Workflow requires an explicitly started Research Task")
+    graph_id = f"workflow:{workflow_revision_id}:{workflow_digest[:24]}"
+    existing = list(
+        (
+            await db_session.scalars(
+                select(ResearchAction).where(
+                    ResearchAction.run_id == run.id,
+                    ResearchAction.idempotency_key.like(f"{graph_id}:%"),
+                )
+            )
+        ).all()
+    )
+    if existing:
+        if len(existing) != len(graph.nodes):
+            raise ValueError("The fixed Workflow is only partially materialized")
+        return sorted(existing, key=lambda action: action.sequence)
+    await create_plan_version(
+        db_session,
+        task=task,
+        run=run,
+        kind="manual_workflow",
+        plan={
+            "workflow_revision_id": str(workflow_revision_id),
+            "workflow_digest": workflow_digest,
+            "graph": graph.model_dump(mode="json"),
+        },
+        summary="User-confirmed fixed Workflow revision",
+    )
+    actions: list[ResearchAction] = []
+    by_node: dict[str, ResearchAction] = {}
+    for position, node in enumerate(graph.nodes, start=1):
+        graph_meta = {
+            "id": graph_id,
+            "type": "manual_workflow",
+            "node_id": node.node_id,
+            "position": position,
+            "size": len(graph.nodes),
+            "depends_on_count": sum(
+                edge.target_node_id == node.node_id for edge in graph.edges
+            ),
+            "dependency_count": len(graph.edges),
+            "result_bindings": [],
+        }
+        if node.kind == "analysis":
+            from app.services.workflow_analysis_runtime import materialize_analysis_card
+
+            action = await materialize_analysis_card(
+                db_session,
+                task=task,
+                run=run,
+                node=node,
+                graph_meta=graph_meta,
+                idempotency_key=f"{graph_id}:{node.node_id}",
+            )
+            actions.append(action)
+            by_node[node.node_id] = action
+            continue
+        action = await _materialize_governed_action(
+            db_session,
+            task=task,
+            run=run,
+            proposal=ProtocolActionDraft(
+                protocol_id=node.protocol_id,
+                protocol_version_id=node.protocol_version_id,
+                title=node.title,
+                thought=node.title,
+                protocol_initial_values=node.initial_values,
+            ),
+            source="manual_workflow",
+            step_index=0,
+            create_plan=False,
+            idempotency_key_override=f"{graph_id}:{node.node_id}",
+            action_graph={
+                "id": graph_id,
+                "type": "manual_workflow",
+                "node_id": node.node_id,
+                "position": position,
+                "size": len(graph.nodes),
+                "depends_on_count": sum(
+                    edge.target_node_id == node.node_id for edge in graph.edges
+                ),
+                "dependency_count": len(graph.edges),
+                "result_bindings": [],
+            },
+            defer_activation=True,
+        )
+        actions.append(action)
+        by_node[node.node_id] = action
+    for edge in graph.edges:
+        db_session.add(
+            ResearchActionDependency(
+                action_id=by_node[edge.target_node_id].id,
+                depends_on_action_id=by_node[edge.source_node_id].id,
+                condition=_workflow_edge_contract(
+                    edge, resolved=_workflow_resolution_v2(run)
+                ),
+            )
+        )
+    await db_session.flush()
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="workflow.materialized",
+        actor_user_id=run.requested_by_user_id,
+        payload={
+            "revision_id": str(workflow_revision_id),
+            "digest": workflow_digest,
+            "node_actions": {node: str(action.id) for node, action in by_node.items()},
+        },
+        idempotency_key=f"{graph_id}:run:{run.id}:materialized",
+    )
+    await hold_or_release_aira_action_group(
+        db_session, task=task, run=run, action=actions[0]
+    )
+    return actions
 
 
 async def _activate_aira_service_request(
@@ -2666,6 +2909,179 @@ def _aira_action_graph(action: ResearchAction) -> dict[str, Any] | None:
     if not isinstance(value, dict) or not str(value.get("id") or "").strip():
         return None
     return value
+
+
+def _workflow_resolution_v2(run: ResearchRun) -> bool:
+    marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
+    version = marker.get("execution_contract_version", 1)
+    if version not in {1, 2, 3, 4, 5}:
+        raise ValueError("Unsupported fixed Workflow execution contract version")
+    return version in {2, 3, 4, 5}
+
+
+def _workflow_edge_contract(edge: Any, *, resolved: bool) -> dict[str, Any]:
+    contract = {"required_status": "completed", "on_unsatisfied": "skipped"}
+    if resolved:
+        contract.update(
+            {
+                "workflow_edge_id": edge.edge_id,
+                "predicate": edge.condition.model_dump(mode="json")
+                if edge.condition
+                else None,
+                "join": "all_active",
+            }
+        )
+    return contract
+
+
+def _workflow_resolution_reference(resolution: Any) -> dict[str, Any]:
+    return jsonable_encoder(
+        {
+            "id": str(resolution.id),
+            "digest": resolution.digest,
+            "state": resolution.state,
+            "receipt": resolution.receipt,
+        }
+    )
+
+
+def _workflow_action_preview(action: ResearchAction) -> str:
+    return canonical_digest(
+        {
+            "run_id": str(action.run_id),
+            "plan_version": action.plan_version,
+            "kind": action.kind,
+            "title": action.title,
+            "description": action.description,
+            "executor_type": action.executor_type,
+            "input_data": action.input_data,
+            "requirements": action.requirements,
+            "assignee_user_id": str(action.assignee_user_id),
+        }
+    )
+
+
+def _workflow_branch_not_selected(action: ResearchAction) -> bool:
+    reference = (action.input_data or {}).get("workflow_resolution") or {}
+    return (
+        action.status == ResearchActionStatus.SKIPPED.value
+        and reference.get("state") == "branch_not_selected"
+        and bool(reference.get("id"))
+        and len(str(reference.get("digest") or "")) == 64
+        and (action.output_data or {}).get("workflow_resolution") == reference
+        and action.error is None
+    )
+
+
+async def _resolve_fixed_workflow_candidate(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    graph: Any,
+    node: Any,
+    action: ResearchAction,
+    parents_by_node: dict[str, ResearchAction],
+) -> bool:
+    """Resolve one settled frontier exactly once before permitting its Action."""
+    from app.services.workflow_resolutions import resolve_workflow_node
+
+    resolution = await resolve_workflow_node(
+        db_session,
+        task=task,
+        run=run,
+        graph=graph,
+        node=node,
+        action=action,
+        parents_by_node=parents_by_node,
+    )
+    if resolution.state not in {"ready", "branch_not_selected", "blocked", "failed"}:
+        raise ValueError("The Workflow resolver returned an unsupported state")
+    protocol_run = await ResearchProtocolRun.find_by(
+        db_session, [ResearchProtocolRun.action_id == action.id]
+    )
+    if protocol_run is None and node.kind == "protocol":
+        raise ValueError("The resolved Workflow card has no Protocol Run")
+    reference = _workflow_resolution_reference(resolution)
+    previous_reference = (action.input_data or {}).get("workflow_resolution")
+    if previous_reference is not None:
+        if canonical_digest(previous_reference) != canonical_digest(reference):
+            raise ValueError(
+                "A Workflow node cannot replace its resolved input receipt"
+            )
+        return resolution.state == "ready"
+    action.input_data = {**action.input_data, "workflow_resolution": reference}
+    if protocol_run is not None:
+        action.input_data = {
+            **action.input_data,
+            "initial_values": resolution.initial_values,
+        }
+        protocol_run.initial_values = resolution.initial_values
+    elif resolution.state == "ready":
+        action.input_data = {
+            **action.input_data,
+            "analysis_input": resolution.receipt["analysis_input"],
+        }
+    if resolution.state == "ready" and (
+        node.kind == "analysis"
+        or any(binding.target_node_id == node.node_id for binding in graph.bindings)
+    ):
+        # The graph confirmation could not show these values. Bind the newly
+        # resolved input and lineage to a fresh deterministic Action approval.
+        action.requirements = {
+            **action.requirements,
+            "approval_policy": "always_ask",
+            "workflow_bound_input_confirmation": True,
+        }
+        action.policy_decision = "ask"
+        action.policy_reason = "Confirm the resolved Workflow input values and source revisions before execution."
+    action.preview_digest = _workflow_action_preview(action)
+    if node.kind == "analysis" and resolution.state == "ready":
+        from app.models.workflow_analysis import ResearchAnalysisAction
+
+        bridge = await db_session.get(ResearchAnalysisAction, action.id)
+        bridge.source_digest = resolution.receipt["analysis_input"]["source_digest"]
+        bridge.resolution_digest = resolution.digest
+        bridge.preview_digest = action.preview_digest
+    action.revision += 1
+    if resolution.state != "ready":
+        branch_not_selected = resolution.state == "branch_not_selected"
+        action.status = (
+            ResearchActionStatus.FAILED.value
+            if resolution.state == "failed"
+            else ResearchActionStatus.SKIPPED.value
+        )
+        action.error = (
+            None
+            if branch_not_selected
+            else str(
+                resolution.receipt.get("error")
+                or f"Workflow dependency resolution {resolution.state}"
+            )
+        )
+        action.output_data = {"workflow_resolution": reference}
+        action.completed_at = utcnow()
+        if protocol_run is not None:
+            protocol_run.validation_status = resolution.state
+            protocol_run.validation_report = reference
+        if not branch_not_selected:
+            run.last_error = action.error
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        action_id=action.id,
+        kind="workflow.node_resolved",
+        actor_user_id=None,
+        payload={
+            "resolution_id": str(resolution.id),
+            "digest": resolution.digest,
+            "state": resolution.state,
+            "preview_digest": action.preview_digest,
+        },
+        idempotency_key=f"workflow-resolution:{resolution.id}:applied",
+    )
+    return resolution.state == "ready"
 
 
 def _action_graph_output_value(output_data: dict[str, Any], path: list[str]) -> Any:
@@ -3168,7 +3584,9 @@ async def hold_or_release_aira_action_group(
         if str((_aira_action_graph(item) or {}).get("id") or "") == graph_id
     ]
     graph_type = str(graph.get("type") or "tool")
-    if expected_size < 2 or len(actions) != expected_size:
+    is_fixed_workflow = graph_type == "manual_workflow"
+    prepaid_frontier = False
+    if expected_size < (1 if is_fixed_workflow else 2) or len(actions) != expected_size:
         raise ValueError("Aira dependency graph is incomplete")
     supported_kinds = (
         {
@@ -3180,6 +3598,7 @@ async def hold_or_release_aira_action_group(
         else (
             {
                 ResearchActionKind.PROTOCOL_RUN.value,
+                ResearchActionKind.ANALYSIS_RUN.value,
                 ResearchActionKind.HUMAN_WORK_ITEM.value,
                 ResearchActionKind.TOOL_JOB.value,
                 ResearchActionKind.RESOURCE_RESERVATION.value,
@@ -3188,12 +3607,45 @@ async def hold_or_release_aira_action_group(
                 ResearchActionKind.COMPUTE_JOB.value,
                 ResearchActionKind.WAIT_EVENT.value,
             }
-            if graph_type == "mixed_governed"
+            if graph_type in {"mixed_governed", "manual_workflow"}
             else {ResearchActionKind.TOOL_JOB.value}
         )
     )
     if any(item.kind not in supported_kinds for item in actions):
         raise ValueError("Aira dependency graph contains an unsupported Action type")
+    if is_fixed_workflow:
+        marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
+        if not marker or any(
+            item.kind
+            not in {
+                ResearchActionKind.PROTOCOL_RUN.value,
+                ResearchActionKind.ANALYSIS_RUN.value,
+            }
+            or (item.input_data or {}).get("source") != "manual_workflow"
+            for item in actions
+        ):
+            raise ValueError("The fixed Workflow contains an unsupported Action")
+        if (
+            task.status == ResearchTaskStatus.CANCELLED.value
+            or run.status in TERMINAL_RUN_STATUSES
+        ):
+            return False
+        from app.services.workflow_compute_runtime import (
+            has_prepaid_compute_frontier,
+            settlement_only_workflow,
+        )
+
+        settling = await settlement_only_workflow(db_session, run=run, actions=actions)
+        prepaid_frontier = await has_prepaid_compute_frontier(
+            db_session, task=task, run=run
+        )
+        if not await manual_workflow_dispatch_allowed(
+            db_session,
+            task=task,
+            run=run,
+            check_budget=not (settling or prepaid_frontier),
+        ):
+            return False
     if (
         graph_type in {"mixed_digital", "mixed_governed"}
         and len({item.kind for item in actions}) < 2
@@ -3212,6 +3664,44 @@ async def hold_or_release_aira_action_group(
     )
     if len(dependency_rows) != expected_dependency_count:
         raise ValueError("Aira dependency graph edge set is incomplete")
+    resolved_workflow = is_fixed_workflow and _workflow_resolution_v2(run)
+    if (
+        is_fixed_workflow
+        and not resolved_workflow
+        and any(
+            item.condition
+            != {"required_status": "completed", "on_unsatisfied": "skipped"}
+            for item in dependency_rows
+        )
+    ):
+        raise ValueError("The fixed Workflow has unsupported dependency conditions")
+    if is_fixed_workflow:
+        try:
+            workflow_graph = await verify_manual_workflow_execution(
+                db_session,
+                task=task,
+                run=run,
+                actions=actions,
+                dependencies=dependency_rows,
+            )
+        except (ValueError, HTTPException) as error:
+            message = (
+                str(error.detail) if isinstance(error, HTTPException) else str(error)
+            )
+            run.status = ResearchRunStatus.PAUSED.value
+            run.last_error = message
+            task.status = ResearchTaskStatus.PAUSED.value
+            task.revision += 1
+            await emit_research_event(
+                db_session,
+                task_id=task.id,
+                run_id=run.id,
+                kind="workflow.integrity_paused",
+                actor_user_id=None,
+                payload={"reason": message},
+                idempotency_key=f"run:{run.id}:workflow-integrity:{task.revision}",
+            )
+            return False
     action_by_id = {item.id: item for item in actions}
     action_by_node_id: dict[str, ResearchAction] = {}
     for item in actions:
@@ -3253,6 +3743,17 @@ async def hold_or_release_aira_action_group(
         ResearchActionStatus.CANCELLED.value,
     }
     now = utcnow()
+    workflow_nodes = (
+        {node.node_id: node for node in workflow_graph.nodes}
+        if resolved_workflow
+        else {}
+    )
+    if prepaid_frontier:
+        # Existing funded work remains eligible. Do not release even one new
+        # blocked card until its budget is available; the Runner rechecks the
+        # exact reservation, source ACL and approval before actual execution.
+        run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
+        return True
     changed = True
     while changed:
         changed = False
@@ -3260,11 +3761,73 @@ async def hold_or_release_aira_action_group(
             if candidate.status != ResearchActionStatus.BLOCKED.value:
                 continue
             parents = dependencies[candidate.id]
-            failed_parents = [
-                parent
-                for parent in parents
-                if parent.status in terminal_failure_statuses
-            ]
+            resolved_ready = False
+            if resolved_workflow and parents:
+                # A condition is evaluated only after every incoming edge can
+                # be classified. A false branch is not an execution failure.
+                if not all(
+                    parent.status
+                    in terminal_failure_statuses
+                    | {
+                        ResearchActionStatus.COMPLETED.value,
+                    }
+                    for parent in parents
+                ):
+                    continue
+                parents_by_node = {
+                    str((_aira_action_graph(parent) or {}).get("node_id") or ""): parent
+                    for parent in parents
+                }
+                node_id = str(
+                    (_aira_action_graph(candidate) or {}).get("node_id") or ""
+                )
+                try:
+                    resolved_ready = await _resolve_fixed_workflow_candidate(
+                        db_session,
+                        task=task,
+                        run=run,
+                        graph=workflow_graph,
+                        node=workflow_nodes[node_id],
+                        action=candidate,
+                        parents_by_node=parents_by_node,
+                    )
+                    if settling and resolved_ready:
+                        raise ValueError(
+                            "A settlement-only Workflow cannot release an executable node"
+                        )
+                except (HTTPException, ValueError) as error:
+                    message = (
+                        str(error.detail)
+                        if isinstance(error, HTTPException)
+                        else str(error)
+                    )
+                    run.status = ResearchRunStatus.PAUSED.value
+                    run.last_error = message
+                    task.status = ResearchTaskStatus.PAUSED.value
+                    task.revision += 1
+                    await emit_research_event(
+                        db_session,
+                        task_id=task.id,
+                        run_id=run.id,
+                        action_id=candidate.id,
+                        kind="workflow.resolution_paused",
+                        actor_user_id=None,
+                        payload={"reason": message},
+                        idempotency_key=f"run:{run.id}:workflow-resolution-paused:{task.revision}",
+                    )
+                    return False
+                if not resolved_ready:
+                    changed = True
+                    continue
+            failed_parents = (
+                [
+                    parent
+                    for parent in parents
+                    if parent.status in terminal_failure_statuses
+                ]
+                if not resolved_ready
+                else []
+            )
             if failed_parents:
                 candidate.status = ResearchActionStatus.SKIPPED.value
                 candidate.error = "Dependency did not complete: " + ", ".join(
@@ -3295,9 +3858,12 @@ async def hold_or_release_aira_action_group(
                 )
                 changed = True
                 continue
-            if task.status == ResearchTaskStatus.ACTIVE.value and all(
-                parent.status == ResearchActionStatus.COMPLETED.value
-                for parent in parents
+            if task.status == ResearchTaskStatus.ACTIVE.value and (
+                resolved_ready
+                or all(
+                    parent.status == ResearchActionStatus.COMPLETED.value
+                    for parent in parents
+                )
             ):
                 parents_by_node_id = {
                     str((_aira_action_graph(parent) or {}).get("node_id") or ""): parent
@@ -3344,12 +3910,34 @@ async def hold_or_release_aira_action_group(
                     continue
                 candidate.status = ResearchActionStatus.PROPOSED.value
                 candidate.revision += 1
-                await _activate_released_graph_action(
-                    db_session,
-                    task=task,
-                    run=run,
-                    action=candidate,
-                )
+                try:
+                    await _activate_released_graph_action(
+                        db_session,
+                        task=task,
+                        run=run,
+                        action=candidate,
+                    )
+                except ValueError as error:
+                    if not is_fixed_workflow:
+                        raise
+                    # Keep already accepted upstream evidence. A revoked human
+                    # executor blocks the next card; it does not undo that work.
+                    candidate.status = ResearchActionStatus.BLOCKED.value
+                    run.status = ResearchRunStatus.PAUSED.value
+                    run.last_error = str(error)
+                    task.status = ResearchTaskStatus.PAUSED.value
+                    task.revision += 1
+                    await emit_research_event(
+                        db_session,
+                        task_id=task.id,
+                        run_id=run.id,
+                        action_id=candidate.id,
+                        kind="workflow.dispatch_paused",
+                        actor_user_id=None,
+                        payload={"reason": str(error)},
+                        idempotency_key=f"run:{run.id}:workflow-paused:{task.revision}",
+                    )
+                    return False
                 await emit_research_event(
                     db_session,
                     task_id=task.id,
@@ -3377,6 +3965,11 @@ async def hold_or_release_aira_action_group(
         }
     ]
     if not remaining:
+        if is_fixed_workflow:
+            await finish_manual_workflow(
+                db_session, task=task, run=run, actions=actions
+            )
+            return False
         run.status = (
             ResearchRunStatus.PAUSED.value
             if task.status == ResearchTaskStatus.PAUSED.value
@@ -3396,7 +3989,9 @@ async def hold_or_release_aira_action_group(
     ):
         run.status = ResearchRunStatus.WAITING_FOR_APPROVAL.value
     elif any(
-        item.kind == ResearchActionKind.COMPUTE_JOB.value for item in active_remaining
+        item.kind
+        in {ResearchActionKind.COMPUTE_JOB.value, ResearchActionKind.ANALYSIS_RUN.value}
+        for item in active_remaining
     ):
         run.status = ResearchRunStatus.WAITING_FOR_COMPUTE.value
     elif any(
@@ -3432,6 +4027,371 @@ async def hold_or_release_aira_action_group(
     return False
 
 
+async def verify_manual_workflow_execution(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    actions: list[ResearchAction],
+    dependencies: list[ResearchActionDependency],
+) -> Any:
+    """Reconcile persisted execution with its sealed, immutable source assets."""
+    from app.models.workflow_definition import WorkflowRevision, WorkflowRunBinding
+    from app.services.workflow_contracts import workflow_revision_digest
+    from app.services.workflow_definitions import resolve_pins, verify_revision
+
+    marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
+    revision_id = UUID(str(marker.get("revision_id") or ""))
+    revision = await db_session.get(
+        WorkflowRevision, revision_id, populate_existing=True
+    )
+    binding = await db_session.scalar(
+        select(WorkflowRunBinding)
+        .where(WorkflowRunBinding.run_id == run.id)
+        .execution_options(populate_existing=True)
+    )
+    if (
+        revision is None
+        or binding is None
+        or binding.workflow_revision_id != revision_id
+        or binding.task_id != task.id
+        or binding.created_by_user_id != run.requested_by_user_id
+        or binding.environment_digest != canonical_digest(run.environment_snapshot)
+        or str(revision.definition_id) != marker.get("definition_id")
+        or revision.digest != marker.get("revision_digest")
+    ):
+        raise ValueError("The fixed Workflow execution binding has changed")
+    graph = verify_revision(revision)
+    resolved_workflow = _workflow_resolution_v2(run)
+    if workflow_revision_digest(graph) != marker.get("digest"):
+        raise ValueError("The fixed Workflow graph digest has changed")
+    plan = await db_session.scalar(
+        select(ResearchPlanVersion)
+        .where(
+            ResearchPlanVersion.run_id == run.id,
+            ResearchPlanVersion.version == run.plan_version,
+        )
+        .execution_options(populate_existing=True)
+    )
+    if (
+        plan is None
+        or plan.kind != "manual_workflow"
+        or plan.digest != canonical_digest(plan.plan)
+        or plan.plan.get("workflow_revision_id") != str(revision_id)
+        or plan.plan.get("workflow_digest") != marker["digest"]
+        or plan.plan.get("graph") != graph.model_dump(mode="json")
+    ):
+        raise ValueError("The fixed Workflow execution plan has changed")
+    requester = await db_session.get(User, run.requested_by_user_id)
+    project = await db_session.get(Project, task.project_id)
+    if requester is None or project is None:
+        raise ValueError("The fixed Workflow scope is unavailable")
+    live_pins = await resolve_pins(db_session, requester, project, graph)
+
+    def execution_pin(pin):
+        return {key: value for key, value in pin.items() if key != "name"}
+
+    if [execution_pin(pin) for pin in live_pins] != [
+        execution_pin(pin) for pin in revision.pins
+    ]:
+        raise ValueError("A pinned Protocol version content has changed")
+    by_node = {
+        str((_aira_action_graph(action) or {}).get("node_id") or ""): action
+        for action in actions
+    }
+    if set(by_node) != {node.node_id for node in graph.nodes} or len(by_node) != len(
+        actions
+    ):
+        raise ValueError("The fixed Workflow node set has changed")
+    expected_graph_id = f"workflow:{revision.id}:{marker['digest'][:24]}"
+    typed_runs = list(
+        (
+            await db_session.scalars(
+                select(ResearchProtocolRun)
+                .where(
+                    ResearchProtocolRun.action_id.in_([action.id for action in actions])
+                )
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    typed_by_action = {item.action_id: item for item in typed_runs}
+    if len(typed_runs) != sum(node.kind == "protocol" for node in graph.nodes):
+        raise ValueError("The fixed Workflow Protocol Run set has changed")
+    pins = {pin["node_id"]: pin for pin in revision.pins}
+    resolutions_by_node = {}
+    if resolved_workflow:
+        from app.models.workflow_definition import WorkflowNodeResolution
+        from app.services.workflow_resolutions import verify_workflow_node_resolution
+
+        resolution_rows = list(
+            (
+                await db_session.scalars(
+                    select(WorkflowNodeResolution)
+                    .where(WorkflowNodeResolution.run_id == run.id)
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        )
+        resolutions_by_node = {row.node_id: row for row in resolution_rows}
+        if len(resolutions_by_node) != len(resolution_rows) or set(
+            resolutions_by_node
+        ) - set(by_node):
+            raise ValueError("The Workflow node resolution set has changed")
+    non_root_ids = {edge.target_node_id for edge in graph.edges}
+    for node in graph.nodes:
+        action = by_node[node.node_id]
+        typed_run = typed_by_action.get(action.id)
+        data = action.input_data or {}
+        expected_initial_values = node.initial_values
+        resolution = resolutions_by_node.get(node.node_id)
+        if resolved_workflow and node.node_id in non_root_ids:
+            if resolution is None:
+                if (
+                    action.status != ResearchActionStatus.BLOCKED.value
+                    or data.get("workflow_resolution") is not None
+                ):
+                    raise ValueError(
+                        "A released Workflow node has no immutable resolution"
+                    )
+            else:
+                await verify_workflow_node_resolution(
+                    db_session,
+                    task=task,
+                    run=run,
+                    graph=graph,
+                    node=node,
+                    action=action,
+                    resolution=resolution,
+                )
+                expected_initial_values = resolution.initial_values
+                reference = _workflow_resolution_reference(resolution)
+                if canonical_digest(
+                    data.get("workflow_resolution")
+                ) != canonical_digest(reference):
+                    raise ValueError("The Workflow resolved input receipt has changed")
+                if resolution.state == "branch_not_selected":
+                    if not _workflow_branch_not_selected(action):
+                        raise ValueError(
+                            "The Workflow inactive branch state has changed"
+                        )
+                elif resolution.state in {"blocked", "failed"}:
+                    expected_status = (
+                        "failed" if resolution.state == "failed" else "skipped"
+                    )
+                    if (
+                        action.status != expected_status
+                        or (action.output_data or {}).get("workflow_resolution")
+                        != reference
+                    ):
+                        raise ValueError(
+                            "The Workflow failed dependency state has changed"
+                        )
+                elif resolution.state != "ready":
+                    raise ValueError("The Workflow resolution state is unsupported")
+                elif any(
+                    binding.target_node_id == node.node_id for binding in graph.bindings
+                ):
+                    if (action.requirements or {}).get(
+                        "approval_policy"
+                    ) != "always_ask" or (action.requirements or {}).get(
+                        "workflow_bound_input_confirmation"
+                    ) is not True:
+                        raise ValueError(
+                            "The Workflow bound input approval requirement has changed"
+                        )
+        elif resolution is not None or data.get("workflow_resolution") is not None:
+            raise ValueError("A root or legacy Workflow node cannot have a resolution")
+        if node.kind == "analysis":
+            from app.services.workflow_analysis_runtime import verify_analysis_card
+
+            if (
+                marker.get("execution_contract_version") not in {3, 4, 5}
+                or action.kind != "analysis_run"
+            ):
+                raise ValueError("Analysis card execution contract changed")
+            if (
+                action.plan_version != run.plan_version
+                or (_aira_action_graph(action) or {}).get("id") != expected_graph_id
+                or action.idempotency_key != f"{expected_graph_id}:{node.node_id}"
+                or data.get("record_sources")
+                != [item.model_dump(mode="json") for item in node.record_sources]
+                or data.get("analysis_outputs")
+                != [item.model_dump(mode="json") for item in node.analysis_outputs]
+                or data.get("input_policy") != node.input_policy
+                or (action.requirements or {}).get("approval_policy") != "always_ask"
+                or data.get("method_digest") != pins[node.node_id]["content_digest"]
+                or action.preview_digest != _workflow_action_preview(action)
+            ):
+                raise ValueError("A fixed Workflow Analysis occurrence has changed")
+            if getattr(node, "analysis_kind", "builtin") == "compute" and (
+                marker.get("execution_contract_version") not in {4, 5}
+                or data.get("analysis_kind") != "compute"
+                or data.get("compute_outputs")
+                != [item.model_dump(mode="json") for item in node.compute_outputs]
+            ):
+                raise ValueError("A fixed Workflow Compute occurrence has changed")
+            if graph.schema_version >= 4 and data.get("compute_file_outputs", []) != [
+                item.model_dump(mode="json") for item in node.compute_file_outputs
+            ]:
+                raise ValueError(
+                    "A fixed Workflow Compute file declaration has changed"
+                )
+            await verify_analysis_card(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                node=node,
+                resolution=resolution,
+            )
+            continue
+        if (
+            action.plan_version != run.plan_version
+            or (_aira_action_graph(action) or {}).get("id") != expected_graph_id
+            or action.idempotency_key != f"{expected_graph_id}:{node.node_id}"
+            or data.get("protocol_id") != str(node.protocol_id)
+            or data.get("protocol_version_id") != str(node.protocol_version_id)
+            or data.get("protocol_version") != pins[node.node_id]["version"]
+            or canonical_digest(data.get("initial_values"))
+            != canonical_digest(expected_initial_values)
+            or typed_run is None
+            or typed_run.protocol_id != node.protocol_id
+            or typed_run.protocol_version_id != node.protocol_version_id
+            or typed_run.protocol_version != pins[node.node_id]["version"]
+            or canonical_digest(typed_run.initial_values)
+            != canonical_digest(expected_initial_values)
+        ):
+            raise ValueError("A fixed Workflow Protocol occurrence has changed")
+        if action.preview_digest != _workflow_action_preview(action):
+            raise ValueError(
+                "A fixed Workflow Action confirmation contract has changed"
+            )
+    expected_edges = {
+        (by_node[edge.target_node_id].id, by_node[edge.source_node_id].id)
+        for edge in graph.edges
+    }
+    actual_edges = {
+        (edge.action_id, edge.depends_on_action_id) for edge in dependencies
+    }
+    if actual_edges != expected_edges or len(dependencies) != len(expected_edges):
+        raise ValueError("The fixed Workflow dependency edge set has changed")
+    if resolved_workflow:
+        expected_contracts = {
+            (
+                by_node[edge.target_node_id].id,
+                by_node[edge.source_node_id].id,
+            ): canonical_digest(_workflow_edge_contract(edge, resolved=True))
+            for edge in graph.edges
+        }
+        if any(
+            canonical_digest(edge.condition)
+            != expected_contracts[(edge.action_id, edge.depends_on_action_id)]
+            for edge in dependencies
+        ):
+            raise ValueError("The Workflow conditional edge contract has changed")
+    return graph
+
+
+async def manual_workflow_dispatch_allowed(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    check_budget: bool = True,
+) -> bool:
+    """Recheck live authority and limits before every fixed-graph dispatch."""
+    if task.status != ResearchTaskStatus.ACTIVE.value:
+        return False
+    project = await db_session.get(Project, task.project_id)
+    reason = None
+    for user_id in {task.owner_user_id, run.requested_by_user_id}:
+        user = await db_session.get(User, user_id)
+        if (
+            project is None
+            or user is None
+            or not await has_research_capability(
+                db_session, user=user, project=project, capability="research.run"
+            )
+        ):
+            reason = (
+                "Pinned Workflow requester or owner no longer has execution permission"
+            )
+            break
+    limit = await reached_operational_limit(db_session, task=task)
+    if limit is not None and (check_budget or limit[0] != "budget"):
+        reason = f"Research Task {limit[0]} limit reached"
+    if reason is None:
+        return True
+    run.status = ResearchRunStatus.PAUSED.value
+    run.last_error = reason
+    task.status = ResearchTaskStatus.PAUSED.value
+    task.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="workflow.dispatch_paused",
+        actor_user_id=None,
+        payload={"reason": reason},
+        idempotency_key=f"run:{run.id}:workflow-paused:{task.revision}",
+    )
+    return False
+
+
+async def finish_manual_workflow(
+    db_session: AsyncSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    actions: list[ResearchAction],
+) -> None:
+    """Settle execution without inventing a scientific conclusion or calling AI."""
+    package = await build_research_result_package(db_session, task=task, run=run)
+    package["manual_workflow"] = (run.environment_snapshot or {})["manual_workflow"]
+    package["narrative_conclusion"] = ""
+    failed = any(
+        item.status != ResearchActionStatus.COMPLETED.value
+        and not (_workflow_resolution_v2(run) and _workflow_branch_not_selected(item))
+        for item in actions
+    )
+    run.status = (
+        ResearchRunStatus.FAILED.value if failed else ResearchRunStatus.COMPLETED.value
+    )
+    run.completed_at = utcnow()
+    run.result_package = package
+    task.status = ResearchTaskStatus.REVIEW_REQUIRED.value
+    task.result_package = package
+    task.revision += 1
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="workflow.settled",
+        actor_user_id=None,
+        payload={"execution_status": run.status, "human_review_required": True},
+        idempotency_key=f"run:{run.id}:workflow-settled",
+    )
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="run.failed" if failed else "run.completed",
+        actor_user_id=None,
+        payload={"source": "manual_workflow", "human_review_required": True},
+        idempotency_key=f"run:{run.id}:workflow-execution-finished",
+    )
+    await emit_research_event(
+        db_session,
+        task_id=task.id,
+        run_id=run.id,
+        kind="task.review_requested",
+        actor_user_id=None,
+        payload={"result_package_schema": package["schema"]},
+        idempotency_key=f"task:{task.id}:review:{run.id}",
+    )
+
+
 async def restore_pending_action_boundary(
     db_session: AsyncSession, *, task: ResearchTask, run: ResearchRun
 ) -> bool:
@@ -3462,6 +4422,20 @@ async def restore_pending_action_boundary(
         action for action in actions if action.status not in TERMINAL_ACTION_STATUSES
     ]
     if not pending:
+        if (run.environment_snapshot or {}).get("manual_workflow"):
+            if run.status not in TERMINAL_RUN_STATUSES:
+                last_action = await db_session.scalar(
+                    select(ResearchAction)
+                    .where(ResearchAction.run_id == run.id)
+                    .order_by(ResearchAction.sequence.desc())
+                    .limit(1)
+                )
+                if last_action is None:
+                    raise ValueError("The fixed Workflow has no materialized Actions")
+                await hold_or_release_aira_action_group(
+                    db_session, task=task, run=run, action=last_action
+                )
+            return True
         return False
     if task.status == ResearchTaskStatus.ACTIVE.value:
         from sqlalchemy import update
@@ -3504,6 +4478,10 @@ async def restore_pending_action_boundary(
     else:
         kinds = {action.kind for action in pending}
         for kind, status in (
+            (
+                ResearchActionKind.ANALYSIS_RUN.value,
+                ResearchRunStatus.WAITING_FOR_COMPUTE.value,
+            ),
             (
                 ResearchActionKind.INSTRUMENT_JOB.value,
                 ResearchRunStatus.WAITING_FOR_INSTRUMENT.value,
@@ -3908,57 +4886,73 @@ async def build_research_result_package(
         not in registered_evidence
     ]
     budget = await research_budget_snapshot(db_session, task=task)
-    return {
-        "schema": "airalogy.research-result-package.v1",
-        "task_id": str(task.id),
-        "run_id": str(run.id),
-        "goal": task.goal,
-        "success_criteria": task.success_criteria,
-        "goal_assessment": "requires_human_review",
-        "narrative_conclusion": run.aira_state.get("final_research_conclusion") or "",
-        "claims": scientific_assets["claims"],
-        "evidence": [
-            *scientific_assets["evidence"],
-            *legacy_evidence,
-        ],
-        "data_assets": scientific_assets["data_assets"],
-        "knowledge_items": scientific_assets["knowledge_items"],
-        "protocol_improvements": scientific_assets["protocol_improvements"],
-        "actions": [
-            {
-                "id": str(item.id),
-                "sequence": item.sequence,
-                "plan_version": item.plan_version,
-                "kind": item.kind,
-                "status": item.status,
-                "title": item.title,
-                "error": item.error,
-                "policy_decision": item.policy_decision,
-                "policy_reason": item.policy_reason,
-                "depends_on_action_ids": dependency_ids_by_action[item.id],
-                "result_bindings": list(
-                    (_aira_action_graph(item) or {}).get("result_bindings") or []
-                ),
-                "result_binding_receipts": list(
-                    (_aira_action_graph(item) or {}).get("result_binding_receipts")
-                    or []
-                ),
-            }
-            for item in actions
-        ],
-        "failed_attempts": [
-            str(item.id)
-            for item in actions
-            if item.status == ResearchActionStatus.FAILED.value
-        ],
-        "unresolved_questions": [],
-        "reproducibility": {
-            "environment_snapshot": run.environment_snapshot,
-            "plan_version": run.plan_version,
+    # This package is stored in JSON columns before an HTTP response is encoded.
+    # Asset read models can contain native UUID/date/Decimal values; normalize
+    # the shared boundary for both manual Workflows and Aira completion. Keep
+    # Decimal values exact rather than coercing scientific/cost values to floats.
+    return jsonable_encoder(
+        {
+            "schema": "airalogy.research-result-package.v1",
+            "task_id": str(task.id),
+            "run_id": str(run.id),
+            "goal": task.goal,
+            "success_criteria": task.success_criteria,
+            "goal_assessment": "requires_human_review",
+            "narrative_conclusion": run.aira_state.get("final_research_conclusion")
+            or "",
+            "claims": scientific_assets["claims"],
+            "evidence": [
+                *scientific_assets["evidence"],
+                *legacy_evidence,
+            ],
+            "data_assets": scientific_assets["data_assets"],
+            "knowledge_items": scientific_assets["knowledge_items"],
+            "protocol_improvements": scientific_assets["protocol_improvements"],
+            "actions": [
+                {
+                    "id": str(item.id),
+                    "sequence": item.sequence,
+                    "plan_version": item.plan_version,
+                    "kind": item.kind,
+                    "status": item.status,
+                    "title": item.title,
+                    "error": item.error,
+                    "policy_decision": item.policy_decision,
+                    "policy_reason": item.policy_reason,
+                    "depends_on_action_ids": dependency_ids_by_action[item.id],
+                    "result_bindings": list(
+                        (_aira_action_graph(item) or {}).get("result_bindings") or []
+                    ),
+                    "result_binding_receipts": list(
+                        (_aira_action_graph(item) or {}).get("result_binding_receipts")
+                        or []
+                    ),
+                    "workflow_resolution": {
+                        key: (item.input_data or {})
+                        .get("workflow_resolution", {})
+                        .get(key)
+                        for key in ("id", "digest", "state")
+                    }
+                    if (item.input_data or {}).get("workflow_resolution")
+                    else None,
+                }
+                for item in actions
+            ],
+            "failed_attempts": [
+                str(item.id)
+                for item in actions
+                if item.status == ResearchActionStatus.FAILED.value
+            ],
+            "unresolved_questions": [],
+            "reproducibility": {
+                "environment_snapshot": run.environment_snapshot,
+                "plan_version": run.plan_version,
+            },
+            "budget": budget,
+            "generated_at": utcnow().isoformat(),
         },
-        "budget": budget,
-        "generated_at": utcnow().isoformat(),
-    }
+        custom_encoder={Decimal: str},
+    )
 
 
 async def _finish_aira_run(
@@ -3998,6 +4992,46 @@ async def _finish_aira_run(
     return {"status": run.status, "human_review_required": True}
 
 
+async def _authorize_aira_research_context(
+    db_session: AsyncSession, *, task: ResearchTask, run: ResearchRun
+) -> bool:
+    """Recheck the persisted initiating actor, never substitute the Task owner."""
+    from app.services.research_asset_visibility import HIDDEN_SOURCE_STATUSES
+
+    requester = await db_session.get(User, run.requested_by_user_id)
+    project = await db_session.get(Project, task.project_id)
+    try:
+        if requester is None or project is None or project.deleted_at is not None:
+            raise HTTPException(403, "Research requester is unavailable")
+        await require_research_capability(
+            db_session, user=requester, project=project, capability="research.run"
+        )
+        await require_research_context_readable(
+            db_session, task=task, run=run, current_user=requester
+        )
+    except HTTPException as error:
+        if error.status_code not in HIDDEN_SOURCE_STATUSES:
+            raise
+        run.status = ResearchRunStatus.PAUSED.value
+        run.last_error = (
+            "Research context sources are unavailable to the initiating user"
+        )
+        task.status = ResearchTaskStatus.PAUSED.value
+        task.revision += 1
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            kind="run.source_access_required",
+            actor_user_id=None,
+            payload={"reason": "source_access_required"},
+            idempotency_key=f"run:{run.id}:source-access:{task.revision}",
+        )
+        await db_session.commit()
+        return False
+    return True
+
+
 async def process_research_run_advance(
     db_session: AsyncSession,
     *,
@@ -4013,6 +5047,8 @@ async def process_research_run_advance(
 
     for _ in range(max_steps):
         run, task, project, lab, rows = await _load_run_context(db_session, run_id)
+        if (run.environment_snapshot or {}).get("manual_workflow"):
+            return {"status": run.status, "fixed_workflow": True}
         if generation != run.advance_generation:
             return {"status": "superseded", "generation": generation}
         if run.status in TERMINAL_RUN_STATUSES or run.status in {
@@ -4086,6 +5122,8 @@ async def process_research_run_advance(
         path_status = run.aira_state.get("path_status")
         if path_status not in AIRA_AI_STATUSES:
             raise ValueError(f"Unsupported AIRA path status: {path_status}")
+        if not await _authorize_aira_research_context(db_session, task=task, run=run):
+            return {"status": run.status, "source_access_required": True}
         state_digest = canonical_digest(run.aira_state)
         step_index = len(run.aira_state.get("steps") or [])
         planner_decision: str | None = None
@@ -4165,6 +5203,13 @@ async def process_research_run_advance(
                     await db_session.rollback()
                     continue
                 current_task = await db_session.get(ResearchTask, current_run.task_id)
+                if not await _authorize_aira_research_context(
+                    db_session, task=current_task, run=current_run
+                ):
+                    return {
+                        "status": current_run.status,
+                        "source_access_required": True,
+                    }
                 materialized_decision = proposal.decision
                 if proposal.decision == "parallel_tools":
                     actions = await _materialize_aira_parallel_tools(
@@ -4317,6 +5362,12 @@ async def process_research_run_advance(
         if canonical_digest(current_run.aira_state) != state_digest:
             await db_session.rollback()
             continue
+
+        current_task = await db_session.get(ResearchTask, current_run.task_id)
+        if not await _authorize_aira_research_context(
+            db_session, task=current_task, run=current_run
+        ):
+            return {"status": current_run.status, "source_access_required": True}
 
         normalized_step = {
             **step,

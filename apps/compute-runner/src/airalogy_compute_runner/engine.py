@@ -109,6 +109,44 @@ class ContainerEngine:
             ],
             timeout=30,
         )
+        # A local-driver tmpfs is emptied when its final mount disappears.
+        # Keep a read-only mount alive across staging, execution and upload
+        # helpers. This trusted idle holder never executes job source and is
+        # removed with the job; it also preserves pending result delivery.
+        self._run(
+            [
+                "run",
+                "--detach",
+                "--name",
+                f"{container_name}-workspace",
+                "--log-driver",
+                "none",
+                "--user",
+                "65532:65532",
+                "--read-only",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges",
+                "--network",
+                "none",
+                "--pids-limit",
+                "16",
+                "--memory",
+                "32m",
+                "--memory-swap",
+                "32m",
+                "--cpus",
+                "0.1",
+                "--mount",
+                f"type=volume,source={volume_name},target=/airalogy,readonly",
+                "--entrypoint",
+                "sleep",
+                self.config.helper_image,
+                "infinity",
+            ],
+            timeout=30,
+        )
         return container_name, volume_name
 
     @staticmethod
@@ -143,16 +181,28 @@ class ContainerEngine:
         volume_name: str,
         input_files: dict[str, Path],
     ) -> None:
+        stage_name = f"{self.names(job.job_id)[0]}-stage"
         command = [
             self.executable,
             "run",
             "--rm",
             "--interactive",
+            "--name",
+            stage_name,
             "--network",
             "none",
             "--read-only",
             "--cap-drop",
             "ALL",
+            # Only the trusted tar helper needs these to install root-owned
+            # read-only inputs and UID 65532-owned output directories. It never
+            # executes the reviewed source, has no network or host bind mount.
+            "--cap-add",
+            "CHOWN",
+            "--cap-add",
+            "DAC_OVERRIDE",
+            "--cap-add",
+            "FOWNER",
             "--security-opt",
             "no-new-privileges",
             "--mount",
@@ -204,11 +254,19 @@ class ContainerEngine:
                         recursive=False,
                         filter=lambda info: self._safe_input_info(info),
                     )
+            # tarfile does not own this pipe. Flush and close it explicitly so
+            # the helper receives EOF, including with buffered small archives.
+            process.stdin.close()
             process.stdin = None
             _stdout, stderr = process.communicate(timeout=120)
         except Exception:
             process.kill()
             process.wait()
+            if process.stdin is not None:
+                process.stdin.close()
+            if process.stderr is not None:
+                process.stderr.close()
+            self._run(["rm", "--force", stage_name], timeout=30, check=False)
             raise
         if process.returncode != 0:
             message = stderr.decode("utf-8", errors="replace")[-4000:]
@@ -314,6 +372,8 @@ class ContainerEngine:
         base = [
             "run",
             "--rm",
+            "--user",
+            "65532:65532",
             "--network",
             "none",
             "--read-only",
@@ -366,6 +426,8 @@ class ContainerEngine:
             self.executable,
             "run",
             "--rm",
+            "--user",
+            "65532:65532",
             "--log-driver",
             "none",
             "--network",
@@ -497,5 +559,13 @@ class ContainerEngine:
     def cleanup(self, container_name: str, volume_name: str) -> None:
         if container_name:
             self._run(["rm", "--force", container_name], timeout=30, check=False)
+            self._run(
+                ["rm", "--force", f"{container_name}-stage"], timeout=30, check=False
+            )
+            self._run(
+                ["rm", "--force", f"{container_name}-workspace"],
+                timeout=30,
+                check=False,
+            )
         if volume_name:
             self._run(["volume", "rm", "--force", volume_name], timeout=30, check=False)

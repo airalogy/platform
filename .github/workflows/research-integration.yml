@@ -5,6 +5,8 @@ on:
     paths:
       [
         "apps/api/**",
+        "apps/compute-runner/src/**",
+        "apps/compute-runner/tests/**",
         "apps/instrument-gateway/src/**",
         "apps/instrument-gateway/tests/**",
         "apps/instrument-gateway/examples/**",
@@ -12,6 +14,8 @@ on:
         "scripts/instrument-interface-example.mjs",
         "scripts/instrument-interface-worker-example.mjs",
         "scripts/prepare-instrument-ci*",
+        "scripts/compute-runner-integration.mjs",
+        "scripts/research-integration.mjs",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "tests/e2e/**",
@@ -23,6 +27,8 @@ on:
     paths:
       [
         "apps/api/**",
+        "apps/compute-runner/src/**",
+        "apps/compute-runner/tests/**",
         "apps/instrument-gateway/src/**",
         "apps/instrument-gateway/tests/**",
         "apps/instrument-gateway/examples/**",
@@ -30,6 +36,8 @@ on:
         "scripts/instrument-interface-example.mjs",
         "scripts/instrument-interface-worker-example.mjs",
         "scripts/prepare-instrument-ci*",
+        "scripts/compute-runner-integration.mjs",
+        "scripts/research-integration.mjs",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "tests/e2e/**",
@@ -66,7 +74,7 @@ jobs:
       - name: Prepare trusted CI executables and sandboxed Chromium
         run: node scripts/prepare-instrument-ci.mjs --executables --browser
       - name: Migrate isolated database and run real API/worker acceptance
-        run: bash tests/e2e/scripts/research-integration.sh -q --tb=short
+        run: pnpm research:integration -q --tb=short
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v6

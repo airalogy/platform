@@ -48,6 +48,21 @@
               @imported="handleRecordsImported"
             />
 
+            <n-button
+              v-if="canAnalyzeRecords"
+              secondary
+              data-testid="analysis-filtered-trigger"
+              :disabled="!appliedFilters || total === 0 || loadingState.records"
+              @click="handleAnalyzeFiltered"
+            >
+              <template #icon>
+                <n-icon>
+                  <icon-tabler-chart-bar />
+                </n-icon>
+              </template>
+              {{ $t("page.analysis.analyzeFiltered") }}
+            </n-button>
+
             <record-export-modal
               v-if="canBulkExport && protocolInfo.lab.id && protocolInfo.project.id"
               scope-type="protocol"
@@ -152,8 +167,10 @@
         :initial-page-size="preferredRecordPageSize"
         :is-item-in-chat-context="isItemInChatContext"
         :is-item-in-chat-context-disabled="isItemInChatContextDisabled"
+        :can-analyze="canAnalyzeRecords"
         @add-to-chat="handleAddToChat"
         @add-selected-to-chat="handleAddSelectedToChat"
+        @analyze-selected="handleAnalyzeSelected"
         @remove-from-chat="handleRemoveFromChat"
         @show-report="handleShowReport"
         @fetch-records="handleFetchRecords"
@@ -165,8 +182,9 @@
 </template>
 
 <script setup lang="ts">
-import type { ProtocolModels } from "@airalogy/shared/types"
+import type { AnalysisRecordFilters, AnalysisRecordReference, AnalysisSelection } from "@/service/api/analysis"
 
+import type { ProtocolModels } from "@airalogy/shared/types"
 import type { SelectOption } from "naive-ui"
 import type { ITimelineItem } from "./types"
 import GlobalAddMember from "@/components/common/global-add-member.vue"
@@ -176,6 +194,7 @@ import SearchInput from "@/components/common/search-input.vue"
 import { useProjectPermissions } from "@/composables"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { LabRole, ProjectRole } from "@/enum"
+import { createAnalysisSelectionTransfer, discardAnalysisSelectionTransfer } from "@/service/api/analysis"
 import { getProtocolVersions } from "@/service/api/protocol"
 import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
@@ -204,7 +223,10 @@ const { projectInfo } = useOrProvideProjectInfoStore(null)
 const authStore = useAuthStore()
 
 const { fetchProtocolRecords } = useFetchProtocolRecords()
-const { canSubmitDataToOthers } = useProjectPermissions(projectInfo)
+const { canSubmitDataToOthers, canViewOwnRecords, canViewOthersRecords } = useProjectPermissions(projectInfo)
+const canAnalyzeRecords = computed(() => authStore.isLogin && (
+  canViewOwnRecords.value || canViewOthersRecords.value || projectInfo.value?.user_lab_role === LabRole.OWNER
+))
 const canBulkExport = computed(() => Boolean(projectInfo.value) && (
   projectInfo.value?.user_lab_role === LabRole.OWNER
   || projectInfo.value?.user_role === ProjectRole.OWNER
@@ -236,7 +258,7 @@ const lastFetchPayload = ref<{ currentPage: number, currentPageSize: number }>({
 const deleteGraceDays = computed(() => getRecordDeleteGraceDays())
 
 const currentRecordData = ref<ProtocolModels.RecordInfo | null>(null)
-const { routerPushByKey } = useRouterPush()
+const { routerPushByKey, routerPush } = useRouterPush()
 
 const selectThemeOverrides = {
   peers: {
@@ -258,6 +280,55 @@ const protocolVersionOption = ref<string>("all")
 const selectedUserId = ref<string | null>(null)
 const recordNumberInput = ref<number | null>(null)
 const recordVersionInput = ref<number | null>(null)
+const appliedFilters = ref<AnalysisRecordFilters | null>(null)
+let recordsRequestSequence = 0
+
+function draftRecordFilters(): AnalysisRecordFilters {
+  return {
+    ...(protocolVersionOption.value !== "all" ? { protocol_version: protocolVersionOption.value } : {}),
+    ...(selectedUserId.value ? { user_id: selectedUserId.value } : {}),
+    ...(recordNumberInput.value ? { number: recordNumberInput.value } : {}),
+    ...(recordVersionInput.value ? { version: recordVersionInput.value } : {}),
+    ...(searchInputVal.value.trim() ? { q: searchInputVal.value.trim() } : {}),
+  }
+}
+
+async function openAnalysis(selection: AnalysisSelection) {
+  const info = protocolInfo.value
+  if (!canAnalyzeRecords.value || !info?.lab || !info.project)
+    return
+  let token: string | undefined
+  try {
+    token = createAnalysisSelectionTransfer({
+      userId: authStore.userInfo.id,
+      projectId: info.project.id,
+      protocolId: info.id,
+      selection,
+    })
+    const failure = await routerPush({
+      name: "project-analysis",
+      params: { labUid: info.lab.uid, projectUid: info.project.uid },
+      query: { protocolId: info.id, selectionToken: token },
+    })
+    if (failure)
+      throw failure
+  }
+  catch {
+    if (token)
+      discardAnalysisSelectionTransfer(token)
+    message.error(t("page.analysis.openError"))
+  }
+}
+
+function handleAnalyzeFiltered() {
+  if (!appliedFilters.value || !total.value || loadingState.value.records)
+    return
+  return openAnalysis({ mode: "latest", filters: { ...appliedFilters.value } })
+}
+
+function handleAnalyzeSelected(records: AnalysisRecordReference[]) {
+  return openAnalysis({ mode: "selected", filters: {}, records })
+}
 
 const protocolVersions = ref<string[]>([])
 const protocolVersionOptions = computed<SelectOption[]>(() => {
@@ -348,7 +419,7 @@ async function handleSearch() {
     await handleFetchRecords({
       currentPage: 1,
       currentPageSize: lastFetchPayload.value.currentPageSize,
-    })
+    }, draftRecordFilters())
   }
   finally {
     endTargetLoading("search")
@@ -367,69 +438,49 @@ function handleClearFilters() {
   handleSearch()
 }
 
-async function handleFetchRecords(payload: { currentPage: number, currentPageSize: number }) {
+async function handleFetchRecords(
+  payload: { currentPage: number, currentPageSize: number },
+  filters: AnalysisRecordFilters = appliedFilters.value || draftRecordFilters(),
+) {
   if (!protocolInfo.value || !protocolInfo.value.id) {
     return
   }
 
-  lastFetchPayload.value = payload
+  const requestedProtocolId = protocolInfo.value.id
+  const requestSequence = ++recordsRequestSequence
+  const requestedFilters = { ...filters }
   startTargetLoading("records")
   try {
     const { currentPage, currentPageSize } = payload
 
-    // Build search parameters with only supported options
-    const searchParams: {
-      page: number
-      pageSize: number
-      protocolVersion?: string
-      number?: number
-      version?: string
-      userId?: string
-      q?: string
-    } = {
+    const data = await fetchProtocolRecords(requestedProtocolId, {
       page: currentPage,
       pageSize: currentPageSize,
-    }
-
-    // Add protocol version filter
-    if (protocolVersionOption.value !== "all") {
-      searchParams.protocolVersion = protocolVersionOption.value
-    }
-
-    // Add record number search
-    if (recordNumberInput.value) {
-      searchParams.number = recordNumberInput.value
-    }
-
-    if (searchInputVal.value.trim()) {
-      searchParams.q = searchInputVal.value.trim()
-    }
-
-    // Add record version search from advanced panel
-    if (recordVersionInput.value) {
-      searchParams.version = String(recordVersionInput.value)
-    }
-
-    // Add submitter filter
-    if (selectedUserId.value) {
-      searchParams.userId = selectedUserId.value
-    }
-
-    const data = await fetchProtocolRecords(protocolInfo.value.id, searchParams)
+      protocolVersion: requestedFilters.protocol_version,
+      number: requestedFilters.number,
+      version: requestedFilters.version !== undefined ? String(requestedFilters.version) : undefined,
+      userId: requestedFilters.user_id,
+      q: requestedFilters.q,
+    })
+    if (requestSequence !== recordsRequestSequence || requestedProtocolId !== protocolInfo.value?.id)
+      return
     if (data && Array.isArray(data.records)) {
       const { records, total_count } = data
 
       recordList.value = records
       total.value = total_count
+      appliedFilters.value = requestedFilters
+      lastFetchPayload.value = payload
     }
     void fetchLatestRecordNumber()
   }
   catch (e) {
-    // NOPE
-    message.error((e as Error).message)
+    if (requestSequence === recordsRequestSequence)
+      message.error((e as Error).message)
   }
   finally {
-    endTargetLoading("records")
+    if (requestSequence === recordsRequestSequence)
+      endTargetLoading("records")
   }
 }
 
@@ -586,6 +637,10 @@ function handleRemoveFromChat(item: ITimelineItem) {
 watch(
   () => protocolInfo.value?.id,
   async (id) => {
+    appliedFilters.value = null
+    recordList.value = []
+    total.value = 0
+    recordsRequestSequence += 1
     if (!id) {
       return
     }

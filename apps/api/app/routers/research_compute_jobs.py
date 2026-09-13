@@ -14,9 +14,9 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
 from app.config import config
@@ -27,6 +27,7 @@ from app.libs.file_storage import (
     get_file_with_stream,
     upload_file,
 )
+from app.models.analysis import AnalysisRun
 from app.models.knowledge import (
     OwnerScope,
     ResearchFile,
@@ -63,7 +64,24 @@ from app.routers.research_compute_runners import (
     RunnerToken,
     authenticate_compute_runner,
 )
+from app.services.analysis_compute import (
+    analysis_compute_input_bytes,
+    emit_analysis_compute_event,
+)
+from app.services.analysis_compute_contracts import ANALYSIS_JOB_SCHEMA
+from app.services.analysis_compute_runtime import (
+    RESEARCH_JOB_SCHEMA,
+    analysis_input_manifest,
+    authorize_analysis_runtime,
+    finish_analysis_failure,
+    invalidate_analysis_execution,
+    private_output_manifest,
+    runner_job_schemas,
+    seal_analysis_completion,
+    verified_output_receipts,
+)
 from app.services.knowledge import assert_research_file_upload_quota
+from app.services.persistent_jobs import JobDeferred
 from app.services.research_autonomy_evaluations import compute_autonomy_target
 from app.services.research_budget import (
     ResearchBudgetError,
@@ -98,7 +116,10 @@ from app.services.research_compute_jobs import (
     sign_compute_envelope,
     validate_pinned_compute_inputs,
 )
-from app.services.research_compute_runners import runner_report_is_execution_ready
+from app.services.research_compute_runners import (
+    compute_runner_token_digest,
+    runner_report_is_execution_ready,
+)
 from app.services.research_instruments import validate_schema_payload
 from app.services.research_runtime import (
     append_aira_result,
@@ -293,6 +314,10 @@ async def _validated_action_command(
     params: ComputeActionDraft,
     requesting_user_id: UUID,
 ):
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        raise HTTPException(
+            409, "Fixed Workflows cannot accept Actions outside their pinned graph"
+        )
     if task.status != ResearchTaskStatus.ACTIVE.value:
         raise HTTPException(status_code=409, detail="Research Task must be active")
     if run.status != ResearchRunStatus.RUNNING.value:
@@ -699,10 +724,13 @@ async def _user_job_context(
     *,
     lock: bool,
 ) -> tuple[ResearchComputeJob, ResearchAction, ResearchRun, ResearchTask, Project, Lab]:
-    statement = select(ResearchComputeJob).where(ResearchComputeJob.id == job_id)
-    if lock:
-        statement = statement.with_for_update()
+    statement = select(ResearchComputeJob).where(
+        ResearchComputeJob.id == job_id,
+        ResearchComputeJob.analysis_run_id.is_(None),
+    )
     job = (await db_session.scalars(statement)).first()
+    if job is not None and lock:
+        job, _action, _run, _task = await _lock_compute_job_context(db_session, job)
     action = await db_session.get(ResearchAction, job.action_id) if job else None
     run = await db_session.get(ResearchRun, action.run_id) if action else None
     task = await db_session.get(ResearchTask, run.task_id) if run else None
@@ -893,13 +921,89 @@ async def cancel_compute_job(
     return {**action.as_dict(), "compute_job": compute_job_snapshot(job)}
 
 
+async def _lock_compute_job_context(db_session, candidate, *, skip_locked=False):
+    """Acquire Task -> Run -> Action -> Analysis -> Job, then recheck binding.
+
+    Discovery/credential reads never lock Job before its governed parent. Leases
+    use nonblocking parent locks so a Runner slot lock cannot wait on a Task.
+    """
+    job_id, action_id, analysis_id = (
+        candidate.id,
+        candidate.action_id,
+        candidate.analysis_run_id,
+    )
+
+    async def lock_row(model, row_id):
+        row = await db_session.scalar(
+            select(model)
+            .where(model.id == row_id)
+            .with_for_update(skip_locked=skip_locked)
+            .execution_options(populate_existing=True)
+        )
+        if row is None:
+            if skip_locked:
+                raise JobDeferred("Compute execution context is locked or unavailable")
+            raise HTTPException(409, "Compute execution context is unavailable")
+        return row
+
+    if analysis_id is not None:
+        if action_id is not None:
+            raise HTTPException(409, "Compute execution binding is ambiguous")
+        from app.services.workflow_analysis_runtime import workflow_analysis_context
+
+        await workflow_analysis_context(
+            db_session, analysis_id, skip_locked=skip_locked
+        )
+        run = await lock_row(AnalysisRun, analysis_id)
+        action = task = None
+    else:
+        action = await db_session.get(ResearchAction, action_id)
+        run = await db_session.get(ResearchRun, action.run_id) if action else None
+        task = await db_session.get(ResearchTask, run.task_id) if run else None
+        if action is None or run is None or task is None:
+            raise HTTPException(409, "Compute Job context is missing")
+        run_id, task_id = run.id, task.id
+        task = await lock_row(ResearchTask, task_id)
+        run = await lock_row(ResearchRun, run_id)
+        action = await lock_row(ResearchAction, action_id)
+        if action.run_id != run_id or run.task_id != task_id:
+            raise HTTPException(409, "Compute Job parent binding changed")
+    job = await lock_row(ResearchComputeJob, job_id)
+    if job.action_id != action_id or job.analysis_run_id != analysis_id:
+        raise HTTPException(409, "Compute Job execution binding changed")
+    return job, action, run, task
+
+
+async def _workflow_compute_delivery_paused(db_session, job):
+    if job.analysis_run_id is None:
+        return False
+    from app.services.workflow_analysis_runtime import workflow_analysis_context
+
+    context = await workflow_analysis_context(
+        db_session, job.analysis_run_id, skip_locked=True
+    )
+    if context is None:
+        return False
+    task, run, action, _bridge = context
+    return (
+        task.status != "active"
+        or run.status in {"paused", "cancelled", "completed", "failed"}
+        or action.status != "queued"
+    )
+
+
 async def _runner_job_context(
     db_session: DBSession,
     *,
     runner: ResearchComputeRunner,
     job_id: UUID,
     lease_token: str,
-) -> tuple[ResearchComputeJob, ResearchAction, ResearchRun, ResearchTask]:
+) -> tuple[
+    ResearchComputeJob,
+    ResearchAction | None,
+    ResearchRun | AnalysisRun,
+    ResearchTask | None,
+]:
     job = (
         await db_session.scalars(
             select(ResearchComputeJob)
@@ -907,7 +1011,7 @@ async def _runner_job_context(
                 ResearchComputeJob.id == job_id,
                 ResearchComputeJob.runner_id == runner.id,
             )
-            .with_for_update()
+            .execution_options(populate_existing=True)
         )
     ).first()
     if job is None:
@@ -917,12 +1021,31 @@ async def _runner_job_context(
         job.lease_token_digest, digest
     ):
         raise HTTPException(status_code=401, detail="Invalid Compute Job lease")
-    action = await db_session.get(ResearchAction, job.action_id)
-    run = await db_session.get(ResearchRun, action.run_id) if action else None
-    task = await db_session.get(ResearchTask, run.task_id) if run else None
-    if action is None or run is None or task is None:
-        raise HTTPException(status_code=409, detail="Compute Job context is missing")
+    job, action, run, task = await _lock_compute_job_context(db_session, job)
+    if (
+        job.runner_id != runner.id
+        or job.lease_token_digest is None
+        or not hmac.compare_digest(job.lease_token_digest, digest)
+    ):
+        raise HTTPException(status_code=401, detail="Compute Job lease changed")
     return job, action, run, task
+
+
+async def _authorize_analysis_request(db_session, job, runner, *, check_deadline=True):
+    try:
+        return await authorize_analysis_runtime(
+            db_session, job, runner, check_deadline=check_deadline
+        )
+    except HTTPException as error:
+        await invalidate_analysis_execution(
+            db_session,
+            job,
+            reason="Private Compute execution authority changed or expired",
+        )
+        await db_session.commit()
+        raise HTTPException(
+            409, "Private Compute execution authority changed or expired"
+        ) from error
 
 
 def _ensure_live_lease(job: ResearchComputeJob) -> None:
@@ -1020,10 +1143,12 @@ async def _output_rows(db_session: DBSession, job_id: UUID):
 async def _refresh_output_manifest(
     db_session: DBSession, job: ResearchComputeJob
 ) -> list[dict[str, Any]]:
-    manifest = [
-        compute_output_snapshot(output, blob)
-        for output, blob in await _output_rows(db_session, job.id)
-    ]
+    rows = await _output_rows(db_session, job.id)
+    manifest = (
+        private_output_manifest(rows)
+        if job.analysis_run_id is not None
+        else [compute_output_snapshot(output, blob) for output, blob in rows]
+    )
     job.output_manifest = manifest
     return manifest
 
@@ -1034,6 +1159,21 @@ async def lease_compute_job(
     db_session: DBSession,
 ):
     runner = await authenticate_compute_runner(db_session, runner_token)
+    # Serialize capacity checks for this Runner. Job SKIP LOCKED alone permits
+    # concurrent requests to lease different jobs beyond the same slot ceiling.
+    runner = await db_session.scalar(
+        select(ResearchComputeRunner)
+        .where(
+            ResearchComputeRunner.id == runner.id,
+            ResearchComputeRunner.token_digest
+            == compute_runner_token_digest(runner_token),
+            ResearchComputeRunner.revoked_at.is_(None),
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if runner is None:
+        raise HTTPException(401, "Compute Runner credential changed")
     if not runner.enabled or not runner_report_is_execution_ready(runner):
         raise HTTPException(
             status_code=403, detail="Compute Runner is not execution-ready"
@@ -1051,11 +1191,35 @@ async def lease_compute_job(
                     ResearchComputeJob.runner_id == runner.id,
                     ResearchComputeJob.status.in_(ACTIVE_COMPUTE_JOB_STATUSES),
                 )
-                .with_for_update(skip_locked=True)
+                .execution_options(populate_existing=True)
             )
         ).all()
     )
-    for active in active_jobs:
+    for candidate in active_jobs:
+        try:
+            active, _action, _run, _task = await _lock_compute_job_context(
+                db_session, candidate, skip_locked=True
+            )
+        except JobDeferred:
+            continue
+        if (
+            active.runner_id != runner.id
+            or active.status not in ACTIVE_COMPUTE_JOB_STATUSES
+        ):
+            continue
+        if (
+            active.analysis_run_id is not None
+            and active.status in {"running", "cancel_requested"}
+            and active.lease_expires_at is not None
+            and active.lease_expires_at <= now
+        ):
+            await finish_analysis_failure(
+                db_session,
+                active,
+                error="Compute Runner lease expired; execution outcome is uncertain",
+                uncertain=True,
+            )
+            continue
         if (
             active.status == ResearchComputeJobStatus.LEASED.value
             and active.started_at is None
@@ -1142,24 +1306,112 @@ async def lease_compute_job(
         ResearchComputeRunnerEnvironment.runner_id == runner.id,
         ResearchComputeRunnerEnvironment.archived_at.is_(None),
     )
-    job = (
-        await db_session.scalars(
-            select(ResearchComputeJob)
-            .join(ResearchAction, ResearchAction.id == ResearchComputeJob.action_id)
-            .where(
-                ResearchComputeJob.status == ResearchComputeJobStatus.QUEUED.value,
-                ResearchComputeJob.compute_environment_revision_id.in_(bound_revisions),
-                ResearchAction.status == ResearchActionStatus.QUEUED.value,
-            )
-            .order_by(ResearchComputeJob.created_at, ResearchComputeJob.id)
-            .limit(1)
-            .with_for_update(skip_locked=True)
+    from app.models.workflow_analysis import ResearchAnalysisAction
+
+    inactive_workflow = (
+        select(ResearchAnalysisAction.action_id)
+        .join(ResearchAction, ResearchAction.id == ResearchAnalysisAction.action_id)
+        .join(ResearchRun, ResearchRun.id == ResearchAction.run_id)
+        .join(ResearchTask, ResearchTask.id == ResearchRun.task_id)
+        .where(
+            ResearchAnalysisAction.analysis_run_id
+            == ResearchComputeJob.analysis_run_id,
+            or_(
+                ResearchTask.status != "active",
+                ResearchRun.status.in_(["paused", "cancelled", "completed", "failed"]),
+                ResearchAction.status != "queued",
+            ),
         )
-    ).first()
+        .correlate(ResearchComputeJob)
+        .exists()
+    )
+    candidates_statement = (
+        select(ResearchComputeJob)
+        .outerjoin(ResearchAction, ResearchAction.id == ResearchComputeJob.action_id)
+        .where(
+            ResearchComputeJob.status == ResearchComputeJobStatus.QUEUED.value,
+            ResearchComputeJob.compute_environment_revision_id.in_(bound_revisions),
+            ~inactive_workflow,
+            or_(
+                and_(
+                    ResearchComputeJob.analysis_run_id.is_(None),
+                    ResearchAction.status == ResearchActionStatus.QUEUED.value,
+                    RESEARCH_JOB_SCHEMA in runner_job_schemas(runner),
+                ),
+                and_(
+                    ResearchComputeJob.analysis_run_id.is_not(None),
+                    ResearchComputeJob.action_id.is_(None),
+                    ANALYSIS_JOB_SCHEMA in runner_job_schemas(runner),
+                ),
+            ),
+        )
+        .order_by(ResearchComputeJob.created_at, ResearchComputeJob.id)
+    )
+    candidates = list((await db_session.scalars(candidates_statement.limit(100))).all())
+    job = None
+    for candidate in candidates:
+        try:
+            locked, _action, _run, _task = await _lock_compute_job_context(
+                db_session, candidate, skip_locked=True
+            )
+            # The candidate may have been cancelled, delivered or unbound while
+            # acquiring its parents. Reapply the complete eligible selection.
+            eligible = await db_session.scalar(
+                candidates_statement.where(
+                    ResearchComputeJob.id == locked.id
+                ).execution_options(populate_existing=True)
+            )
+            if eligible is None or await _workflow_compute_delivery_paused(
+                db_session, eligible
+            ):
+                continue
+        except JobDeferred:
+            continue
+        job = eligible
+        break
     if job is None:
         runner.last_seen_at = now
         await db_session.commit()
         return {"job": None, "retry_after_seconds": 15}
+    if job.analysis_run_id is not None:
+        try:
+            analysis, _details = await _authorize_analysis_request(
+                db_session, job, runner
+            )
+        except HTTPException:
+            return {"job": None, "retry_after_seconds": 15}
+        if analysis.status != "pending":
+            await finish_analysis_failure(
+                db_session, job, error="Private analysis is not awaiting execution"
+            )
+            await db_session.commit()
+            return {"job": None, "retry_after_seconds": 15}
+        input_row = await db_session.scalar(
+            select(ResearchComputeJobInput).where(
+                ResearchComputeJobInput.compute_job_id == job.id,
+                ResearchComputeJobInput.analysis_run_id == analysis.id,
+            )
+        )
+        revision = await db_session.get(
+            ResearchComputeEnvironmentRevision, job.compute_environment_revision_id
+        )
+        return await _deliver_compute_lease(
+            db_session,
+            job=job,
+            runner=runner,
+            revision=revision,
+            context={
+                "schema": ANALYSIS_JOB_SCHEMA,
+                "context": {
+                    "kind": "analysis",
+                    "analysis_id": str(analysis.id),
+                    "project_id": str(analysis.project_id),
+                    "lab_id": str(runner.lab_id),
+                },
+            },
+            inputs=[analysis_input_manifest(job, analysis, input_row)],
+            output_rows=await _output_rows(db_session, job.id),
+        )
     action = await db_session.get(ResearchAction, job.action_id)
     run = await db_session.get(ResearchRun, action.run_id) if action else None
     task = await db_session.get(ResearchTask, run.task_id) if run else None
@@ -1264,6 +1516,40 @@ async def lease_compute_job(
         )
         await db_session.commit()
         return {"job": None, "retry_after_seconds": 15}
+    return await _deliver_compute_lease(
+        db_session,
+        job=job,
+        runner=runner,
+        revision=revision,
+        context={
+            "schema": RESEARCH_JOB_SCHEMA,
+            "action_id": str(action.id),
+            "task_id": str(task.id),
+            "run_id": str(run.id),
+        },
+        inputs=[
+            {
+                "id": str(input_row.id),
+                "mount_name": input_row.mount_name,
+                "data_asset_id": str(asset.id),
+                "data_asset_version_id": str(version.id),
+                "data_asset_version": version.version,
+                "filename": research_file.filename,
+                "media_type": blob.content_type,
+                "byte_size": blob.size_bytes,
+                "checksum_sha256": blob.checksum_sha256,
+                "download_path": f"/compute-runner/v1/jobs/{job.id}/inputs/{input_row.id}",
+            }
+            for input_row, asset, version, research_file, blob in input_rows
+        ],
+        output_rows=output_rows,
+    )
+
+
+async def _deliver_compute_lease(
+    db_session, *, job, runner, revision, context, inputs, output_rows
+):
+    now = utcnow()
     lease_token = generate_compute_lease_token()
     expires_at = now + timedelta(seconds=LEASE_SECONDS)
     job.status = ResearchComputeJobStatus.LEASED.value
@@ -1276,11 +1562,8 @@ async def lease_compute_job(
     job.revision += 1
     runner.last_seen_at = now
     envelope = {
-        "schema": "airalogy.compute-job.v1",
+        **context,
         "job_id": str(job.id),
-        "action_id": str(action.id),
-        "task_id": str(task.id),
-        "run_id": str(run.id),
         "issued_at": now.isoformat(),
         "lease_expires_at": expires_at.isoformat(),
         "environment": {
@@ -1299,23 +1582,7 @@ async def lease_compute_job(
             "sha256": job.source_sha256,
         },
         "input_payload": job.input_payload,
-        "inputs": [
-            {
-                "id": str(input_row.id),
-                "mount_name": input_row.mount_name,
-                "data_asset_id": str(asset.id),
-                "data_asset_version_id": str(version.id),
-                "data_asset_version": version.version,
-                "filename": research_file.filename,
-                "media_type": blob.content_type,
-                "byte_size": blob.size_bytes,
-                "checksum_sha256": blob.checksum_sha256,
-                "download_path": (
-                    f"/compute-runner/v1/jobs/{job.id}/inputs/{input_row.id}"
-                ),
-            }
-            for input_row, asset, version, research_file, blob in input_rows
-        ],
+        "inputs": inputs,
         "outputs": [
             {
                 "id": str(output.id),
@@ -1336,21 +1603,35 @@ async def lease_compute_job(
         ],
         "result_schema": job.result_schema,
     }
-    await emit_research_event(
-        db_session,
-        task_id=task.id,
-        run_id=run.id,
-        action_id=action.id,
-        kind="compute_job.leased",
-        actor_user_id=None,
-        payload={
-            "compute_job_id": str(job.id),
-            "runner_id": str(runner.id),
-            "lease_expires_at": expires_at.isoformat(),
-            "attempt": job.attempt_count,
-        },
-        idempotency_key=f"compute-job:{job.id}:leased:{job.attempt_count}",
-    )
+    if job.analysis_run_id is not None:
+        await emit_analysis_compute_event(
+            db_session,
+            job.analysis_run_id,
+            "compute.leased",
+            payload={
+                "compute_job_id": str(job.id),
+                "runner_id": str(runner.id),
+                "lease_expires_at": expires_at.isoformat(),
+                "attempt": job.attempt_count,
+            },
+            key=f"leased:{job.attempt_count}",
+        )
+    else:
+        await emit_research_event(
+            db_session,
+            task_id=UUID(context["task_id"]),
+            run_id=UUID(context["run_id"]),
+            action_id=job.action_id,
+            kind="compute_job.leased",
+            actor_user_id=None,
+            payload={
+                "compute_job_id": str(job.id),
+                "runner_id": str(runner.id),
+                "lease_expires_at": expires_at.isoformat(),
+                "attempt": job.attempt_count,
+            },
+            idempotency_key=f"compute-job:{job.id}:leased:{job.attempt_count}",
+        )
     await db_session.commit()
     return {
         "job": envelope,
@@ -1380,6 +1661,40 @@ async def download_compute_input(
     }:
         raise HTTPException(status_code=409, detail="Compute Job is not active")
     _ensure_live_lease(job)
+    if job.analysis_run_id is not None:
+        run, _details = await _authorize_analysis_request(db_session, job, runner)
+        input_row = await db_session.scalar(
+            select(ResearchComputeJobInput).where(
+                ResearchComputeJobInput.id == input_id,
+                ResearchComputeJobInput.compute_job_id == job.id,
+                ResearchComputeJobInput.analysis_run_id == run.id,
+            )
+        )
+        if input_row is None:
+            raise HTTPException(404, "Compute input not found")
+        manifest = analysis_input_manifest(job, run, input_row)
+        payload = analysis_compute_input_bytes(run)
+        now = utcnow()
+        runner.last_seen_at = job.heartbeat_at = now
+        job.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
+        await emit_analysis_compute_event(
+            db_session,
+            run.id,
+            "compute.input_downloaded",
+            payload={"compute_job_id": str(job.id), "input_id": str(input_row.id)},
+            key=f"input:{input_row.id}:attempt:{job.attempt_count}",
+        )
+        await db_session.commit()
+        return Response(
+            payload,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="records.json"',
+                "X-Content-SHA256": manifest["checksum_sha256"],
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
     row = (
         await db_session.execute(
             select(ResearchComputeJobInput, ResearchFile, ResearchFileBlob)
@@ -1448,6 +1763,29 @@ async def start_compute_job(
     )
     if job.status != ResearchComputeJobStatus.LEASED.value:
         raise HTTPException(status_code=409, detail="Compute Job cannot be started")
+    if job.analysis_run_id is not None:
+        _ensure_live_lease(job)
+        run, _details = await _authorize_analysis_request(db_session, job, runner)
+        if run.status != "pending":
+            raise HTTPException(409, "Private analysis is not ready")
+        now = utcnow()
+        job.status = run.status = "running"
+        job.started_at = run.started_at = now
+        job.heartbeat_at = runner.last_seen_at = now
+        job.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
+        job.revision += 1
+        from app.services.workflow_compute_runtime import started_compute
+
+        await started_compute(db_session, job)
+        await emit_analysis_compute_event(
+            db_session,
+            run.id,
+            "compute.started",
+            payload={"compute_job_id": str(job.id), "runner_id": str(runner.id)},
+            key="started",
+        )
+        await db_session.commit()
+        return {"status": job.status, "lease_expires_at": job.lease_expires_at}
     if (
         task.status != ResearchTaskStatus.ACTIVE.value
         or run.status != ResearchRunStatus.WAITING_FOR_COMPUTE.value
@@ -1509,6 +1847,33 @@ async def heartbeat_compute_job(
         job.started_at
         and now >= job.started_at + timedelta(seconds=job.timeout_seconds)
     )
+    if job.analysis_run_id is not None:
+        try:
+            await _authorize_analysis_request(db_session, job, runner)
+        except HTTPException:
+            return {
+                "status": job.status,
+                "cancel_requested": True,
+                "reason": job.cancel_reason,
+            }
+        if timed_out:
+            await invalidate_analysis_execution(
+                db_session, job, reason="Compute Job timeout reached"
+            )
+            await db_session.commit()
+            return {
+                "status": job.status,
+                "cancel_requested": True,
+                "reason": job.cancel_reason,
+            }
+        job.heartbeat_at = runner.last_seen_at = now
+        job.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
+        await db_session.commit()
+        return {
+            "status": job.status,
+            "cancel_requested": False,
+            "lease_expires_at": job.lease_expires_at,
+        }
     if timed_out:
         job.status = ResearchComputeJobStatus.CANCEL_REQUESTED.value
         job.cancel_reason = "Compute Job timeout reached"
@@ -1574,6 +1939,10 @@ async def upload_compute_output(
     job, _action, _run, _task = await _runner_job_context(
         db_session, runner=runner, job_id=job_id, lease_token=lease_token
     )
+    if job.analysis_run_id is not None:
+        await _authorize_analysis_request(
+            db_session, job, runner, check_deadline=job.status != "completed"
+        )
     output = (
         await db_session.scalars(
             select(ResearchComputeJobOutput)
@@ -1678,6 +2047,8 @@ async def upload_compute_output(
     if job.status != ResearchComputeJobStatus.RUNNING.value:
         raise HTTPException(status_code=409, detail="Compute Job is not running")
     _ensure_live_lease(job)
+    if job.analysis_run_id is not None:
+        await _authorize_analysis_request(db_session, job, runner)
     output = (
         await db_session.scalars(
             select(ResearchComputeJobOutput)
@@ -1691,6 +2062,12 @@ async def upload_compute_output(
     if output is None:
         raise HTTPException(status_code=404, detail="Compute output is not declared")
     if output.blob_id is None:
+        # The streaming/storage phase released the first quota lock. Recheck
+        # under the owner lock at the actual logical-output binding boundary.
+        # An already bound idempotent receipt does not consume another slot.
+        await assert_research_file_upload_quota(
+            db_session, job.created_by_user_id, content_length
+        )
         inserted_id = await db_session.scalar(
             postgresql_insert(ResearchFileBlob)
             .values(
@@ -1737,22 +2114,35 @@ async def upload_compute_output(
                 detail="Compute output was concurrently uploaded with different content",
             )
     await _refresh_output_manifest(db_session, job)
-    await emit_research_event(
-        db_session,
-        task_id=task.id,
-        run_id=run.id,
-        action_id=action.id,
-        kind="compute_output.uploaded",
-        actor_user_id=None,
-        payload={
-            "compute_job_id": str(job.id),
-            "output_id": str(output.id),
-            "mount_name": output.mount_name,
-            "checksum_sha256": blob.checksum_sha256,
-            "byte_size": blob.size_bytes,
-        },
-        idempotency_key=f"compute-output:{output.id}:uploaded:{blob.checksum_sha256}",
-    )
+    if job.analysis_run_id is not None:
+        await emit_analysis_compute_event(
+            db_session,
+            job.analysis_run_id,
+            "compute.output_uploaded",
+            payload={
+                "output_id": str(output.id),
+                "checksum_sha256": blob.checksum_sha256,
+                "byte_size": blob.size_bytes,
+            },
+            key=f"upload:{output.id}:{blob.checksum_sha256}",
+        )
+    else:
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            action_id=action.id,
+            kind="compute_output.uploaded",
+            actor_user_id=None,
+            payload={
+                "compute_job_id": str(job.id),
+                "output_id": str(output.id),
+                "mount_name": output.mount_name,
+                "checksum_sha256": blob.checksum_sha256,
+                "byte_size": blob.size_bytes,
+            },
+            idempotency_key=f"compute-output:{output.id}:uploaded:{blob.checksum_sha256}",
+        )
     await db_session.commit()
     return {
         "status": "uploaded",
@@ -1822,42 +2212,12 @@ async def _register_compute_output_assets(
     task: ResearchTask,
     completed_outputs: list[RunnerCompletedOutput],
 ) -> list[dict[str, Any]]:
+    if job.analysis_run_id is not None:
+        raise HTTPException(
+            409, "Private Compute outputs cannot be published as Project assets"
+        )
     rows = await _output_rows(db_session, job.id)
-    provided = {item.output_id: item for item in completed_outputs}
-    declared_ids = {output.id for output, _blob in rows}
-    if set(provided) - declared_ids:
-        raise HTTPException(status_code=422, detail="Compute output was not declared")
-    uploaded: list[tuple[ResearchComputeJobOutput, ResearchFileBlob]] = []
-    for output, blob in rows:
-        completion = provided.get(output.id)
-        if blob is None:
-            if output.required:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Required Compute output {output.mount_name} was not uploaded",
-                )
-            if completion is not None:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Compute completion references an output that was not uploaded",
-                )
-            continue
-        if completion is None:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Uploaded Compute output {output.mount_name} is missing from completion",
-            )
-        if (
-            completion.checksum_sha256 != blob.checksum_sha256
-            or completion.byte_size != blob.size_bytes
-            or blob.content_type != output.media_type
-            or blob.size_bytes > output.max_bytes
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail=f"Compute output {output.mount_name} changed after upload",
-            )
-        uploaded.append((output, blob))
+    uploaded = verified_output_receipts(rows, completed_outputs)
 
     if uploaded:
         await assert_research_file_upload_quota(
@@ -1940,6 +2300,10 @@ async def complete_compute_job(
     job, action, run, task = await _runner_job_context(
         db_session, runner=runner, job_id=job_id, lease_token=lease_token
     )
+    if job.analysis_run_id is not None:
+        run, analysis_details = await _authorize_analysis_request(
+            db_session, job, runner, check_deadline=job.status != "completed"
+        )
     if job.status == ResearchComputeJobStatus.COMPLETED.value:
         if (
             job.result != params.result
@@ -1961,14 +2325,20 @@ async def complete_compute_job(
     uploaded_output_bytes = sum(
         blob.size_bytes for _output, blob in output_rows if blob is not None
     )
-    result_bytes = len(
-        json.dumps(
-            params.result,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    )
+    try:
+        result_bytes = len(
+            json.dumps(
+                params.result,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        )
+    except (ValueError, TypeError) as error:
+        raise HTTPException(
+            422, "Compute result must contain finite JSON values"
+        ) from error
     if params.usage.output_bytes < uploaded_output_bytes + result_bytes:
         raise HTTPException(
             status_code=422,
@@ -1976,6 +2346,28 @@ async def complete_compute_job(
         )
     try:
         validate_schema_payload(job.result_schema, params.result, "compute result")
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if job.analysis_run_id is not None:
+        from app.services.workflow_compute_runtime import (
+            validate_workflow_compute_result,
+        )
+
+        await validate_workflow_compute_result(db_session, job, params.result)
+        await seal_analysis_completion(
+            db_session,
+            job,
+            run,
+            analysis_details,
+            result=params.result,
+            usage=params.usage.model_dump(mode="json"),
+            rows=output_rows,
+            outputs=params.outputs,
+        )
+        runner.last_seen_at = utcnow()
+        await db_session.commit()
+        return {"status": job.status}
+    try:
         actual_cost = await settle_compute_budget(
             db_session,
             task=task,
@@ -2106,6 +2498,22 @@ async def fail_compute_job(
             )
         await db_session.commit()
         return {"status": job.status}
+    if job.analysis_run_id is not None:
+        if job.status not in {"leased", "running", "cancel_requested"}:
+            raise HTTPException(409, "Compute Job is not active")
+        if job.status != "cancel_requested":
+            _ensure_live_lease(job)
+        if params.usage is not None:
+            _validate_usage(job, params.usage)
+        await finish_analysis_failure(
+            db_session,
+            job,
+            error=params.error,
+            usage=params.usage.model_dump(mode="json") if params.usage else None,
+        )
+        runner.last_seen_at = utcnow()
+        await db_session.commit()
+        return {"status": job.status}
     if job.status not in {
         ResearchComputeJobStatus.LEASED.value,
         ResearchComputeJobStatus.RUNNING.value,
@@ -2190,6 +2598,19 @@ async def acknowledge_compute_cancellation(
         return {"status": job.status}
     if job.status != ResearchComputeJobStatus.CANCEL_REQUESTED.value:
         raise HTTPException(status_code=409, detail="Cancellation was not requested")
+    if job.analysis_run_id is not None:
+        if params.usage is not None:
+            _validate_usage(job, params.usage)
+        await finish_analysis_failure(
+            db_session,
+            job,
+            error=params.reason.strip() or job.cancel_reason or "Cancelled",
+            usage=params.usage.model_dump(mode="json") if params.usage else None,
+            cancelled=True,
+        )
+        runner.last_seen_at = utcnow()
+        await db_session.commit()
+        return {"status": job.status}
     now = utcnow()
     runner.last_seen_at = now
     if params.usage is not None:

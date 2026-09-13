@@ -15,6 +15,8 @@ from urllib.request import (
     build_opener,
 )
 
+from .models import SUPPORTED_JOB_SCHEMAS
+
 
 class RunnerAPIError(RuntimeError):
     def __init__(self, message: str, *, status: int | None = None):
@@ -104,6 +106,7 @@ class PlatformClient:
             "/compute-runner/v1/status",
             payload={
                 "protocol_version": "airalogy.compute-runner.v1",
+                "job_schemas": list(SUPPORTED_JOB_SCHEMAS),
                 "runner_version": "0.1.0",
                 "executor_backend": backend,
                 "active_jobs": 1 if active else 0,

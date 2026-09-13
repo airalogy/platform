@@ -125,6 +125,12 @@ export const checks = {
     command: "corepack",
     args: ["pnpm", "compute-runner:test"],
   },
+  computeEngine: {
+    id: "compute-engine",
+    label: "real isolated Compute engine and private input/output acceptance",
+    command: "node",
+    args: ["scripts/compute-runner-integration.mjs"],
+  },
   docs: {
     id: "docs",
     label: "documentation production build",
@@ -192,7 +198,7 @@ const GATEWAY_FILES = new Set([
   "scripts/sync-instrument-contract.mjs",
   "scripts/instrument-authoring-example.mjs",
 ])
-const COMPUTE_RUNNER_FILES = new Set([".github/workflows/compute-runner.yml"])
+const COMPUTE_RUNNER_FILES = new Set([".github/workflows/compute-runner.yml", "scripts/compute-runner-integration.mjs"])
 
 function hasPath(files, exactFiles, prefixes = []) {
   return files.some(
@@ -234,18 +240,34 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   }
   if (files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
+    || /^apps\/api\/(?:app\/(?:models|routers|services)\/workflow|tests\/test_workflow)/.test(file)
+    || /^apps\/api\/(?:app\/(?:models|routers|services)\/(?:analys(?:is|es)|record_analyses)|tests\/(?:test_analysis|test_record_analysis))/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
     || /^apps\/api\/tests\/(?:activation|instrument_output|http_read|authoring|exploration)_acceptance\.py$/.test(file)
     || /^apps\/instrument-gateway\/(?:src|tests|examples)\//.test(file)
+    || /^apps\/compute-runner\/(?:src|tests)\//.test(file)
     || file.startsWith("apps/instrument-interface/")
-    || /^apps\/api\/migrations\/versions\/\d+_instrument/.test(file)
+    || /^apps\/api\/migrations\/versions\/\d+_(?:instrument|analysis|workflow)/.test(file)
     || [
       "apps/api/app/services/persistent_jobs.py",
       "apps/api/app/services/resource_job_worker.py",
+      "apps/api/app/models/airalogy_file.py",
+      "apps/api/app/routers/airalogy_files.py",
+      "apps/api/app/routers/airalogy_api.py",
+      "apps/api/app/routers/records.py",
+      "apps/api/app/routers/record_exports.py",
+      "apps/api/app/routers/aira_imports.py",
+      "apps/api/app/services/record_exports.py",
+      "apps/api/app/routers/labs.py",
+      "apps/api/app/libs/lab_force_delete.py",
+      "apps/api/tests/test_lab_workflow_file_cleanup.py",
+      "apps/api/tests/test_lab_workflow_file_cleanup_postgres.py",
       "apps/api/app/models/base.py",
       "apps/api/app/database.py",
       "tests/e2e/scripts/api-env.sh",
       "tests/e2e/scripts/research-integration.sh",
+      "scripts/research-integration.mjs",
+      "scripts/compute-runner-integration.mjs",
       ".github/workflows/research-integration.yml",
       "scripts/instrument-interface-example.mjs",
       "scripts/instrument-interface-worker-example.mjs",
@@ -292,6 +314,10 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
 
   if (hasPath(files, COMPUTE_RUNNER_FILES, ["apps/compute-runner/"])) {
     plan.push(checks.computeRunnerTests)
+  }
+  if (hasPath(files, COMPUTE_RUNNER_FILES, ["apps/compute-runner/"])
+    || files.some(file => /^apps\/api\/app\/(?:routers|services)\/(?:analysis_compute|research_compute_jobs)/.test(file))) {
+    plan.push(checks.computeEngine)
   }
 
   if (hasPath(files, DOCS_FILES, ["docs/"])) {

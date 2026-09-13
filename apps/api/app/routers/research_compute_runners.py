@@ -161,6 +161,14 @@ class ComputeRunnerReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     protocol_version: Literal["airalogy.compute-runner.v1"]
+    job_schemas: list[
+        Literal["airalogy.compute-job.v1", "airalogy.compute-job.analysis.v1"]
+    ] = Field(
+        default_factory=lambda: ["airalogy.compute-job.v1"],
+        min_length=1,
+        max_length=2,
+        strict=True,
+    )
     runner_version: str = Field(min_length=1, max_length=64)
     executor_backend: Literal["docker", "podman", "kubernetes", "slurm"]
     active_jobs: int = Field(ge=0, le=64)
@@ -170,6 +178,8 @@ class ComputeRunnerReport(BaseModel):
     @model_validator(mode="after")
     def normalize(self):
         self.runner_version = self.runner_version.strip()
+        if len(set(self.job_schemas)) != len(self.job_schemas):
+            raise ValueError("Compute Runner job schemas must be unique")
         return self
 
 

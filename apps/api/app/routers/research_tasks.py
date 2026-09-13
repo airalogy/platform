@@ -9,6 +9,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -94,6 +95,10 @@ from app.services.research_action_outputs import (
     action_output_digest,
     action_output_payload,
 )
+from app.services.research_asset_visibility import (
+    HIDDEN_SOURCE_STATUSES,
+    require_asset_snapshot_sources_readable,
+)
 from app.services.research_assets import research_asset_bundle
 from app.services.research_autonomy_evaluations import (
     current_autonomy_grant_snapshots,
@@ -172,6 +177,7 @@ from app.services.research_runtime import (
     hold_or_release_aira_action_group,
     initial_aira_state,
     require_research_capability,
+    require_research_context_readable,
     research_run_has_executable_ai_path,
     research_task_command,
     task_protocol_rows,
@@ -183,6 +189,13 @@ from app.services.research_services import (
     offering_snapshot,
 )
 from app.services.research_task_drafts import generate_research_task_draft
+from app.services.workflow_visibility import (
+    require_workflow_action_data_readable,
+    require_workflow_data_readable,
+    restricted_workflow_payload,
+    workflow_action_data_readable,
+    workflow_data_readable,
+)
 
 router = APIRouter(prefix="/research-tasks", tags=["research-tasks"])
 work_items_router = APIRouter(
@@ -208,6 +221,9 @@ class ResearchTaskDraft(BaseModel):
     resource_type_ids: list[UUID] = Field(default_factory=list, max_length=100)
     service_offering_ids: list[UUID] = Field(default_factory=list, max_length=50)
     compute_environment_ids: list[UUID] = Field(default_factory=list, max_length=50)
+    compute_environment_revision_ids: list[UUID] = Field(
+        default_factory=list, max_length=50
+    )
     owner_user_id: UUID | None = None
     ai_model: str | None = Field(default=None, max_length=128)
     deadline_at: datetime | None = None
@@ -241,6 +257,12 @@ class ResearchTaskDraft(BaseModel):
             raise ValueError("Service offering selection contains duplicates")
         if len(set(self.compute_environment_ids)) != len(self.compute_environment_ids):
             raise ValueError("Compute environment selection contains duplicates")
+        if len(set(self.compute_environment_revision_ids)) != len(
+            self.compute_environment_revision_ids
+        ):
+            raise ValueError(
+                "Compute environment revision selection contains duplicates"
+            )
         if (self.budget_limit is None) != (self.budget_currency is None):
             raise ValueError("Budget limit and currency must be provided together")
         if self.budget_currency is not None:
@@ -442,6 +464,15 @@ async def _task_context(
     task = await db_session.get(ResearchTask, task_id)
     if task is None or task.archived_at is not None:
         raise HTTPException(status_code=404, detail="Research Task not found")
+    if capability == "research.run":
+        task = await db_session.scalar(
+            select(ResearchTask)
+            .where(ResearchTask.id == task_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if task is None or task.archived_at is not None:
+            raise HTTPException(status_code=404, detail="Research Task not found")
     project = await _project(db_session, task.project_id)
     await require_research_capability(
         db_session, user=current_user, project=project, capability=capability
@@ -699,6 +730,7 @@ async def _validate_new_run(
     *,
     task: ResearchTask,
     params: ResearchRunDraft,
+    current_user: User,
 ) -> tuple[ResearchRun, int, dict[str, Any]]:
     if task.revision != params.expected_task_revision:
         raise HTTPException(status_code=409, detail="Research Task has changed")
@@ -714,10 +746,19 @@ async def _validate_new_run(
     source_run = await db_session.get(ResearchRun, params.source_run_id)
     if source_run is None or source_run.task_id != task.id:
         raise HTTPException(status_code=404, detail="Source Research Run not found")
+    if (source_run.environment_snapshot or {}).get("manual_workflow"):
+        raise HTTPException(
+            status_code=409,
+            detail="Start a new Workflow preview with a draft Research Environment; fixed Workflow Runs cannot become open-ended Runs",
+        )
     if source_run.status not in TERMINAL_RUN_STATUSES:
         raise HTTPException(
             status_code=409, detail="Source Research Run must be terminal"
         )
+    await require_research_context_readable(
+        db_session, task=task, run=source_run, current_user=current_user
+    )
+    await _require_run_package_sources(db_session, task, source_run, current_user)
     nonterminal_run = (
         await db_session.scalars(
             select(ResearchRun)
@@ -1043,7 +1084,17 @@ async def _validate_task_draft(
     compute_environments: list[
         tuple[ResearchComputeEnvironment, ResearchComputeEnvironmentRevision]
     ] = []
-    for environment_id in draft.compute_environment_ids:
+    selections = [(value, None) for value in draft.compute_environment_ids]
+    for revision_id in draft.compute_environment_revision_ids:
+        selected_revision = await db_session.get(
+            ResearchComputeEnvironmentRevision, revision_id
+        )
+        if selected_revision is None:
+            raise HTTPException(422, "Compute environment revision is unavailable")
+        selections.append((selected_revision.compute_environment_id, selected_revision))
+    if len({item[0] for item in selections}) != len(selections):
+        raise HTTPException(422, "Select only one revision of each Compute environment")
+    for environment_id, selected_revision in selections:
         environment = await db_session.get(ResearchComputeEnvironment, environment_id)
         if (
             environment is None
@@ -1054,7 +1105,9 @@ async def _validate_task_draft(
                 status_code=422,
                 detail=f"Compute environment {environment_id} is unavailable in this Lab",
             )
-        revision = await latest_compute_environment_revision(db_session, environment.id)
+        revision = selected_revision or await latest_compute_environment_revision(
+            db_session, environment.id
+        )
         if revision is None or not revision.enabled:
             raise HTTPException(
                 status_code=422,
@@ -1303,6 +1356,7 @@ async def _task_summary(
     db_session: DBSession,
     task: ResearchTask,
     *,
+    current_user: User,
     project: Project | None = None,
     lab: Lab | None = None,
 ) -> dict[str, Any]:
@@ -1310,6 +1364,17 @@ async def _task_summary(
     lab = lab or await db_session.get(Lab, task.lab_id)
     owner = await db_session.get(User, task.owner_user_id)
     run = await _latest_run(db_session, task.id)
+    data_restricted = run is not None and not await workflow_data_readable(
+        db_session, run=run, current_user=current_user, project=project
+    )
+    try:
+        await require_research_context_readable(
+            db_session, task=task, run=run, current_user=current_user
+        )
+    except HTTPException as error:
+        if error.status_code not in HIDDEN_SOURCE_STATUSES:
+            raise
+        data_restricted = True
     open_items = await db_session.scalar(
         select(func.count())
         .select_from(ResearchHumanWorkItem)
@@ -1330,7 +1395,7 @@ async def _task_summary(
             ResearchApproval.status == ResearchApprovalStatus.PENDING.value,
         )
     )
-    return {
+    data = {
         **task.as_dict(),
         "deadline_at": task.deadline_at.isoformat() if task.deadline_at else None,
         "budget_limit": (
@@ -1343,7 +1408,13 @@ async def _task_summary(
             "name": project.name,
         },
         "lab": {"id": str(lab.id), "uid": lab.uid, "name": lab.name},
-        "latest_run": run.as_dict() if run is not None else None,
+        "latest_run": (
+            restricted_workflow_payload(run.as_dict(), kind="run")
+            if data_restricted and run is not None
+            else run.as_dict()
+            if run is not None
+            else None
+        ),
         "open_work_items": open_items or 0,
         "pending_approvals": pending_approvals or 0,
         "ai_available": bool(
@@ -1354,17 +1425,30 @@ async def _task_summary(
             )
         ),
     }
+    return restricted_workflow_payload(data, kind="task") if data_restricted else data
 
 
 async def _action_data(
     db_session: DBSession,
     action: ResearchAction,
     *,
+    current_user: User,
     project: Project,
     lab: Lab,
     dependency_rows: list[ResearchActionDependency] | None = None,
     dependent_action_ids: list[UUID] | None = None,
 ) -> dict[str, Any]:
+    run = await db_session.get(ResearchRun, action.run_id)
+    workflow_data_restricted = (
+        run is not None
+        and not await workflow_action_data_readable(
+            db_session,
+            run=run,
+            action=action,
+            current_user=current_user,
+            project=project,
+        )
+    )
     assignee = (
         await db_session.get(User, action.assignee_user_id)
         if action.assignee_user_id
@@ -1474,7 +1558,7 @@ async def _action_data(
                 for consumption, record, protocol in consumption_rows
             ],
         }
-    return {
+    data = {
         **action.as_dict(),
         "assignee": _user_data(assignee),
         "protocol_run": protocol_run.as_dict() if protocol_run else None,
@@ -1511,6 +1595,63 @@ async def _action_data(
         ],
         "dependent_action_ids": [str(item) for item in dependent_action_ids],
     }
+    if action.kind == ResearchActionKind.ANALYSIS_RUN.value:
+        from app.models.analysis import AnalysisRun
+        from app.models.workflow_analysis import ResearchAnalysisAction
+        from app.services.workflow_analysis_methods import (
+            get_method,
+            publication_payload,
+        )
+
+        bridge = await db_session.get(ResearchAnalysisAction, action.id)
+        analysis = (
+            await db_session.get(AnalysisRun, bridge.analysis_run_id)
+            if bridge and bridge.analysis_run_id
+            else None
+        )
+        data["analysis_run"] = {
+            "id": str(analysis.id) if analysis else None,
+            "status": analysis.status if analysis else "awaiting_approval",
+            "method_publication_id": str(bridge.method_publication_id)
+            if bridge
+            else None,
+            "can_open_private_report": bool(
+                analysis
+                and analysis.created_by_user_id == current_user.id
+                and not workflow_data_restricted
+            ),
+        }
+        if bridge is not None and not workflow_data_restricted:
+            try:
+                method = await get_method(
+                    db_session, current_user, bridge.method_publication_id, project
+                )
+                data["analysis_run"]["method"] = publication_payload(method)
+                if method.recipe.get("kind") == "compute":
+                    data["analysis_run"]["compute"] = deepcopy(
+                        (action.input_data.get("analysis_input") or {})
+                        .get("summary", {})
+                        .get("compute")
+                    )
+                    if analysis is not None:
+                        from app.services.workflow_compute_runtime import (
+                            verify_bound_compute,
+                        )
+
+                        job, _details = await verify_bound_compute(db_session, analysis)
+                        data["analysis_run"]["compute_job"] = compute_job_snapshot(job)
+                        data["analysis_run"]["output_download_base"] = (
+                            f"/research-tasks/{run.task_id}/actions/{action.id}/analysis/outputs"
+                        )
+            except HTTPException as error:
+                if error.status_code not in {403, 404, 409}:
+                    raise
+                workflow_data_restricted = True
+    return (
+        restricted_workflow_payload(data, kind="action")
+        if workflow_data_restricted
+        else data
+    )
 
 
 async def _approval_summary(
@@ -1532,10 +1673,34 @@ async def _approval_summary(
     }
 
 
+async def _require_run_package_sources(
+    db_session: DBSession, task: ResearchTask, run: ResearchRun, current_user: User
+) -> None:
+    """A historical seal does not grant access to its original source assets."""
+    await require_workflow_data_readable(db_session, run=run, current_user=current_user)
+    snapshot = await ResearchResultPackageSnapshot.find_by(
+        db_session, [ResearchResultPackageSnapshot.run_id == run.id]
+    )
+    if snapshot is not None:
+        try:
+            verify_result_package_digest(snapshot.package, snapshot.digest)
+        except ResearchResultPackageError as error:
+            raise HTTPException(
+                409, "Result snapshot failed integrity checks"
+            ) from error
+        package = snapshot.package
+    else:
+        package = run.result_package or {}
+    await require_asset_snapshot_sources_readable(
+        db_session, task_id=task.id, payload=package, user=current_user
+    )
+
+
 async def _reproduction_context(
     db_session: DBSession,
     task: ResearchTask,
     *,
+    current_user: User,
     run: ResearchRun | None = None,
     scientific_assets: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
@@ -1558,6 +1723,7 @@ async def _reproduction_context(
             status_code=409,
             detail="Replication source Run is unavailable in this Research Task",
         )
+    await _require_run_package_sources(db_session, task, source_run, current_user)
     source_snapshot = await ResearchResultPackageSnapshot.find_by(
         db_session,
         [ResearchResultPackageSnapshot.run_id == source_run.id],
@@ -1615,9 +1781,17 @@ async def _research_review_context(
     db_session: DBSession,
     task: ResearchTask,
     *,
+    current_user: User,
     scientific_assets: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], ResearchRun | None]:
     run = await _latest_run(db_session, task.id)
+    await require_research_context_readable(
+        db_session, task=task, run=run, current_user=current_user
+    )
+    if run is not None:
+        await require_workflow_data_readable(
+            db_session, run=run, current_user=current_user
+        )
     actions = (
         list(
             (
@@ -1637,6 +1811,7 @@ async def _research_review_context(
     reproduction_context = await _reproduction_context(
         db_session,
         task,
+        current_user=current_user,
         run=run,
         scientific_assets=assets,
     )
@@ -1698,7 +1873,9 @@ async def _task_detail(
     lab: Lab,
     current_user: User,
 ) -> dict[str, Any]:
-    summary = await _task_summary(db_session, task, project=project, lab=lab)
+    summary = await _task_summary(
+        db_session, task, current_user=current_user, project=project, lab=lab
+    )
     runs = list(
         (
             await db_session.scalars(
@@ -1709,6 +1886,25 @@ async def _task_detail(
         ).all()
     )
     run_ids = [run.id for run in runs]
+    restricted_run_ids = {
+        run.id
+        for run in runs
+        if not await workflow_data_readable(
+            db_session, run=run, current_user=current_user, project=project
+        )
+    }
+    for run in runs:
+        if run.id in restricted_run_ids:
+            continue
+        try:
+            await _require_run_package_sources(db_session, task, run, current_user)
+        except HTTPException as error:
+            if error.status_code not in HIDDEN_SOURCE_STATUSES:
+                raise
+            restricted_run_ids.add(run.id)
+    context_restricted = bool(summary.get("workflow_data_restricted"))
+    if restricted_run_ids or context_restricted:
+        summary = restricted_workflow_payload(summary, kind="task")
     actions = (
         list(
             (
@@ -1862,18 +2058,33 @@ async def _task_detail(
             dependents_by_action[dependency.depends_on_action_id].append(
                 dependency.action_id
             )
-    reproduction_context = await _reproduction_context(
-        db_session,
-        task,
-        run=runs[0] if runs else None,
-    )
+    reproduction_context = None
+    if not restricted_run_ids and not context_restricted:
+        try:
+            reproduction_context = await _reproduction_context(
+                db_session,
+                task,
+                current_user=current_user,
+                run=runs[0] if runs else None,
+            )
+        except HTTPException as error:
+            if error.status_code not in HIDDEN_SOURCE_STATUSES:
+                raise
+            context_restricted = True
+            summary = restricted_workflow_payload(summary, kind="task")
     return {
         **summary,
-        "runs": [run.as_dict() for run in runs],
+        "runs": [
+            restricted_workflow_payload(run.as_dict(), kind="run")
+            if context_restricted or run.id in restricted_run_ids
+            else run.as_dict()
+            for run in runs
+        ],
         "actions": [
             await _action_data(
                 db_session,
                 action,
+                current_user=current_user,
                 project=project,
                 lab=lab,
                 dependency_rows=dependencies_by_action[action.id],
@@ -1881,23 +2092,38 @@ async def _task_detail(
             )
             for action in actions
         ],
-        "events": [event.as_dict() for event in events],
-        "plan_versions": [plan.as_dict() for plan in plans],
+        "events": [
+            {**event.as_dict(), "payload": {}, "workflow_data_restricted": True}
+            if context_restricted or event.run_id in restricted_run_ids
+            else event.as_dict()
+            for event in events
+        ],
+        "plan_versions": [
+            plan.as_dict()
+            for plan in plans
+            if not context_restricted and plan.run_id not in restricted_run_ids
+        ],
         "protocols": protocols,
         "knowledge": knowledge,
         "resources": resources,
         "services": services,
         "compute": compute,
-        "review_recommendations": [item.as_dict() for item in review_recommendations],
+        "review_recommendations": [
+            item.as_dict()
+            for item in review_recommendations
+            if not context_restricted and item.run_id not in restricted_run_ids
+        ],
         "reproduction_context": reproduction_context,
         "permissions": {
-            "can_run": await has_research_capability(
+            "can_run": not restricted_run_ids
+            and await has_research_capability(
                 db_session,
                 user=current_user,
                 project=project,
                 capability="research.run",
             ),
-            "can_approve": await has_research_capability(
+            "can_approve": not restricted_run_ids
+            and await has_research_capability(
                 db_session,
                 user=current_user,
                 project=project,
@@ -2250,6 +2476,64 @@ async def create_research_task(
     return await _task_detail(db_session, task, project, lab, current_user)
 
 
+@router.get("/compute-environment-revisions")
+async def task_compute_environment_revisions(
+    project_id: UUID, current_user: CurrentUser, db_session: DBSession
+):
+    from app.services.research_compute import all_compute_environment_revision_rows
+
+    project = await _project(db_session, project_id)
+    await require_research_capability(
+        db_session,
+        user=current_user,
+        project=project,
+        capability="research.compute.use",
+    )
+    rows = await all_compute_environment_revision_rows(
+        db_session, lab_id=project.lab_id, enabled_only=True
+    )
+    return {
+        "items": [
+            compute_environment_snapshot(environment, revision)
+            for environment, revision in rows
+        ]
+    }
+
+
+@router.get("/{task_id}/actions/{action_id}/analysis/outputs/{output_id}")
+async def download_workflow_analysis_output(
+    task_id: UUID,
+    action_id: UUID,
+    output_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+):
+    from app.models.analysis import AnalysisRun
+    from app.models.workflow_analysis import ResearchAnalysisAction
+    from app.routers.analysis_compute import stream_analysis_compute_output
+    from app.services.workflow_compute_runtime import verify_bound_compute
+    from app.services.workflow_visibility import require_workflow_action_data_readable
+
+    task, project, _ = await _task_context(
+        db_session, current_user, task_id, "research.read"
+    )
+    action = await db_session.get(ResearchAction, action_id)
+    run = await db_session.get(ResearchRun, action.run_id) if action else None
+    if run is None or run.task_id != task.id or action.kind != "analysis_run":
+        raise HTTPException(404, "Workflow analysis not found")
+    await require_workflow_action_data_readable(
+        db_session, run=run, action=action, current_user=current_user, project=project
+    )
+    bridge = await db_session.get(ResearchAnalysisAction, action.id)
+    if bridge is None or bridge.analysis_run_id is None:
+        raise HTTPException(404, "Workflow computation not found")
+    analysis = await db_session.get(AnalysisRun, bridge.analysis_run_id)
+    job, _ = await verify_bound_compute(db_session, analysis)
+    return await stream_analysis_compute_output(
+        db_session, current_user, analysis, job, output_id
+    )
+
+
 @router.get("")
 async def list_research_tasks(
     current_user: CurrentUser,
@@ -2319,7 +2603,10 @@ async def list_research_tasks(
     total = len(visible_tasks)
     tasks = visible_tasks[(page - 1) * page_size : page * page_size]
     return {
-        "tasks": [await _task_summary(db_session, task) for task in tasks],
+        "tasks": [
+            await _task_summary(db_session, task, current_user=current_user)
+            for task in tasks
+        ],
         "total_count": total or 0,
     }
 
@@ -2345,7 +2632,7 @@ async def preview_research_run(
         db_session, current_user, task_id, "research.run"
     )
     source_run, next_run_number, command = await _validate_new_run(
-        db_session, task=task, params=params
+        db_session, task=task, params=params, current_user=current_user
     )
     return {
         "preview_digest": canonical_digest(command),
@@ -2412,7 +2699,7 @@ async def create_research_run(
         return await _task_detail(db_session, task, project, lab, current_user)
 
     source_run, next_run_number, command = await _validate_new_run(
-        db_session, task=task, params=params
+        db_session, task=task, params=params, current_user=current_user
     )
     preview_digest = canonical_digest(command)
     if preview_digest != params.preview_digest:
@@ -2511,6 +2798,10 @@ async def start_research_task(
     run = await _latest_run(db_session, task.id)
     if run is None or run.status != ResearchRunStatus.DRAFT.value:
         raise HTTPException(status_code=409, detail="Draft Research Run not found")
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        raise HTTPException(
+            status_code=409, detail="Use the fixed Workflow start confirmation"
+        )
     operational_limit = await reached_operational_limit(db_session, task=task)
     if operational_limit is not None:
         raise HTTPException(
@@ -2598,6 +2889,15 @@ async def pause_research_task(
             .with_for_update()
         )
     ).first()
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        from app.services.workflow_compute_runtime import stop_workflow_computes
+
+        await stop_workflow_computes(
+            db_session,
+            run=run,
+            pause=True,
+            reason=params.reason or "Research Task paused",
+        )
     if active_instrument_job is not None and active_instrument_job.status in {
         ResearchInstrumentJobStatus.LEASED.value,
         ResearchInstrumentJobStatus.RUNNING.value,
@@ -2728,7 +3028,50 @@ async def resume_research_task(
         ResearchRunStatus.FAILED.value,
     }:
         raise HTTPException(status_code=409, detail="Research Run cannot be resumed")
+    if (run.environment_snapshot or {}).get(
+        "manual_workflow"
+    ) and run.status == ResearchRunStatus.FAILED.value:
+        raise HTTPException(
+            status_code=409,
+            detail="A settled failed Workflow must be reviewed and started as a new confirmed Run",
+        )
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        from app.models.workflow_analysis import ResearchAnalysisAction
+
+        stopping = await db_session.scalar(
+            select(ResearchComputeJob.id)
+            .join(
+                ResearchAnalysisAction,
+                ResearchAnalysisAction.analysis_run_id
+                == ResearchComputeJob.analysis_run_id,
+            )
+            .join(ResearchAction, ResearchAction.id == ResearchAnalysisAction.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchComputeJob.status == "cancel_requested",
+            )
+        )
+        if stopping is not None:
+            raise HTTPException(
+                409,
+                "Wait for the Compute Runner cancellation acknowledgement before resuming",
+            )
     operational_limit = await reached_operational_limit(db_session, task=task)
+    if (
+        operational_limit is not None
+        and operational_limit[0] == "budget"
+        and (run.environment_snapshot or {}).get("manual_workflow")
+    ):
+        from app.services.workflow_compute_runtime import (
+            has_prepaid_compute_frontier,
+            settlement_only_workflow,
+        )
+
+        settlement_only = await settlement_only_workflow(db_session, run=run)
+        if settlement_only or await has_prepaid_compute_frontier(
+            db_session, task=task, run=run
+        ):
+            operational_limit = None
     if operational_limit is not None:
         raise HTTPException(
             status_code=409,
@@ -2871,6 +3214,9 @@ async def cancel_research_task(
     run = await _latest_run(db_session, task.id)
     now = utcnow()
     if run is not None:
+        from app.services.workflow_analysis_runtime import cancel_workflow_analyses
+
+        await cancel_workflow_analyses(db_session, run=run)
         released_resource_ids = await release_research_run_reservations(
             db_session,
             run_id=run.id,
@@ -3197,7 +3543,9 @@ async def generate_review_recommendation(
             project=project,
             capability="research.approve",
         )
-    review_context, _run = await _research_review_context(db_session, task)
+    review_context, _run = await _research_review_context(
+        db_session, task, current_user=current_user
+    )
     context_digest = canonical_digest(review_context)
     model_name = config.CHAT_MODEL_DEEP
     existing = await ResearchReviewRecommendation.find_by(
@@ -3240,7 +3588,7 @@ async def generate_review_recommendation(
             capability="research.approve",
         )
     current_context, current_run = await _research_review_context(
-        db_session, current_task
+        db_session, current_task, current_user=current_user
     )
     if (
         current_task.revision != params.expected_task_revision
@@ -3344,6 +3692,14 @@ async def complete_research_task(
             project=project,
             capability="research.approve",
         )
+    latest_run = await _latest_run(db_session, task.id)
+    await require_research_context_readable(
+        db_session, task=task, run=latest_run, current_user=current_user
+    )
+    if latest_run is not None:
+        await require_workflow_data_readable(
+            db_session, run=latest_run, current_user=current_user, project=project
+        )
     pending_evidence = await ResearchEvidence.count(
         db_session,
         [
@@ -3382,6 +3738,7 @@ async def complete_research_task(
         current_review_context, _review_run = await _research_review_context(
             db_session,
             task,
+            current_user=current_user,
             scientific_assets=scientific_assets,
         )
         if (
@@ -3431,6 +3788,7 @@ async def complete_research_task(
             ResearchRun.task_id == task.id,
             ResearchAction.status.in_(
                 [
+                    ResearchActionStatus.BLOCKED.value,
                     ResearchActionStatus.PROPOSED.value,
                     ResearchActionStatus.APPROVED.value,
                     ResearchActionStatus.QUEUED.value,
@@ -3457,6 +3815,7 @@ async def complete_research_task(
     reproduction_context = await _reproduction_context(
         db_session,
         task,
+        current_user=current_user,
         run=run,
         scientific_assets=scientific_assets,
     )
@@ -3607,6 +3966,11 @@ async def _manual_action_context(
         ResearchRunStatus.CANCELLED.value,
     }:
         raise HTTPException(status_code=409, detail="Active Research Run not found")
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot add Actions outside the fixed Workflow revision",
+        )
     operational_limit = await reached_operational_limit(db_session, task=task)
     if operational_limit is not None:
         raise HTTPException(
@@ -3779,7 +4143,9 @@ async def create_manual_protocol_action(
                 status_code=409,
                 detail="This idempotency key was already used for another Action",
             )
-        return await _action_data(db_session, existing, project=project, lab=lab)
+        return await _action_data(
+            db_session, existing, current_user=current_user, project=project, lab=lab
+        )
 
     task_protocol = await ResearchTaskProtocol.find_by(
         db_session,
@@ -3943,7 +4309,9 @@ async def create_manual_protocol_action(
         idempotency_key=f"action:{action.id}:assigned:1",
     )
     await db_session.commit()
-    return await _action_data(db_session, action, project=project, lab=lab)
+    return await _action_data(
+        db_session, action, current_user=current_user, project=project, lab=lab
+    )
 
 
 async def _manual_human_action_context(
@@ -3970,6 +4338,11 @@ async def _manual_human_action_context(
     run = await _latest_run(db_session, task.id)
     if run is None or run.status in TERMINAL_RUN_STATUSES:
         raise HTTPException(status_code=409, detail="Active Research Run not found")
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot add Actions outside the fixed Workflow revision",
+        )
     operational_limit = await reached_operational_limit(db_session, task=task)
     if operational_limit is not None:
         raise HTTPException(
@@ -4066,7 +4439,9 @@ async def create_manual_human_action(
                 status_code=409,
                 detail="This idempotency key was already used for another Action",
             )
-        return await _action_data(db_session, existing, project=project, lab=lab)
+        return await _action_data(
+            db_session, existing, current_user=current_user, project=project, lab=lab
+        )
     await create_plan_version(
         db_session,
         task=task,
@@ -4125,7 +4500,9 @@ async def create_manual_human_action(
     run.advance_generation += 1
     task.revision += 1
     await db_session.commit()
-    return await _action_data(db_session, action, project=project, lab=lab)
+    return await _action_data(
+        db_session, action, current_user=current_user, project=project, lab=lab
+    )
 
 
 async def _work_item_context(
@@ -4161,6 +4538,108 @@ async def _work_item_context(
     return item, action, run, task, project, lab
 
 
+async def _lock_fixed_workflow_execution(
+    db_session: DBSession,
+    *,
+    task: ResearchTask,
+    run: ResearchRun,
+    action: ResearchAction,
+    current_user: User,
+    project: Project,
+    require_actor_run: bool = True,
+) -> None:
+    """Serialize fixed-graph writes and recheck live execution authority."""
+    if not (run.environment_snapshot or {}).get("manual_workflow"):
+        return
+    await db_session.scalar(
+        select(ResearchTask)
+        .where(ResearchTask.id == task.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    await db_session.scalar(
+        select(ResearchRun)
+        .where(ResearchRun.id == run.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if task.status != ResearchTaskStatus.ACTIVE.value or run.status in {
+        *TERMINAL_RUN_STATUSES,
+        ResearchRunStatus.PAUSED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Resume the active Workflow before executing this card",
+        )
+    if require_actor_run:
+        await require_research_capability(
+            db_session, user=current_user, project=project, capability="research.run"
+        )
+    for user_id in {task.owner_user_id, run.requested_by_user_id}:
+        user = await db_session.get(User, user_id)
+        if user is None:
+            raise HTTPException(
+                status_code=403, detail="Workflow executor is unavailable"
+            )
+        await require_research_capability(
+            db_session, user=user, project=project, capability="research.run"
+        )
+    from app.services.research_runtime import verify_manual_workflow_execution
+
+    actions = list(
+        (
+            await db_session.scalars(
+                select(ResearchAction)
+                .where(ResearchAction.run_id == run.id)
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+    dependencies = list(
+        (
+            await db_session.scalars(
+                select(ResearchActionDependency).where(
+                    ResearchActionDependency.action_id.in_(
+                        [action.id for action in actions]
+                    )
+                )
+            )
+        ).all()
+    )
+    try:
+        await verify_manual_workflow_execution(
+            db_session, task=task, run=run, actions=actions, dependencies=dependencies
+        )
+    except (HTTPException, ValueError) as error:
+        # The actor has already passed execution/approval authorization. A source
+        # becoming unreadable or failing its immutable receipt is a paused
+        # boundary, never a newly computed scientific failure or an implicit retry.
+        message = str(error.detail) if isinstance(error, HTTPException) else str(error)
+        run.status = ResearchRunStatus.PAUSED.value
+        run.last_error = message
+        task.status = ResearchTaskStatus.PAUSED.value
+        task.revision += 1
+        await emit_research_event(
+            db_session,
+            task_id=task.id,
+            run_id=run.id,
+            kind="workflow.resolution_paused",
+            actor_user_id=current_user.id,
+            payload={"reason": message},
+            idempotency_key=f"run:{run.id}:workflow-resolution-paused:{task.revision}",
+        )
+        await db_session.commit()
+        raise HTTPException(
+            status_code=error.status_code if isinstance(error, HTTPException) else 409,
+            detail=message,
+        ) from error
+    # Approval authority is not source-data authority. An independently granted
+    # approver must see the bound values before confirming their exact digest.
+    await require_workflow_action_data_readable(
+        db_session, run=run, action=action, current_user=current_user, project=project
+    )
+
+
 async def _can_manage_work_item(
     db_session: DBSession,
     *,
@@ -4181,6 +4660,20 @@ async def _can_manage_work_item(
     return decision.allows("research.assign")
 
 
+async def _run_attachment_readable(db_session, *, task, run, current_user):
+    """Protect the complete embedded Run without disabling a readable card."""
+    try:
+        await require_research_context_readable(
+            db_session, task=task, run=run, current_user=current_user
+        )
+        await _require_run_package_sources(db_session, task, run, current_user)
+    except HTTPException as error:
+        if error.status_code in HIDDEN_SOURCE_STATUSES:
+            return False
+        raise
+    return True
+
+
 async def _work_item_data(
     db_session: DBSession,
     current_user: User,
@@ -4191,13 +4684,21 @@ async def _work_item_data(
     project: Project,
     lab: Lab,
 ) -> dict[str, Any]:
-    action_data = await _action_data(db_session, action, project=project, lab=lab)
+    action_data = await _action_data(
+        db_session, action, current_user=current_user, project=project, lab=lab
+    )
+    data_restricted = action_data.get("workflow_data_restricted", False)
+    run_data_restricted = not await _run_attachment_readable(
+        db_session, task=task, run=run, current_user=current_user
+    )
     can_assign = await has_research_capability(
         db_session,
         user=current_user,
         project=project,
         capability="research.assign",
     )
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        can_assign = False
     can_review = current_user.id == task.owner_user_id or await has_research_capability(
         db_session,
         user=current_user,
@@ -4205,11 +4706,23 @@ async def _work_item_data(
         capability="research.approve",
     )
     can_work = item.assignee_user_id == current_user.id
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        can_work = can_work and task.status == ResearchTaskStatus.ACTIVE.value
+    if data_restricted:
+        can_assign = can_review = can_work = False
     return {
-        **item.as_dict(),
+        **(
+            restricted_workflow_payload(item.as_dict(), kind="work_item")
+            if data_restricted
+            else item.as_dict()
+        ),
         "assignee": action_data["assignee"],
         "action": action_data,
-        "run": run.as_dict(),
+        "run": (
+            restricted_workflow_payload(run.as_dict(), kind="run")
+            if run_data_restricted
+            else run.as_dict()
+        ),
         "task": {
             "id": str(task.id),
             "title": task.title,
@@ -4312,6 +4825,17 @@ async def start_research_work_item(
         raise HTTPException(
             status_code=403, detail="Only the assignee can start this work"
         )
+    await _lock_fixed_workflow_execution(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+        current_user=current_user,
+        project=project,
+    )
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        await db_session.refresh(item)
+        await db_session.refresh(action)
     operational_limit = await reached_operational_limit(db_session, task=task)
     if operational_limit is not None:
         raise HTTPException(
@@ -4356,6 +4880,11 @@ async def assign_research_work_item(
     item, action, run, task, project, lab = await _work_item_context(
         db_session, current_user, work_item_id
     )
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        raise HTTPException(
+            status_code=409,
+            detail="The executor is pinned in this Workflow; use a newly confirmed Research Environment to change it",
+        )
     await require_research_capability(
         db_session,
         user=current_user,
@@ -4423,25 +4952,29 @@ def _record_payload(
         f"airalogy.id.lab.{lab.uid}.project.{project.uid}.protocol."
         f"{protocol.uid}.v.{protocol_version.protocol_version}"
     )
-    return {
-        "airalogy_record_id": record.airalogy_id,
-        "record_id": str(record.id),
-        "record_version": record.version,
-        "metadata": {
-            "airalogy_protocol_id": airalogy_protocol_id,
-            "protocol_id": protocol.uid,
-            "protocol_uuid": str(protocol.id),
-            "protocol_version": record.protocol_version,
-            "record_current_version_submission_time": record.created_at,
-            "record_current_version_submission_user_id": user.username,
-            "lab_id": lab.uid,
-            "project_id": project.uid,
-            "record_num": record.number,
-            "sha1": record.hash,
-        },
-        "data": record.data,
-        "report": record.report,
-    }
+    # This receipt is persisted in several JSON columns before any HTTP encoder
+    # runs. Normalize dates here so query-triggered autoflush is safe as well.
+    return jsonable_encoder(
+        {
+            "airalogy_record_id": record.airalogy_id,
+            "record_id": str(record.id),
+            "record_version": record.version,
+            "metadata": {
+                "airalogy_protocol_id": airalogy_protocol_id,
+                "protocol_id": protocol.uid,
+                "protocol_uuid": str(protocol.id),
+                "protocol_version": record.protocol_version,
+                "record_current_version_submission_time": record.created_at,
+                "record_current_version_submission_user_id": user.username,
+                "lab_id": lab.uid,
+                "project_id": project.uid,
+                "record_num": record.number,
+                "sha1": record.hash,
+            },
+            "data": record.data,
+            "report": record.report,
+        }
+    )
 
 
 async def _human_work_data_assets(
@@ -4539,8 +5072,7 @@ async def _validated_human_work_submission_command(
         "contract_digest": canonical_digest(item.submission_contract or {}),
         "values": values,
         "data_assets": [
-            _human_work_asset_snapshot(version, asset)
-            for version, asset in assets
+            _human_work_asset_snapshot(version, asset) for version, asset in assets
         ],
         "note": params.note,
     }
@@ -4587,11 +5119,7 @@ async def preview_human_work_submission(
         "command": command,
         "effects": [
             "Submit structured values for authorized review",
-            *(
-                [f"Link {len(assets)} exact DataAsset version(s)"]
-                if assets
-                else []
-            ),
+            *([f"Link {len(assets)} exact DataAsset version(s)"] if assets else []),
             "Keep downstream Actions blocked until the submission is accepted",
         ],
         "completion_criteria": request.completion_criteria,
@@ -4705,7 +5233,9 @@ async def _human_work_review_command(
     lock_assets: bool = False,
 ) -> tuple[dict[str, Any], HumanWorkRequest, list[tuple[DataAssetVersion, DataAsset]]]:
     if action.kind != ResearchActionKind.HUMAN_WORK_ITEM.value:
-        raise HTTPException(status_code=409, detail="This work uses Protocol validation")
+        raise HTTPException(
+            status_code=409, detail="This work uses Protocol validation"
+        )
     if item.status != HumanWorkItemStatus.SUBMITTED.value:
         raise HTTPException(status_code=409, detail="Human Work is not awaiting review")
     if item.revision != params.expected_revision:
@@ -4750,8 +5280,7 @@ async def _human_work_review_command(
         "reason": params.reason,
         "values": values,
         "data_assets": [
-            _human_work_asset_snapshot(version, asset)
-            for version, asset in assets
+            _human_work_asset_snapshot(version, asset) for version, asset in assets
         ],
     }
     return command, request, assets
@@ -5081,6 +5610,20 @@ async def submit_research_work_item(
         raise HTTPException(
             status_code=403, detail="Only the assignee can submit this work"
         )
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        # A settled duplicate receipt is read-only; all new submissions lock the
+        # shared Run before checking whether another occurrence used this Record.
+        if item.status != HumanWorkItemStatus.ACCEPTED.value:
+            await _lock_fixed_workflow_execution(
+                db_session,
+                task=task,
+                run=run,
+                action=action,
+                current_user=current_user,
+                project=project,
+            )
+            await db_session.refresh(item)
+            await db_session.refresh(action)
     if item.status == HumanWorkItemStatus.ACCEPTED.value:
         if item.record_id == params.record_id and (
             params.record_version is None
@@ -5117,6 +5660,22 @@ async def submit_research_work_item(
     ).first()
     if record is None:
         raise HTTPException(status_code=404, detail="Matching Record not found")
+    if (run.environment_snapshot or {}).get("manual_workflow"):
+        reused = await db_session.scalar(
+            select(ResearchProtocolRun.id)
+            .join(ResearchAction, ResearchAction.id == ResearchProtocolRun.action_id)
+            .where(
+                ResearchAction.run_id == run.id,
+                ResearchProtocolRun.action_id != action.id,
+                ResearchProtocolRun.record_id == record.id,
+            )
+            .limit(1)
+        )
+        if reused is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Each Workflow card requires its own independent Record",
+            )
     if record.user_id != current_user.id:
         raise HTTPException(
             status_code=403,
@@ -5127,6 +5686,31 @@ async def submit_research_work_item(
             status_code=409,
             detail="Record Protocol version does not match the pinned Protocol Run",
         )
+    from app.services.workflow_files import authorize_record_files
+
+    await authorize_record_files(db_session, record.data, current_user)
+    if ((run.environment_snapshot or {}).get("manual_workflow") or {}).get(
+        "execution_contract_version"
+    ) == 5:
+        from app.models.workflow_file import WorkflowFileBinding
+
+        bindings = list(
+            (
+                await db_session.scalars(
+                    select(WorkflowFileBinding).where(
+                        WorkflowFileBinding.action_id == action.id
+                    )
+                )
+            ).all()
+        )
+        for binding in bindings:
+            field = binding.source_ref["target_path"][1]
+            expected = protocol_run.initial_values.get(field)
+            if (record.data.get("var") or {}).get(field) != expected:
+                raise HTTPException(
+                    409,
+                    "Submitted Record file differs from the approved Workflow binding",
+                )
     protocol = await db_session.get(Protocol, protocol_run.protocol_id)
     record_user = await db_session.get(User, record.user_id)
     if protocol is None or record_user is None:
@@ -5329,8 +5913,6 @@ async def _approval_context(
     Lab,
 ]:
     statement = select(ResearchApproval).where(ResearchApproval.id == approval_id)
-    if lock:
-        statement = statement.with_for_update()
     approval = (await db_session.scalars(statement)).first()
     if approval is None:
         raise HTTPException(status_code=404, detail="Research Approval not found")
@@ -5339,6 +5921,25 @@ async def _approval_context(
     task = await db_session.get(ResearchTask, run.task_id) if run else None
     if action is None or run is None or task is None:
         raise HTTPException(status_code=404, detail="Research Task context not found")
+    if lock:
+        # Match pause/cancel/Record submission ordering: Task, Run, then the
+        # individual approval. An approval must not race a cancelled Workflow.
+        await db_session.scalar(
+            select(ResearchTask)
+            .where(ResearchTask.id == task.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        await db_session.scalar(
+            select(ResearchRun)
+            .where(ResearchRun.id == run.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        await db_session.scalar(
+            statement.with_for_update().execution_options(populate_existing=True)
+        )
+        await db_session.refresh(action)
     project = await _project(db_session, task.project_id)
     await require_research_capability(
         db_session,
@@ -5360,11 +5961,29 @@ async def _approval_data(
     task: ResearchTask,
     project: Project,
     lab: Lab,
+    *,
+    current_user: User,
 ) -> dict[str, Any]:
+    action_data = await _action_data(
+        db_session, action, current_user=current_user, project=project, lab=lab
+    )
+    data_restricted = action_data.get("workflow_data_restricted", False)
+    run_data_restricted = not await _run_attachment_readable(
+        db_session, task=task, run=run, current_user=current_user
+    )
+    approval_data = await _approval_summary(db_session, approval)
     return {
-        **(await _approval_summary(db_session, approval)),
-        "action": await _action_data(db_session, action, project=project, lab=lab),
-        "run": run.as_dict(),
+        **(
+            restricted_workflow_payload(approval_data, kind="approval")
+            if data_restricted
+            else approval_data
+        ),
+        "action": action_data,
+        "run": (
+            restricted_workflow_payload(run.as_dict(), kind="run")
+            if run_data_restricted
+            else run.as_dict()
+        ),
         "task": {
             "id": str(task.id),
             "title": task.title,
@@ -5451,7 +6070,9 @@ async def list_research_approvals(
             if error.status_code == 403:
                 continue
             raise
-        result.append(await _approval_data(db_session, *context))
+        result.append(
+            await _approval_data(db_session, *context, current_user=current_user)
+        )
     total = len(result)
     return {
         "approvals": result[(page - 1) * page_size : page * page_size],
@@ -5466,7 +6087,7 @@ async def get_research_approval(
     db_session: DBSession,
 ):
     context = await _approval_context(db_session, current_user, approval_id)
-    return await _approval_data(db_session, *context)
+    return await _approval_data(db_session, *context, current_user=current_user)
 
 
 @approvals_router.post("/{approval_id}/approve")
@@ -5485,6 +6106,15 @@ async def approve_research_action(
         approval=approval,
         project=project,
     )
+    await _lock_fixed_workflow_execution(
+        db_session,
+        task=task,
+        run=run,
+        action=action,
+        current_user=current_user,
+        project=project,
+        require_actor_run=False,
+    )
     _validate_pending_approval(approval, action, params)
     if task.status != ResearchTaskStatus.ACTIVE.value or run.status in {
         *TERMINAL_RUN_STATUSES,
@@ -5502,6 +6132,7 @@ async def approve_research_action(
         )
     if action.kind not in {
         ResearchActionKind.PROTOCOL_RUN.value,
+        ResearchActionKind.ANALYSIS_RUN.value,
         ResearchActionKind.HUMAN_WORK_ITEM.value,
         ResearchActionKind.TOOL_JOB.value,
         ResearchActionKind.RESOURCE_RESERVATION.value,
@@ -5547,6 +6178,12 @@ async def approve_research_action(
             )
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+    elif action.kind == ResearchActionKind.ANALYSIS_RUN.value:
+        from app.services.workflow_analysis_runtime import approve_workflow_analysis
+
+        await approve_workflow_analysis(
+            db_session, task=task, run=run, action=action, current_user=current_user
+        )
     elif action.kind == ResearchActionKind.HUMAN_WORK_ITEM.value:
         try:
             await activate_human_work_action(
@@ -5714,7 +6351,9 @@ async def approve_research_action(
         idempotency_key=f"approval:{approval.id}:approved",
     )
     await db_session.commit()
-    return await _approval_data(db_session, approval, action, run, task, project, lab)
+    return await _approval_data(
+        db_session, approval, action, run, task, project, lab, current_user=current_user
+    )
 
 
 @approvals_router.post("/{approval_id}/reject")
@@ -5860,4 +6499,6 @@ async def reject_research_action(
                 idempotency_key=f"run:{run.id}:manual:approval:{approval.id}",
             )
     await db_session.commit()
-    return await _approval_data(db_session, approval, action, run, task, project, lab)
+    return await _approval_data(
+        db_session, approval, action, run, task, project, lab, current_user=current_user
+    )

@@ -150,9 +150,7 @@ def _build_export(params: RecordExportParams, user_id: UUID) -> RecordExport:
             "record_number": params.record_number,
             "record_version": params.record_version,
             "query": (
-                params.query.strip()
-                if params.query and params.query.strip()
-                else None
+                params.query.strip() if params.query and params.query.strip() else None
             ),
         }.items()
         if value is not None
@@ -221,6 +219,12 @@ async def _reauthorize_export_download(
         include_attachments=record_export.include_attachments,
     )
     await _resolve_scope_and_authorize(db_session, params, user_id)
+    from app.models.user import User
+    from app.services.workflow_files import authorize_export_files
+
+    await authorize_export_files(
+        db_session, record_export, await db_session.get(User, user_id)
+    )
 
 
 @router.post("/preview")
@@ -385,6 +389,9 @@ async def create_download_url(
         url = await record_export_download_url(record_export)
     except RecordExportError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    from app.services.workflow_files import export_download_payload
+
+    protected = await export_download_payload(db_session, record_export, current_user)
     await add_export_audit(
         db_session,
         record_export,
@@ -394,9 +401,9 @@ async def create_download_url(
     record_export.seen_at = record_export.seen_at or utcnow()
     await db_session.commit()
     return {
-        "url": url,
+        "url": protected["url"] if protected else url,
         "filename": record_export.output_filename,
-        "expires_in_seconds": 3600,
+        "expires_in_seconds": protected["expires_in_seconds"] if protected else 3600,
         "checksum_sha256": record_export.checksum_sha256,
     }
 

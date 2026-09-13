@@ -106,6 +106,8 @@ const showIcon = computed(
     || route.name === "project-protocols"
     || route.name === "project-knowledge"
     || route.name === "project-research"
+    || route.name === "project-workflows"
+    || route.name === "project-analysis"
     || route.name === "project-records"
     || route.name === "project-members"
     || route.name === "project-settings",
@@ -131,6 +133,8 @@ const baseTabs = computed<(TabPaneProps & { name: App.Global.TabKey })[]>(() => 
   if (authStore.isLogin) {
     tabs.push({ name: "project-knowledge", tab: $t("page.knowledge.title") })
     tabs.push({ name: "project-research", tab: $t("page.research.title") })
+    tabs.push({ name: "project-workflows", tab: $t("page.workflowDefinitions.title") })
+    tabs.push({ name: "project-analysis", tab: $t("page.analysis.title") })
     tabs.push({ name: "project-records", tab: $t("page.recordDiary.tab") })
     tabs.push({ name: "project-members", tab: hintTab($t("page.project.tab.members"), membersHint.value) })
   }
@@ -276,6 +280,18 @@ async function setBreadcrumbs(info?: Api.Project.MyProjectInfo | null) {
           label: "Project research",
           i18nKey: "page.research.title",
           breadcrumbLabel: "Project research",
+        },
+        {
+          key: "project-workflows",
+          label: "Project workflows",
+          i18nKey: "page.workflowDefinitions.title",
+          breadcrumbLabel: "Project workflows",
+        },
+        {
+          key: "project-analysis",
+          label: "Project analysis",
+          i18nKey: "page.analysis.title",
+          breadcrumbLabel: "Project analysis",
         },
         {
           key: "project-records",

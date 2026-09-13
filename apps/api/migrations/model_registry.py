@@ -5,6 +5,9 @@ MODEL_MODULES = [
     "app.models.account_security",
     "app.models.account_token",
     "app.models.airalogy_file",
+    "app.models.analysis",
+    "app.models.analysis_ai",
+    "app.models.analysis_compute",
     "app.models.answer",
     "app.models.attachment",
     "app.models.chat",
@@ -42,6 +45,10 @@ MODEL_MODULES = [
     "app.models.user",
     "app.models.user_alias",
     "app.models.workflow",
+    "app.models.workflow_analysis",
+    "app.models.workflow_conversion",
+    "app.models.workflow_definition",
+    "app.models.workflow_file",
 ]
 
 

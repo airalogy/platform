@@ -30,6 +30,9 @@ from .access import router as access_router
 from .aira_imports import router as aira_imports_router
 from .airalogy_api import router as airalogy_router
 from .airalogy_files import router as airalogy_files_router
+from .analyses import router as analyses_router
+from .analysis_ai import router as analysis_ai_router
+from .analysis_compute import router as analysis_compute_router
 from .answers import router as answers_router
 from .attachments import router as attachments_router
 from .chats import router as chats_router
@@ -105,6 +108,10 @@ from .system import router as system_router
 from .user_aliases import router as user_aliases_router
 from .users import router as users_router
 from .workflow import router as workflow_router
+from .workflow_conversions import router as workflow_conversions_router
+from .workflow_definitions import router as workflow_definitions_router
+from .workflow_analysis_methods import router as workflow_analysis_methods_router
+from .workflow_files import router as workflow_files_router
 
 if config.APP_ENV != "production":
     from .dev_fixtures import router as dev_fixtures_router
@@ -301,6 +308,9 @@ app.include_router(protocols_router)
 app.include_router(protocol_versions_router)
 app.include_router(records_router)
 app.include_router(record_exports_router)
+app.include_router(analyses_router)
+app.include_router(analysis_ai_router)
+app.include_router(analysis_compute_router)
 app.include_router(research_tasks_router)
 app.include_router(research_work_items_router)
 app.include_router(research_approvals_router)
@@ -355,6 +365,10 @@ app.include_router(protocol_users_router)
 app.include_router(pinned_items_router)
 app.include_router(protocol_folders_router)
 app.include_router(workflow_router)
+app.include_router(workflow_conversions_router)
+app.include_router(workflow_definitions_router)
+app.include_router(workflow_analysis_methods_router)
+app.include_router(workflow_files_router)
 
 if config.APP_ENV != "production":
     app.include_router(dev_fixtures_router)

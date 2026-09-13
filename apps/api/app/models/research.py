@@ -58,6 +58,7 @@ class ResearchRunStatus(StrEnum):
 
 class ResearchActionKind(StrEnum):
     PROTOCOL_RUN = "protocol_run"
+    ANALYSIS_RUN = "analysis_run"
     TOOL_JOB = "tool_job"
     HUMAN_WORK_ITEM = "human_work_item"
     INSTRUMENT_JOB = "instrument_job"

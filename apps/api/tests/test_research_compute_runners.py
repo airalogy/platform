@@ -97,6 +97,8 @@ def test_compute_runner_report_requires_bounded_declared_runtime():
     )
 
     assert report.executor_backend == "podman"
+    assert report.job_schemas == ["airalogy.compute-job.v1"]
+    assert report.model_dump(mode="json")["job_schemas"] == ["airalogy.compute-job.v1"]
     with pytest.raises(ValidationError, match="Input should be"):
         ComputeRunnerReport(
             protocol_version="airalogy.compute-runner.v1",
@@ -104,6 +106,78 @@ def test_compute_runner_report_requires_bounded_declared_runtime():
             executor_backend="shell",
             active_jobs=0,
             available_slots=1,
+            security={
+                "non_root": True,
+                "read_only_root_filesystem": True,
+                "network_isolation": True,
+                "no_host_mounts": True,
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "schemas",
+    [
+        ["airalogy.compute-job.v1"],
+        ["airalogy.compute-job.analysis.v1"],
+        ["airalogy.compute-job.v1", "airalogy.compute-job.analysis.v1"],
+    ],
+)
+def test_compute_runner_can_explicitly_advertise_supported_job_schemas(schemas):
+    report = ComputeRunnerReport(
+        protocol_version="airalogy.compute-runner.v1",
+        runner_version="0.1.0",
+        executor_backend="podman",
+        active_jobs=0,
+        available_slots=1,
+        job_schemas=schemas,
+        security={
+            "non_root": True,
+            "read_only_root_filesystem": True,
+            "network_isolation": True,
+            "no_host_mounts": True,
+        },
+    )
+    assert report.model_dump(mode="json")["job_schemas"] == schemas
+    assert runner_report_is_execution_ready(
+        SimpleNamespace(
+            runner_protocol_version=report.protocol_version,
+            last_seen_at=datetime.now(UTC),
+            last_report=report.model_dump(mode="json"),
+        )
+    )
+    report.security.network_isolation = False
+    assert not runner_report_is_execution_ready(
+        SimpleNamespace(
+            runner_protocol_version=report.protocol_version,
+            last_seen_at=datetime.now(UTC),
+            last_report=report.model_dump(mode="json"),
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "schemas",
+    [
+        [],
+        None,
+        "airalogy.compute-job.v1",
+        ["unknown"],
+        ["airalogy.compute-job.v1", "airalogy.compute-job.v1"],
+        ["airalogy.compute-job.analysis.v2"],
+        [True],
+        ["airalogy.compute-job.v1"] * 3,
+    ],
+)
+def test_compute_runner_rejects_ambiguous_or_unknown_job_schemas(schemas):
+    with pytest.raises(ValidationError):
+        ComputeRunnerReport(
+            protocol_version="airalogy.compute-runner.v1",
+            runner_version="0.1.0",
+            executor_backend="podman",
+            active_jobs=0,
+            available_slots=1,
+            job_schemas=schemas,
             security={
                 "non_root": True,
                 "read_only_root_filesystem": True,

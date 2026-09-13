@@ -218,6 +218,34 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     authoring_revision = import_module("migrations.versions.0055_instrument_authoring")
     assert authoring_revision.down_revision == "0054_instrument_outputs"
     later_tables.update(authoring_revision.TABLE_NAMES)
+    analysis_revision = import_module("migrations.versions.0059_analysis")
+    assert analysis_revision.down_revision == "0058_optional_embeddings"
+    later_tables.update(analysis_revision.TABLE_NAMES)
+    analysis_ai_revision = import_module("migrations.versions.0060_analysis_ai")
+    assert analysis_ai_revision.down_revision == "0059_analysis"
+    later_tables.update(analysis_ai_revision.TABLE_NAMES)
+    analysis_compute_revision = import_module(
+        "migrations.versions.0061_analysis_compute"
+    )
+    assert analysis_compute_revision.down_revision == "0060_analysis_ai"
+    later_tables.update(analysis_compute_revision.TABLE_NAMES)
+    workflow_revision = import_module("migrations.versions.0063_workflow_definitions")
+    assert workflow_revision.down_revision == "0062_analysis_compute_ai"
+    later_tables.update(workflow_revision.TABLE_NAMES)
+    workflow_resolution_revision = import_module("migrations.versions.0064_workflow_node_resolutions")
+    assert workflow_resolution_revision.down_revision == "0063_workflow_definitions"
+    later_tables.update(workflow_resolution_revision.TABLE_NAMES)
+    workflow_analysis_revision = import_module("migrations.versions.0065_workflow_analysis")
+    assert workflow_analysis_revision.down_revision == "0064_workflow_node_resolutions"
+    later_tables.update(workflow_analysis_revision.TABLE_NAMES)
+    workflow_compute_revision = import_module("migrations.versions.0066_workflow_compute_methods")
+    assert workflow_compute_revision.down_revision == "0065_workflow_analysis"
+    workflow_conversion_revision = import_module("migrations.versions.0067_workflow_legacy_conversions")
+    assert workflow_conversion_revision.down_revision == "0066_workflow_compute_methods"
+    later_tables.update(workflow_conversion_revision.TABLE_NAMES)
+    workflow_file_revision = import_module("migrations.versions.0068_workflow_file_bindings")
+    assert workflow_file_revision.down_revision == workflow_conversion_revision.revision
+    later_tables.update(workflow_file_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

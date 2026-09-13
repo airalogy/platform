@@ -54,6 +54,21 @@
 
               <div class="record-batch-actions">
                 <n-button
+                  v-if="canAnalyze"
+                  secondary
+                  size="small"
+                  data-testid="analysis-selected-trigger"
+                  :disabled="loading"
+                  @click="handleAnalyzeSelected"
+                >
+                  <template #icon>
+                    <n-icon size="16">
+                      <icon-tabler-chart-bar />
+                    </n-icon>
+                  </template>
+                  {{ $t("page.analysis.analyzeSelected", { count: selectedRecords.length }) }}
+                </n-button>
+                <n-button
                   v-if="instanceStore.aiEnabled"
                   secondary
                   size="small"
@@ -300,6 +315,7 @@
 </template>
 
 <script setup lang="ts">
+import type { AnalysisRecordReference } from "@/service/api/analysis"
 import type { AimdRecordMetadataColumn, AimdRecordViewKey } from "@airalogy/aimd-renderer/vue"
 import type { ProtocolModels } from "@airalogy/shared/types"
 import type { ITimelineItem } from "../types"
@@ -335,6 +351,7 @@ interface Props {
   latestRecordNumber?: number | null
   deleteGraceDays?: number
   initialPageSize?: number
+  canAnalyze?: boolean
   isItemInChatContext: (id: string | number) => boolean
   isItemInChatContextDisabled: (id: string | number) => boolean
 }
@@ -344,6 +361,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: "addToChat", item: ITimelineItem): void
   (e: "addSelectedToChat", items: ITimelineItem[]): void
+  (e: "analyzeSelected", records: AnalysisRecordReference[]): void
   (e: "removeFromChat", item: ITimelineItem): void
   (e: "showReport", item: ITimelineItem): void
   (e: "update:page", page: number): void
@@ -371,6 +389,8 @@ const recordPageSizeOptions = [...RECORD_PAGE_SIZE_OPTIONS]
 watch(
   [() => authStore.userInfo.id, () => props.protocolInfo.id],
   ([userId, protocolId]) => {
+    selectedRecordKeys.value = []
+    selectedRecordMap.clear()
     visibleFieldKeys.value = getRecordFieldKeysPreference(userId, protocolId)
     visibleMetadataColumnKeys.value = getRecordMetadataColumnKeysPreference(userId, protocolId)
   },
@@ -491,6 +511,15 @@ function handleAddSelectedToChat() {
   if (items.length > 0) {
     emit("addSelectedToChat", items)
   }
+}
+
+function handleAnalyzeSelected() {
+  if (!props.canAnalyze || props.loading || !selectedRecords.value.length)
+    return
+  emit("analyzeSelected", selectedRecords.value.map(record => ({
+    id: record.record_id,
+    version: record.record_version,
+  })))
 }
 
 watch(

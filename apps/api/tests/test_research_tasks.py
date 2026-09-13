@@ -5,6 +5,11 @@ from unittest.mock import ANY, AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from pydantic import ValidationError
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.main import app
 from app.models.research import (
     ResearchActionKind,
@@ -34,10 +39,6 @@ from app.services.research_runtime import (
     research_run_has_executable_ai_path,
     research_task_command,
 )
-from fastapi import HTTPException
-from pydantic import ValidationError
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def test_research_task_command_is_canonical_and_digest_is_stable():
@@ -246,6 +247,7 @@ def test_new_research_run_requires_a_terminal_task_before_database_changes():
                     id=uuid4(), revision=4, status=ResearchTaskStatus.ACTIVE.value
                 ),
                 params=params,
+                current_user=SimpleNamespace(id=uuid4()),
             )
         )
 

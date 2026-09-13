@@ -5,16 +5,22 @@ import io
 import stat
 import tempfile
 import unittest
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from uuid import UUID
 
-from airalogy_compute_runner.client import RunnerAPIError
+from airalogy_compute_runner.client import PlatformClient, RunnerAPIError
 from airalogy_compute_runner.config import RunnerConfig
 from airalogy_compute_runner.engine import ContainerEngine, JobProcess, OutputProcess
-from airalogy_compute_runner.models import ComputeJobEnvelope
+from airalogy_compute_runner.models import (
+    ANALYSIS_JOB_SCHEMA,
+    RESEARCH_JOB_SCHEMA,
+    SUPPORTED_JOB_SCHEMAS,
+    ComputeJobEnvelope,
+)
 from airalogy_compute_runner.runtime import RunnerRuntime
 from airalogy_compute_runner.security import (
     expected_job_signature,
@@ -84,6 +90,20 @@ def config(state_file: Path) -> RunnerConfig:
         stop_timeout_seconds=1,
         max_workspace_bytes=64 * 1024 * 1024,
     )
+
+
+def analysis_envelope(**kwargs: Any) -> dict[str, Any]:
+    raw = envelope(**kwargs)
+    raw["schema"] = ANALYSIS_JOB_SCHEMA
+    for key in ("action_id", "task_id", "run_id"):
+        raw.pop(key)
+    raw["context"] = {
+        "kind": "analysis",
+        "analysis_id": "00000000-0000-0000-0000-000000000009",
+        "project_id": "00000000-0000-0000-0000-000000000010",
+        "lab_id": "00000000-0000-0000-0000-000000000011",
+    }
+    return raw
 
 
 def output_declaration(*, required: bool = True) -> dict[str, Any]:
@@ -265,6 +285,250 @@ class FailRunningSaveStore(StateStore):
 
 
 class RunnerTests(unittest.TestCase):
+    def test_status_explicitly_advertises_supported_job_schemas(self):
+        client = object.__new__(PlatformClient)
+        with patch.object(client, "_request", return_value={}) as request:
+            client.report_status("podman", active=False)
+        payload = request.call_args.kwargs["payload"]
+        self.assertEqual(payload["job_schemas"], list(SUPPORTED_JOB_SCHEMAS))
+        self.assertEqual(
+            payload["job_schemas"], [RESEARCH_JOB_SCHEMA, ANALYSIS_JOB_SCHEMA]
+        )
+        self.assertEqual(payload["protocol_version"], "airalogy.compute-runner.v1")
+        self.assertTrue(all(payload["security"].values()))
+
+    def test_analysis_context_is_explicit_without_fake_research_identifiers(self):
+        raw = analysis_envelope()
+        parsed = ComputeJobEnvelope.parse(raw)
+        self.assertIsNone(parsed.action_id)
+        self.assertIsNone(parsed.task_id)
+        self.assertIsNone(parsed.run_id)
+        for key in ("analysis_id", "project_id", "lab_id"):
+            self.assertEqual(getattr(parsed, key), raw["context"][key])
+        legacy = ComputeJobEnvelope.parse(envelope())
+        self.assertIsNotNone(legacy.task_id)
+        self.assertIsNone(legacy.analysis_id)
+        self.assertIsNone(legacy.project_id)
+        self.assertIsNone(legacy.lab_id)
+
+    def test_analysis_context_rejects_missing_mixed_or_ambiguous_identifiers(self):
+        invalid = []
+        for key in ("analysis_id", "project_id", "lab_id"):
+            raw = analysis_envelope()
+            raw["context"][key] = "not-a-uuid"
+            invalid.append(raw)
+            raw = analysis_envelope()
+            del raw["context"][key]
+            invalid.append(raw)
+            raw = analysis_envelope()
+            raw[key] = raw["context"][key]
+            invalid.append(raw)
+        for key in ("action_id", "task_id", "run_id"):
+            for value in (None, envelope()[key]):
+                raw = analysis_envelope()
+                raw[key] = value
+                invalid.append(raw)
+        for change in ({"kind": "research"}, {"unexpected": True}, {"task_id": None}):
+            raw = analysis_envelope()
+            raw["context"].update(change)
+            invalid.append(raw)
+        raw = analysis_envelope()
+        raw.pop("context")
+        invalid.append(raw)
+        raw = envelope()
+        raw["context"] = analysis_envelope()["context"]
+        invalid.append(raw)
+        for index, raw in enumerate(invalid):
+            with self.subTest(case=index), self.assertRaises((ValueError, TypeError)):
+                ComputeJobEnvelope.parse(raw)
+
+    def test_both_schemas_preserve_the_same_execution_validation(self):
+        changes = [
+            (("source", "code"), "print('changed')"),
+            (("environment", "image_ref"), "python:latest"),
+            (("environment", "language"), "shell"),
+            (("environment", "network_policy"), "host"),
+            (("environment", "allowed_egress_hosts"), ["example.org"]),
+            (("environment", "resource_limits", "memory_mb"), True),
+            (("environment", "resource_limits", "timeout_seconds"), 0),
+            (("environment", "resource_limits", "max_output_bytes"), 1),
+            (
+                ("lease_expires_at",),
+                (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            ),
+        ]
+        for factory in (envelope, analysis_envelope):
+            for path, value in changes:
+                raw = factory()
+                target = raw
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                with (
+                    self.subTest(schema=raw["schema"], path=path),
+                    self.assertRaises((ValueError, TypeError)),
+                ):
+                    ComputeJobEnvelope.parse(raw)
+            output = output_declaration()
+            output["upload_path"] += "/../escape"
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                ComputeJobEnvelope.parse(factory(outputs=[output]))
+            input_id = "00000000-0000-0000-0000-000000000012"
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                ComputeJobEnvelope.parse(
+                    factory(
+                        inputs=[
+                            {
+                                "id": input_id,
+                                "mount_name": "records.json",
+                                "download_path": f"/compute-runner/v1/jobs/{input_id}/inputs/{input_id}",
+                                "checksum_sha256": "a" * 64,
+                                "byte_size": 3,
+                            }
+                        ]
+                    )
+                )
+
+    def test_analysis_signature_binds_context_and_rejects_unsigned_unknown_jobs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = analysis_envelope()
+            runtime = RunnerRuntime(
+                config(Path(directory) / "state.json"),
+                FakeClient(raw),
+                FakeEngine(),
+                StateStore(Path(directory) / "state.json"),
+            )
+            signature = expected_job_signature(raw, TOKEN)
+            self.assertEqual(runtime._verified_job(raw, signature).raw, raw)
+            for key in ("analysis_id", "project_id", "lab_id"):
+                tampered = deepcopy(raw)
+                tampered["context"][key] = envelope()["job_id"]
+                with self.assertRaisesRegex(ValueError, "signature"):
+                    runtime._verified_job(tampered, signature)
+            for factory in (envelope, analysis_envelope):
+                with self.assertRaisesRegex(ValueError, "signature"):
+                    runtime._verified_job(factory(), "")
+                for schema in (None, "airalogy.compute-job.analysis.v2", "unsigned"):
+                    unknown = factory()
+                    unknown["schema"] = schema
+                    with self.assertRaisesRegex(ValueError, "schema"):
+                        runtime._verified_job(
+                            unknown, expected_job_signature(unknown, TOKEN)
+                        )
+            expired = analysis_envelope()
+            expired["issued_at"] = (
+                datetime.now(UTC) - timedelta(minutes=3)
+            ).isoformat()
+            expired["lease_expires_at"] = (
+                datetime.now(UTC) - timedelta(minutes=1)
+            ).isoformat()
+            with self.assertRaisesRegex(ValueError, "expired"):
+                runtime._verified_job(expired, expected_job_signature(expired, TOKEN))
+
+    def test_analysis_downloads_private_input_and_recovers_output_without_rerunning(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            input_id = "00000000-0000-0000-0000-000000000012"
+            raw = analysis_envelope(
+                inputs=[
+                    {
+                        "id": input_id,
+                        "mount_name": "records.json",
+                        "download_path": f"/compute-runner/v1/jobs/{envelope()['job_id']}/inputs/{input_id}",
+                        "checksum_sha256": hashlib.sha256(b"xxx").hexdigest(),
+                        "byte_size": 3,
+                    }
+                ],
+                outputs=[output_declaration()],
+            )
+            client = InterruptedUploadClient(raw)
+            engine = FakeEngine(output_payload=b'{"value":42}')
+            runtime = RunnerRuntime(
+                config(state_path), client, engine, StateStore(state_path)
+            )
+            self.assertTrue(runtime.run_once())
+            saved = StateStore(state_path).load()
+            self.assertEqual(saved.phase, "output_pending")
+            self.assertEqual(saved.envelope["context"], raw["context"])
+            self.assertEqual(stat.S_IMODE(state_path.stat().st_mode), 0o600)
+            verify_job_signature(saved.envelope, saved.signature, TOKEN)
+            self.assertTrue(runtime.run_once())
+            self.assertEqual(engine.calls.count("start"), 1)
+            self.assertEqual([name for name, _ in client.calls].count("lease"), 1)
+            self.assertEqual([name for name, _ in client.calls].count("download"), 1)
+            self.assertEqual(client.calls[-1], ("complete", {"value": 42}))
+            self.assertFalse(state_path.exists())
+
+    def test_analysis_recovery_refuses_tampered_state_before_callbacks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.json"
+            raw = analysis_envelope()
+            signature = expected_job_signature(raw, TOKEN)
+            raw["context"]["analysis_id"] = envelope()["job_id"]
+            store = StateStore(state_path)
+            store.save(
+                RunnerState(
+                    phase="completion_pending",
+                    envelope=raw,
+                    signature=signature,
+                    lease_token=f"aicl_{'d' * 48}",
+                    result={"value": 42},
+                )
+            )
+            client, engine = FakeClient(raw), FakeEngine()
+            runtime = RunnerRuntime(config(state_path), client, engine, store)
+            with self.assertRaisesRegex(ValueError, "signature"):
+                runtime.recover_pending()
+            self.assertEqual(client.calls, [])
+            self.assertEqual(engine.calls, [])
+            self.assertTrue(state_path.exists())
+
+    def test_recovery_refuses_correctly_signed_unknown_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            raw = analysis_envelope()
+            raw["schema"] = "airalogy.compute-job.analysis.v2"
+            store = StateStore(path)
+            store.save(
+                RunnerState(
+                    phase="completion_pending",
+                    envelope=raw,
+                    signature=expected_job_signature(raw, TOKEN),
+                    lease_token=f"aicl_{'d' * 48}",
+                    result={"value": 42},
+                )
+            )
+            client, engine = FakeClient(raw), FakeEngine()
+            runtime = RunnerRuntime(config(path), client, engine, store)
+            with self.assertRaisesRegex(ValueError, "schema"):
+                runtime.recover_pending()
+            self.assertEqual(client.calls, [])
+            self.assertEqual(engine.calls, [])
+
+    def test_analysis_recovery_never_reexecutes_uncertain_container(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            raw = analysis_envelope()
+            store = StateStore(path)
+            store.save(
+                RunnerState(
+                    phase="started",
+                    envelope=raw,
+                    signature=expected_job_signature(raw, TOKEN),
+                    lease_token=f"aicl_{'d' * 48}",
+                    container_name="analysis-recover",
+                    volume_name="analysis-volume",
+                )
+            )
+            client, engine = FakeClient(raw), FakeEngine(running=True)
+            runtime = RunnerRuntime(config(path), client, engine, store)
+            self.assertTrue(runtime.recover_pending())
+            self.assertEqual(engine.calls, ["stop", "cleanup"])
+            self.assertEqual([name for name, _ in client.calls], ["fail"])
+            self.assertFalse(path.exists())
+
     def test_signature_and_exact_source_digest_reject_tampering(self):
         raw = envelope()
         signature = expected_job_signature(raw, TOKEN)
@@ -507,12 +771,18 @@ class RunnerTests(unittest.TestCase):
         self.assertRegex(volume, r"^airalogy-work-[0-9a-f]{24}$")
 
     def test_research_container_command_enforces_local_isolation_contract(self):
+        self.assert_container_isolation(envelope())
+
+    def test_analysis_container_command_enforces_local_isolation_contract(self):
+        self.assert_container_isolation(analysis_envelope())
+
+    def assert_container_isolation(self, raw):
         with tempfile.TemporaryDirectory() as directory:
             engine = object.__new__(ContainerEngine)
             engine.config = config(Path(directory) / "state.json")
             engine.executable = "/usr/bin/docker"
             fake_process = FakeProcess(running=True)
-            job = ComputeJobEnvelope.parse(envelope())
+            job = ComputeJobEnvelope.parse(raw)
 
             with patch(
                 "airalogy_compute_runner.engine.subprocess.Popen",
@@ -536,6 +806,43 @@ class RunnerTests(unittest.TestCase):
             )
             self.assertFalse(any("type=bind" in argument for argument in command))
             self.assertIn(job.image_ref, command)
+
+
+class WorkspaceSetupRecoveryTests(unittest.TestCase):
+    def test_setup_failure_has_journaled_exact_cleanup_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runner_config = config(Path(temporary) / "state.json")
+            journal = StateStore(runner_config.state_file)
+            expected = ContainerEngine.names(analysis_envelope()["job_id"])
+
+            class FailingWorkspace(FakeEngine):
+                cleaned_names = None
+
+                def create_workspace(self, job):
+                    saved = journal.load()
+                    if (
+                        saved is None
+                        or (saved.container_name, saved.volume_name) != expected
+                    ):
+                        raise AssertionError(
+                            "cleanup identities must precede workspace creation"
+                        )
+                    raise OSError("synthetic helper startup failure")
+
+                def cleanup(self, container_name, volume_name):
+                    self.cleaned_names = (container_name, volume_name)
+                    super().cleanup(container_name, volume_name)
+
+            engine = FailingWorkspace()
+            runtime = RunnerRuntime(
+                runner_config,
+                client=FakeClient(analysis_envelope()),
+                engine=engine,
+                state_store=journal,
+            )
+            self.assertTrue(runtime.run_once())
+            self.assertEqual(engine.cleaned_names, expected)
+            self.assertIsNone(journal.load())
 
 
 if __name__ == "__main__":

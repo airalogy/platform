@@ -74,6 +74,9 @@
           </div>
         </header>
 
+        <n-alert v-if="task.workflow_data_restricted" type="warning" class="mt-3" data-testid="workflow-task-restricted">
+          {{ $t("page.workflowDefinitions.resolution.taskRestrictedHint") }}
+        </n-alert>
         <n-alert
           v-if="latestRun?.last_error"
           :type="latestRun.status === 'failed' ? 'error' : 'info'"
@@ -274,13 +277,13 @@
                       <p class="aira-type-body aira-text-secondary mb-0 mt-2 whitespace-pre-wrap">
                         {{ action.description || action.approval?.reason }}
                       </p>
-                      <research-action-impact :action="action" />
+                      <research-action-impact :action="action" :source-titles="workflowSourceTitles" />
                       <div class="aira-type-meta mt-3 break-all">
                         {{ $t("page.research.previewDigest") }} · {{ action.preview_digest }}
                       </div>
                     </div>
                     <research-approval-actions
-                      v-if="action.approval"
+                      v-if="action.approval && !action.workflow_data_restricted"
                       :approval="action.approval"
                       :action-revision="action.revision"
                       @decided="() => loadTask(true)"
@@ -374,6 +377,8 @@
                     <p v-if="action.dependencies.length" class="aira-type-meta mb-0 mt-1">
                       {{ $t("page.research.dependsOn", { actions: actionDependencyLabel(action) }) }}
                     </p>
+                    <workflow-resolution-summary :input-data="action.input_data" :source-titles="workflowSourceTitles" :restricted="action.workflow_data_restricted" />
+                    <workflow-analysis-execution :action="action" :task-id="task.id" :project-route="{ labUid: task.lab.uid, projectUid: task.project.uid }" />
                     <p
                       v-if="action.input_data.action_graph?.result_bindings?.length"
                       class="aira-type-meta mb-0 mt-1"
@@ -562,7 +567,7 @@
                         <research-instrument-files :job-id="action.instrument_job.id" @changed="() => loadTask(true)" />
                       </div>
                     </div>
-                    <div v-if="action.compute_job" class="research-digital-result mt-3">
+                    <div v-if="action.kind !== 'analysis_run' && action.compute_job" class="research-digital-result mt-3">
                       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div class="min-w-0">
                           <div class="flex flex-wrap items-center gap-2">
@@ -748,6 +753,7 @@
             />
 
             <research-result-package-panel
+              v-if="!task.workflow_data_restricted"
               :task-id="task.id"
               :outcome="task.outcome"
               :scientific-outcome="task.scientific_outcome"
@@ -1172,6 +1178,8 @@ import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
 import { useRoute, useRouter } from "vue-router"
+import WorkflowAnalysisExecution from "../workflow-definitions/components/workflow-analysis-execution.vue"
+import WorkflowResolutionSummary from "../workflow-definitions/components/workflow-resolution-summary.vue"
 import CreateResearchRunModal from "./components/create-research-run-modal.vue"
 import ResearchActionImpact from "./components/research-action-impact.vue"
 import ResearchApprovalActions from "./components/research-approval-actions.vue"
@@ -1198,6 +1206,9 @@ const dialog = useDialog()
 const authStore = useAuthStore()
 const instanceStore = useInstanceStore()
 const task = ref<ResearchTaskDetail | null>(null)
+const workflowSourceTitles = computed(() => Object.fromEntries((task.value?.actions ?? [])
+  .filter(action => action.input_data.action_graph?.node_id)
+  .map(action => [String(action.input_data.action_graph.node_id), action.title])))
 const loading = ref(false)
 const loadError = ref(false)
 const mutating = ref(false)

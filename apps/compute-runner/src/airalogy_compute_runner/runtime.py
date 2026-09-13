@@ -461,6 +461,12 @@ class RunnerRuntime:
         try:
             with tempfile.TemporaryDirectory(prefix="airalogy-compute-inputs-") as path:
                 input_files = self._download_inputs(job, lease_token, Path(path))
+                # Journal cleanup identities before the first engine mutation;
+                # a holder/volume setup failure or crash must remain recoverable.
+                state.container_name, state.volume_name = ContainerEngine.names(
+                    job.job_id
+                )
+                self._save_pending(state, "staging")
                 container_name, volume_name = self.engine.create_workspace(job)
                 state.container_name = container_name
                 state.volume_name = volume_name

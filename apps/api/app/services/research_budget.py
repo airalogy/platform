@@ -17,6 +17,33 @@ class ResearchBudgetError(ValueError):
     pass
 
 
+def protected_compute_reservations(snapshot: dict[str, Any]) -> Decimal:
+    """Unsettled automatic reserves cannot be released as a manual pool entry.
+
+    Use the ledger, not live Job statuses: lost Runner usage intentionally leaves a
+    reservation held even after the execution itself is marked uncertain/failed.
+    """
+    by_job: dict[str, Decimal] = {}
+    for entry in snapshot.get("entries", []):
+        if entry.get("source_type") != "compute_job" or entry["kind"] not in {
+            "reserve",
+            "release",
+        }:
+            continue
+        if entry["currency"] != snapshot["currency"] or not entry.get("source_ref"):
+            raise ResearchBudgetError("Automatic Compute budget attribution is invalid")
+        reference = entry["source_ref"]
+        amount = Decimal(entry["amount"])
+        by_job[reference] = by_job.get(reference, Decimal(0)) + (
+            amount if entry["kind"] == "reserve" else -amount
+        )
+    if any(value < 0 for value in by_job.values()):
+        raise ResearchBudgetError(
+            "Automatic Compute budget releases exceed their own reservation"
+        )
+    return sum(by_job.values(), Decimal(0))
+
+
 def normalize_currency(value: str) -> str:
     currency = value.strip().upper()
     if len(currency) != 3 or not currency.isalpha() or not currency.isascii():

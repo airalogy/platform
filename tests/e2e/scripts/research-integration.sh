@@ -14,4 +14,31 @@ docker compose -p airalogy-platform-e2e -f "$compose_file" up --build --detach -
 docker compose -p airalogy-platform-e2e -f "$compose_file" run --rm createbuckets
 uv --directory apps/api run --no-sync python -m alembic upgrade head
 export RESEARCH_INTEGRATION_TEST=1 RESOURCE_TEST_DATABASE_URL="$DATABASE_URL" AI_ENABLED=false
-uv --directory apps/api run --with pytest python -m pytest tests/test_research_integration.py tests/test_resource_postgres.py "$@"
+export PYTHONPATH="$repository_root/apps/compute-runner/src${PYTHONPATH:+:$PYTHONPATH}"
+test_files=(
+  tests/test_research_integration.py
+  tests/test_resource_postgres.py
+  tests/test_record_analysis_postgres.py
+  tests/test_record_analysis_ai_postgres.py
+  tests/test_record_analysis_compute_postgres.py
+  tests/test_analysis_compute_runtime_postgres.py
+  tests/test_record_analysis_compute_ai_postgres.py
+  tests/test_analysis_compute_ai_runner_postgres.py
+  tests/test_workflow_definitions_postgres.py
+  tests/test_workflow_binding_postgres.py
+  tests/test_workflow_condition_postgres.py
+  tests/test_workflow_visibility_postgres.py
+  tests/test_workflow_analysis_methods_postgres.py
+  tests/test_workflow_analysis_runtime_postgres.py
+  tests/test_workflow_analysis_lifecycle_postgres.py
+  tests/test_workflow_compute_methods_postgres.py
+  tests/test_workflow_compute_runtime_postgres.py
+  tests/test_workflow_compute_r_postgres.py
+  tests/test_workflow_compute_locks_postgres.py
+  tests/test_workflow_conversions_postgres.py
+  tests/test_lab_workflow_file_cleanup_postgres.py
+  tests/test_workflow_files_postgres.py
+  tests/test_research_asset_visibility_postgres.py
+  tests/test_research_context_visibility_postgres.py
+)
+uv --directory apps/api run --with pytest python -m pytest "${test_files[@]}" "$@"

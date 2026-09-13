@@ -112,6 +112,28 @@ Research Task
 
 有界 Specialist Agent Panel 是对“所有认知步骤都由一个模型完成”的明确修正。Aira 可以围绕同一个科学问题，并行提议 2–4 个角色不同的 `aira.specialist` Tool Action：Literature Analyst、Experimental Designer、Data Analyst 或 Research Critic。每个分支都只接收同一份经摘要绑定的 Task、当前策略、已审核且非 Restricted 的 Knowledge，以及有上限的类型化 Action 结果快照。模型在该次调用中没有网络或 Tool 访问权；每条发现和建议都必须引用快照中存在的来源标识，Platform 会拒绝未知引用。Specialist 输出只是建议，不是 Evidence、审批、资产写入、下单、代码执行或设备控制。每次调用都保留审批门禁，记入 Task 预算，并持久化、可审计；每个 Run 最多四次。整个 Panel 稳定后，协调器才返回普通 Planner 和类型化 Action 边界。相互依赖的 Agent 对话、递归委派、共享隐藏记忆和任意 Agent 集群仍不支持。
 
+## 用户编排的固定工作流
+
+项目级 `WorkflowDefinition` 保存稳定身份，`WorkflowRevision` 保存不可变修订。稳定节点 ID 表示一次执行，不依赖 Protocol 身份或画布位置。当前手工适配器支持单节点、同类节点、独立并行、顺序及汇合的 Protocol DAG，将每个节点编译成既有生命周期内的独立 Action/ProtocolRun。唯一 `WorkflowRunBinding` 将固定修订和科研环境摘要关联到普通 ResearchRun 草稿；预览确认拒绝环境变化、重复启动及无权来源，重试返回原执行而不添加节点。
+
+`manual_workflow` 是明确的非模型来源，不伪装成 Aira 提议。已确认的图和固定执行者策略决定节点放行，其他手工 Action 入口及 AI 重新规划不能修改该固定 Run。依赖放行复核当前权限与资源限制，每次 Protocol 执行需要独立匹配的 Record；执行结束进入普通结果包的人工审核，不自动宣称科学成功。整个路径可在 AI 完全关闭时使用。
+
+新 Run 固定执行契约 v2，每个非根节点只有一份不可变 `WorkflowNodeResolution`：记录各入边结果、激活入边汇合决策、准确 Record 修订及 Action 输出快照摘要、类型化标量映射和解析后的初始值。条件和绑定共用有界本地 Schema 解析，不使用表达式执行器、不推断类型、不自动换算单位，字段路径固定为字面量 `['var', field]`。未选分支与缺值、执行失败、取消明确区分，汇合也保留这一语义。输入必须通过目标 Schema 校验，并进入新的审批摘要后才放行；解析及后续审批、开始、提交时复核接收者、发起人和负责人对源 Record 的读取权。重试验证已封存回执，不改选最新 Record。先前已开始的 v1 纯控制流程保留原契约。
+
+当前查看者权限与执行接收者权限分别校验。任务摘要和完整结果包检查全部来源；Action、工作项和审批则检查本卡片解析回执中的来源与已提交 Record。无关私有分支既不能扩展数据读取权，也不应阻塞可独立读取的工作。受限响应不提供可用于批准的摘要；完整结果导出失败关闭，不返回带原始签名的脱敏对象。
+
+图 Schema v2 与执行契约 v3 增加内置分析卡片，旧图序列化及已开始的 v1/v2 Run 契约不变。`WorkflowAnalysisMethod` 是经显式确认的不可变项目副本，仅包含私有已保存方法的统计规则与参考 Schema，不包含选择条件、报告和 AI 来源。发布检查归属、来源读取权、修订及 Schema 摘要、过期预览和幂等性；单个失效方法不会阻断整个方法目录。
+
+`ResearchAnalysisAction` 将每次执行绑定到发布方法、准确输入快照、解析/审批摘要，以及至多一个普通 `AnalysisRun`。全部声明的直接前置 Protocol 须提供同一兼容 Protocol 的不同 Record 修订，不导入历史选择或隐式查询全项目。对实际输入重新审批后，复用既有 `record_analysis` 作业，不新建计算引擎或调度器。命名输出明确选择字段、统计量和完整类型化分组，`['analysis', output_id]` 路径共用条件与绑定校验；必需输出缺失、歧义、null 或类型不兼容均失败关闭。任务报告复核每个查看者的全部输入权限，独立报告 API 仍仅属于发起人。暂停推迟待执行作业，取消拒绝晚到结果，后继只由原有图屏障放行。已发布方法、封存输入及 Schema v2 修订均阻止破坏性迁移降级。
+
+图 Schema v3 与执行契约 v4 增加明确类型的 Compute 分析卡片，不改变 v1/v2 序列化或摘要。新增 `compute_contract` 固定准确环境、完整输入 Schema 及方法结果 Schema；内置方法省略该字段并保留原摘要。计算结果同时校验固定环境和方法的结果 Schema，仅显式声明的对象标量路径成为 `['analysis', output_id]` 命名端口，不检查源码或根据数值猜测类型。
+
+Compute 执行保持 `ResearchAction → ResearchAnalysisAction → AnalysisRun → AnalysisCompute/ResearchComputeJob`，作业只设置 `analysis_run_id`，不设置 `action_id`。Task 固定环境准确修订，Run 封存本次审批人、费用上限/币种及期限。唯一一次针对实际输入的 ResearchApproval 在同一事务内确认既有 Compute 作业、登记审批身份并预留 Task 预算。Runner 回调复核权限并结算同一账本；执行中断且用量未知时保留待核算费用，不当作零支出。先获取工作流上下文锁，再锁作业；暂停和取消处理所有并行桥接作业。独立私有分析控制入口不能绕过 Workflow，受治理报告及输出读取复核全部来源，不隐式创建共享 DataAsset。存在 Compute 发布方法或 v3 图时，迁移 0066 拒绝破坏性降级。
+
+图 Schema v4 / 执行契约 v5 增加单文件类型化绑定：来源为 Protocol 的 FileId 字段或明确选择的 Compute 输出清单条目，目标为 Protocol FileId 字段。`WorkflowFileBinding` 固定准确来源 Action/Record 或分析结果、blob 摘要和目标身份。逻辑 AiralogyFile 别名采用不可公开解析的虚拟后端，不复制原权限或暴露对象存储直链。元数据、预览、流式下载、导出与导入均重新检查来源和目标权限交集，嵌套别名按有界 lineage 回溯。披露前验证实际字节，逻辑引用计入配额，受保护元数据不可变。存在 v4 图或文件回执时迁移 0068 拒绝降级，不将私有输出隐式升级为 DataAsset。Compute 显式附件输入挂载及数组/对象绑定仍未实现。
+
+旧 `ProtocolWorkflow` 仍是独立私有执行对象。`/workflow-conversions` 要求归属与项目权限、当前来源摘要、明确的准确版本选择及有向连线；自由文本、执行路径和历史 Records 保留在原对象，不进入新可执行图。预览确认创建普通新定义/修订，以及私有不可变 `WorkflowLegacyConversion` 回执（0067）。幂等确认返回原转换结果，之后编辑不会改写该次转换。旧查看/继续路由保留，不隐式解释自由文本或移动执行状态。
+
 ## 人机协作
 
 物理实验是一个异步执行器，不是 AI 流程中的特例：

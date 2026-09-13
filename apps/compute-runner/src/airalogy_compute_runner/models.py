@@ -22,6 +22,9 @@ EGRESS_HOST_RE = re.compile(
 )
 MAX_SOURCE_BYTES = 200_000
 MAX_OUTPUT_FILE_BYTES = 2_147_483_647
+RESEARCH_JOB_SCHEMA = "airalogy.compute-job.v1"
+ANALYSIS_JOB_SCHEMA = "airalogy.compute-job.analysis.v1"
+SUPPORTED_JOB_SCHEMAS = (RESEARCH_JOB_SCHEMA, ANALYSIS_JOB_SCHEMA)
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:
@@ -168,9 +171,9 @@ class ComputeOutput:
 class ComputeJobEnvelope:
     raw: dict[str, Any]
     job_id: str
-    action_id: str
-    task_id: str
-    run_id: str
+    action_id: str | None
+    task_id: str | None
+    run_id: str | None
     issued_at: datetime
     lease_expires_at: datetime
     environment_id: str
@@ -192,11 +195,46 @@ class ComputeJobEnvelope:
     inputs: tuple[ComputeInput, ...]
     outputs: tuple[ComputeOutput, ...]
     result_schema: dict[str, Any]
+    analysis_id: str | None = None
+    project_id: str | None = None
+    lab_id: str | None = None
 
     @classmethod
     def parse(cls, raw: dict[str, Any]) -> ComputeJobEnvelope:
-        if raw.get("schema") != "airalogy.compute-job.v1":
+        raw = _mapping(raw, "envelope")
+        schema = raw.get("schema")
+        if schema not in SUPPORTED_JOB_SCHEMAS:
             raise ValueError("Unsupported Compute Job envelope schema")
+        research_keys = ("action_id", "task_id", "run_id")
+        analysis_keys = ("analysis_id", "project_id", "lab_id")
+        if any(key in raw for key in analysis_keys):
+            raise ValueError(
+                "Compute Job analysis identifiers require an analysis context"
+            )
+        action_id = task_id = run_id = None
+        analysis_id = project_id = lab_id = None
+        if schema == ANALYSIS_JOB_SCHEMA:
+            if any(key in raw for key in research_keys):
+                raise ValueError(
+                    "Analysis Compute Job cannot contain Research identifiers"
+                )
+            context = _mapping(raw.get("context"), "context")
+            if (
+                set(context) != {"kind", *analysis_keys}
+                or context["kind"] != "analysis"
+            ):
+                raise ValueError("Analysis Compute Job context is invalid")
+            analysis_id, project_id, lab_id = (
+                _identifier(context[key], f"context.{key}") for key in analysis_keys
+            )
+        else:
+            if "context" in raw:
+                raise ValueError(
+                    "Research Compute Job cannot contain an analysis context"
+                )
+            action_id, task_id, run_id = (
+                _identifier(raw.get(key), key) for key in research_keys
+            )
         now = datetime.now(UTC)
         issued_at = _instant(raw.get("issued_at"), "issued_at")
         expires_at = _instant(raw.get("lease_expires_at"), "lease_expires_at")
@@ -283,9 +321,9 @@ class ComputeJobEnvelope:
         return cls(
             raw=dict(raw),
             job_id=job_id,
-            action_id=_identifier(raw.get("action_id"), "action_id"),
-            task_id=_identifier(raw.get("task_id"), "task_id"),
-            run_id=_identifier(raw.get("run_id"), "run_id"),
+            action_id=action_id,
+            task_id=task_id,
+            run_id=run_id,
             issued_at=issued_at,
             lease_expires_at=expires_at,
             environment_id=_identifier(environment.get("id"), "environment.id"),
@@ -322,6 +360,9 @@ class ComputeJobEnvelope:
             inputs=inputs,
             outputs=outputs,
             result_schema=_mapping(raw.get("result_schema"), "result_schema"),
+            analysis_id=analysis_id,
+            project_id=project_id,
+            lab_id=lab_id,
         )
 
     @property

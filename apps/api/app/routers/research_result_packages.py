@@ -20,6 +20,9 @@ from app.models.research import (
 )
 from app.models.user import User
 from app.routers.depends import CurrentUser
+from app.services.research_asset_visibility import (
+    require_asset_snapshot_sources_readable,
+)
 from app.services.research_result_packages import (
     ResearchResultPackageError,
     render_result_package_markdown,
@@ -27,6 +30,7 @@ from app.services.research_result_packages import (
     verify_result_package_digest,
 )
 from app.services.research_runtime import require_research_capability
+from app.services.workflow_visibility import require_workflow_data_readable
 
 router = APIRouter(prefix="/research-tasks", tags=["research-result-packages"])
 
@@ -72,6 +76,9 @@ async def _result_package_envelope(
     run = (await db_session.scalars(statement)).first()
     if run is None:
         raise HTTPException(status_code=404, detail="Research Run not found")
+    # A signed result package is indivisible. Do not return a redacted package
+    # under the original digest, or disclose resolved values through export.
+    await require_workflow_data_readable(db_session, run=run, current_user=current_user)
     snapshot = await ResearchResultPackageSnapshot.find_by(
         db_session,
         [ResearchResultPackageSnapshot.run_id == run.id],
@@ -90,6 +97,12 @@ async def _result_package_envelope(
         digest = snapshot.digest
     else:
         digest = result_package_digest(package)
+    # Read the sources sealed in this exact historical package, not a filtered
+    # bundle or the latest Run's Evidence. Later unrelated assets do not change
+    # which sources this immutable report requires.
+    await require_asset_snapshot_sources_readable(
+        db_session, task_id=task.id, payload=package, user=current_user
+    )
     finalized_at = snapshot.finalized_at.isoformat() if snapshot is not None else None
     envelope = {
         "snapshot": {

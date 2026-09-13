@@ -30,6 +30,7 @@ from app.services.research_budget import (
     normalize_currency,
     project_budget_change,
     project_operational_limit_amendment,
+    protected_compute_reservations,
     research_budget_snapshot,
 )
 from app.services.research_runtime import (
@@ -292,6 +293,12 @@ async def _preview(
         raise HTTPException(status_code=409, detail="Research Task has changed")
     current = await research_budget_snapshot(db_session, task=task)
     try:
+        if params.kind == "release" and params.amount > Decimal(
+            current["reserved"]
+        ) - protected_compute_reservations(current):
+            raise ResearchBudgetError(
+                "Manual releases cannot spend unsettled Compute Job reservations; wait for an attributable usage or cancellation receipt"
+            )
         projected = project_budget_change(
             task=task,
             snapshot=current,

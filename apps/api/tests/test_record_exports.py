@@ -41,6 +41,24 @@ from app.services.record_exports import (
 )
 
 
+@pytest.fixture(autouse=True)
+def no_workflow_files_in_legacy_export_fixtures(monkeypatch):
+    """These format fixtures contain no governed references; real ACLs use PG."""
+    from app.services import workflow_files
+
+    monkeypatch.setattr(
+        workflow_files, "authorize_record_files", AsyncMock(return_value=[])
+    )
+    monkeypatch.setattr(
+        workflow_files, "authorize_export_files", AsyncMock(return_value=False)
+    )
+
+
+class ExportFixtureSession:
+    async def get(self, model, identity):
+        return SimpleNamespace(id=identity)
+
+
 def write_protocol(protocol_dir: Path) -> None:
     protocol_dir.mkdir()
     (protocol_dir / "protocol.aimd").write_text(
@@ -277,9 +295,7 @@ def test_download_permission_is_rechecked_for_the_original_scope(monkeypatch):
         authorize,
     )
 
-    asyncio.run(
-        _reauthorize_export_download(SimpleNamespace(), item, user.id)
-    )
+    asyncio.run(_reauthorize_export_download(ExportFixtureSession(), item, user.id))
 
     params = authorize.await_args.args[1]
     assert params.scope_type == "protocol"
@@ -345,7 +361,7 @@ def test_jsonl_export_writes_one_standard_record_envelope(monkeypatch, tmp_path)
     monkeypatch.setattr(record_exports, "iter_export_rows", rows)
     output, warnings = asyncio.run(
         _write_export_file(
-            SimpleNamespace(),
+            ExportFixtureSession(),
             export_job(lab, project, protocol, user, export_format="jsonl"),
             tmp_path,
         )
@@ -371,7 +387,7 @@ def test_csv_export_is_bom_prefixed_and_keeps_nested_values_as_json(
     monkeypatch.setattr(record_exports, "iter_export_rows", rows)
     output, warnings = asyncio.run(
         _write_export_file(
-            SimpleNamespace(),
+            ExportFixtureSession(),
             export_job(lab, project, protocol, user, export_format="csv"),
             tmp_path,
         )
@@ -447,7 +463,7 @@ def test_platform_aira_export_round_trip_embeds_exact_protocol(monkeypatch, tmp_
         export_format="aira",
     )
     output, warnings = asyncio.run(
-        _write_export_file(SimpleNamespace(), record_export, tmp_path / "work")
+        _write_export_file(ExportFixtureSession(), record_export, tmp_path / "work")
     )
 
     assert warnings == []

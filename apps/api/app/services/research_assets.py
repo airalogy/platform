@@ -6,11 +6,13 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import KnowledgeItem
 from app.models.protocol import Protocol
+from app.models.research import ResearchTask
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
@@ -26,6 +28,13 @@ from app.services.research_action_outputs import (
     ResearchActionOutputError,
     action_output_snapshot_data,
 )
+from app.services.research_asset_visibility import (
+    HIDDEN_SOURCE_STATUSES,
+    evidence_source_readable,
+    require_artifact_source_readable,
+    require_protocol_improvement_readable,
+    visible_knowledge_evidence_links,
+)
 
 
 def _confidence(value: Decimal | None) -> float | None:
@@ -36,8 +45,13 @@ async def research_asset_bundle(
     db_session: AsyncSession,
     *,
     task_id: UUID,
+    current_user=None,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Return stable, ordered Task results without exposing private file internals."""
+    """Read exact assets; public callers must supply their current reader.
+
+    Internal result assembly may omit the reader after authorizing its complete
+    context; filtered public views must never be sealed as complete results.
+    """
 
     assets = list(
         (
@@ -63,10 +77,29 @@ async def research_asset_bundle(
         else []
     )
     versions_by_asset: dict[UUID, list[dict[str, Any]]] = {}
+    task = await db_session.get(ResearchTask, task_id) if current_user else None
     for version in versions:
+        if current_user:
+            try:
+                if task is None:
+                    raise HTTPException(403, "Research Task not found")
+                await require_artifact_source_readable(
+                    db_session,
+                    task=task,
+                    user=current_user,
+                    artifact_type="data_asset",
+                    artifact_id=version.data_asset_id,
+                    artifact_version=str(version.version),
+                )
+            except HTTPException as exc:
+                if exc.status_code in HIDDEN_SOURCE_STATUSES:
+                    continue
+                raise
         versions_by_asset.setdefault(version.data_asset_id, []).append(
             version.as_dict()
         )
+    if current_user:
+        assets = [item for item in assets if item.id in versions_by_asset]
 
     evidence = list(
         (
@@ -77,6 +110,13 @@ async def research_asset_bundle(
             )
         ).all()
     )
+    if current_user:
+        evidence = [
+            item
+            for item in evidence
+            if await evidence_source_readable(db_session, item, current_user)
+        ]
+    visible_evidence_ids = {item.id for item in evidence}
     action_output_ids = [
         UUID(item.artifact_id)
         for item in evidence
@@ -129,6 +169,13 @@ async def research_asset_bundle(
     relations_by_claim: dict[UUID, list[dict[str, Any]]] = {}
     for relation in relations:
         relations_by_claim.setdefault(relation.claim_id, []).append(relation.as_dict())
+    if current_user:
+        hidden_claims = {
+            relation.claim_id
+            for relation in relations
+            if relation.evidence_id not in visible_evidence_ids
+        }
+        claims = [item for item in claims if item.id not in hidden_claims]
 
     knowledge_links = list(
         (
@@ -160,6 +207,20 @@ async def research_asset_bundle(
         else []
     )
     knowledge_by_id = {item.id: item for item in knowledge_items}
+    if current_user:
+        from app.services.knowledge import authorize_knowledge_item
+
+        for item in knowledge_items:
+            try:
+                await authorize_knowledge_item(db_session, current_user, item)
+            except HTTPException as exc:
+                if exc.status_code in HIDDEN_SOURCE_STATUSES:
+                    knowledge_by_id.pop(item.id, None)
+                    continue
+                raise
+        knowledge_links = await visible_knowledge_evidence_links(
+            db_session, knowledge_links, current_user
+        )
     links_by_knowledge: dict[UUID, list[dict[str, Any]]] = {}
     for link in knowledge_links:
         links_by_knowledge.setdefault(link.knowledge_item_id, []).append(link.as_dict())
@@ -208,6 +269,27 @@ async def research_asset_bundle(
     links_by_proposal: dict[UUID, list[dict[str, Any]]] = {}
     for link in improvement_links:
         links_by_proposal.setdefault(link.proposal_id, []).append(link.as_dict())
+    if current_user:
+        hidden_proposals = {
+            link.proposal_id
+            for link in improvement_links
+            if link.evidence_id not in visible_evidence_ids
+        }
+        improvement_proposals = [
+            item for item in improvement_proposals if item.id not in hidden_proposals
+        ]
+        allowed_proposals = []
+        for item in improvement_proposals:
+            try:
+                await require_protocol_improvement_readable(
+                    db_session, item, current_user
+                )
+            except HTTPException as exc:
+                if exc.status_code in HIDDEN_SOURCE_STATUSES:
+                    continue
+                raise
+            allowed_proposals.append(item)
+        improvement_proposals = allowed_proposals
 
     return {
         "data_assets": [

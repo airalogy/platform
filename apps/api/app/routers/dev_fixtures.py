@@ -1,8 +1,7 @@
 import json
 import os
 import tomllib
-from pathlib import Path
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TypedDict
 
 from airalogy.markdown import generate_model
@@ -151,7 +150,9 @@ def load_protocol_example(example_root: Path, relative_dir: str) -> dict:
     }
 
 
-def load_protocol_examples_from_index(example_root: Path) -> tuple[list[dict], list[str]]:
+def load_protocol_examples_from_index(
+    example_root: Path,
+) -> tuple[list[dict], list[str]]:
     index_path = example_root / "index.json"
     try:
         index = json.loads(index_path.read_text(encoding="utf-8"))
@@ -491,9 +492,7 @@ async def ensure_schema_governance_fixture(
         "version": "airalogy.migration.v1",
         "from": "1.0.0",
         "to": "2.0.0",
-        "operations": [
-            {"op": "rename", "from": "var.old_name", "to": "var.name"}
-        ],
+        "operations": [{"op": "rename", "from": "var.old_name", "to": "var.name"}],
     }
     version_payloads = {
         "1.0.0": {
@@ -568,6 +567,358 @@ async def ensure_schema_governance_fixture(
     return protocol, record
 
 
+async def ensure_analysis_fixture(
+    db_session: DBSession, project: Project, owner: User
+) -> Protocol:
+    """Known numerical inputs for real browser analysis; no model or instruments."""
+    uid = "record_analysis_e2e"
+    protocol = await Protocol.find_by(
+        db_session, [Protocol.project_id == project.id, Protocol.uid == uid]
+    )
+    if protocol is not None:
+        return protocol
+    protocol = Protocol(
+        project_id=project.id,
+        user_id=owner.id,
+        uid=uid,
+        name="Synthetic Record Analysis",
+        latest_version="1.0.0",
+        description="Development-only known-value analysis fixture.",
+    )
+    db_session.add(protocol)
+    await db_session.flush()
+    db_session.add(
+        ProtocolVersion(
+            protocol_id=protocol.id,
+            version="1.0.0",
+            meta_data={"id": uid, "version": "1.0.0", "name": protocol.name},
+            json_schema={
+                "vars": {
+                    "type": "object",
+                    "properties": {
+                        "measurement": {
+                            "type": "number",
+                            "title": "Measurement",
+                            "unit": "mg/L",
+                        },
+                        "group": {"type": "string", "title": "Group"},
+                    },
+                }
+            },
+            fields={"vars": ["measurement", "group"]},
+            assigners={},
+            assigner_graph={},
+            aimd="# Synthetic measurement\n\n{{var|measurement: float}}\n\n{{var|group: str}}",
+        )
+    )
+    for number in range(1, 13):
+        data = {
+            "var": {
+                "measurement": number * 2,
+                "group": "control" if number <= 6 else "treatment",
+            },
+            "step": {},
+            "check": {},
+        }
+        db_session.add(
+            Record(
+                protocol_id=protocol.id,
+                protocol_version="1.0.0",
+                user_id=owner.id,
+                number=number,
+                version=1,
+                data=data,
+                report=f"Synthetic sample {number}",
+                hash=get_data_sha1({"data": data}),
+            )
+        )
+    await db_session.flush()
+    return protocol
+
+
+async def ensure_workflow_compute_fixture(db, project, owner, protocol):
+    """Synthetic UI fixtures only: no successful run, device or runnable token."""
+    from decimal import Decimal
+    from secrets import token_hex
+
+    from sqlalchemy import select
+
+    from app.models.analysis import AnalysisPipeline, AnalysisPipelineRevision
+    from app.models.research_execution import (
+        ResearchComputeEnvironment,
+        ResearchComputeEnvironmentRevision,
+        ResearchComputeRunner,
+        ResearchComputeRunnerEnvironment,
+    )
+    from app.services.analysis_compute_contracts import (
+        ANALYSIS_JOB_SCHEMA,
+        COMPUTE_ENGINE_VERSION,
+        AnalysisComputeRecipe,
+    )
+    from app.services.analysis_engine import canonical_digest
+    from app.services.record_analyses import AnalysisSelection, method_revision_digest
+
+    environment = await db.scalar(
+        select(ResearchComputeEnvironment).where(
+            ResearchComputeEnvironment.lab_id == project.lab_id,
+            ResearchComputeEnvironment.environment_key == "workflow-compute-e2e",
+        )
+    )
+    if environment is None:
+        environment = ResearchComputeEnvironment(
+            lab_id=project.lab_id,
+            environment_key="workflow-compute-e2e",
+            created_by_user_id=owner.id,
+        )
+        db.add(environment)
+        await db.flush()
+        for number in (1, 2):
+            db.add(
+                ResearchComputeEnvironmentRevision(
+                    compute_environment_id=environment.id,
+                    revision=number,
+                    name="Synthetic Workflow Python",
+                    enabled=True,
+                    description="UI fixture only; not an executable research environment.",
+                    image_ref="synthetic.example.test/python@sha256:"
+                    + str(number) * 64,
+                    runtime_version="synthetic-python-3.13",
+                    allowed_languages=["python"],
+                    resource_limits={
+                        "cpu_millis": 1000,
+                        "gpu_count": 0,
+                        "memory_mb": 256,
+                        "timeout_seconds": 60,
+                        "max_output_bytes": 65536,
+                    },
+                    network_policy="none",
+                    allowed_egress_hosts=[],
+                    software_manifest={},
+                    input_schema={
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                    result_schema={
+                        "type": "object",
+                        "properties": {"mean": {"type": "number", "unit": "mg/L"}},
+                        "required": ["mean"],
+                        "additionalProperties": False,
+                    },
+                    estimated_cost_per_hour=Decimal("6"),
+                    currency="USD",
+                    created_by_user_id=owner.id,
+                )
+            )
+        await db.flush()
+        revision = await db.scalar(
+            select(ResearchComputeEnvironmentRevision).where(
+                ResearchComputeEnvironmentRevision.compute_environment_id
+                == environment.id,
+                ResearchComputeEnvironmentRevision.revision == 1,
+            )
+        )
+        runner = ResearchComputeRunner(
+            lab_id=project.lab_id,
+            name="Synthetic offline UI fixture — no execution",
+            token_digest=token_hex(32),
+            token_hint="synthetic",
+            last_report={
+                "protocol_version": "airalogy.compute-runner.v1",
+                "job_schemas": [ANALYSIS_JOB_SCHEMA],
+            },
+            created_by_user_id=owner.id,
+            updated_by_user_id=owner.id,
+        )
+        db.add(runner)
+        await db.flush()
+        db.add(
+            ResearchComputeRunnerEnvironment(
+                runner_id=runner.id,
+                lab_id=project.lab_id,
+                compute_environment_id=environment.id,
+                compute_environment_revision_id=revision.id,
+                created_by_user_id=owner.id,
+            )
+        )
+    revision = await db.scalar(
+        select(ResearchComputeEnvironmentRevision).where(
+            ResearchComputeEnvironmentRevision.compute_environment_id == environment.id,
+            ResearchComputeEnvironmentRevision.revision == 1,
+        )
+    )
+    title = "Synthetic Workflow Python method (not executed)"
+    pipeline = await db.scalar(
+        select(AnalysisPipeline).where(
+            AnalysisPipeline.protocol_id == protocol.id,
+            AnalysisPipeline.created_by_user_id == owner.id,
+            AnalysisPipeline.title == title,
+        )
+    )
+    if pipeline is None:
+        pipeline = AnalysisPipeline(
+            project_id=project.id,
+            protocol_id=protocol.id,
+            created_by_user_id=owner.id,
+            title=title,
+            current_revision=1,
+        )
+        db.add(pipeline)
+        await db.flush()
+        recipe = AnalysisComputeRecipe(
+            kind="compute",
+            environment_revision_id=revision.id,
+            language="python",
+            source_code="import json, os, statistics\nfrom pathlib import Path\nsource = json.loads((Path(os.environ['AIRALOGY_INPUT_DIR']) / 'records.json').read_text())\nvalues = [row['data']['var']['measurement'] for row in source['records']]\nmean = statistics.mean(values)\nPath(os.environ['AIRALOGY_RESULT_JSON']).write_text(json.dumps({'mean': mean}))\n(Path(os.environ['AIRALOGY_RESULT_JSON']).parent / 'files' / 'summary.csv').write_text('mean\\n' + str(mean) + '\\n')\n",
+            parameters={},
+            output_files=[
+                {
+                    "mount_name": "summary.csv",
+                    "asset_name": "Synthetic summary CSV",
+                    "media_type": "text/csv",
+                    "max_bytes": 4096,
+                    "required": True,
+                }
+            ],
+        ).model_dump(mode="json")
+        selection = AnalysisSelection().model_dump(mode="json", exclude_none=True)
+        provenance = {
+            "engine_version": COMPUTE_ENGINE_VERSION,
+            "synthetic_ui_fixture": True,
+        }
+        provenance["method_digest"] = method_revision_digest(
+            recipe, selection, provenance
+        )
+        db.add(
+            AnalysisPipelineRevision(
+                pipeline_id=pipeline.id,
+                revision=1,
+                recipe=recipe,
+                recipe_digest=canonical_digest(recipe),
+                source_selection=selection,
+                provenance=provenance,
+                created_by_user_id=owner.id,
+            )
+        )
+    version = await db.scalar(
+        select(ProtocolVersion).where(
+            ProtocolVersion.protocol_id == protocol.id,
+            ProtocolVersion.version == "1.0.0",
+        )
+    )
+    await db.flush()
+    return {
+        "pipeline_id": str(pipeline.id),
+        "pipeline_title": title,
+        "environment_id": str(environment.id),
+        "environment_revision_id": str(revision.id),
+        "environment_name": revision.name,
+        "protocol_id": str(protocol.id),
+        "protocol_version_id": str(version.id),
+    }
+
+
+async def ensure_workflow_file_fixture(db, project, owner):
+    """Real small managed file and submitted Record; no execution is fabricated."""
+    import hashlib
+    from io import BytesIO
+
+    from sqlalchemy import select
+
+    from app.models.airalogy_file import AiralogyFile
+
+    uid = "workflow_files_e2e"
+    protocol = await Protocol.find_by(
+        db, [Protocol.project_id == project.id, Protocol.uid == uid]
+    )
+    if protocol is None:
+        protocol = Protocol(
+            project_id=project.id,
+            user_id=owner.id,
+            uid=uid,
+            name="Synthetic Workflow Files",
+            latest_version="1.0.0",
+            description="Development-only managed file binding fixture.",
+        )
+        db.add(protocol)
+        await db.flush()
+        db.add(
+            ProtocolVersion(
+                protocol_id=protocol.id,
+                version="1.0.0",
+                meta_data={"id": uid, "version": "1.0.0", "name": protocol.name},
+                json_schema={
+                    "vars": {
+                        "type": "object",
+                        "properties": {
+                            "attachment": {
+                                "type": "string",
+                                "airalogy_type": "FileId",
+                                "file_extension": "csv",
+                                "title": "CSV attachment",
+                            },
+                        },
+                        "required": ["attachment"],
+                    }
+                },
+                fields={"vars": ["attachment"]},
+                assigners={},
+                assigner_graph={},
+                aimd="# Synthetic Workflow Files\n\n{{var|attachment: FileIdCSV}}",
+            )
+        )
+        content = b"sample,measurement\nsynthetic-a,2\nsynthetic-b,4\n"
+        file = AiralogyFile(
+            filename="synthetic-measurements.csv",
+            content_type="text/csv",
+            protocol_id=protocol.id,
+            project_id=project.id,
+            user_id=owner.id,
+        )
+        db.add(file)
+        await db.flush()
+        await file.save_file(
+            BytesIO(content),
+            content_type="text/csv",
+            length=len(content),
+            checksum_sha256=hashlib.sha256(content).hexdigest(),
+        )
+        data = {"var": {"attachment": file.airalogy_id}, "step": {}, "check": {}}
+        db.add(
+            Record(
+                protocol_id=protocol.id,
+                protocol_version="1.0.0",
+                user_id=owner.id,
+                number=1,
+                version=1,
+                data=data,
+                hash=get_data_sha1({"data": data}),
+                report="Synthetic managed CSV, not a Workflow execution.",
+            )
+        )
+        await db.flush()
+    version = await db.scalar(
+        select(ProtocolVersion).where(
+            ProtocolVersion.protocol_id == protocol.id,
+            ProtocolVersion.version == "1.0.0",
+        )
+    )
+    record = await db.scalar(
+        select(Record).where(
+            Record.protocol_id == protocol.id, Record.number == 1, Record.version == 1
+        )
+    )
+    return {
+        "protocol_id": str(protocol.id),
+        "protocol_uid": protocol.uid,
+        "protocol_version_id": str(version.id),
+        "record_id": str(record.id),
+        "record_version": record.version,
+        "file_ref": record.data["var"]["attachment"],
+        "field": "attachment",
+    }
+
+
 @router.post("/quickstart")
 async def ensure_quickstart_fixtures(db_session: DBSession):
     ensure_development_mode()
@@ -617,7 +968,9 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
         await db_session.flush()
     else:
         project.name = "Quickstart Protocol Testing"
-        project.description = "Development-only project with Airalogy example protocols."
+        project.description = (
+            "Development-only project with Airalogy example protocols."
+        )
         project.type = ProjectType.PUBLIC
         project.public_access_role = ProjectRole.EXPLORER
         project.create_user_id = owner.id
@@ -630,6 +983,11 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
         project,
         owner,
     )
+    analysis_protocol = await ensure_analysis_fixture(db_session, project, owner)
+    workflow_compute = await ensure_workflow_compute_fixture(
+        db_session, project, owner, analysis_protocol
+    )
+    workflow_files = await ensure_workflow_file_fixture(db_session, project, owner)
     lab.projects_count = await Project.count(
         db_session,
         [Project.lab_id == lab.id, Project.deleted_at.is_(None)],
@@ -677,5 +1035,11 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
             "record_id": str(governance_record.id),
             "record_version": governance_record.version,
         },
+        "analysis": {
+            "protocol_id": str(analysis_protocol.id),
+            "protocol_uid": analysis_protocol.uid,
+        },
+        "workflow_compute": workflow_compute,
+        "workflow_files": workflow_files,
         "warnings": warnings,
     }

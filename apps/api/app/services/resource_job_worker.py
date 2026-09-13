@@ -31,6 +31,7 @@ from app.services.persistent_jobs import (
     renew_job_lease,
     utcnow,
 )
+from app.services.record_analyses import mark_analysis_failed, process_record_analysis
 from app.services.record_exports import (
     expire_record_exports,
     mark_record_export_failed,
@@ -279,6 +280,10 @@ async def _migrate_resources(db_session: AsyncSession, job: PersistentJob) -> di
 
 
 async def process_persistent_job(db_session: AsyncSession, job: PersistentJob) -> dict:
+    if job.kind == "record_analysis":
+        return await process_record_analysis(
+            db_session, UUID(str(job.payload["analysis_id"]))
+        )
     if job.kind == "research_run_advance":
         return await process_research_run_advance(
             db_session,
@@ -307,6 +312,58 @@ async def process_persistent_job(db_session: AsyncSession, job: PersistentJob) -
     raise ValueError(f"Unsupported persistent job kind: {job.kind}")
 
 
+async def _lock_record_analysis_job_context(db_session, job, *, skip_locked=False):
+    """Lock the governed parent and Analysis before its lower-level Job lease."""
+    from app.models.analysis import AnalysisRun
+    from app.services.workflow_analysis_runtime import workflow_analysis_context
+
+    analysis_id = UUID(str(job.payload["analysis_id"]))
+    await workflow_analysis_context(db_session, analysis_id, skip_locked=skip_locked)
+    analysis = await db_session.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.id == analysis_id)
+        .with_for_update(skip_locked=skip_locked)
+        .execution_options(populate_existing=True)
+    )
+    if analysis is None:
+        if (
+            skip_locked
+            and await db_session.scalar(
+                select(AnalysisRun.id).where(AnalysisRun.id == analysis_id)
+            )
+            is not None
+        ):
+            raise JobDeferred("Analysis is currently locked")
+        # Missing application data does not mean another transaction owns a lock.
+        # An orphan Job must still settle after the lease is checked under lock.
+        return None
+    if analysis.job_id != job.id:
+        raise ValueError("Analysis worker Job binding changed")
+    return analysis
+
+
+async def fail_record_analysis_job(db_session, *, job, worker_id, error):
+    """A failed worker must not acquire its Task after locking the Job."""
+    payload = dict(job.payload)
+    analysis = await _lock_record_analysis_job_context(db_session, job)
+    # fail_job refreshes and checks the current owner, expiry and running state
+    # only after the parent locks. Stale workers cannot alter a reclaimed lease.
+    await fail_job(db_session, job=job, worker_id=worker_id, error=error)
+    if job.kind != "record_analysis" or job.payload != payload:
+        raise ValueError("Analysis worker Job payload changed")
+    if analysis is not None and analysis.status == "cancelled":
+        job.status = JobStatus.CANCELLED.value
+        await db_session.flush()
+        return
+    if analysis is not None:
+        await mark_analysis_failed(
+            db_session,
+            analysis.id,
+            error,
+            terminal=job.status == JobStatus.FAILED.value,
+        )
+
+
 async def reconcile_exhausted_jobs(db_session: AsyncSession) -> int:
     """Settle crashed final attempts; never repeat an uncertain model operation."""
     jobs = list(
@@ -320,12 +377,38 @@ async def reconcile_exhausted_jobs(db_session: AsyncSession) -> int:
                 )
                 .order_by(PersistentJob.lease_expires_at)
                 .limit(20)
-                .with_for_update(skip_locked=True)
                 .execution_options(populate_existing=True)
             )
         ).all()
     )
-    for job in jobs:
+    settled = 0
+    for candidate in jobs:
+        kind, payload = candidate.kind, dict(candidate.payload)
+        if kind == "record_analysis":
+            try:
+                analysis = await _lock_record_analysis_job_context(
+                    db_session, candidate, skip_locked=True
+                )
+            except JobDeferred:
+                continue
+        # Discovery is not authority. Recheck exhaustion after acquiring the
+        # parent locks; renewal, another worker or cancellation may have won.
+        job = await db_session.scalar(
+            select(PersistentJob)
+            .where(
+                PersistentJob.id == candidate.id,
+                PersistentJob.status == JobStatus.RUNNING.value,
+                PersistentJob.lease_expires_at < utcnow(),
+                PersistentJob.attempts >= PersistentJob.max_attempts,
+            )
+            .with_for_update(skip_locked=True)
+            .execution_options(populate_existing=True)
+        )
+        if job is None:
+            continue
+        if job.kind != kind or job.payload != payload:
+            raise ValueError("Persistent Job binding changed during recovery")
+        settled += 1
         error = "Worker lease expired on the final attempt; execution outcome is uncertain. Inspect results before explicitly retrying."
         job.status = JobStatus.FAILED.value
         job.last_error = error
@@ -350,6 +433,13 @@ async def reconcile_exhausted_jobs(db_session: AsyncSession) -> int:
             await mark_record_export_failed(
                 db_session, UUID(str(job.payload["export_id"])), error
             )
+        elif job.kind == "record_analysis":
+            if analysis is not None and analysis.status == "cancelled":
+                job.status = JobStatus.CANCELLED.value
+            else:
+                await mark_analysis_failed(
+                    db_session, UUID(str(job.payload["analysis_id"])), error
+                )
         elif job.kind == "research_notification_delivery":
             await record_research_notification_delivery_failure(
                 db_session,
@@ -359,7 +449,7 @@ async def reconcile_exhausted_jobs(db_session: AsyncSession) -> int:
                 terminal=True,
             )
     await db_session.flush()
-    return len(jobs)
+    return settled
 
 
 async def run_persistent_job_worker(
@@ -381,6 +471,7 @@ async def run_persistent_job_worker(
                         db_session,
                         worker_id=worker_id,
                         kinds={
+                            "record_analysis",
                             "record_export",
                             "record_projection",
                             "research_run_advance",
@@ -428,6 +519,15 @@ async def run_persistent_job_worker(
                     await db_session.rollback()
                     job = await db_session.get(PersistentJob, job_id)
                     if job is not None:
+                        if job.kind == "record_analysis":
+                            await fail_record_analysis_job(
+                                db_session,
+                                job=job,
+                                worker_id=worker_id,
+                                error=str(error),
+                            )
+                            await db_session.commit()
+                            continue
                         await fail_job(
                             db_session,
                             job=job,

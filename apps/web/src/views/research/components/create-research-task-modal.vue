@@ -7,8 +7,8 @@
   </n-button>
 
   <n-modal
-    style="--aira-dialog-width: 48rem"
     v-model:show="visible"
+    style="--aira-dialog-width: 48rem"
     preset="card"
     class="aira-dialog research-task-modal"
     :title="$t('page.research.createTitle')"
@@ -152,7 +152,7 @@
             :placeholder="$t('page.research.criteriaPlaceholder')"
           />
         </n-form-item>
-        <details class="research-task-options mb-5" :open="Boolean(stopText.trim() || deadlineAt || form.budget_limit)">
+        <details class="research-task-options mb-5" :open="Boolean(stopText.trim() || deadlineAt || form.budget_limit)" data-testid="research-task-limits">
           <summary class="aira-type-label cursor-pointer py-3">
             {{ $t("page.research.optionalLimits") }}
           </summary>
@@ -187,6 +187,7 @@
               <n-input-group>
                 <n-input
                   v-model:value="form.budget_limit"
+                  data-testid="research-task-budget"
                   inputmode="decimal"
                   :placeholder="$t('page.research.budgetLimitPlaceholder')"
                 />
@@ -205,12 +206,13 @@
           <summary class="aira-type-label cursor-pointer py-3">
             {{ $t("page.research.optionalEnvironment") }}
             <span class="aira-type-meta mt-1 block" data-testid="research-task-environment-summary">
-              {{ $t("page.research.environmentSelectionSummary", { methods: form.protocol_ids?.length || 0, tools: form.tool_keys?.length || 0, knowledge: form.knowledge_ids?.length || 0, resources: (form.resource_type_ids?.length || 0) + (form.service_offering_ids?.length || 0) + (form.compute_environment_ids?.length || 0) }) }}
+              {{ $t("page.research.environmentSelectionSummary", { methods: form.protocol_ids?.length || 0, tools: form.tool_keys?.length || 0, knowledge: form.knowledge_ids?.length || 0, resources: (form.resource_type_ids?.length || 0) + (form.service_offering_ids?.length || 0) + (form.compute_environment_revision_ids?.length || 0) }) }}
             </span>
           </summary>
           <n-form-item :label="$t('page.research.methods')">
             <n-select
               v-model:value="form.protocol_ids"
+              data-testid="research-task-protocols"
               :options="protocolOptions"
               :loading="protocolsLoading"
               :disabled="!form.project_id"
@@ -269,19 +271,25 @@
           </n-form-item>
           <n-form-item :label="$t('page.research.computeEnvironments')">
             <n-select
-              v-model:value="form.compute_environment_ids"
+              v-model:value="form.compute_environment_revision_ids"
               :options="computeOptions"
-              :loading="capabilitiesLoading"
+              :loading="capabilitiesLoading || computeRevisionsLoading"
               :disabled="!form.project_id"
               multiple
               filterable
               clearable
               :placeholder="$t('page.research.computeEnvironmentsPlaceholder')"
+              data-testid="research-task-compute-revisions"
             />
             <template #feedback>
-              {{ $t("page.research.computeEnvironmentsHint") }}
+              {{ $t("page.workflowAnalysis.exactEnvironmentHint") }}
             </template>
           </n-form-item>
+          <n-alert v-if="computeRevisionError" type="warning" class="mb-3">
+            {{ $t('page.workflowAnalysis.computeRevisionError') }}<n-button size="small" :loading="computeRevisionsLoading" @click="loadComputeRevisions(form.project_id)">
+              {{ $t('common.retry') }}
+            </n-button>
+          </n-alert>
           <n-form-item :label="$t('page.research.knowledgeContext')">
             <n-select
               v-model:value="form.knowledge_ids"
@@ -487,6 +495,7 @@ import type {
   KnowledgeItem,
 } from "@/service/api/knowledge"
 import type { ResearchCapabilityDescriptor } from "@/service/api/research-capabilities"
+import type { ResearchComputeEnvironment } from "@/service/api/research-compute"
 import type {
   AiraResearchTaskDraftResponse,
   ResearchEnvironmentExecutorBinding,
@@ -501,11 +510,13 @@ import { fetchResearchCapabilities } from "@/service/api/research-capabilities"
 import {
   createResearchTask,
   draftResearchTaskWithAira,
+  fetchTaskComputeEnvironmentRevisions,
   previewResearchTask,
 } from "@/service/api/research-tasks"
 import { fetchUserProjects } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
+import { resolveResearchComputeSelection } from "@/utils/research-compute-selection"
 import { $t } from "@airalogy/shared/locales"
 
 interface ProjectContext {
@@ -538,6 +549,9 @@ const toolCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const resourceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const serviceCapabilities = ref<ResearchCapabilityDescriptor[]>([])
 const computeCapabilities = ref<ResearchCapabilityDescriptor[]>([])
+const computeRevisions = ref<ResearchComputeEnvironment[]>([])
+const computeRevisionsLoading = ref(false)
+const computeRevisionError = ref(false)
 const preview = ref<ResearchTaskPreview | null>(null)
 const criteriaText = ref("")
 const stopText = ref("")
@@ -564,6 +578,7 @@ function emptyForm(): ResearchTaskDraft {
     resource_type_ids: [],
     service_offering_ids: [],
     compute_environment_ids: [],
+    compute_environment_revision_ids: [],
     budget_limit: "",
     budget_currency: "USD",
   }
@@ -605,10 +620,10 @@ const serviceOptions = computed(() => serviceCapabilities.value.map(item => ({
   value: item.source_id,
   disabled: !item.available,
 })))
-const computeOptions = computed(() => computeCapabilities.value.map(item => ({
-  label: `${item.name} · r${item.version} · ${String(item.metadata.runtime_version || "")}`,
-  value: item.source_id,
-  disabled: !item.available,
+const computeOptions = computed(() => computeRevisions.value.map(item => ({
+  label: `${item.name} · r${item.metadata.environment_revision} · ${item.metadata.runtime_version}`,
+  value: item.source_revision_id,
+  disabled: !item.available || computeRevisions.value.some(other => other.source_id === item.source_id && other.source_revision_id !== item.source_revision_id && form.compute_environment_revision_ids?.includes(other.source_revision_id)),
 })))
 const autonomyOptions = computed(() => [
   { label: $t("page.research.autonomyAssisted"), value: "assisted" },
@@ -715,19 +730,27 @@ async function loadCapabilities(projectId: string) {
   resourceCapabilities.value = []
   serviceCapabilities.value = []
   computeCapabilities.value = []
+  computeRevisions.value = []
+  computeRevisionsLoading.value = false
+  computeRevisionError.value = false
   form.tool_keys = []
   form.resource_type_ids = []
   form.service_offering_ids = []
   form.compute_environment_ids = []
+  form.compute_environment_revision_ids = []
   if (!projectId)
     return
   capabilitiesLoading.value = true
   try {
     const catalog = await fetchResearchCapabilities(projectId)
+    if (form.project_id !== projectId)
+      return
     toolCapabilities.value = catalog.tools
     resourceCapabilities.value = catalog.resources
     serviceCapabilities.value = catalog.services
     computeCapabilities.value = catalog.compute
+    if (catalog.compute.length)
+      await loadComputeRevisions(projectId)
     const internalSearch = catalog.tools.find(item =>
       item.available && item.source_id === "knowledge.search",
     )
@@ -736,6 +759,26 @@ async function loadCapabilities(projectId: string) {
   }
   finally {
     capabilitiesLoading.value = false
+  }
+}
+
+async function loadComputeRevisions(projectId: string) {
+  if (!projectId)
+    return
+  computeRevisionsLoading.value = true
+  computeRevisionError.value = false
+  try {
+    const revisions = await fetchTaskComputeEnvironmentRevisions(projectId)
+    if (form.project_id === projectId)
+      computeRevisions.value = revisions.items
+  }
+  catch {
+    if (form.project_id === projectId)
+      computeRevisionError.value = true
+  }
+  finally {
+    if (form.project_id === projectId)
+      computeRevisionsLoading.value = false
   }
 }
 
@@ -809,11 +852,21 @@ async function handleAiraDraft() {
       additional_constraints: airaConstraints.value.trim(),
       autonomy_level: form.autonomy_level,
     })
+    let computeRevisionIds: string[]
+    try {
+      computeRevisionIds = resolveResearchComputeSelection(result.draft.compute_environment_ids ?? [], result.draft.compute_environment_revision_ids ?? [], computeCapabilities.value, computeRevisions.value)
+    }
+    catch {
+      window.$message?.warning($t("page.workflowAnalysis.invalidComputeSelection"))
+      return
+    }
     Object.assign(form, {
       ...result.draft,
       project_id: form.project_id,
       autonomy_level: form.autonomy_level,
     })
+    form.compute_environment_revision_ids = computeRevisionIds
+    form.compute_environment_ids = []
     criteriaText.value = result.draft.success_criteria.join("\n")
     stopText.value = result.draft.stop_conditions.join("\n")
     airaGuidance.value = {

@@ -1267,7 +1267,7 @@ async def remove_collection_entry(
 
 
 async def _knowledge_payload(
-    db_session: DBSession, item: KnowledgeItem
+    db_session: DBSession, item: KnowledgeItem, current_user: User
 ) -> dict[str, Any]:
     paper_ids = list(
         (
@@ -1298,6 +1298,11 @@ async def _knowledge_payload(
                 )
             )
         ).all()
+    )
+    from app.services.research_asset_visibility import visible_knowledge_evidence_links
+
+    evidence_links = await visible_knowledge_evidence_links(
+        db_session, evidence_links, current_user
     )
     return item.as_dict(
         paper_library_entry_ids=paper_ids,
@@ -1903,7 +1908,7 @@ async def create_knowledge_item(
                 detail="This Aira Knowledge generation has already been used",
             ) from error
         raise
-    return await _knowledge_payload(db_session, item)
+    return await _knowledge_payload(db_session, item, current_user)
 
 
 @router.get("/items")
@@ -1954,7 +1959,7 @@ async def list_knowledge_items(
             await authorize_knowledge_item(db_session, current_user, item)
         except HTTPException:
             continue
-        visible.append(await _knowledge_payload(db_session, item))
+        visible.append(await _knowledge_payload(db_session, item, current_user))
     return {"items": visible, "page": page, "page_size": page_size}
 
 
@@ -1966,7 +1971,7 @@ async def get_knowledge_item(
     if item is None:
         raise HTTPException(status_code=404, detail="Knowledge item not found")
     await authorize_knowledge_item(db_session, current_user, item)
-    return await _knowledge_payload(db_session, item)
+    return await _knowledge_payload(db_session, item, current_user)
 
 
 @router.patch("/items/{item_id}")
@@ -2010,7 +2015,7 @@ async def update_knowledge_item(
         )
     )
     await db_session.commit()
-    return await _knowledge_payload(db_session, item)
+    return await _knowledge_payload(db_session, item, current_user)
 
 
 @router.post("/items/{item_id}/review")
@@ -2051,7 +2056,7 @@ async def review_knowledge_item(
         )
     )
     await db_session.commit()
-    return await _knowledge_payload(db_session, item)
+    return await _knowledge_payload(db_session, item, current_user)
 
 
 async def _publish_command(
@@ -2244,7 +2249,7 @@ async def confirm_knowledge_publish(
             )
         )
     await db_session.commit()
-    return await _knowledge_payload(db_session, published)
+    return await _knowledge_payload(db_session, published, current_user)
 
 
 @router.post("/files/{file_id}/token")

@@ -73,6 +73,12 @@ from app.services.research_action_outputs import (
     action_output_payload,
     verify_action_output_snapshot,
 )
+from app.services.research_asset_visibility import (
+    require_artifact_source_readable,
+    require_claim_sources_readable,
+    require_evidence_source_readable,
+    require_protocol_improvement_readable,
+)
 from app.services.research_assets import research_asset_bundle
 from app.services.research_claims import (
     AiraClaimGeneration,
@@ -560,6 +566,15 @@ async def _validate_evidence_artifact(
         run = await db_session.get(ResearchRun, action.run_id)
         if run is None or run.task_id != context.task.id:
             raise HTTPException(status_code=404, detail="Research Action not found")
+        await require_artifact_source_readable(
+            db_session,
+            task=context.task,
+            user=current_user,
+            artifact_type=artifact_type,
+            artifact_id=artifact_id,
+            artifact_version=artifact_version,
+            action=action,
+        )
         from app.services.research_action_outputs import (
             require_evidence_eligible_action,
         )
@@ -598,6 +613,14 @@ async def _validate_evidence_artifact(
         protocol = await db_session.get(Protocol, record.protocol_id)
         if protocol is None or protocol.project_id != context.project.id:
             raise HTTPException(status_code=404, detail="Record not found")
+        await require_artifact_source_readable(
+            db_session,
+            task=context.task,
+            user=current_user,
+            artifact_type=artifact_type,
+            artifact_id=artifact_id,
+            artifact_version=str(record.version),
+        )
         return str(record.version)
 
     if artifact_type == "data_asset":
@@ -622,6 +645,14 @@ async def _validate_evidence_artifact(
         )
         if not exists:
             raise HTTPException(status_code=404, detail="DataAsset version not found")
+        await require_artifact_source_readable(
+            db_session,
+            task=context.task,
+            user=current_user,
+            artifact_type=artifact_type,
+            artifact_id=artifact_id,
+            artifact_version=str(version),
+        )
         return str(version)
 
     if artifact_type == "knowledge":
@@ -744,6 +775,7 @@ async def _evidence_for_task(
     db_session: DBSession,
     task_id: UUID,
     evidence_inputs: list[ClaimEvidenceInput],
+    current_user: User,
 ) -> list[ResearchEvidence]:
     if not evidence_inputs:
         return []
@@ -761,6 +793,8 @@ async def _evidence_for_task(
         raise HTTPException(
             status_code=422, detail="Claim evidence is not in this Task"
         )
+    for item in evidence:
+        await require_evidence_source_readable(db_session, item, current_user)
     return evidence
 
 
@@ -1005,7 +1039,9 @@ def _verify_protocol_improvement_generation(
 async def _protocol_improvement_payload(
     db_session: DBSession,
     proposal: ProtocolImprovementProposal,
+    current_user: User,
 ) -> dict[str, Any]:
+    await require_protocol_improvement_readable(db_session, proposal, current_user)
     protocol = await db_session.get(Protocol, proposal.protocol_id)
     links = list(
         (
@@ -1016,6 +1052,11 @@ async def _protocol_improvement_payload(
             )
         ).all()
     )
+    for link in links:
+        evidence = await db_session.get(ResearchEvidence, link.evidence_id)
+        if evidence is None or evidence.task_id != proposal.task_id:
+            raise HTTPException(403, "Protocol improvement source is unavailable")
+        await require_evidence_source_readable(db_session, evidence, current_user)
     return {
         **proposal.as_dict(),
         "protocol": (
@@ -1102,7 +1143,7 @@ async def _add_claim_relations(
     claim: ResearchClaim,
     evidence_inputs: list[ClaimEvidenceInput],
 ) -> list[dict[str, Any]]:
-    await _evidence_for_task(db_session, claim.task_id, evidence_inputs)
+    await _evidence_for_task(db_session, claim.task_id, evidence_inputs, current_user)
     payload: list[dict[str, Any]] = []
     for item in evidence_inputs:
         relation = {
@@ -1130,7 +1171,9 @@ async def get_task_research_assets(
     db_session: DBSession,
 ):
     await _task_context(db_session, current_user, task_id, "research.read")
-    return await research_asset_bundle(db_session, task_id=task_id)
+    return await research_asset_bundle(
+        db_session, task_id=task_id, current_user=current_user
+    )
 
 
 @router.post("/data-assets/preview")
@@ -1477,6 +1520,7 @@ async def review_evidence(
     context = await _task_context(
         db_session, current_user, evidence.task_id, "research.approve"
     )
+    await require_evidence_source_readable(db_session, evidence, current_user)
     if evidence.quality_state != params.expected_quality_state.value:
         raise HTTPException(status_code=409, detail="Evidence review state has changed")
     if evidence.quality_state != EvidenceQuality.PENDING.value:
@@ -1634,7 +1678,9 @@ async def preview_claim(
             ),
         )
     else:
-        await _evidence_for_task(db_session, context.task.id, params.evidence)
+        await _evidence_for_task(
+            db_session, context.task.id, params.evidence, current_user
+        )
         generation = None
     command = _claim_command(params)
     return {
@@ -1686,7 +1732,9 @@ async def create_claim(
             ),
         )
     else:
-        await _evidence_for_task(db_session, context.task.id, draft.evidence)
+        await _evidence_for_task(
+            db_session, context.task.id, draft.evidence, current_user
+        )
         generation = None
     command = _claim_command(draft)
     if canonical_digest(command) != params.preview_digest:
@@ -1756,9 +1804,10 @@ async def preview_claim_revision(
     if claim is None:
         raise HTTPException(status_code=404, detail="Claim not found")
     await _task_context(db_session, current_user, claim.task_id, "research.run")
+    await require_claim_sources_readable(db_session, claim, current_user)
     if claim.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Claim has changed")
-    await _evidence_for_task(db_session, claim.task_id, params.evidence)
+    await _evidence_for_task(db_session, claim.task_id, params.evidence, current_user)
     command = {"claim_id": str(claim.id), **_claim_command(params)}
     return {
         "preview_digest": canonical_digest(command),
@@ -1783,12 +1832,13 @@ async def create_claim_revision(
     context = await _task_context(
         db_session, current_user, claim.task_id, "research.run"
     )
+    await require_claim_sources_readable(db_session, claim, current_user)
     if claim.revision != params.expected_revision:
         raise HTTPException(status_code=409, detail="Claim has changed")
     draft = ClaimRevisionDraft.model_validate(
         params.model_dump(exclude={"preview_digest"})
     )
-    await _evidence_for_task(db_session, claim.task_id, draft.evidence)
+    await _evidence_for_task(db_session, claim.task_id, draft.evidence, current_user)
     command = {"claim_id": str(claim.id), **_claim_command(draft)}
     if canonical_digest(command) != params.preview_digest:
         raise HTTPException(status_code=409, detail="Claim preview has changed")
@@ -1843,6 +1893,7 @@ async def review_claim(
     context = await _task_context(
         db_session, current_user, claim.task_id, "research.approve"
     )
+    await require_claim_sources_readable(db_session, claim, current_user)
     if (
         claim.revision != params.expected_revision
         or claim.state != params.expected_state.value
@@ -2276,7 +2327,7 @@ async def create_protocol_improvement(
         idempotency_key=f"protocol-improvement:{proposal.id}:suggested:r1",
     )
     await db_session.commit()
-    return await _protocol_improvement_payload(db_session, proposal)
+    return await _protocol_improvement_payload(db_session, proposal, current_user)
 
 
 @router.get("/protocol-improvements/{proposal_id}")
@@ -2289,7 +2340,7 @@ async def get_protocol_improvement(
     if proposal is None:
         raise HTTPException(status_code=404, detail="Protocol improvement not found")
     await _task_context(db_session, current_user, proposal.task_id, "research.read")
-    return await _protocol_improvement_payload(db_session, proposal)
+    return await _protocol_improvement_payload(db_session, proposal, current_user)
 
 
 @router.post("/protocol-improvements/{proposal_id}/review")
@@ -2309,6 +2360,7 @@ async def review_protocol_improvement(
     context = await _task_context(
         db_session, current_user, proposal.task_id, "research.approve"
     )
+    await _protocol_improvement_payload(db_session, proposal, current_user)
     protocol = await db_session.get(Protocol, proposal.protocol_id)
     if protocol is None or protocol.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Protocol not found")
@@ -2356,4 +2408,4 @@ async def review_protocol_improvement(
         ),
     )
     await db_session.commit()
-    return await _protocol_improvement_payload(db_session, proposal)
+    return await _protocol_improvement_payload(db_session, proposal, current_user)

@@ -20,7 +20,12 @@ from app.models.lab import Lab, LabUser
 from app.models.lab_force_delete_job import LabForceDeleteJob
 from app.models.pinned_item import PinnedItem, PinnedResourceType
 from app.models.project import Project, ProjectUser
-from app.models.project_group import ProjectGroup, ProjectGroupProtocol, ProjectGroupUser, ProtocolUser
+from app.models.project_group import (
+    ProjectGroup,
+    ProjectGroupProtocol,
+    ProjectGroupUser,
+    ProtocolUser,
+)
 from app.models.protocol import Protocol
 from app.models.protocol_folder import ProtocolFolder, ProtocolFolderProtocol
 from app.models.protocol_version import ProtocolVersion
@@ -169,9 +174,11 @@ async def run_lab_force_delete_job(job_id: int):
             if job is None:
                 return
 
-            lab = await Lab.find_by(db_session, [Lab.id == job.lab_id])
+            lab = await Lab.find_by(db_session, [Lab.id == job.lab_id], with_for_update=True)
             if lab is None:
                 raise ValueError("Lab not found")
+            if lab.create_user_id != job.requested_by_user_id:
+                raise ValueError("Lab deletion requester is no longer the Lab creator")
 
             manifest = await collect_lab_force_delete_manifest(db_session, lab)
             await _delete_lab_from_database(db_session, lab, manifest)
@@ -201,6 +208,11 @@ async def _delete_lab_from_database(
     lab: Lab,
     manifest: dict[str, Any],
 ):
+    if manifest.get("lab_id") != lab.id:
+        raise ValueError("Lab deletion manifest does not match the confirmed Lab")
+    # This is deliberately in the same transaction as the existing Lab delete.
+    # A later protected research FK failure rolls back these lineage deletions.
+    await _delete_lab_workflow_file_references(db_session, lab.id)
     project_ids = manifest["project_ids"]
     project_group_ids = manifest["project_group_ids"]
     protocol_folder_ids = manifest["protocol_folder_ids"]
@@ -345,7 +357,127 @@ async def _delete_lab_from_database(
     await db_session.flush()
 
     if logo_attachment is not None:
-        await db_session.execute(delete(Attachment).where(Attachment.id == logo_attachment.id))
+        await db_session.execute(
+            delete(Attachment).where(Attachment.id == logo_attachment.id)
+        )
+
+
+async def _delete_lab_workflow_file_references(db_session: AsyncSession, lab_id):
+    """Remove only this Lab's logical file lifecycle, never its shared blobs.
+
+    Do not reuse this helper for local Protocol/file deletes: their source and
+    execution references must remain protected. Unexpected cross-Lab references
+    stop the entire transaction rather than deleting another Lab's lineage.
+    """
+    from app.models.record_export import RecordExport
+    from app.models.research import ResearchTask
+    from app.models.workflow_file import (
+        WorkflowFileBinding,
+        WorkflowFileExportReference,
+    )
+
+    tasks = list(
+        (
+            await db_session.scalars(
+                select(ResearchTask)
+                .where(ResearchTask.lab_id == lab_id)
+                .order_by(ResearchTask.id)
+                .with_for_update()
+            )
+        ).all()
+    )
+    if not tasks:
+        return
+    project_ids = set(
+        (
+            await db_session.scalars(select(Project.id).where(Project.lab_id == lab_id))
+        ).all()
+    )
+    if any(task.project_id not in project_ids for task in tasks):
+        raise ValueError(
+            "Workflow Task does not belong to the confirmed Lab's Projects"
+        )
+    task_ids = [task.id for task in tasks]
+    bindings = list(
+        (
+            await db_session.scalars(
+                select(WorkflowFileBinding)
+                .where(WorkflowFileBinding.task_id.in_(task_ids))
+                .order_by(WorkflowFileBinding.file_id)
+                .with_for_update()
+            )
+        ).all()
+    )
+    if not bindings:
+        return
+    file_ids = [binding.file_id for binding in bindings]
+    files = list(
+        (
+            await db_session.scalars(
+                select(AiralogyFile)
+                .where(AiralogyFile.id.in_(file_ids))
+                .order_by(AiralogyFile.id)
+                .with_for_update()
+            )
+        ).all()
+    )
+    protocol_ids = set(
+        (
+            await db_session.scalars(
+                select(Protocol.id).where(Protocol.project_id.in_(project_ids))
+            )
+        ).all()
+    )
+    tasks_by_id = {task.id: task for task in tasks}
+    bindings_by_id = {binding.file_id: binding for binding in bindings}
+    if len(files) != len(bindings) or any(
+        file.storage_backend != "workflow_reference"
+        or file.protocol_id not in protocol_ids
+        or file.project_id != tasks_by_id[bindings_by_id[file.id].task_id].project_id
+        for file in files
+    ):
+        raise ValueError("Workflow logical file scope does not match the confirmed Lab")
+    foreign_binding = await db_session.scalar(
+        select(WorkflowFileBinding.file_id)
+        .where(
+            WorkflowFileBinding.source_file_id.in_(file_ids),
+            WorkflowFileBinding.task_id.not_in(task_ids),
+        )
+        .limit(1)
+    )
+    foreign_export = await db_session.scalar(
+        select(WorkflowFileExportReference.file_id)
+        .join(RecordExport, RecordExport.id == WorkflowFileExportReference.export_id)
+        .where(
+            WorkflowFileExportReference.file_id.in_(file_ids),
+            RecordExport.lab_id != lab_id,
+        )
+        .limit(1)
+    )
+    if foreign_binding is not None or foreign_export is not None:
+        raise ValueError(
+            "Another Lab still references these Workflow files; deletion is blocked"
+        )
+    await db_session.execute(
+        delete(WorkflowFileExportReference).where(
+            WorkflowFileExportReference.file_id.in_(file_ids),
+            WorkflowFileExportReference.export_id.in_(
+                select(RecordExport.id).where(RecordExport.lab_id == lab_id)
+            ),
+        )
+    )
+    await db_session.execute(
+        delete(WorkflowFileBinding).where(
+            WorkflowFileBinding.file_id.in_(file_ids),
+            WorkflowFileBinding.task_id.in_(task_ids),
+        )
+    )
+    await db_session.execute(
+        delete(AiralogyFile).where(
+            AiralogyFile.id.in_(file_ids),
+            AiralogyFile.storage_backend == "workflow_reference",
+        )
+    )
 
 
 async def _cleanup_storage_objects(manifest: dict[str, Any] | None) -> list[str]:
@@ -359,6 +491,8 @@ async def _cleanup_storage_objects(manifest: dict[str, Any] | None) -> list[str]
         await _delete_storage_key(logo_attachment.object_key, failures)
 
     for airalogy_file in manifest["airalogy_files"]:
+        if airalogy_file.storage_backend == "workflow_reference":
+            continue
         await _delete_storage_key(airalogy_file.object_key, failures)
 
     for protocol_version in manifest["protocol_versions"]:

@@ -7,6 +7,9 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+
 from app.main import app
 from app.models.research import (
     ResearchAction,
@@ -24,8 +27,6 @@ from app.services.research_result_packages import (
     verify_result_package_digest,
 )
 from app.services.research_runtime import build_research_result_package
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
 
 def compile_table(model) -> str:
@@ -276,6 +277,10 @@ def test_markdown_result_package_is_human_readable_and_retains_raw_snapshot():
 
 
 def test_legacy_package_is_readable_without_claiming_it_was_finalized(monkeypatch):
+    source_access = AsyncMock()
+    monkeypatch.setattr(
+        result_package_router, "require_asset_snapshot_sources_readable", source_access
+    )
     task_id = uuid4()
     run_id = uuid4()
     task = SimpleNamespace(
@@ -323,6 +328,7 @@ def test_legacy_package_is_readable_without_claiming_it_was_finalized(monkeypatc
     assert envelope["snapshot"]["task_revision"] is None
     assert envelope["snapshot"]["finalized_at"] is None
     assert len(envelope["snapshot"]["digest"]) == 64
+    assert source_access.await_args.kwargs["payload"] == run.result_package
 
 
 def test_openapi_exposes_result_package_read_and_export_routes():

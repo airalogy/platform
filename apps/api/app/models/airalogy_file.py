@@ -151,6 +151,10 @@ class AiralogyFile(Base):
             "metadata": self.storage_metadata,
         }
 
+    def _require_direct_storage(self):
+        if self.storage_backend == "workflow_reference":
+            raise ValueError("Workflow file references require source-authorized access")
+
     def reference_payload(self, url: str | None = None) -> dict:
         return {
             "id": self.id,
@@ -165,6 +169,7 @@ class AiralogyFile(Base):
         }
 
     async def file_object_url(self, expires=24):
+        self._require_direct_storage()
         if self.external_uri:
             return self.external_uri
         return await file_object_url(
@@ -174,6 +179,7 @@ class AiralogyFile(Base):
         )
 
     async def local_url(self, expires=24):
+        self._require_direct_storage()
         if self.external_uri:
             return self.external_uri
         return await file_local_url(
@@ -192,6 +198,7 @@ class AiralogyFile(Base):
         namespace: str | None = None,
         checksum_sha256: str | None = None,
     ):
+        self._require_direct_storage()
         self.content_type = content_type or self.content_type
         self.size_bytes = (
             length if length is not None and length >= 0 else self.size_bytes
@@ -207,6 +214,7 @@ class AiralogyFile(Base):
         )
 
     async def download_file(self, file_path: str):
+        self._require_direct_storage()
         if self.external_uri:
             raise ValueError("External file references cannot be downloaded directly.")
         return await download_file(
@@ -216,11 +224,13 @@ class AiralogyFile(Base):
         )
 
     async def get_file_content(self):
+        self._require_direct_storage()
         if self.external_uri:
             raise ValueError("External file references cannot be read directly.")
         return await get_file_content(self.object_key, backend=self.storage_backend)
 
     async def get_file_with_stream(self):
+        self._require_direct_storage()
         if self.external_uri:
             raise ValueError("External file references cannot be streamed directly.")
         async for chunk in get_file_with_stream(
@@ -230,6 +240,7 @@ class AiralogyFile(Base):
             yield chunk
 
     async def copy_file(self, destination_key: str):
+        self._require_direct_storage()
         if self.external_uri:
             raise ValueError("External file references cannot be copied directly.")
         return await copy_file(
@@ -239,6 +250,9 @@ class AiralogyFile(Base):
         )
 
     async def delete_file(self):
+        # A logical reference never owns or deletes its source's shared blob.
+        if self.storage_backend == "workflow_reference":
+            return None
         if self.external_uri:
             return None
         return await delete_file(self.object_key, backend=self.storage_backend)

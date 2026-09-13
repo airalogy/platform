@@ -13,6 +13,7 @@ from app.models.research import (
     ResearchResultPackageSnapshot,
     ResearchReviewRecommendation,
 )
+from app.routers import research_tasks
 from app.routers.research_tasks import TaskCompleteParams, _reproduction_context
 from app.services.research_reproduction import (
     ReproductionAssessment,
@@ -301,6 +302,8 @@ def test_context_rejects_changed_source_lineage():
 
 
 def test_router_context_prefers_and_verifies_sealed_source_snapshot(monkeypatch):
+    source_access = AsyncMock()
+    monkeypatch.setattr(research_tasks, "_require_run_package_sources", source_access)
     task_id = uuid4()
     source_run_id = uuid4()
     replication_run_id = uuid4()
@@ -346,6 +349,7 @@ def test_router_context_prefers_and_verifies_sealed_source_snapshot(monkeypatch)
         _reproduction_context(
             db_session,
             SimpleNamespace(id=task_id, success_criteria=["Criterion"]),
+            current_user=SimpleNamespace(id=uuid4()),
             run=replication_run,
             scientific_assets={"evidence": []},
         )
@@ -355,3 +359,4 @@ def test_router_context_prefers_and_verifies_sealed_source_snapshot(monkeypatch)
     assert context["source_run"]["snapshot_sealed"] is True
     assert context["source_run"]["result_digest"] == source_digest
     assert context["lineage_intact"] is True
+    source_access.assert_awaited_once()

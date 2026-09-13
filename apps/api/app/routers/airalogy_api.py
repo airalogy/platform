@@ -261,6 +261,14 @@ async def download_file(
     current_user: CurrentUser,
 ):
     att = await AiralogyFile.find(db_session, airalogy_file_id)
+    from app.services.workflow_files import (
+        authorized_file,
+        is_workflow_file,
+        stream_workflow_file,
+    )
+    await authorized_file(db_session, att, current_user)
+    if is_workflow_file(att):
+        return await stream_workflow_file(db_session, att, current_user)
     protocol = await Protocol.find(db_session, att.protocol_id)
     project = await Project.find(db_session, id=protocol.project_id)
     await check_user_permission(
@@ -286,6 +294,15 @@ async def get_file_url(
     current_user: CurrentUser,
 ):
     att = await AiralogyFile.find(db_session, airalogy_file_id)
+    from app.services.workflow_files import (
+        authorized_file,
+        file_reference_payload,
+        is_workflow_file,
+    )
+    await authorized_file(db_session, att, current_user)
+    if is_workflow_file(att):
+        reference = await file_reference_payload(db_session, att, current_user)
+        return {"url": reference["url"], "expires_in_seconds": reference["expires_in_seconds"]}
     protocol = await Protocol.find(db_session, att.protocol_id)
     project = await Project.find(db_session, id=protocol.project_id)
     await check_user_permission(

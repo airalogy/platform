@@ -19,6 +19,7 @@ from airalogy.archive import (
     pack_records_archive,
     validate_archive,
 )
+from fastapi import HTTPException
 from sqlalchemy import and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -268,7 +269,11 @@ async def preview_record_export(
     record_count = 0
     protocol_versions: set[tuple[UUID, str]] = set()
     file_ids: set[UUID] = set()
+    from app.services.workflow_files import authorize_record_files
+
+    requester = await db_session.get(User, record_export.requested_by_user_id)
     async for record, protocol, _, _, _ in iter_export_rows(db_session, record_export):
+        await authorize_record_files(db_session, record.data, requester)
         record_count += 1
         protocol_versions.add((protocol.id, record.protocol_version))
         file_ids.update(file_id for file_id, _, _ in _walk_file_ids(record.data))
@@ -398,6 +403,7 @@ async def _file_payload_specs(
     directory: Path,
     *,
     include_attachments: bool,
+    user=None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     occurrences: list[tuple[Path, str, int, UUID, str, str]] = []
     for record_path in record_paths:
@@ -451,6 +457,10 @@ async def _file_payload_specs(
                 }
             )
             continue
+        from app.services.workflow_files import authorized_file, is_workflow_file
+
+        if is_workflow_file(stored):
+            await authorized_file(db_session, stored, user)
         spec: dict[str, Any] = {
             "file_id": stored.airalogy_id,
             "filename": stored.filename,
@@ -475,7 +485,21 @@ async def _file_payload_specs(
                 )
                 local_path.parent.mkdir(parents=True, exist_ok=True)
                 try:
-                    await stored.download_file(str(local_path))
+                    if is_workflow_file(stored):
+                        from app.services.workflow_files import verified_blob_spool
+
+                        _, _, blob = await authorized_file(db_session, stored, user)
+                        handle = await verified_blob_spool(blob)
+                        try:
+                            with local_path.open("wb") as destination:
+                                while chunk := handle.read(64 * 1024):
+                                    destination.write(chunk)
+                        finally:
+                            handle.close()
+                    else:
+                        await stored.download_file(str(local_path))
+                except HTTPException:
+                    raise
                 except Exception as exc:  # noqa: BLE001 - storage adapters vary
                     warnings.append(
                         {
@@ -649,10 +673,23 @@ async def _write_export_file(
         else None
     )
     processed = 0
+    requester = await db_session.get(User, record_export.requested_by_user_id)
 
     async for record, protocol, project, lab, user in iter_export_rows(
         db_session, record_export
     ):
+        from sqlalchemy.dialects.postgresql import insert
+
+        from app.models.workflow_file import WorkflowFileExportReference
+        from app.services.workflow_files import authorize_record_files
+
+        protected = await authorize_record_files(db_session, record.data, requester)
+        for file in protected:
+            await db_session.execute(
+                insert(WorkflowFileExportReference)
+                .values(export_id=record_export.id, file_id=file.id)
+                .on_conflict_do_nothing()
+            )
         payload = serialize_record(record, protocol, project, lab, user)
         protocol_versions.add((protocol.id, record.protocol_version))
         processed += 1
@@ -708,6 +745,7 @@ async def _write_export_file(
             record_paths,
             directory,
             include_attachments=record_export.include_attachments,
+            user=requester,
         )
         _pack_records_archive_streaming_files(
             record_paths,

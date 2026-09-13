@@ -9,7 +9,15 @@ from typing import Any, Dict, Literal
 from airalogy.archive import ArchiveError, unpack_archive, validate_archive
 from airalogy.record.hash import get_data_sha1
 from dotenv import dotenv_values
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy import and_, cast, distinct, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB
@@ -566,6 +574,8 @@ async def import_protocol_records(
     created_records: list[Record] = []
     for offset, imported_record in enumerate(imported_records):
         data = _record_data_from_imported_record(imported_record, protocol_version)
+        from app.services.workflow_files import authorize_record_files
+        await authorize_record_files(db_session, data, current_user)
         record = Record(
             id=normalized_record_ids[offset],
             protocol_id=protocol_id,
@@ -611,6 +621,8 @@ async def create_protocol_record(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    from app.services.workflow_files import authorize_record_files
+    await authorize_record_files(db_session, params.model_dump(), current_user)
     protocol = await Protocol.find(db_session, id=protocol_id)
     project = await Project.find(db_session, id=protocol.project_id)
     await check_user_permission(
@@ -755,6 +767,8 @@ async def update_protocol_record(
         if v.get("airalogy_type") == "IgnoreStr":
             data["var"][k] = ""
 
+    from app.services.workflow_files import authorize_record_files
+    await authorize_record_files(db_session, params.model_dump(), current_user)
     new_record = Record(
         id=record.id,
         protocol_id=protocol_id,

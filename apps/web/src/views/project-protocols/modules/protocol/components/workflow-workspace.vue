@@ -3,6 +3,14 @@
     <n-alert type="info" :show-icon="false">
       {{ $t("page.protocol.workflow.workspaceHint") }}
     </n-alert>
+    <n-alert v-if="cardWorkflowRoute" type="info" :show-icon="false">
+      <p class="my-0">
+        {{ $t('page.workflowLegacy.preserve') }}
+      </p>
+      <router-link :to="cardWorkflowRoute" target="_blank" rel="noopener noreferrer" class="mt-2 inline-block text-primary underline" data-testid="legacy-workflow-open-cards">
+        {{ $t('page.workflowLegacy.openWorkbench') }}
+      </router-link>
+    </n-alert>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)]">
       <n-card :title="$t('page.protocol.workflow.structureTitle')" size="small">
@@ -269,6 +277,7 @@ import { useProtocolInfoStore } from "@/views/project-protocols/hooks/useProtoco
 import { useClosableMessage } from "@airalogy/composables"
 import { getRealAiralogyId } from "@airalogy/shared/utils/parseAiralogyId"
 import { useI18n } from "vue-i18n"
+import { useRoute } from "vue-router"
 
 interface Props {
   workflowId: string
@@ -286,6 +295,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { t } = useI18n()
+const route = useRoute()
+const cardWorkflowRoute = computed(() => typeof route.params.labUid === "string" && typeof route.params.projectUid === "string" ? { name: "project-workflows" as const, params: { labUid: route.params.labUid, projectUid: route.params.projectUid } } : null)
 const message = useClosableMessage()
 const workflowStore = useProtocolWorkflowStore()
 const { protocolInfo, protocolUid } = useProtocolInfoStore()!

@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import config
@@ -33,7 +33,9 @@ from app.models.knowledge import (
 )
 from app.models.lab import LabRole, LabUser
 from app.models.project import Project
+from app.models.research_execution import ResearchComputeJob, ResearchComputeJobOutput
 from app.models.user import User
+from app.models.workflow_file import WorkflowFileBinding
 from app.services.access_control import (
     ROLE_CAPABILITIES,
     resolve_resource_access,
@@ -57,22 +59,45 @@ async def assert_research_file_upload_quota(
     # Every logical ResearchFile writer uses this shared owner lock; physical
     # blob deduplication never bypasses a concurrent user's logical-file quota.
     await db_session.scalar(select(User.id).where(User.id == user_id).with_for_update())
+    # Private analysis output blobs deliberately have no ResearchFile or
+    # Project DataAsset. Count each logical output as well, including failed
+    # jobs' retained uploads, so deduplication and private scope cannot bypass
+    # the same storage quota used by every other research-file writer.
+    logical_files = union_all(
+        select(ResearchFileBlob.size_bytes.label("size_bytes"))
+        .select_from(WorkflowFileBinding)
+        .join(ResearchFileBlob, ResearchFileBlob.id == WorkflowFileBinding.blob_id)
+        .where(WorkflowFileBinding.created_by_user_id == user_id),
+        select(ResearchFileBlob.size_bytes.label("size_bytes"))
+        .select_from(ResearchFile)
+        .join(ResearchFileBlob, ResearchFileBlob.id == ResearchFile.blob_id)
+        .where(
+            ResearchFile.uploaded_by_user_id == user_id,
+            ResearchFile.archived_at.is_(None),
+        ),
+        select(ResearchFileBlob.size_bytes.label("size_bytes"))
+        .select_from(ResearchComputeJobOutput)
+        .join(
+            ResearchComputeJob,
+            ResearchComputeJob.id == ResearchComputeJobOutput.compute_job_id,
+        )
+        .join(ResearchFileBlob, ResearchFileBlob.id == ResearchComputeJobOutput.blob_id)
+        .where(
+            ResearchComputeJob.analysis_run_id.is_not(None),
+            ResearchComputeJob.created_by_user_id == user_id,
+        ),
+    ).subquery()
     count, total = (
         await db_session.execute(
             select(
-                func.count(ResearchFile.id),
-                func.coalesce(func.sum(ResearchFileBlob.size_bytes), 0),
-            )
-            .select_from(ResearchFile)
-            .join(ResearchFileBlob, ResearchFileBlob.id == ResearchFile.blob_id)
-            .where(
-                ResearchFile.uploaded_by_user_id == user_id,
-                ResearchFile.archived_at.is_(None),
-            )
+                func.count(), func.coalesce(func.sum(logical_files.c.size_bytes), 0)
+            ).select_from(logical_files)
         )
     ).one()
     if count + incoming_count > config.KNOWLEDGE_USER_FILE_COUNT_LIMIT:
-        raise HTTPException(status_code=413, detail="Research file count quota exceeded")
+        raise HTTPException(
+            status_code=413, detail="Research file count quota exceeded"
+        )
     if total + incoming_size > config.KNOWLEDGE_USER_STORAGE_QUOTA_BYTES:
         raise HTTPException(
             status_code=413, detail="Research file storage quota exceeded"

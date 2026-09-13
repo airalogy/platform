@@ -13,7 +13,7 @@
       <span v-else-if="action.instrument_job" class="aira-type-meta">
         {{ action.instrument_job.command_key }} · v{{ action.instrument_job.command_version }} · r{{ action.instrument_job.command_revision }}
       </span>
-      <span v-else-if="action.compute_job" class="aira-type-meta">
+      <span v-else-if="action.kind !== 'analysis_run' && action.compute_job" class="aira-type-meta">
         {{ action.compute_job.environment_snapshot.name || action.compute_job.compute_environment_id }} · r{{ action.compute_job.compute_environment_revision }} · {{ action.compute_job.language === "python" ? "Python" : "R" }}
       </span>
       <span v-else-if="action.wait_event" class="aira-type-meta">
@@ -67,7 +67,7 @@
         <pre>{{ formatted(action.instrument_job.arguments) }}</pre>
       </div>
     </div>
-    <div v-else-if="action.compute_job" class="mt-2 space-y-2">
+    <div v-else-if="action.kind !== 'analysis_run' && action.compute_job" class="mt-2 space-y-2">
       <div class="aira-type-meta flex flex-wrap gap-x-4 gap-y-1">
         <span>{{ $t("page.research.computeEnvironment") }} · {{ action.compute_job.environment_snapshot.name || action.compute_job.compute_environment_id }} · r{{ action.compute_job.compute_environment_revision }}</span>
         <span>{{ $t("page.research.computeSourceDigest") }} · {{ action.compute_job.source_sha256 }}</span>
@@ -151,18 +151,22 @@
       </div>
       <pre>{{ formatted(action.protocol_run.initial_values) }}</pre>
     </div>
+    <workflow-analysis-execution :action="action" />
+    <workflow-resolution-summary :input-data="action.input_data" :source-titles="sourceTitles" :restricted="action.workflow_data_restricted" :pending-approval="action.approval?.status === 'pending'" />
   </div>
 </template>
 
 <script setup lang="ts">
 import type { ResearchAction } from "@/service/api/research-tasks"
 import type { TagProps } from "naive-ui"
+import WorkflowAnalysisExecution from "@/views/workflow-definitions/components/workflow-analysis-execution.vue"
+import WorkflowResolutionSummary from "@/views/workflow-definitions/components/workflow-resolution-summary.vue"
 import { $t } from "@airalogy/shared/locales"
 
-const props = defineProps<{ action: ResearchAction }>()
+const props = defineProps<{ action: ResearchAction, sourceTitles?: Record<string, string> }>()
 
 const kindLabel = computed(() => {
-  const known = ["protocol_run", "tool_job", "instrument_job", "compute_job", "external_service_job", "resource_reservation", "wait_event", "human_work_item"]
+  const known = ["protocol_run", "analysis_run", "tool_job", "instrument_job", "compute_job", "external_service_job", "resource_reservation", "wait_event", "human_work_item"]
   return known.includes(props.action.kind)
     ? $t(`page.research.actionKind.${props.action.kind}` as I18n.I18nKey)
     : props.action.kind.replaceAll("_", " ")

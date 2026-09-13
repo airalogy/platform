@@ -1,6 +1,6 @@
 # Airalogy Compute Runner
 
-The Compute Runner is an independently supervised execution plane for approval-gated Airalogy Compute Jobs. It pulls signed jobs from Platform, verifies the complete envelope again, downloads only lease-authorized DataAsset versions, and executes reviewed Python or R source in a short-lived OCI container. Platform's API process never evaluates job source and never receives access to the container-engine socket.
+The Compute Runner is an independently supervised execution plane for approval-gated Airalogy Compute Jobs. It pulls signed jobs from Platform, verifies the complete envelope again, downloads only lease-authorized DataAsset versions or private analysis snapshots, and executes reviewed Python or R source in a short-lived OCI container. Platform's API process never evaluates job source and never receives access to the container-engine socket.
 
 ## Security boundary
 
@@ -10,6 +10,8 @@ Network policy fails closed. `none` maps to the engine's isolated network. An `e
 
 Container-engine access is a privileged local boundary. Prefer a dedicated rootless Podman account or a dedicated Runner host. Do not mount its socket into Platform API containers, and do not co-locate untrusted services under the Runner identity.
 
+A bounded, read-only idle helper holds the tmpfs mount across staging, execution and result delivery; it is removed when that job is cleaned up. The trusted staging helper installs root-owned immutable inputs and UID 65532-owned output directories using only `CHOWN`, `DAC_OVERRIDE` and `FOWNER`, with no network or host bind mounts. It never executes job source. The actual research container and output readers receive no Linux capabilities; readers use UID/GID 65532. Keep the private state journal to reconcile and clean up a job after a Runner restart.
+
 ## Source and result contract
 
 The selected Compute Environment image must provide `python` for Python jobs or `Rscript` for R jobs. The Runner exposes:
@@ -18,9 +20,15 @@ The selected Compute Environment image must provide `python` for Python jobs or 
 - `AIRALOGY_INPUT_DIR=/airalogy/input`
 - `AIRALOGY_RESULT_JSON=/airalogy/output/result.json`
 
-The source must write one UTF-8 JSON object to `AIRALOGY_RESULT_JSON`. Platform validates it against the immutable result Schema before accepting completion. A request may also declare up to 16 output files. Source writes each one to `/airalogy/output/files/<declared-mount-name>`; the Runner rejects undeclared references, missing required files, per-file or combined size overflow, and content that changes while being streamed. It computes SHA-256 inside the read-only helper, streams the bytes through the job lease, and Platform registers a Project-visible draft DataAsset only after the structured result and every receipt pass final validation.
+The source must write one UTF-8 JSON object to `AIRALOGY_RESULT_JSON`. Platform validates it against the immutable result Schema before accepting completion. A request may also declare up to 16 output files. Source writes each one to `/airalogy/output/files/<declared-mount-name>`; the Runner rejects undeclared references, missing required files, per-file or combined size overflow, and content that changes while being streamed. It computes SHA-256 inside the read-only helper and streams bytes through the job lease. Research Task jobs register Project-visible draft DataAssets only after the structured result and every receipt pass final validation; private analysis jobs retain private output blobs and never implicitly create a ResearchFile or DataAsset.
 
-The reference Runner disables the research container log driver and discards untrusted standard output so code cannot bypass the output limit and fill host storage; use the bounded result object for diagnostics that must be retained. The immutable helper image must provide `tar`, `test`, `wc`, `sha256sum`, and `cat`.
+The SDK advertises `airalogy.compute-job.v1` and `airalogy.compute-job.analysis.v1`. Private analysis envelopes carry `context.kind=analysis` plus the Analysis, Project and Lab IDs, never fabricated Research Task/Run/Action IDs. Older Runners that do not advertise the analysis schema cannot receive these jobs. Analysis code reads `AIRALOGY_INPUT_DIR/records.json`; Platform rechecks the creator's and selected approver's current source authority during execution and rechecks creator source access on report/file reads.
+
+The reference Runner disables the research container log driver and discards untrusted standard output so code cannot bypass the output limit and fill host storage; use the bounded result object for diagnostics that must be retained. The immutable helper image must provide `tar`, `test`, `wc`, `sha256sum`, `cat`, and `sleep infinity`.
+
+## Real-container regression
+
+From the repository root, run `pnpm compute-runner:integration` with Docker available. This shared pre-push/CI gate uses a pinned image, four synthetic measurements, signed analysis envelopes and the real workspace/container/output helpers. It verifies non-root execution, read-only input/root boundaries and exact result-file receipts, then cleans up only its own container and temporary volume. Ordinary `pnpm compute-runner:test` does not start containers; the explicit integration gate is required for Runner and analysis transport changes. This regression does not certify a deployment's egress network, GPU or real instrument environment.
 
 ## Configuration
 

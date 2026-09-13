@@ -573,6 +573,11 @@ class ResearchComputeJob(Base):
     __table_args__ = (
         UniqueConstraint("action_id", name="uq_research_compute_job_action"),
         CheckConstraint(
+            "(action_id IS NOT NULL AND analysis_run_id IS NULL) OR "
+            "(action_id IS NULL AND analysis_run_id IS NOT NULL)",
+            name="ck_research_compute_job_context",
+        ),
+        CheckConstraint(
             "status IN ('awaiting_approval', 'queued', 'leased', 'running', "
             "'cancel_requested', 'completed', 'failed', 'cancelled')",
             name="ck_research_compute_job_status",
@@ -621,9 +626,14 @@ class ResearchComputeJob(Base):
     id: Mapped[UUID] = mapped_column(
         primary_key=True, server_default=func.uuid_generate_v7()
     )
-    action_id: Mapped[UUID] = mapped_column(
+    action_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("research_actions.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    analysis_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="RESTRICT"),
         unique=True,
         index=True,
     )
@@ -685,7 +695,7 @@ class ResearchComputeJob(Base):
 
 
 class ResearchComputeJobInput(Base):
-    """An exact, Platform-controlled DataAsset version exposed to one job."""
+    """One exact DataAsset version or immutable analysis snapshot exposed to a job."""
 
     __tablename__ = "research_compute_job_inputs"
     __table_args__ = (
@@ -697,6 +707,13 @@ class ResearchComputeJobInput(Base):
             "data_asset_version_id",
             name="uq_research_compute_job_input_asset_version",
         ),
+        CheckConstraint(
+            "(data_asset_id IS NOT NULL AND data_asset_version_id IS NOT NULL "
+            "AND analysis_run_id IS NULL) OR "
+            "(data_asset_id IS NULL AND data_asset_version_id IS NULL "
+            "AND analysis_run_id IS NOT NULL)",
+            name="ck_research_compute_job_input_source",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -707,13 +724,16 @@ class ResearchComputeJobInput(Base):
         nullable=False,
         index=True,
     )
-    data_asset_id: Mapped[UUID] = mapped_column(
-        ForeignKey("data_assets.id", ondelete="RESTRICT"), nullable=False, index=True
+    data_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("data_assets.id", ondelete="RESTRICT"), nullable=True, index=True
     )
-    data_asset_version_id: Mapped[UUID] = mapped_column(
+    data_asset_version_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("data_asset_versions.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
+    )
+    analysis_run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="RESTRICT"), index=True
     )
     position: Mapped[int] = mapped_column(nullable=False)
     mount_name: Mapped[str] = mapped_column(String(128), nullable=False)

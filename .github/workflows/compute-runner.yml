@@ -4,10 +4,20 @@ on:
   push:
     paths:
       - "apps/compute-runner/**"
+      - "scripts/compute-runner-integration.mjs"
+      - "apps/api/app/routers/analysis_compute.py"
+      - "apps/api/app/routers/research_compute_jobs.py"
+      - "apps/api/app/services/analysis_compute*.py"
+      - "apps/api/app/services/research_compute_jobs.py"
       - ".github/workflows/compute-runner.yml"
   pull_request:
     paths:
       - "apps/compute-runner/**"
+      - "scripts/compute-runner-integration.mjs"
+      - "apps/api/app/routers/analysis_compute.py"
+      - "apps/api/app/routers/research_compute_jobs.py"
+      - "apps/api/app/services/analysis_compute*.py"
+      - "apps/api/app/services/research_compute_jobs.py"
       - ".github/workflows/compute-runner.yml"
 
 concurrency:
@@ -39,6 +49,10 @@ jobs:
 
       - name: Run tests
         run: PYTHONPATH=src python -m unittest discover -s tests
+
+      - name: Run real isolated Compute acceptance
+        working-directory: .
+        run: node scripts/pre-push.mjs --check compute-engine
 
       - name: Compile package
         run: python -m compileall -q src tests

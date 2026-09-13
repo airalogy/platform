@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from aiohttp import ClientError
 from airalogy.archive import ArchiveError, unpack_archive, validate_archive
 from airalogy.record.hash import get_data_sha1
-from aiohttp import ClientError
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from miniopy_async.error import S3Error
 from sqlalchemy import func, select
@@ -670,6 +670,8 @@ class AiraArchiveImporter:
                 existing_file is not None
                 and existing_file.protocol_id == pending_record.protocol.id
             ):
+                from app.services.workflow_files import authorized_file
+                await authorized_file(self.db_session, existing_file, self.user)
                 airalogy_file = existing_file
             else:
                 if existing_file is not None and blob is None and not has_source_uri:
@@ -866,6 +868,8 @@ class AiraArchiveImporter:
                 if schema.get("airalogy_type") == "IgnoreStr":
                     pending_record.data["var"][key] = ""
 
+            from app.services.workflow_files import authorize_record_files
+            await authorize_record_files(self.db_session, pending_record.data, self.user)
             record = Record(
                 id=pending_record.record_id,
                 protocol_id=pending_record.protocol.id,

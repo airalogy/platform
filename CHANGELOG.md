@@ -14,7 +14,35 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Added
+
+- Add Project Workflow cards with stable occurrence IDs, exact Protocol versions, immutable preview-confirm revisions, responsive graph/list editing and deterministic execution through existing Research Tasks. Single, repeated, sequential, parallel and joining Protocol cards work with AI disabled; preserve approvals, distinct Records, pause/cancel, permission rechecks and human result review. Add typed conditions with normal unselected branches and immutable scalar-transfer receipts pinned to exact Record revisions; validate target inputs and require fresh downstream approval. Protect source-derived views, approvals and exports without blocking independently readable cards. Array/object bindings remain unsupported; legacy Workflow routes and previously started control-only Runs remain unchanged.
+
+- Add explicitly published Project snapshots of saved built-in analysis methods, excluding private Record selections, reports and AI provenance. Workflow Analysis cards require all declared upstream Record revisions, fresh input approval and explicit typed statistic ports; reuse ordinary persisted analysis jobs and pass sealed outputs to downstream Protocol cards. Preserve source permissions, private report ownership, pause/cancel and duplicate-delivery safety. Cross-Protocol synthesis remains separate work.
+
+- Extend Workflow Analysis cards to explicitly published Python/R methods, sealing source, parameters, exact Compute Environment revision, complete input Schema and declared result Schema. Reuse existing Runner jobs with a single actual-input approval, Task budget accounting and pause/cancel controls; method publication never carries an old approver, budget or private report. Expose only Schema-validated named scalar outputs, with report-only cards also supported. Task creation can select an exact available environment revision without environment-management authority; version 1/2 graph seals remain unchanged.
+
+- Introduce private, version-pinned Record analysis with typed descriptive statistics, explicit field/group filters, missing-value accounting, source snapshots and immutable method revisions. Preview and confirm inputs before a durable background job; recheck current Record access for execution, reports and downloads, reject stale previews, and preserve old results when rerunning a saved method.
+
+- Add Aira analysis drafts and computed-result interpretations through Masterbrain with explicit consent, persisted single-attempt recovery, strict supported-operator validation and result-grounded numeric references. Preserve editable AI provenance in reports and methods; recheck sources after generation and retain authorized history with AI disabled. Add accessible unit-separated bar/line charts without replacing numeric tables.
+
+- Add private Python/R analysis through the existing governed Compute Runner: exact Record snapshots, full code/environment/input/output/cost previews, explicit eligible approvers, private result downloads, cancellation receipts and saved-method reruns. Runners must advertise the analysis envelope before leasing; source and approval authority are rechecked during execution, outputs count toward storage quotas and never become Project-visible assets implicitly. Multi-Protocol synthesis remains subsequent RFC #6 work.
+
+- Extend Aira to draft editable advanced analysis code for an explicitly selected environment and interpret actual bounded JSON outputs with server-resolved result references. Keep separate consent, persisted single-attempt recovery, source/environment revalidation and inherited AI provenance; generation never executes or approves a job, and manual execution and method reruns remain available with AI disabled. Shared local/CI integration includes a synthetic model response followed by real approved container execution, not a claim of live model quality.
+
+- Add explicit preview-confirm conversion of owned legacy Workflows into new Project definitions, with exact Protocol versions, reviewed directed edges and private immutable conversion receipts. Keep the original logic, execution path and Records unchanged; do not execute prose or start a Task during conversion.
+
+- Add schema-v4 file bindings from fixed Record FileId fields and declared Compute output files into downstream Protocols. Seal exact sources, bytes and target references, retain source/target permission intersection across preview, download, export and reuse, and preserve prior graph digests. Files are not text or arbitrary URLs; explicit Compute attachment input mounts and array/object bindings remain future work.
+
 ### Fixed
+
+- Recheck exact source access when registering or reading Evidence and its derived Claims, Knowledge source links, reviews and result exports. Task membership does not reveal private Workflow analysis or controlled files; independently readable assets remain available, while complete sealed reports cannot silently omit restricted sources or retain an old digest after redaction.
+
+- Protect outstanding automatic Compute reservations from manual budget release. Keep already funded Workflow jobs executable/resumable when their reservation fills the Task budget, without authorizing new unfunded cards; use consistent parent-before-job locking for Runner requests and cancellation.
+
+- Normalize Record receipt dates and result-package UUIDs/dates before persisting Research Action/work-item/Run JSON, preserving exact decimal values and preventing completion from failing during database flush. Count dependency-blocked Actions as unfinished during human finalization.
+
+- Exercise the real Compute container lifecycle in shared local pre-push and CI acceptance. Close staged input streams, preserve bounded tmpfs workspaces across helper containers, install immutable inputs with a narrowly privileged trusted helper, and read private outputs as the non-root execution user without granting capabilities to research code.
 
 - Route built-in embeddings through published Masterbrain 0.12.0 with trusted usage context and strict model/dimension validation. Keep keyword indexing/search available with AI disabled or unavailable, preserve existing 1024-dimensional vectors, atomically replace resource indexes and exclude private/deleted content from public recommendations. Document migration rollback and the separate vector-backfill boundary; remove the API's direct production OpenAI SDK dependency.
 

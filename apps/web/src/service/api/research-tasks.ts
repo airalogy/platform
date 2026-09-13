@@ -1,5 +1,8 @@
+import type { AnalysisComputeContract } from "./analysis-compute"
 import type { ResearchAutonomyPolicySnapshot } from "./research-autonomy-policies"
+import type { ResearchComputeEnvironment } from "./research-compute"
 import type { ResearchComputeJob } from "./research-compute-jobs"
+import type { WorkflowAnalysisPublication } from "./workflow-analysis-methods"
 import { request } from "../request"
 
 export type ResearchTaskStatus =
@@ -44,6 +47,7 @@ export type ResearchActionStatus =
 
 export type ResearchActionKind =
   | "protocol_run"
+  | "analysis_run"
   | "tool_job"
   | "human_work_item"
   | "instrument_job"
@@ -290,6 +294,7 @@ export interface ResearchResourceConsumption {
 
 export interface ResearchRun {
   id: string
+  workflow_data_restricted?: boolean
   task_id: string
   run_number: number
   status: ResearchRunStatus
@@ -671,6 +676,7 @@ export interface ResearchServiceJob {
 
 export interface ResearchAction {
   id: string
+  workflow_data_restricted?: boolean
   run_id: string
   sequence: number
   plan_version: number
@@ -700,6 +706,7 @@ export interface ResearchAction {
   }>
   dependent_action_ids: string[]
   protocol_run?: ResearchProtocolRun | null
+  analysis_run?: { id: string | null, status: string, method_publication_id: string | null, can_open_private_report: boolean, method?: WorkflowAnalysisPublication, compute?: AnalysisComputeContract | null, compute_job?: ResearchComputeJob, output_download_base?: string }
   protocol?: ResearchProtocolRef | null
   work_item?: ResearchHumanWorkItem | null
   tool_job?: ResearchToolJob | null
@@ -714,6 +721,7 @@ export interface ResearchAction {
 
 export interface ResearchApproval {
   id: string
+  workflow_data_restricted?: boolean
   action_id: string
   approver_user_id: string
   requested_by_user_id: string
@@ -732,6 +740,7 @@ export interface ResearchApproval {
 
 export interface ResearchTaskSummary {
   id: string
+  workflow_data_restricted?: boolean
   lab_id: string
   project_id: string
   title: string
@@ -897,6 +906,7 @@ export interface ResearchTaskDraft {
   resource_type_ids: string[]
   service_offering_ids: string[]
   compute_environment_ids: string[]
+  compute_environment_revision_ids?: string[]
   deadline_at?: string
   budget_limit?: string
   budget_currency?: string
@@ -1394,4 +1404,17 @@ export function rejectResearchAction(
     method: "POST",
     data: payload,
   })
+}
+
+export function fetchTaskComputeEnvironmentRevisions(projectId: string) {
+  return getData<{ items: ResearchComputeEnvironment[] }>({ url: "/research-tasks/compute-environment-revisions", params: { project_id: projectId } })
+}
+
+export async function downloadWorkflowAnalysisOutput(taskId: string, actionId: string, outputId: string) {
+  const { data, error } = await request<Blob, "blob">({ url: `/research-tasks/${taskId}/actions/${actionId}/analysis/outputs/${outputId}`, responseType: "blob", metadata: { showError: false } })
+  if (error)
+    throw error
+  if (data === null)
+    throw new Error("Workflow analysis output returned no data")
+  return data
 }

@@ -44,6 +44,18 @@ export const projectInfoRoute: CustomRoute<ProjectInfoNameKey> = {
       component: () => import("@/views/research/index.vue"),
     },
     {
+      path: "workflows",
+      name: "project-workflows",
+      meta: { ...createProjectMeta("Project Workflows", "page.workflowDefinitions.title"), allowGuest: false },
+      component: () => import("@/views/workflow-definitions/index.vue"),
+    },
+    {
+      path: "analysis",
+      name: "project-analysis",
+      meta: { ...createProjectMeta("Project Analysis", "page.analysis.title"), allowGuest: false },
+      component: () => import("@/views/analysis/index.vue"),
+    },
+    {
       path: "members",
       name: "project-members",
       meta: { ...createProjectMeta("Project Members", "page.project.members"), allowGuest: false },
