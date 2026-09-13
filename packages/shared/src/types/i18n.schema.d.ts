@@ -1008,6 +1008,28 @@ declare namespace I18n {
           network: string
           sourceHint: string
           inputContract: string
+          inputFiles: string
+          inputFilesHint: string
+          inputFilesNone: string
+          inputFilesNoFields: string
+          inputFileId: string
+          inputFileIdHint: string
+          inputFileField: string
+          addInputFile: string
+          inputFileLimits: string
+          inputFilesEstimate: string
+          inputFilesAiHint: string
+          inputFilesDeclarationHint: string
+          inputFilesWorkflowHint: string
+          inputFilesReceipt: string
+          inputFilesSummary: string
+          inputFileSource: string
+          inputFileMount: string
+          inputFilesManifestHint: string
+          inputFileIntegrity: string
+          inputFilesUnavailable: string
+          invalidInputFiles: string
+          tooManyInputFiles: string
           outputs: string
           outputHint: string
           addOutput: string

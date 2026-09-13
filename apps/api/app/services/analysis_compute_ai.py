@@ -254,6 +254,10 @@ def validate_analysis_compute_draft(
     )
     recipe = output.recipe
     if recipe is not None:
+        if recipe.input_files:
+            raise AnalysisError(
+                "Aira cannot attach files implicitly; select Record attachment fields manually"
+            )
         if recipe.environment_revision_id != revision_id or recipe.language != language:
             raise AnalysisError(
                 "Aira cannot change the selected environment revision or language"
@@ -382,6 +386,7 @@ def analysis_compute_draft_prompt(
             f"Use mode compute only for a complete editable program of at most {MAX_AIRA_SOURCE_BYTES} UTF-8 bytes and validated parameters. Use clarification_required with concrete questions and no recipe when fields, experimental assumptions, required software or the requested method cannot be established. Do not replace a requested inferential method with descriptive statistics silently.",
             "The locked environment input_schema governs recipe.parameters; output_schema governs the structured result JSON. Copy the exact source_revision_id to recipe.environment_revision_id. Only use software actually listed by the immutable software_manifest and language standard library. Never assume packages, install dependencies, download data or bypass locked network policy. For R, do not assume jsonlite or any other non-base package exists.",
             "Runtime paths: AIRALOGY_INPUT_JSON=/airalogy/input/input.json contains recipe.parameters as a JSON object. AIRALOGY_INPUT_DIR=/airalogy/input. Read the sole selected source snapshot from AIRALOGY_INPUT_DIR/records.json. AIRALOGY_RESULT_JSON=/airalogy/output/result.json must receive exactly one finite UTF-8 JSON object matching output_schema. These paths are provided via environment variables. Inputs and source are read-only; the container root is read-only and source runs as non-root.",
+            "FileId values in records.json are references, not file bytes or URLs. Do not set recipe.input_files or invent attachment paths. The user can separately select attachment fields and review an edited program through the deterministic preview and approval flow; this draft request grants no attachment access.",
             "records.json has {schema_version:1,protocol_id,records:[{record_id,record_version,protocol_version,user_id,number,created_at,record_hash,data}],schemas:[{id,version,json_schema,fields}],fields:[field metadata]}. Each Record's variables are under record['data']['var'], keyed by complete literal field identifiers, not dotted paths. No raw values are provided during drafting. The runtime snapshot contains exact authorized submitted revisions, never drafts or an unbounded database query.",
             "Validate actual values and pinned Schema/version/units at runtime; distinguish bool from numeric, missing from zero, invalid from absent. Do not silently coerce strings, merge incompatible units, impute data or infer independent samples. Explain assumptions and limitations; reject unsuitable data clearly instead of fabricating results. No claim is scientifically verified by source generation or syntax checks.",
             "Write only declared optional result files to /airalogy/output/files/<mount_name>, within the shared resource max_output_bytes and declared per-file max_bytes. Leave at least 1024 bytes for result.json; never write undeclared outputs, private credentials or copies of raw Records. Files stay private and are not automatically published as Project assets. Structured results must not contain NaN or Infinity. Include any legitimate statistics, sample counts, units and limitations explicitly in the result object when its schema permits them; do not invent a result during drafting.",

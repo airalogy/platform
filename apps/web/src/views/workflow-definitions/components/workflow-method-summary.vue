@@ -10,6 +10,7 @@
         <dt>{{ t('page.analysis.compute.image') }}</dt><dd>{{ method.compute_contract?.environment.metadata.image_ref || '—' }}</dd>
         <dt>{{ t('page.analysis.compute.network') }}</dt><dd>{{ method.compute_contract?.environment.metadata.network_policy || '—' }} · {{ method.compute_contract?.environment.metadata.allowed_egress_hosts.join(', ') }}</dd>
       </dl>
+      <analysis-compute-input-declarations :inputs="computeRecipe.input_files" />
       <h4 class="aira-type-label">
         {{ t('page.analysis.compute.source') }}
       </h4>
@@ -46,6 +47,7 @@
 <script setup lang="ts">
 import type { WorkflowAnalysisPublication } from "@/service/api/workflow-analysis-methods"
 import { isComputeAnalysisRecipe } from "@/utils/analysis-compute"
+import AnalysisComputeInputDeclarations from "@/views/analysis/components/analysis-compute-input-declarations.vue"
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 

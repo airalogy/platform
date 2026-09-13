@@ -14,6 +14,7 @@
         {{ t('page.workflowAnalysis.noSources') }}
       </p>
     </n-form>
+    <analysis-compute-input-declarations :inputs="computeRecipe?.input_files" workflow />
     <workflow-compute-outputs v-if="node.analysis_kind === 'compute'" :node="node" :disabled="disabled" @change="emit('computeOutputs', $event)" @files="emit('computeFiles', $event)" />
     <template v-else>
       <h4 class="aira-type-label">
@@ -71,6 +72,7 @@ import type { WorkflowAnalysisOutput, WorkflowAnalysisPublication, WorkflowCompu
 import type { WorkflowAnalysisNode, WorkflowGraph, WorkflowScalarType } from "@/service/api/workflow-definitions"
 import { isComputeAnalysisRecipe } from "@/utils/analysis-compute"
 import { parseWorkflowScalar } from "@/utils/workflow-editor"
+import AnalysisComputeInputDeclarations from "@/views/analysis/components/analysis-compute-input-declarations.vue"
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import WorkflowComputeOutputs from "./workflow-compute-outputs.vue"
@@ -87,6 +89,7 @@ const groupNulls = ref<Record<string, boolean>>({})
 const statistics: WorkflowAnalysisOutput["statistic"][] = ["count", "missing", "invalid", "mean", "median", "min", "max", "sum", "sample_stddev"]
 const sourceOptions = computed(() => props.graph.nodes.filter(node => node.kind === "protocol" && node.protocol_id === props.method?.protocol_id && props.graph.edges.some(edge => edge.source_node_id === node.node_id && edge.target_node_id === props.node.node_id)).map(node => ({ label: node.title, value: node.node_id })))
 const builtinRecipe = computed(() => props.method && !isComputeAnalysisRecipe(props.method.recipe) ? props.method.recipe : null)
+const computeRecipe = computed(() => props.method && isComputeAnalysisRecipe(props.method.recipe) ? props.method.recipe : null)
 const fieldOptions = computed(() => (builtinRecipe.value?.numeric_fields ?? []).map(key => ({ value: key, label: props.method?.input_fields.find(field => field.key === key)?.title || key })))
 function groupTypeOptions(key: string) {
   const field = props.method?.input_fields.find(field => field.key === key)

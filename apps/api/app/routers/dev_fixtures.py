@@ -636,7 +636,9 @@ async def ensure_analysis_fixture(
     return protocol
 
 
-async def ensure_workflow_compute_fixture(db, project, owner, protocol):
+async def ensure_workflow_compute_fixture(
+    db, project, owner, protocol, *, attachment_method=False
+):
     """Synthetic UI fixtures only: no successful run, device or runnable token."""
     from decimal import Decimal
     from secrets import token_hex
@@ -747,7 +749,11 @@ async def ensure_workflow_compute_fixture(db, project, owner, protocol):
             ResearchComputeEnvironmentRevision.revision == 1,
         )
     )
-    title = "Synthetic Workflow Python method (not executed)"
+    title = (
+        "Synthetic attachment analysis method (not executed)"
+        if attachment_method
+        else "Synthetic Workflow Python method (not executed)"
+    )
     pipeline = await db.scalar(
         select(AnalysisPipeline).where(
             AnalysisPipeline.protocol_id == protocol.id,
@@ -765,11 +771,33 @@ async def ensure_workflow_compute_fixture(db, project, owner, protocol):
         )
         db.add(pipeline)
         await db.flush()
+        source_code = (
+            "import json, os, statistics\nfrom pathlib import Path\n"
+            "source = json.loads((Path(os.environ['AIRALOGY_INPUT_DIR']) / 'records.json').read_text())\n"
+            "values = [row['data']['var']['measurement'] for row in source['records']]\n"
+        )
+        if attachment_method:
+            # Editable fixture only. No attachment declaration is preselected and
+            # no successful run is fabricated; browser tests explicitly choose it.
+            source_code = (
+                "import csv, json, os, statistics\nfrom pathlib import Path\n"
+                "input_dir = Path(os.environ['AIRALOGY_INPUT_DIR'])\n"
+                "mapping = json.loads((input_dir / 'attachments.json').read_text())\n"
+                "values = []\n"
+                "for item in mapping['files']:\n"
+                "    with (input_dir / item['mount_name']).open() as handle:\n"
+                "        values.extend(float(row['measurement']) for row in csv.DictReader(handle))\n"
+            )
+        source_code += (
+            "mean = statistics.mean(values)\n"
+            "Path(os.environ['AIRALOGY_RESULT_JSON']).write_text(json.dumps({'mean': mean}))\n"
+            "(Path(os.environ['AIRALOGY_RESULT_JSON']).parent / 'files' / 'summary.csv').write_text('mean\\n' + str(mean) + '\\n')\n"
+        )
         recipe = AnalysisComputeRecipe(
             kind="compute",
             environment_revision_id=revision.id,
             language="python",
-            source_code="import json, os, statistics\nfrom pathlib import Path\nsource = json.loads((Path(os.environ['AIRALOGY_INPUT_DIR']) / 'records.json').read_text())\nvalues = [row['data']['var']['measurement'] for row in source['records']]\nmean = statistics.mean(values)\nPath(os.environ['AIRALOGY_RESULT_JSON']).write_text(json.dumps({'mean': mean}))\n(Path(os.environ['AIRALOGY_RESULT_JSON']).parent / 'files' / 'summary.csv').write_text('mean\\n' + str(mean) + '\\n')\n",
+            source_code=source_code,
             parameters={},
             output_files=[
                 {
@@ -781,7 +809,27 @@ async def ensure_workflow_compute_fixture(db, project, owner, protocol):
                 }
             ],
         ).model_dump(mode="json")
-        selection = AnalysisSelection().model_dump(mode="json", exclude_none=True)
+        selected = AnalysisSelection()
+        if attachment_method:
+            records = list(
+                (
+                    await db.scalars(
+                        select(Record)
+                        .where(
+                            Record.protocol_id == protocol.id,
+                            Record.number.in_([1, 2]),
+                            Record.version == 1,
+                            Record.deleted_at.is_(None),
+                        )
+                        .order_by(Record.number)
+                    )
+                ).all()
+            )
+            selected = AnalysisSelection(
+                mode="selected",
+                records=[{"id": row.id, "version": row.version} for row in records],
+            )
+        selection = selected.model_dump(mode="json", exclude_none=True)
         provenance = {
             "engine_version": COMPUTE_ENGINE_VERSION,
             "synthetic_ui_fixture": True,
@@ -816,6 +864,55 @@ async def ensure_workflow_compute_fixture(db, project, owner, protocol):
         "protocol_id": str(protocol.id),
         "protocol_version_id": str(version.id),
     }
+
+
+async def ensure_second_analysis_attachment(db, project, owner, protocol):
+    """A distinct second real CSV/Record for multi-sample attachment acceptance."""
+    import hashlib
+    from io import BytesIO
+
+    from app.models.airalogy_file import AiralogyFile
+
+    existing = await Record.find_by(
+        db,
+        [
+            Record.protocol_id == protocol.id,
+            Record.number == 2,
+            Record.version == 1,
+        ],
+    )
+    if existing is not None:
+        return
+    content = b"sample,measurement\nsynthetic-c,6\nsynthetic-d,8\n"
+    file = AiralogyFile(
+        filename="synthetic-measurements-second.csv",
+        content_type="text/csv",
+        protocol_id=protocol.id,
+        project_id=project.id,
+        user_id=owner.id,
+    )
+    db.add(file)
+    await db.flush()
+    await file.save_file(
+        BytesIO(content),
+        content_type="text/csv",
+        length=len(content),
+        checksum_sha256=hashlib.sha256(content).hexdigest(),
+    )
+    data = {"var": {"attachment": file.airalogy_id}, "step": {}, "check": {}}
+    db.add(
+        Record(
+            protocol_id=protocol.id,
+            protocol_version="1.0.0",
+            user_id=owner.id,
+            number=2,
+            version=1,
+            data=data,
+            hash=get_data_sha1({"data": data}),
+            report="Second synthetic managed CSV, not an analysis execution.",
+        )
+    )
+    await db.flush()
 
 
 async def ensure_workflow_file_fixture(db, project, owner):
@@ -988,6 +1085,14 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
         db_session, project, owner, analysis_protocol
     )
     workflow_files = await ensure_workflow_file_fixture(db_session, project, owner)
+    file_protocol = await Protocol.find_by(
+        db_session,
+        [Protocol.project_id == project.id, Protocol.uid == "workflow_files_e2e"],
+    )
+    await ensure_second_analysis_attachment(db_session, project, owner, file_protocol)
+    workflow_compute_attachments = await ensure_workflow_compute_fixture(
+        db_session, project, owner, file_protocol, attachment_method=True
+    )
     lab.projects_count = await Project.count(
         db_session,
         [Project.lab_id == lab.id, Project.deleted_at.is_(None)],
@@ -1041,5 +1146,6 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
         },
         "workflow_compute": workflow_compute,
         "workflow_files": workflow_files,
+        "workflow_compute_attachments": workflow_compute_attachments,
         "warnings": warnings,
     }

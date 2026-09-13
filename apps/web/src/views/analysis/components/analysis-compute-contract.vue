@@ -15,6 +15,7 @@
       <dt>{{ t(mode === 'historical' || mode === 'approval' ? "page.analysis.compute.historicalRunners" : "page.analysis.compute.runners") }}</dt><dd>{{ t("page.analysis.compute.runnerCounts", { authorized: contract.authorized_runner_count, ready: contract.ready_runner_count }) }}</dd>
       <dt>{{ t("page.analysis.compute.network") }}</dt><dd>{{ contract.environment.metadata.network_policy }}<br>{{ contract.environment.metadata.allowed_egress_hosts?.join(", ") }}</dd>
     </dl>
+    <analysis-compute-input-receipt v-if="contract.input_files" :envelope="contract.input_files" />
     <n-alert v-if="mode !== 'historical' && mode !== 'approval' && !contract.ready_runner_count" type="warning" class="mb-3" data-testid="analysis-compute-contract-offline-warning">
       {{ t("page.analysis.compute.noReadyRunner") }}
     </n-alert>
@@ -44,6 +45,7 @@
 <script setup lang="ts">
 import type { AnalysisComputeContract } from "@/service/api/analysis-compute"
 import { useI18n } from "vue-i18n"
+import AnalysisComputeInputReceipt from "./analysis-compute-input-receipt.vue"
 
 defineProps<{ contract: AnalysisComputeContract, mode?: "review" | "approval" | "historical" }>()
 const { t, locale } = useI18n()

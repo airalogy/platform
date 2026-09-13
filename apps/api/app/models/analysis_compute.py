@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Numeric,
     String,
@@ -80,6 +81,9 @@ class AnalysisCompute(Base):
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     contract_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_file_manifest: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     max_cost: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
     budget_currency: Mapped[str | None] = mapped_column(String(3))
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -124,6 +128,57 @@ class AnalysisComputeEvent(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AnalysisComputeInputFile(Base):
+    """A private, immutable exact Record attachment, never a published DataAsset."""
+
+    __tablename__ = "analysis_compute_input_files"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["record_id", "record_version"],
+            ["records.id", "records.version"],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "analysis_run_id",
+            "record_id",
+            "record_version",
+            "input_id",
+            name="uq_analysis_compute_input_file_source",
+        ),
+        CheckConstraint(
+            "digest ~ '^[0-9a-f]{64}$'", name="ck_analysis_input_file_digest"
+        ),
+        CheckConstraint(
+            "record_version >= 1", name="ck_analysis_input_file_record_version"
+        ),
+    )
+
+    input_row_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_compute_job_inputs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    analysis_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    source_file_id: Mapped[UUID] = mapped_column(
+        ForeignKey("airalogy_files.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    blob_id: Mapped[UUID] = mapped_column(
+        ForeignKey("research_file_blobs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    record_id: Mapped[UUID] = mapped_column(nullable=False)
+    record_version: Mapped[int] = mapped_column(nullable=False)
+    input_id: Mapped[str] = mapped_column(String(24), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_metadata: Mapped[dict] = mapped_column(JSON, nullable=False)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

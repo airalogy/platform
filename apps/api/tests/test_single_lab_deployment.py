@@ -246,6 +246,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     workflow_file_revision = import_module("migrations.versions.0068_workflow_file_bindings")
     assert workflow_file_revision.down_revision == workflow_conversion_revision.revision
     later_tables.update(workflow_file_revision.TABLE_NAMES)
+    analysis_input_file_revision = import_module("migrations.versions.0069_analysis_compute_input_files")
+    assert analysis_input_file_revision.down_revision == workflow_file_revision.revision
+    later_tables.update(analysis_input_file_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

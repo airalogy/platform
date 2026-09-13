@@ -7,6 +7,7 @@ to a Research Task. Runner authentication, leases and transport stay shared.
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -24,7 +25,12 @@ from app.services.analysis_compute import (
     emit_analysis_compute_event,
     money,
 )
-from app.services.analysis_compute_contracts import ANALYSIS_JOB_SCHEMA, SOURCE_FILENAME
+from app.services.analysis_compute_contracts import (
+    ANALYSIS_JOB_SCHEMA,
+    ATTACHMENT_MANIFEST_FILENAME,
+    MAX_ANALYSIS_INPUT_FILES,
+    SOURCE_FILENAME,
+)
 from app.services.analysis_engine import canonical_digest
 from app.services.record_analyses import utcnow
 from app.services.research_compute_jobs import (
@@ -111,6 +117,74 @@ def analysis_input_manifest(job, run, input_row):
         "checksum_sha256": hashlib.sha256(payload).hexdigest(),
         "download_path": f"/compute-runner/v1/jobs/{job.id}/inputs/{input_row.id}",
     }
+
+
+async def additional_analysis_input(db, job, run, details, input_row):
+    """Resolve one sealed attachment input; never authorize by a storage key."""
+    from app.services.analysis_compute_files import manifest_bytes, sealed_input_file
+
+    envelope = details.input_file_manifest
+    if (
+        not envelope
+        or input_row is None
+        or input_row.analysis_run_id != run.id
+        or input_row.compute_job_id != job.id
+        or input_row.data_asset_id is not None
+        or input_row.data_asset_version_id is not None
+    ):
+        raise HTTPException(409, "Compute attachment source binding changed")
+    if input_row.position == 2 and input_row.mount_name == ATTACHMENT_MANIFEST_FILENAME:
+        payload = manifest_bytes(envelope)
+        blob = None
+        media_type = "application/json"
+        size = len(payload)
+        checksum = hashlib.sha256(payload).hexdigest()
+    elif input_row.position >= 3 and input_row.mount_name not in {
+        SOURCE_FILENAME,
+        ATTACHMENT_MANIFEST_FILENAME,
+        "input.json",
+    }:
+        receipt, blob = await sealed_input_file(db, run, input_row)
+        payload = None
+        # Deduplicated physical storage does not own logical file metadata.
+        # Serve the exact MIME type approved for this attachment occurrence.
+        media_type = receipt.snapshot["media_type"]
+        size = blob.size_bytes
+        checksum = blob.checksum_sha256
+    else:
+        raise HTTPException(409, "Compute attachment position or name changed")
+    manifest = {
+        "id": str(input_row.id),
+        "mount_name": input_row.mount_name,
+        "filename": input_row.mount_name,
+        "media_type": media_type,
+        "byte_size": size,
+        "checksum_sha256": checksum,
+        "download_path": f"/compute-runner/v1/jobs/{job.id}/inputs/{input_row.id}",
+    }
+    return manifest, payload, blob
+
+
+async def analysis_input_manifests(db, job, run, details, input_rows):
+    """Extend the existing signed multi-input transport without changing v1 JSON."""
+    envelope = details.input_file_manifest
+    rows = sorted(input_rows, key=lambda item: item.position)
+    if (
+        not isinstance(envelope, dict)
+        or not isinstance(envelope.get("files"), list)
+        or not 1 <= len(envelope["files"]) <= MAX_ANALYSIS_INPUT_FILES
+        or len(rows) != len(envelope["files"]) + 2
+        or [item.position for item in rows] != list(range(1, len(rows) + 1))
+        or len({item.mount_name for item in rows}) != len(rows)
+    ):
+        raise HTTPException(409, "Compute attachment input set changed")
+    manifests = [analysis_input_manifest(job, run, rows[0])]
+    for row in rows[1:]:
+        manifest, _payload, _blob = await additional_analysis_input(
+            db, job, run, details, row
+        )
+        manifests.append(manifest)
+    return manifests
 
 
 def verified_output_receipts(rows, completed_outputs):
@@ -273,6 +347,10 @@ async def seal_analysis_completion(
         "actual_cost": str(cost) if cost is not None else None,
         "currency": job.currency,
     }
+    if getattr(details, "input_file_manifest", None):
+        # This is the approved public mapping, not storage keys or blob lineage.
+        # Keep it in the canonical report so ordinary exports preserve inputs.
+        sealed["input_files"] = deepcopy(details.input_file_manifest)
     digest = canonical_digest(sealed)
     job.status = "completed"
     job.result = result

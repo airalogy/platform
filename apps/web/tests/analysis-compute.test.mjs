@@ -8,7 +8,7 @@ import ts from "typescript"
 const source = readFileSync(new URL("../src/utils/analysis-compute.ts", import.meta.url), "utf8")
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }, reportDiagnostics: true })
 assert.deepEqual(compiled.diagnostics, [])
-const { isComputeAnalysisRecipe, isBuiltinAnalysisRun, parseAnalysisComputeParameters, analysisComputeRecipeIdentity, analysisComputeGovernance, validateAnalysisComputeRecipe } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`)
+const { isComputeAnalysisRecipe, isBuiltinAnalysisRun, parseAnalysisComputeParameters, analysisComputeRecipeIdentity, analysisComputeGovernance, validateAnalysisComputeRecipe, validateAnalysisComputeInputFiles, withAnalysisComputeInputFiles, analysisComputeInputFileFieldLabel } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`)
 
 function fixture() {
   return {
@@ -83,4 +83,89 @@ test("budget and deadline validation never invents a currency or accepts stale l
   assert.throws(() => analysisComputeGovernance("", "", 999, 1000))
   assert.throws(() => analysisComputeGovernance("", "", Number.POSITIVE_INFINITY, 1000))
   assert.equal(analysisComputeGovernance("", "", 2000, 1000).deadline_at, "1970-01-01T00:00:02.000Z")
+})
+
+function attachmentFixture() {
+  const base = fixture()
+  return {
+    ...base,
+    inputs: [{ input_id: "measurement_file", field_path: ["var", "attachment"] }],
+    context: {
+      ...base.context,
+      source: { record_count: 2, source_digest: "synthetic", filename: "records.json" },
+      input_file_fields: [
+        { field_path: ["var", "attachment"], title: "Measurements", file_extensions: ["csv"], nullable: true },
+        { field_path: ["var", "raw.file"], title: "Raw data", file_extensions: null, nullable: false },
+      ],
+      input_file_limits: { max_files: 30, max_file_bytes: 268435456, max_total_bytes: 536870912, manifest_filename: "attachments.json" },
+    },
+  }
+}
+
+test("empty attachments preserve the exact legacy recipe JSON and method identity", () => {
+  const { recipe } = fixture()
+  assert.equal(JSON.stringify(withAnalysisComputeInputFiles(recipe, [])), JSON.stringify(recipe))
+  assert.equal(analysisComputeRecipeIdentity({ ...recipe, input_files: [] }), analysisComputeRecipeIdentity(recipe))
+  assert.equal(validateAnalysisComputeRecipe(recipe, fixture().context), null)
+  assert.equal(Object.hasOwn(withAnalysisComputeInputFiles({ ...recipe, input_files: [{ input_id: "old", field_path: ["var", "old"] }] }, []), "input_files"), false)
+})
+
+test("explicit attachments change the method identity and serialize only field declarations", () => {
+  const { recipe, inputs, context } = attachmentFixture()
+  const withInputs = withAnalysisComputeInputFiles(recipe, inputs.map(input => ({ ...input, file_id: "private-file", url: "https://private.invalid" })))
+  assert.deepEqual(withInputs.input_files, inputs)
+  assert.notEqual(analysisComputeRecipeIdentity(recipe), analysisComputeRecipeIdentity(withInputs))
+  assert.equal(validateAnalysisComputeRecipe(withInputs, context), null)
+  assert.equal(JSON.stringify(withInputs).includes("private-file"), false)
+  withInputs.input_files[0].field_path[1] = "changed"
+  assert.equal(inputs[0].field_path[1], "attachment")
+})
+
+test("attachment declarations require authorized literal FileId fields and unique safe names", () => {
+  const { inputs, context } = attachmentFixture()
+  for (const input_id of ["", "Uppercase", "../private", "https://file", "has-hyphen", "x".repeat(25)])
+    assert.equal(validateAnalysisComputeInputFiles([{ ...inputs[0], input_id }], context), "invalidInputFiles")
+  for (const field_path of [["var", "unknown"], ["var", "raw", "file"], ["record", "attachment"], ["https://private.invalid"]])
+    assert.equal(validateAnalysisComputeInputFiles([{ ...inputs[0], field_path }], context), "invalidInputFiles")
+  assert.equal(validateAnalysisComputeInputFiles([inputs[0], { ...inputs[0], input_id: "second" }], context), "invalidInputFiles")
+  assert.equal(validateAnalysisComputeInputFiles([inputs[0], { ...inputs[0], field_path: ["var", "raw.file"] }], context), "invalidInputFiles")
+  assert.equal(validateAnalysisComputeInputFiles([{ input_id: "raw", field_path: ["var", "raw.file"] }], context), null)
+  assert.equal(analysisComputeInputFileFieldLabel(context.input_file_fields[1]), "Raw data [raw.file] (*)")
+})
+
+test("actual attachment counts expand every selected Record and never truncate the source scope", () => {
+  const { inputs, context } = attachmentFixture()
+  context.source.record_count = 30
+  assert.equal(validateAnalysisComputeInputFiles(inputs, context), null)
+  context.source.record_count = 31
+  assert.equal(validateAnalysisComputeInputFiles(inputs, context), "tooManyInputFiles")
+  const twoFields = [...inputs, { input_id: "raw", field_path: ["var", "raw.file"] }]
+  context.source.record_count = 15
+  assert.equal(validateAnalysisComputeInputFiles(twoFields, context), null)
+  context.source.record_count = 16
+  assert.equal(validateAnalysisComputeInputFiles(twoFields, context), "tooManyInputFiles")
+  assert.equal(context.source.record_count, 16)
+  assert.equal(validateAnalysisComputeInputFiles(Array.from({ length: 17 }, () => inputs[0]), context), "invalidInputFiles")
+})
+
+test("missing catalogs fail closed for attachments without breaking older records-only methods", () => {
+  const { inputs, context } = attachmentFixture()
+  for (const missing of [{ ...context, input_file_fields: undefined }, { ...context, input_file_limits: undefined }]) {
+    assert.equal(validateAnalysisComputeInputFiles(inputs, missing), "inputFilesUnavailable")
+    assert.equal(validateAnalysisComputeInputFiles([], missing), null)
+  }
+})
+
+test("Aira recipe adoption cannot introduce or replace explicit user attachment selections", () => {
+  const { recipe, inputs } = attachmentFixture()
+  const generated = { ...recipe, input_files: [{ input_id: "untrusted", field_path: ["var", "other"] }] }
+  assert.deepEqual(withAnalysisComputeInputFiles(generated, inputs).input_files, inputs)
+  assert.equal(Object.hasOwn(withAnalysisComputeInputFiles(generated, []), "input_files"), false)
+})
+
+test("attachment display and validation terminology exists in both supported locales", () => {
+  const en = JSON.parse(readFileSync(new URL("../../../packages/shared/src/locales/langs/en-us.json", import.meta.url), "utf8")).page.analysis.compute
+  const zh = JSON.parse(readFileSync(new URL("../../../packages/shared/src/locales/langs/zh-cn.json", import.meta.url), "utf8")).page.analysis.compute
+  for (const key of ["inputFiles", "inputFilesHint", "inputFilesNone", "inputFilesAiHint", "inputFilesDeclarationHint", "inputFilesWorkflowHint", "inputFilesReceipt", "inputFilesUnavailable", "invalidInputFiles", "tooManyInputFiles"])
+    assert.ok(en[key] && zh[key], key)
 })

@@ -15,6 +15,7 @@ export interface E2EFixtures {
   resourceType: { id: string }
   analysis: { protocol_id: string, protocol_uid: string }
   workflow_compute: { pipeline_id: string, pipeline_title: string, environment_id: string, environment_revision_id: string, environment_name: string, protocol_id: string, protocol_version_id: string }
+  workflow_compute_attachments: { pipeline_id: string, pipeline_title: string, environment_id: string, environment_revision_id: string, environment_name: string, protocol_id: string, protocol_version_id: string }
   workflow_files: { protocol_id: string, protocol_uid: string, protocol_version_id: string, record_id: string, record_version: number, file_ref: string, field: string }
   labResource: { id: string }
   restrictedResource: { id: string }

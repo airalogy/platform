@@ -288,6 +288,8 @@ class ComputeJobEnvelope:
         mount_names = {item.mount_name for item in inputs}
         if len(mount_names) != len(inputs) or len(inputs) > 32:
             raise ValueError("Compute Job input mount names must be unique and bounded")
+        if "input.json" in mount_names:
+            raise ValueError("Compute input cannot replace the reserved parameter file")
         job_id = _identifier(raw.get("job_id"), "job_id")
         for item in inputs:
             expected_path = f"/compute-runner/v1/jobs/{job_id}/inputs/{item.id}"

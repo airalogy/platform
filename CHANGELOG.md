@@ -16,6 +16,8 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ### Added
 
+- Add explicit Record attachment inputs to private and Workflow Compute analysis: typed field declarations, per-Record safe mappings, immutable file/byte receipts and current source permissions through the existing preview, approval and Runner flow. Preserve old recipes and `records.json`, reject missing or excessive files without dropping samples, retain declarations in reusable methods, and keep AI-disabled manual selection available. No attachment bytes or implicit selection are delegated to Aira.
+
 - Add Project Workflow cards with stable occurrence IDs, exact Protocol versions, immutable preview-confirm revisions, responsive graph/list editing and deterministic execution through existing Research Tasks. Single, repeated, sequential, parallel and joining Protocol cards work with AI disabled; preserve approvals, distinct Records, pause/cancel, permission rechecks and human result review. Add typed conditions with normal unselected branches and immutable scalar-transfer receipts pinned to exact Record revisions; validate target inputs and require fresh downstream approval. Protect source-derived views, approvals and exports without blocking independently readable cards. Array/object bindings remain unsupported; legacy Workflow routes and previously started control-only Runs remain unchanged.
 
 - Add explicitly published Project snapshots of saved built-in analysis methods, excluding private Record selections, reports and AI provenance. Workflow Analysis cards require all declared upstream Record revisions, fresh input approval and explicit typed statistic ports; reuse ordinary persisted analysis jobs and pass sealed outputs to downstream Protocol cards. Preserve source permissions, private report ownership, pause/cancel and duplicate-delivery safety. Cross-Protocol synthesis remains separate work.
@@ -32,9 +34,13 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 - Add explicit preview-confirm conversion of owned legacy Workflows into new Project definitions, with exact Protocol versions, reviewed directed edges and private immutable conversion receipts. Keep the original logic, execution path and Records unchanged; do not execute prose or start a Task during conversion.
 
-- Add schema-v4 file bindings from fixed Record FileId fields and declared Compute output files into downstream Protocols. Seal exact sources, bytes and target references, retain source/target permission intersection across preview, download, export and reuse, and preserve prior graph digests. Files are not text or arbitrary URLs; explicit Compute attachment input mounts and array/object bindings remain future work.
+- Add schema-v4 file bindings from fixed Record FileId fields and declared Compute output files into downstream Protocols. Seal exact sources, bytes and target references, retain source/target permission intersection across preview, download, export and reuse, and preserve prior graph digests. Files are not text or arbitrary URLs; array/object bindings remain future work.
 
 ### Fixed
+
+- Reject the reserved `input.json` input mount on both the API and Runner, preventing an attached file from replacing the approved parameter JSON during staging.
+
+- Return explicit validation/conflict responses for invalid attachment formats and attempts to rename sealed analysis inputs; serialize renaming with confirmation to preserve immutable file receipts.
 
 - Recheck exact source access when registering or reading Evidence and its derived Claims, Knowledge source links, reviews and result exports. Task membership does not reveal private Workflow analysis or controlled files; independently readable assets remain available, while complete sealed reports cannot silently omit restricted sources or retain an old digest after redaction.
 

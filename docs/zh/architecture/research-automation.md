@@ -130,7 +130,9 @@ Research Task
 
 Compute 执行保持 `ResearchAction → ResearchAnalysisAction → AnalysisRun → AnalysisCompute/ResearchComputeJob`，作业只设置 `analysis_run_id`，不设置 `action_id`。Task 固定环境准确修订，Run 封存本次审批人、费用上限/币种及期限。唯一一次针对实际输入的 ResearchApproval 在同一事务内确认既有 Compute 作业、登记审批身份并预留 Task 预算。Runner 回调复核权限并结算同一账本；执行中断且用量未知时保留待核算费用，不当作零支出。先获取工作流上下文锁，再锁作业；暂停和取消处理所有并行桥接作业。独立私有分析控制入口不能绕过 Workflow，受治理报告及输出读取复核全部来源，不隐式创建共享 DataAsset。存在 Compute 发布方法或 v3 图时，迁移 0066 拒绝破坏性降级。
 
-图 Schema v4 / 执行契约 v5 增加单文件类型化绑定：来源为 Protocol 的 FileId 字段或明确选择的 Compute 输出清单条目，目标为 Protocol FileId 字段。`WorkflowFileBinding` 固定准确来源 Action/Record 或分析结果、blob 摘要和目标身份。逻辑 AiralogyFile 别名采用不可公开解析的虚拟后端，不复制原权限或暴露对象存储直链。元数据、预览、流式下载、导出与导入均重新检查来源和目标权限交集，嵌套别名按有界 lineage 回溯。披露前验证实际字节，逻辑引用计入配额，受保护元数据不可变。存在 v4 图或文件回执时迁移 0068 拒绝降级，不将私有输出隐式升级为 DataAsset。Compute 显式附件输入挂载及数组/对象绑定仍未实现。
+图 Schema v4 / 执行契约 v5 增加单文件类型化绑定：来源为 Protocol 的 FileId 字段或明确选择的 Compute 输出清单条目，目标为 Protocol FileId 字段。`WorkflowFileBinding` 固定准确来源 Action/Record 或分析结果、blob 摘要和目标身份。逻辑 AiralogyFile 别名采用不可公开解析的虚拟后端，不复制原权限或暴露对象存储直链。元数据、预览、流式下载、导出与导入均重新检查来源和目标权限交集，嵌套别名按有界 lineage 回溯。披露前验证实际字节，逻辑引用计入配额，受保护元数据不可变。存在 v4 图或文件回执时迁移 0068 拒绝降级，不将私有输出隐式升级为 DataAsset。数组/对象绑定仍属后续工作。
+
+Compute 方法可通过 `input_files` 明确声明稳定输入标识及字面量 `['var', field]` 路径。空声明在序列化时省略，保持旧方法、预览、图摘要及 `records.json` 字节不变。迁移 0069 增加不可变 `AnalysisComputeInputFile` 回执和封存的 `AnalysisCompute.input_file_manifest`，固定每条 Record 修订/摘要、类型化字段、文件身份、元数据摘要、字节数、校验值和确定挂载名，blob/存储 lineage 留在服务端。既有签名分析任务封装通过同一 Runner 传递 `records.json`、安全 `attachments.json` 及最多 30 个文件输入；单件上限 256 MiB，逻辑合计上限 512 MiB，不允许退回部分样本。来源文件及 blob 元数据受保护，下载披露前校验完整字节，在使用边界复核发起人、审批者及 Workflow 读取者权限。参考容器以内置非特权身份运行，输入文件和目录由 root 持有且不可写；这不等于独立只读卷挂载。附件声明与清单纳入预览、审批及结果封存，不另建执行器或隐式发布资产；存在附件契约时拒绝降级。
 
 旧 `ProtocolWorkflow` 仍是独立私有执行对象。`/workflow-conversions` 要求归属与项目权限、当前来源摘要、明确的准确版本选择及有向连线；自由文本、执行路径和历史 Records 保留在原对象，不进入新可执行图。预览确认创建普通新定义/修订，以及私有不可变 `WorkflowLegacyConversion` 回执（0067）。幂等确认返回原转换结果，之后编辑不会改写该次转换。旧查看/继续路由保留，不隐式解释自由文本或移动执行状态。
 

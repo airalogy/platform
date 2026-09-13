@@ -40,6 +40,81 @@ def recipe_payload():
     }
 
 
+def test_empty_attachment_selection_preserves_original_json_and_nested_digest():
+    original = AnalysisComputeRecipe.model_validate(recipe_payload()).model_dump(
+        mode="json"
+    )
+    assert "input_files" not in original
+    explicit_empty = AnalysisComputeRecipe.model_validate(
+        recipe_payload() | {"input_files": []}
+    )
+    assert explicit_empty.model_dump(mode="json") == original
+    outer = AnalysisComputeDraft.model_validate(draft_payload(recipe=explicit_empty))
+    assert outer.model_dump(mode="json")["recipe"] == original
+    assert canonical_digest(explicit_empty.model_dump(mode="json")) == canonical_digest(
+        original
+    )
+
+
+def test_attachment_declarations_round_trip_and_preserve_literal_field_names():
+    declarations = [{"input_id": "measurements", "field_path": ["var", "测量.csv"]}]
+    recipe = AnalysisComputeRecipe.model_validate(
+        recipe_payload() | {"input_files": declarations}
+    )
+    assert recipe.model_dump(mode="json")["input_files"] == declarations
+    assert AnalysisComputeRecipe.model_validate_json(recipe.model_dump_json()) == recipe
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        {"input_id": "../secret", "field_path": ["var", "file"]},
+        {"input_id": "x" * 25, "field_path": ["var", "file"]},
+        {"input_id": "UPPER", "field_path": ["var", "file"]},
+        {"input_id": "", "field_path": ["var", "file"]},
+        {"input_id": "file", "field_path": ["result", "file"]},
+        {"input_id": "file", "field_path": ["var", " "]},
+        {"input_id": "file", "field_path": ["var", "x" * 256]},
+        {"input_id": "file", "field_path": ["var", "line\nbreak"]},
+        {"input_id": "file", "field_path": ["var", "file", "nested"]},
+        {
+            "input_id": "file",
+            "field_path": ["var", "file"],
+            "url": "https://example.org",
+        },
+        {"input_id": "file", "field_path": ["var", "file"], "required": False},
+        {
+            "input_id": "file",
+            "field_path": ["var", "file"],
+            "file_id": str(SYNTHETIC_ID),
+        },
+    ],
+)
+def test_attachment_selection_rejects_paths_urls_and_implicit_missing_policy(
+    declaration,
+):
+    with pytest.raises(ValidationError):
+        AnalysisComputeRecipe.model_validate(
+            recipe_payload() | {"input_files": [declaration]}
+        )
+
+
+def test_attachment_declarations_reject_duplicate_fields_ids_and_excess_count():
+    base = {"input_id": "file", "field_path": ["var", "attachment"]}
+    for declarations in (
+        [base, base | {"input_id": "same_field"}],
+        [base, base | {"field_path": ["var", "another"]}],
+        [
+            {"input_id": f"file_{index}", "field_path": ["var", str(index)]}
+            for index in range(17)
+        ],
+    ):
+        with pytest.raises(ValidationError):
+            AnalysisComputeRecipe.model_validate(
+                recipe_payload() | {"input_files": declarations}
+            )
+
+
 def draft_payload(**changes):
     return {
         "protocol_id": str(SYNTHETIC_ID),

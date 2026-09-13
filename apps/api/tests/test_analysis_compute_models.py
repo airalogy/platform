@@ -14,6 +14,7 @@ from app.models.analysis_compute import (
     AnalysisCompute,
     AnalysisComputeApprovalState,
     AnalysisComputeEvent,
+    AnalysisComputeInputFile,
 )
 from app.models.research_execution import ResearchComputeJob, ResearchComputeJobInput
 from migrations.model_registry import MODEL_MODULES, import_models
@@ -318,8 +319,11 @@ def test_frozen_0061_and_historical_compute_columns_match_current_models(monkeyp
     ):
         declared = model.__table__
         migrated = capture.metadata.tables[declared.name]
-        assert set(migrated.c.keys()) == set(declared.c.keys())
+        later_columns = {"input_file_manifest"} if model is AnalysisCompute else set()
+        assert set(migrated.c.keys()) == set(declared.c.keys()) - later_columns
         for column in declared.c:
+            if column.name in later_columns:
+                continue
             actual, expected = (
                 column_signature(migrated.c[column.name]),
                 column_signature(column),
@@ -335,6 +339,26 @@ def test_frozen_0061_and_historical_compute_columns_match_current_models(monkeyp
         assert str(CreateTable(migrated).compile(dialect=postgresql.dialect()))
     source = Path(migration.__file__).read_text(encoding="utf-8")
     assert "import_models" not in source and "Base.metadata" not in source
+    # 0069, not the frozen 0061, owns private attachment receipt persistence.
+    for name in ("airalogy_files", "research_file_blobs"):
+        sa.Table(name, capture.metadata, sa.Column("id", sa.UUID(), primary_key=True))
+    sa.Table(
+        "records", capture.metadata,
+        sa.Column("id", sa.UUID(), primary_key=True),
+        sa.Column("version", sa.Integer(), primary_key=True),
+    )
+    attachments = import_module("migrations.versions.0069_analysis_compute_input_files")
+    monkeypatch.setattr(attachments.op, "execute", Mock())
+    attachments.upgrade()
+    assert capture.columns_added[-1] == ("analysis_computations", "input_file_manifest")
+    for model in (AnalysisCompute, AnalysisComputeInputFile):
+        declared = model.__table__
+        migrated = capture.metadata.tables[declared.name]
+        assert set(migrated.c.keys()) == set(declared.c.keys())
+        for column in declared.c:
+            assert column_signature(migrated.c[column.name]) == column_signature(column)
+        assert constraint_signature(migrated) == constraint_signature(declared)
+        assert index_signature(migrated) == index_signature(declared)
 
 
 @pytest.mark.parametrize("has_analysis_assets", [False, True])

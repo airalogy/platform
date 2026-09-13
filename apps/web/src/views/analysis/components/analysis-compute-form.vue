@@ -60,6 +60,50 @@
           <n-form-item :label="t('page.analysis.compute.parameters')">
             <n-input v-model:value="parameterText" type="textarea" :autosize="{ minRows: 3, maxRows: 10 }" class="font-mono" data-testid="analysis-compute-parameters" />
           </n-form-item>
+          <section class="mb-5" data-testid="analysis-compute-inputs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="aira-type-label">
+                {{ t('page.analysis.compute.inputFiles') }}
+              </h3>
+              <n-button size="small" :disabled="!context.input_file_limits || !context.input_file_fields?.length || inputFiles.length >= 16" data-testid="analysis-compute-add-input" @click="addInputFile">
+                {{ t('page.analysis.compute.addInputFile') }}
+              </n-button>
+            </div>
+            <p class="aira-type-meta">
+              {{ t('page.analysis.compute.inputFilesHint') }}
+            </p>
+            <p v-if="!inputFiles.length" class="aira-type-meta" data-testid="analysis-compute-no-inputs">
+              {{ t('page.analysis.compute.inputFilesNone') }}
+            </p>
+            <p v-if="!context.input_file_fields?.length" class="aira-type-meta">
+              {{ t('page.analysis.compute.inputFilesNoFields') }}
+            </p>
+            <article v-for="(input, index) in inputFiles" :key="index" class="compute-input mb-3" data-testid="analysis-compute-input-declaration">
+              <div class="mb-2 flex justify-end">
+                <n-button size="small" :disabled="busy" data-testid="analysis-compute-remove-input" @click="inputFiles.splice(index, 1)">
+                  {{ t('common.delete') }}
+                </n-button>
+              </div>
+              <n-form-item :label="t('page.analysis.compute.inputFileId')" required>
+                <n-input v-model:value="input.input_id" :maxlength="24" data-testid="analysis-compute-input-id" />
+                <template #feedback>
+                  {{ t('page.analysis.compute.inputFileIdHint') }}
+                </template>
+              </n-form-item>
+              <n-form-item :label="t('page.analysis.compute.inputFileField')" required>
+                <n-select :value="input.field_path[1] ? JSON.stringify(input.field_path) : null" :options="inputFileOptions(index)" data-testid="analysis-compute-input-field" @update:value="value => selectInputFileField(index, value)" />
+              </n-form-item>
+            </article>
+            <p v-if="context.input_file_limits" class="aira-type-meta">
+              {{ t('page.analysis.compute.inputFileLimits', { count: context.input_file_limits.max_files, fileBytes: context.input_file_limits.max_file_bytes, totalBytes: context.input_file_limits.max_total_bytes }) }}
+            </p>
+            <p v-if="inputFiles.length" class="aira-type-meta" data-testid="analysis-compute-input-count">
+              {{ t('page.analysis.compute.inputFilesEstimate', { records: context.source.record_count, fields: inputFiles.length, files: context.source.record_count * inputFiles.length }) }}
+            </p>
+            <p v-if="aiAvailable || adoptedDraftId" class="aira-type-meta">
+              {{ t('page.analysis.compute.inputFilesAiHint') }}
+            </p>
+          </section>
           <n-collapse v-if="environment" class="mb-4">
             <n-collapse-item :title="t('page.analysis.compute.schemas')" name="schemas">
               <pre tabindex="0">{{ JSON.stringify({ input: environment.input_schema, result: environment.result_schema }, null, 2) }}</pre>
@@ -130,7 +174,7 @@
           <n-button type="primary" :disabled="!valid || methodChanged" :loading="busy" data-testid="analysis-compute-preview" @click="handlePreview">
             {{ t("page.analysis.compute.preview") }}
           </n-button>
-          <n-button v-if="seed?.pipeline" :disabled="!recipe || Boolean(recipeError)" @click="saveRevision">
+          <n-button v-if="seed?.pipeline" :disabled="!recipe || Boolean(recipeError)" data-testid="analysis-compute-save-revision" @click="saveRevision">
             {{ t("page.analysis.saveRevision", { number: seed.pipeline.current_revision + 1 }) }}
           </n-button>
         </div>
@@ -167,12 +211,12 @@
 
 <script setup lang="ts">
 import type { AnalysisAIRequest, AnalysisSelection } from "@/service/api/analysis"
-import type { AnalysisComputeContext, AnalysisComputePreview, AnalysisComputeRecipe, AnalysisComputeSeed } from "@/service/api/analysis-compute"
+import type { AnalysisComputeContext, AnalysisComputeInputFile, AnalysisComputePreview, AnalysisComputeRecipe, AnalysisComputeSeed } from "@/service/api/analysis-compute"
 import type { ComputeOutputDraft } from "@/service/api/research-compute-jobs"
 import { createAnalysisPipelineRevision } from "@/service/api/analysis"
 import { confirmAnalysisCompute, fetchAnalysisComputeContext, previewAnalysisCompute } from "@/service/api/analysis-compute"
 import { analysisSelectionIdentity, canAdoptAnalysisComputeDraft, createAnalysisAIRequestId } from "@/utils/analysis-ai"
-import { analysisComputeEnvironmentLabel, analysisComputeGovernance, analysisComputeRecipeIdentity, parseAnalysisComputeParameters, validateAnalysisComputeRecipe } from "@/utils/analysis-compute"
+import { analysisComputeEnvironmentLabel, analysisComputeGovernance, analysisComputeInputFileFieldLabel, analysisComputeRecipeIdentity, parseAnalysisComputeParameters, validateAnalysisComputeRecipe, withAnalysisComputeInputFiles } from "@/utils/analysis-compute"
 import { useDialog } from "naive-ui"
 import { useI18n } from "vue-i18n"
 import AnalysisAiPanel from "./analysis-ai-panel.vue"
@@ -191,6 +235,7 @@ const language = ref<"python" | "r">("python")
 const sourceCode = ref("")
 const parameterText = ref("{}")
 const outputFiles = ref<ComputeOutputDraft[]>([])
+const inputFiles = ref<AnalysisComputeInputFile[]>([])
 const adoptedDraftId = ref<string | undefined>()
 const approverId = ref("")
 const maxCost = ref("")
@@ -206,7 +251,7 @@ const languageOptions = computed(() => environment.value?.allowed_languages.map(
 const outputKindOptions = computed(() => (["file", "table", "image", "model", "archive"] as const).map(value => ({ value, label: t(`page.analysis.compute.kinds.${value}`) })))
 const recipe = computed<AnalysisComputeRecipe | null>(() => {
   try {
-    return { kind: "compute", environment_revision_id: environmentId.value, language: language.value, source_code: sourceCode.value, parameters: parseAnalysisComputeParameters(parameterText.value), output_files: JSON.parse(JSON.stringify(outputFiles.value)) as ComputeOutputDraft[] }
+    return withAnalysisComputeInputFiles({ kind: "compute", environment_revision_id: environmentId.value, language: language.value, source_code: sourceCode.value, parameters: parseAnalysisComputeParameters(parameterText.value), output_files: JSON.parse(JSON.stringify(outputFiles.value)) as ComputeOutputDraft[] }, inputFiles.value)
   }
   catch { return null }
 })
@@ -226,6 +271,9 @@ const valid = computed(() => Boolean(context.value && recipe.value && !validatio
 const methodChanged = computed(() => Boolean(props.seed?.pipeline && recipe.value && analysisComputeRecipeIdentity(props.seed.recipe) !== analysisComputeRecipeIdentity(recipe.value)))
 function errorText(error: unknown) {
   const status = (error as { response?: { status?: number } })?.response?.status
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if ((status === 422 || status === 413) && typeof detail === "string")
+    return detail
   return t(status === 409 ? "page.analysis.stalePreview" : status === 403 || status === 404 ? "page.analysis.compute.accessChanged" : "page.analysis.requestError")
 }
 function onEnvironmentChange() {
@@ -238,9 +286,11 @@ function adoptDraft(request: AnalysisAIRequest) {
   const output = request.output
   if (!canAdoptAnalysisComputeDraft(request, props.protocolId, props.projectId, props.selection, environment.value?.revision_id, language.value) || !output || !("mode" in output) || output.mode !== "compute" || !output.recipe)
     return
-  sourceCode.value = output.recipe.source_code
-  parameterText.value = JSON.stringify(output.recipe.parameters, null, 2)
-  outputFiles.value = JSON.parse(JSON.stringify(output.recipe.output_files)) as ComputeOutputDraft[]
+  // Keep only attachment fields already selected by the user, never model declarations.
+  const adopted = withAnalysisComputeInputFiles(output.recipe, inputFiles.value)
+  sourceCode.value = adopted.source_code
+  parameterText.value = JSON.stringify(adopted.parameters, null, 2)
+  outputFiles.value = JSON.parse(JSON.stringify(adopted.output_files)) as ComputeOutputDraft[]
   adoptedDraftId.value = request.id
   preview.value = null
   previewVisible.value = false
@@ -255,6 +305,26 @@ function continueManually() {
 }
 function addOutput() {
   outputFiles.value.push({ mount_name: `output-${outputFiles.value.length + 1}.json`, asset_name: t("page.analysis.compute.outputName"), description: "", kind: "file", media_type: "application/json", max_bytes: Math.min(1024 * 1024, Math.max(1, (environment.value?.resource_limits.max_output_bytes || 2048) - 1024)), required: true, data_schema: {}, metadata: {} })
+}
+function inputFileOptions(index: number) {
+  return (context.value?.input_file_fields ?? []).map(field => ({
+    label: analysisComputeInputFileFieldLabel(field),
+    value: JSON.stringify(field.field_path),
+    disabled: inputFiles.value.some((input, otherIndex) => otherIndex !== index && JSON.stringify(input.field_path) === JSON.stringify(field.field_path)),
+  }))
+}
+function selectInputFileField(index: number, value: string) {
+  const field = context.value?.input_file_fields?.find(field => JSON.stringify(field.field_path) === value)
+  if (field && inputFiles.value[index])
+    inputFiles.value[index].field_path = [...field.field_path]
+}
+function addInputFile() {
+  if (busy.value || inputFiles.value.length >= 16 || !context.value?.input_file_fields?.length || !context.value.input_file_limits)
+    return
+  let number = 1
+  while (inputFiles.value.some(input => input.input_id === `input_${number}`))
+    number++
+  inputFiles.value.push({ input_id: `input_${number}`, field_path: ["var", ""] })
 }
 async function loadContext() {
   const version = ++sequence
@@ -346,6 +416,7 @@ watch(() => props.seed, (seed) => {
   sourceCode.value = seed?.recipe.source_code || ""
   parameterText.value = JSON.stringify(seed?.recipe.parameters || {}, null, 2)
   outputFiles.value = JSON.parse(JSON.stringify(seed?.recipe.output_files || [])) as ComputeOutputDraft[]
+  inputFiles.value = JSON.parse(JSON.stringify(seed?.recipe.input_files || [])) as AnalysisComputeInputFile[]
   preview.value = null
   previewVisible.value = false
 }, { immediate: true })
@@ -362,6 +433,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .analysis-compute-form { min-width: 0; }
-.compute-output { border: 1px solid #e5e7eb; border-radius: .75rem; padding: .75rem; }
+.compute-output, .compute-input { min-width: 0; border: 1px solid #e5e7eb; border-radius: .75rem; padding: .75rem; overflow-wrap: anywhere; }
 pre { overflow: auto; max-height: 18rem; padding: .75rem; background: #f7f9fc; border-radius: .5rem; font-size: .75rem; }
 </style>

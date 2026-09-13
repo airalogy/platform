@@ -115,12 +115,20 @@ async def materialize_analysis_card(
 
 
 async def authorize_analysis_sources(
-    db, *, task, run, action, snapshot, extra_user=None
+    db, *, task, run, action, snapshot, extra_user=None, input_files=None
 ):
     """Receiving resolved values requires each identity's current Record ACL."""
     identities = {task.owner_user_id, run.requested_by_user_id, action.assignee_user_id}
     if extra_user is not None:
         identities.add(extra_user.id)
+    if input_files is None:
+        input_files = (
+            (action.input_data or {})
+            .get("analysis_input", {})
+            .get("summary", {})
+            .get("compute", {})
+            .get("input_files")
+        )
     for user_id in identities:
         user = await db.get(User, user_id) if user_id else None
         if user is None:
@@ -137,6 +145,12 @@ async def authorize_analysis_sources(
             snapshot["records"],
             own_only=own_only,
         )
+        if input_files:
+            from app.services.analysis_compute_files import (
+                authorize_preview_input_files,
+            )
+
+            await authorize_preview_input_files(db, snapshot, input_files, user)
 
 
 async def prepare_analysis_inputs(
@@ -191,6 +205,14 @@ async def prepare_analysis_inputs(
         if preview.source_digest != canonical_digest(snapshot):
             raise HTTPException(409, "Compute sources changed during resolution")
         summary = preview.summary
+        await authorize_analysis_sources(
+            db,
+            task=task,
+            run=run,
+            action=action,
+            snapshot=snapshot,
+            input_files=summary["compute"].get("input_files"),
+        )
     else:
         summary = preview_analysis(
             AnalysisRecipe.model_validate(method.recipe),
@@ -775,6 +797,21 @@ async def analysis_action_readable(db, *, task, run, action, user):
             )
             if canonical_digest(actual.data) != canonical_digest(record["data"]):
                 return False
+        input_files = (
+            (action.input_data or {})
+            .get("analysis_input", {})
+            .get("summary", {})
+            .get("compute", {})
+            .get("input_files")
+        )
+        if input_files:
+            from app.services.analysis_compute_files import (
+                authorize_preview_input_files,
+            )
+
+            await authorize_preview_input_files(
+                db, bridge.input_snapshot, input_files, user
+            )
         if bridge.analysis_run_id:
             analysis = await db.get(
                 AnalysisRun, bridge.analysis_run_id, populate_existing=True
@@ -782,6 +819,10 @@ async def analysis_action_readable(db, *, task, run, action, user):
             if analysis is None:
                 return False
             verify_run_integrity(analysis)
+            if analysis.recipe.get("input_files"):
+                from app.services.analysis_compute_files import authorize_input_files
+
+                await authorize_input_files(db, analysis, user)
             output = (action.output_data or {}).get("analysis_result") or {}
             if (
                 analysis.status == "succeeded"

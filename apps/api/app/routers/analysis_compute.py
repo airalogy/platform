@@ -64,6 +64,10 @@ async def compute_detail(db, user, run, details, job, *, approval_only=False):
             await authorize_approver(
                 db, run.protocol_id, project, run.source_snapshot, user
             )
+            if run.recipe.get("input_files"):
+                from app.services.analysis_compute_files import authorize_input_files
+
+                await authorize_input_files(db, run, user)
             can_approve = True
         except HTTPException as exc:
             if exc.status_code not in {403, 404}:
@@ -100,6 +104,8 @@ async def compute_detail(db, user, run, details, job, *, approval_only=False):
         "ready_runner_count": ready,
         "approval_required": True,
     }
+    if getattr(details, "input_file_manifest", None):
+        contract["input_files"] = details.input_file_manifest
     events = (
         await db.scalars(
             select(AnalysisComputeEvent)

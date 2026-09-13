@@ -71,7 +71,9 @@ from app.services.analysis_compute import (
 from app.services.analysis_compute_contracts import ANALYSIS_JOB_SCHEMA
 from app.services.analysis_compute_runtime import (
     RESEARCH_JOB_SCHEMA,
+    additional_analysis_input,
     analysis_input_manifest,
+    analysis_input_manifests,
     authorize_analysis_runtime,
     finish_analysis_failure,
     invalidate_analysis_execution,
@@ -1375,7 +1377,7 @@ async def lease_compute_job(
         return {"job": None, "retry_after_seconds": 15}
     if job.analysis_run_id is not None:
         try:
-            analysis, _details = await _authorize_analysis_request(
+            analysis, details = await _authorize_analysis_request(
                 db_session, job, runner
             )
         except HTTPException:
@@ -1386,12 +1388,30 @@ async def lease_compute_job(
             )
             await db_session.commit()
             return {"job": None, "retry_after_seconds": 15}
-        input_row = await db_session.scalar(
-            select(ResearchComputeJobInput).where(
-                ResearchComputeJobInput.compute_job_id == job.id,
-                ResearchComputeJobInput.analysis_run_id == analysis.id,
+        if getattr(details, "input_file_manifest", None):
+            input_rows = list(
+                (
+                    await db_session.scalars(
+                        select(ResearchComputeJobInput)
+                        .where(
+                            ResearchComputeJobInput.compute_job_id == job.id,
+                            ResearchComputeJobInput.analysis_run_id == analysis.id,
+                        )
+                        .order_by(ResearchComputeJobInput.position)
+                    )
+                ).all()
             )
-        )
+            inputs = await analysis_input_manifests(
+                db_session, job, analysis, details, input_rows
+            )
+        else:
+            input_row = await db_session.scalar(
+                select(ResearchComputeJobInput).where(
+                    ResearchComputeJobInput.compute_job_id == job.id,
+                    ResearchComputeJobInput.analysis_run_id == analysis.id,
+                )
+            )
+            inputs = [analysis_input_manifest(job, analysis, input_row)]
         revision = await db_session.get(
             ResearchComputeEnvironmentRevision, job.compute_environment_revision_id
         )
@@ -1409,7 +1429,7 @@ async def lease_compute_job(
                     "lab_id": str(runner.lab_id),
                 },
             },
-            inputs=[analysis_input_manifest(job, analysis, input_row)],
+            inputs=inputs,
             output_rows=await _output_rows(db_session, job.id),
         )
     action = await db_session.get(ResearchAction, job.action_id)
@@ -1662,7 +1682,7 @@ async def download_compute_input(
         raise HTTPException(status_code=409, detail="Compute Job is not active")
     _ensure_live_lease(job)
     if job.analysis_run_id is not None:
-        run, _details = await _authorize_analysis_request(db_session, job, runner)
+        run, details = await _authorize_analysis_request(db_session, job, runner)
         input_row = await db_session.scalar(
             select(ResearchComputeJobInput).where(
                 ResearchComputeJobInput.id == input_id,
@@ -1672,28 +1692,64 @@ async def download_compute_input(
         )
         if input_row is None:
             raise HTTPException(404, "Compute input not found")
-        manifest = analysis_input_manifest(job, run, input_row)
-        payload = analysis_compute_input_bytes(run)
+        handle = None
+        if input_row.mount_name == "records.json":
+            manifest = analysis_input_manifest(job, run, input_row)
+            payload = analysis_compute_input_bytes(run)
+        else:
+            from app.services.workflow_files import verified_blob_spool
+
+            manifest, payload, blob = await additional_analysis_input(
+                db_session, job, run, details, input_row
+            )
+            if blob is not None:
+                handle = await verified_blob_spool(blob)
+                try:
+                    # Storage I/O is not authority. Recheck the current lease,
+                    # requester/approver and Workflow recipients after reading,
+                    # before the first verified byte is disclosed.
+                    _ensure_live_lease(job)
+                    await _authorize_analysis_request(db_session, job, runner)
+                except BaseException:
+                    handle.close()
+                    raise
         now = utcnow()
         runner.last_seen_at = job.heartbeat_at = now
         job.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
-        await emit_analysis_compute_event(
-            db_session,
-            run.id,
-            "compute.input_downloaded",
-            payload={"compute_job_id": str(job.id), "input_id": str(input_row.id)},
-            key=f"input:{input_row.id}:attempt:{job.attempt_count}",
-        )
-        await db_session.commit()
-        return Response(
-            payload,
-            media_type="application/json",
-            headers={
-                "Content-Disposition": 'attachment; filename="records.json"',
-                "X-Content-SHA256": manifest["checksum_sha256"],
-                "Cache-Control": "no-store",
-                "X-Content-Type-Options": "nosniff",
-            },
+        try:
+            await emit_analysis_compute_event(
+                db_session,
+                run.id,
+                "compute.input_downloaded",
+                payload={"compute_job_id": str(job.id), "input_id": str(input_row.id)},
+                key=f"input:{input_row.id}:attempt:{job.attempt_count}",
+            )
+            await db_session.commit()
+        except BaseException:
+            if handle is not None:
+                handle.close()
+            raise
+        headers = {
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(input_row.mount_name)}",
+            "Content-Length": str(manifest["byte_size"]),
+            "X-Content-SHA256": manifest["checksum_sha256"],
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        }
+        if handle is None:
+            if input_row.mount_name == "records.json":
+                headers["Content-Disposition"] = 'attachment; filename="records.json"'
+            return Response(payload, media_type=manifest["media_type"], headers=headers)
+
+        def verified_chunks():
+            try:
+                while chunk := handle.read(64 * 1024):
+                    yield chunk
+            finally:
+                handle.close()
+
+        return StreamingResponse(
+            verified_chunks(), media_type=manifest["media_type"], headers=headers
         )
     row = (
         await db_session.execute(

@@ -21,6 +21,8 @@ test_files=(
   tests/test_record_analysis_postgres.py
   tests/test_record_analysis_ai_postgres.py
   tests/test_record_analysis_compute_postgres.py
+  tests/test_analysis_compute_files_postgres.py
+  tests/test_analysis_compute_attachments_postgres.py
   tests/test_analysis_compute_runtime_postgres.py
   tests/test_record_analysis_compute_ai_postgres.py
   tests/test_analysis_compute_ai_runner_postgres.py

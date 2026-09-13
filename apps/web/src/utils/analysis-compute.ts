@@ -1,5 +1,5 @@
 import type { AnalysisRecipe, AnalysisRun, BuiltinAnalysisRun } from "@/service/api/analysis"
-import type { AnalysisComputeContext, AnalysisComputeEnvironment, AnalysisComputeRecipe } from "@/service/api/analysis-compute"
+import type { AnalysisComputeContext, AnalysisComputeEnvironment, AnalysisComputeInputFile, AnalysisComputeRecipe } from "@/service/api/analysis-compute"
 
 export function isComputeAnalysisRecipe(recipe: AnalysisRecipe | AnalysisComputeRecipe): recipe is AnalysisComputeRecipe {
   return "kind" in recipe && recipe.kind === "compute"
@@ -21,7 +21,38 @@ export function parseAnalysisComputeParameters(text: string): Record<string, unk
 
 export function analysisComputeRecipeIdentity(recipe: AnalysisComputeRecipe) {
   const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value !== null && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)])) : value
-  return JSON.stringify(canonical(recipe))
+  return JSON.stringify(canonical(withAnalysisComputeInputFiles(recipe, recipe.input_files ?? [])))
+}
+
+/** Empty declarations keep existing saved-method JSON byte-compatible. */
+export function withAnalysisComputeInputFiles(recipe: AnalysisComputeRecipe, inputFiles: AnalysisComputeInputFile[]): AnalysisComputeRecipe {
+  const { input_files: _previousInputs, ...base } = recipe
+  return inputFiles.length ? { ...base, input_files: inputFiles.map(input => ({ input_id: input.input_id, field_path: [...input.field_path] })) } : base
+}
+
+export function analysisComputeInputFileFieldLabel(field: { field_path: ["var", string], title: string, file_extensions: string[] | null }): string {
+  return `${field.title || field.field_path[1]} [${field.field_path[1]}] (${field.file_extensions?.join(", ") || "*"})`
+}
+
+export function validateAnalysisComputeInputFiles(inputs: AnalysisComputeInputFile[], context: AnalysisComputeContext): string | null {
+  if (!inputs.length)
+    return null
+  if (!context.input_file_fields || !context.input_file_limits)
+    return "inputFilesUnavailable"
+  if (inputs.length > 16)
+    return "invalidInputFiles"
+  const ids = new Set<string>()
+  const paths = new Set<string>()
+  for (const input of inputs) {
+    const path = JSON.stringify(input.field_path)
+    if (!/^[a-z][a-z0-9_]{0,23}$/.test(input.input_id) || ids.has(input.input_id) || paths.has(path)
+      || !context.input_file_fields.some(field => JSON.stringify(field.field_path) === path)) {
+      return "invalidInputFiles"
+    }
+    ids.add(input.input_id)
+    paths.add(path)
+  }
+  return inputs.length * context.source.record_count > context.input_file_limits.max_files ? "tooManyInputFiles" : null
 }
 
 export function analysisComputeGovernance(maxCost: string, currency: string, deadline: number | null, now = Date.now()): { max_cost?: string, budget_currency?: string, deadline_at?: string } {
@@ -54,6 +85,9 @@ export function validateAnalysisComputeRecipe(recipe: AnalysisComputeRecipe, con
     return "invalidSource"
   if (!recipe.parameters || typeof recipe.parameters !== "object" || Array.isArray(recipe.parameters))
     return "invalidParameters"
+  const inputError = validateAnalysisComputeInputFiles(recipe.input_files ?? [], context)
+  if (inputError)
+    return inputError
   if (recipe.output_files.length > 16)
     return "invalidOutputs"
   const names = new Set<string>()

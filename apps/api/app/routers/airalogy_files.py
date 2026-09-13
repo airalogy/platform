@@ -219,7 +219,22 @@ async def update_airalogy_file_url(
 
     from sqlalchemy import or_, select
 
+    from app.models.analysis_compute import AnalysisComputeInputFile
     from app.models.workflow_file import WorkflowFileBinding
+
+    # Confirmation locks this same source row before creating immutable file
+    # receipts. Serialize rename with it so a normal race returns a controlled
+    # conflict instead of failing later in the database protection trigger.
+    file = await db_session.scalar(
+        select(AiralogyFile)
+        .where(AiralogyFile.id == file.id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if file is None:
+        raise HTTPException(404, "File not found")
+    if file.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Permission denied")
 
     if is_workflow_file(file) or await db_session.scalar(
         select(WorkflowFileBinding.file_id)
@@ -233,6 +248,14 @@ async def update_airalogy_file_url(
     ):
         raise HTTPException(
             409, "Workflow-bound file metadata is immutable; upload a new file"
+        )
+    if await db_session.scalar(
+        select(AnalysisComputeInputFile.input_row_id)
+        .where(AnalysisComputeInputFile.source_file_id == file.id)
+        .limit(1)
+    ):
+        raise HTTPException(
+            409, "Analysis-bound file metadata is immutable; upload a new file"
         )
 
     file.filename = filename

@@ -177,6 +177,17 @@ def test_clarification_requires_no_speculative_program():
     assert validate(value).mode == "clarification_required"
 
 
+def test_model_cannot_select_record_attachments_on_the_users_behalf():
+    value = draft()
+    value["recipe"]["input_files"] = [
+        {"input_id": "measurements", "field_path": ["var", "measurement_file"]}
+    ]
+    with pytest.raises(AnalysisError, match="cannot attach files implicitly"):
+        validate(value)
+    value["recipe"]["input_files"] = []
+    assert "input_files" not in validate(value).recipe.model_dump(mode="json")
+
+
 @pytest.mark.parametrize(
     "change",
     [

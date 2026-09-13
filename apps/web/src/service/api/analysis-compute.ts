@@ -3,6 +3,47 @@ import type { ComputeResourceLimits, ResearchComputeEnvironment } from "./resear
 import type { ComputeOutputDraft, ResearchComputeJob } from "./research-compute-jobs"
 import { request } from "../request"
 
+export interface AnalysisComputeInputFile {
+  input_id: string
+  field_path: ["var", string]
+}
+
+export interface AnalysisComputeInputFileField {
+  field_path: ["var", string]
+  title: string
+  file_extensions: string[] | null
+  nullable: boolean
+}
+
+export interface AnalysisComputeInputFileLimits {
+  max_files: number
+  max_file_bytes: number
+  max_total_bytes: number
+  manifest_filename: "attachments.json"
+}
+
+export interface AnalysisComputeInputFileReceipt extends AnalysisComputeInputFile {
+  record_id: string
+  record_version: number
+  record_hash: string
+  protocol_version: string
+  file_id: string
+  filename: string
+  media_type: string
+  byte_size: number
+  checksum_sha256: string
+  mount_name: string
+  file_metadata_digest: string
+}
+
+export interface AnalysisComputeInputFilesEnvelope {
+  schema: string
+  count: number
+  total_bytes: number
+  files: AnalysisComputeInputFileReceipt[]
+  manifest: { filename: string, byte_size: number, checksum_sha256: string }
+}
+
 export interface AnalysisComputeRecipe {
   kind: "compute"
   environment_revision_id: string
@@ -10,6 +51,7 @@ export interface AnalysisComputeRecipe {
   source_code: string
   parameters: Record<string, unknown>
   output_files: ComputeOutputDraft[]
+  input_files?: AnalysisComputeInputFile[]
 }
 
 export interface AnalysisComputeEnvironment {
@@ -35,6 +77,8 @@ export interface AnalysisComputeContext {
   approvers: Array<{ id: string, name: string }>
   source: { record_count: number, source_digest: string, filename: "records.json" }
   max_source_bytes: number
+  input_file_fields?: AnalysisComputeInputFileField[]
+  input_file_limits?: AnalysisComputeInputFileLimits
 }
 
 export interface AnalysisComputePreviewRequest {
@@ -57,6 +101,7 @@ export interface AnalysisComputeContract {
   input: { record_count: number, bytes: number, sha256: string, filename: string }
   parameters: Record<string, unknown>
   output_files: ComputeOutputDraft[]
+  input_files?: AnalysisComputeInputFilesEnvelope
   approver: { id: string, name: string }
   cost: { estimated_cost: string | null, currency: string | null, max_cost: string | null, budget_currency: string | null }
   deadline_at?: string | null
@@ -114,6 +159,7 @@ export interface AnalysisComputeResult {
   usage: Record<string, number>
   actual_cost: string | null
   currency: string | null
+  input_files?: AnalysisComputeInputFilesEnvelope
 }
 
 export interface AnalysisComputeSeed {

@@ -288,6 +288,10 @@ async def authorize_snapshot(db: AsyncSession, run: AnalysisRun, user: User) -> 
         else None,
         own_only=own_only,
     )
+    if run.recipe.get("input_files"):
+        from app.services.analysis_compute_files import authorize_input_files
+
+        await authorize_input_files(db, run, user)
     if getattr(run, "ai_provenance", None):
         from app.services.analysis_generation import authorize_ai_provenance
 

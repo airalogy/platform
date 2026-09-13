@@ -31,7 +31,11 @@ from app.models.research_execution import (
 from app.models.user import User
 from app.services.analysis_compute_contracts import (
     ANALYSIS_JOB_SCHEMA,
+    ATTACHMENT_MANIFEST_FILENAME,
     COMPUTE_ENGINE_VERSION,
+    MAX_ANALYSIS_FILE_BYTES,
+    MAX_ANALYSIS_INPUT_FILES,
+    MAX_ANALYSIS_TOTAL_FILE_BYTES,
     SOURCE_FILENAME,
     AnalysisComputeDraft,
     AnalysisComputeRecipe,
@@ -213,6 +217,8 @@ async def environment_for_recipe(db, project, recipe):
 
 
 async def compute_options(db, user, protocol_id, selection):
+    from app.services.analysis_compute_files import attachment_field_catalog
+
     snapshot, protocol, project = await capture_sources(
         db, protocol_id=protocol_id, user=user, selection=selection
     )
@@ -282,6 +288,13 @@ async def compute_options(db, user, protocol_id, selection):
             "filename": SOURCE_FILENAME,
         },
         "max_source_bytes": MAX_SOURCE_BYTES,
+        "input_file_fields": attachment_field_catalog(snapshot),
+        "input_file_limits": {
+            "max_files": MAX_ANALYSIS_INPUT_FILES,
+            "max_file_bytes": MAX_ANALYSIS_FILE_BYTES,
+            "max_total_bytes": MAX_ANALYSIS_TOTAL_FILE_BYTES,
+            "manifest_filename": ATTACHMENT_MANIFEST_FILENAME,
+        },
     }
 
 
@@ -345,6 +358,13 @@ async def preview_compute(db, params: AnalysisComputeDraft, user, *, persist=Tru
     if approver is None:
         raise HTTPException(422, "Select an eligible analysis approver")
     await authorize_approver(db, protocol.id, project, snapshot, approver)
+    input_files = None
+    if params.recipe.input_files:
+        from app.services.analysis_compute_files import preview_input_files
+
+        input_files = await preview_input_files(
+            db, snapshot, params.recipe.input_files, user, other_readers=(approver,)
+        )
     estimate = compute_estimated_cost(revision)
     if params.max_cost is not None and (
         estimate is None
@@ -444,6 +464,8 @@ async def preview_compute(db, params: AnalysisComputeDraft, user, *, persist=Tru
         },
     }
     recipe = params.recipe.model_dump(mode="json")
+    if input_files:
+        summary["compute"]["input_files"] = input_files
     preview = AnalysisPreview(
         project_id=project.id,
         protocol_id=protocol.id,
@@ -493,6 +515,11 @@ def compute_contract_digest(run, details, job):
             "max_cost": money(details.max_cost),
             "budget_currency": details.budget_currency,
             "deadline_at": instant(details.deadline_at),
+            **(
+                {"input_files": details.input_file_manifest}
+                if getattr(details, "input_file_manifest", None)
+                else {}
+            ),
         }
     )
 
@@ -559,6 +586,7 @@ async def confirm_compute(db, user, *, preview_id, preview_digest, key):
         refreshed.source_digest != preview.source_digest
         or refreshed.summary["compute"]["environment"] != compute["environment"]
         or refreshed.ai_provenance != preview.ai_provenance
+        or refreshed.summary["compute"].get("input_files") != compute.get("input_files")
     ):
         raise HTTPException(
             409, "Compute sources or environment changed; preview again"
@@ -619,6 +647,19 @@ async def confirm_compute(db, user, *, preview_id, preview_digest, key):
             mount_name=SOURCE_FILENAME,
         )
     )
+    if params.recipe.input_files:
+        from app.services.analysis_compute_files import materialize_input_files
+
+        approver = await db.get(User, params.approver_user_id)
+        await materialize_input_files(
+            db,
+            run=run,
+            job=job,
+            recipe=params.recipe,
+            expected=compute.get("input_files"),
+            user=user,
+            other_readers=(approver,),
+        )
     outputs = []
     for position, spec in enumerate(params.recipe.output_files, 1):
         output = ResearchComputeJobOutput(
@@ -647,6 +688,7 @@ async def confirm_compute(db, user, *, preview_id, preview_digest, key):
         budget_currency=params.budget_currency,
         deadline_at=params.deadline_at,
         decision_reason="",
+        input_file_manifest=compute.get("input_files") or {},
     )
     details.contract_digest = compute_contract_digest(run, details, job)
     db.add(details)
@@ -688,6 +730,8 @@ async def verify_compute_contract(db, run, details, job):
         or job.output_manifest != (run.result or {}).get("outputs")
         or job.usage != (run.result or {}).get("usage")
         or money(job.actual_cost) != (run.result or {}).get("actual_cost")
+        or (run.result or {}).get("input_files")
+        != (getattr(details, "input_file_manifest", None) or None)
     ):
         raise HTTPException(409, "Private Compute result integrity check failed")
     inputs = (
@@ -697,7 +741,17 @@ async def verify_compute_contract(db, run, details, job):
             )
         )
     ).all()
-    if (
+    if recipe.input_files or getattr(details, "input_file_manifest", None):
+        from app.services.analysis_compute_files import verify_input_files
+
+        await verify_input_files(
+            db,
+            run=run,
+            job=job,
+            inputs=inputs,
+            envelope=details.input_file_manifest,
+        )
+    elif (
         len(inputs) != 1
         or inputs[0].analysis_run_id != run.id
         or inputs[0].mount_name != SOURCE_FILENAME
@@ -765,6 +819,10 @@ async def authorize_compute_execution(
         await authorize_approver(
             db, run.protocol_id, project, run.source_snapshot, approver
         )
+        if run.recipe.get("input_files"):
+            from app.services.analysis_compute_files import authorize_input_files
+
+            await authorize_input_files(db, run, approver)
     if check_deadline and details.deadline_at and details.deadline_at <= utcnow():
         raise HTTPException(409, "Private Compute deadline has passed")
     return run, details
@@ -807,4 +865,8 @@ async def owned_compute(db, analysis_id, user, *, approval_access=False, lock=Fa
         await authorize_approver(
             db, run.protocol_id, project, run.source_snapshot, user
         )
+        if run.recipe.get("input_files"):
+            from app.services.analysis_compute_files import authorize_input_files
+
+            await authorize_input_files(db, run, user)
     return run, details, job

@@ -212,6 +212,7 @@ async def _delete_lab_from_database(
         raise ValueError("Lab deletion manifest does not match the confirmed Lab")
     # This is deliberately in the same transaction as the existing Lab delete.
     # A later protected research FK failure rolls back these lineage deletions.
+    await _delete_lab_analysis_input_file_references(db_session, lab.id)
     await _delete_lab_workflow_file_references(db_session, lab.id)
     project_ids = manifest["project_ids"]
     project_group_ids = manifest["project_group_ids"]
@@ -360,6 +361,32 @@ async def _delete_lab_from_database(
         await db_session.execute(
             delete(Attachment).where(Attachment.id == logo_attachment.id)
         )
+
+
+async def _delete_lab_analysis_input_file_references(db_session: AsyncSession, lab_id):
+    """Drop only confirmed Lab attachment receipts before deleting their sources.
+
+    No storage object, original file, shared blob or foreign Lab receipt is
+    removed here. Any later research lifecycle failure rolls this back too.
+    """
+    from app.models.analysis import AnalysisRun
+    from app.models.analysis_compute import AnalysisComputeInputFile
+
+    analysis_ids = select(AnalysisRun.id).join(
+        Project, Project.id == AnalysisRun.project_id
+    ).where(Project.lab_id == lab_id)
+    source_ids = select(AiralogyFile.id).join(
+        Protocol, Protocol.id == AiralogyFile.protocol_id
+    ).join(Project, Project.id == Protocol.project_id).where(Project.lab_id == lab_id)
+    foreign = await db_session.scalar(select(AnalysisComputeInputFile.input_row_id).where(
+        AnalysisComputeInputFile.source_file_id.in_(source_ids),
+        AnalysisComputeInputFile.analysis_run_id.not_in(analysis_ids),
+    ).limit(1))
+    if foreign is not None:
+        raise ValueError("Another Lab still references these analysis attachment files; deletion is blocked")
+    await db_session.execute(delete(AnalysisComputeInputFile).where(
+        AnalysisComputeInputFile.analysis_run_id.in_(analysis_ids)
+    ))
 
 
 async def _delete_lab_workflow_file_references(db_session: AsyncSession, lab_id):

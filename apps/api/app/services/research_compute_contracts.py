@@ -32,6 +32,8 @@ class ComputeInputDraft(BaseModel):
         self.mount_name = self.mount_name.strip()
         if not MOUNT_NAME_RE.fullmatch(self.mount_name):
             raise ValueError("Invalid Compute input mount name")
+        if self.mount_name == "input.json":
+            raise ValueError("Compute input cannot replace the reserved parameter file")
         return self
 
 
@@ -89,6 +91,8 @@ def validate_compute_action_payload(
         raise ValueError(f"Compute input assets cannot exceed {MAX_INPUT_ASSETS}")
     input_versions = [item.data_asset_version_id for item in input_assets]
     input_mounts = [item.mount_name for item in input_assets]
+    if "input.json" in input_mounts:
+        raise ValueError("Compute input cannot replace the reserved parameter file")
     if len(input_versions) != len(set(input_versions)) or len(input_mounts) != len(
         set(input_mounts)
     ):

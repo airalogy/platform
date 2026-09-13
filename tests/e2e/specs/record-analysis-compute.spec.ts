@@ -77,6 +77,8 @@ function computeContext(): AnalysisComputeContext {
     approvers: [{ id: randomUUID(), name: "Synthetic source-authorized approver" }],
     source: { record_count: 1, source_digest: sourceDigest, filename: "records.json" },
     max_source_bytes: 200_000,
+    input_file_fields: [{ field_path: ["var", "synthetic_attachment"], title: "Synthetic attachment", file_extensions: ["csv"], nullable: true }],
+    input_file_limits: { max_files: 30, max_file_bytes: 268435456, max_total_bytes: 536870912, manifest_filename: "attachments.json" },
   }
 }
 
@@ -115,6 +117,17 @@ function makeContract(fixtures: E2EFixtures, state: ComputeUIState, payload: Ana
     },
     source: { language: payload.recipe.language, code: payload.recipe.source_code, sha256: createHash("sha256").update(payload.recipe.source_code).digest("hex"), bytes: new TextEncoder().encode(payload.recipe.source_code).byteLength },
     input: { filename: "records.json", record_count: state.context.source.record_count, bytes: 1200, sha256: sourceDigest },
+    ...(payload.recipe.input_files?.length
+      ? {
+          input_files: {
+            schema: "airalogy.analysis-attachments.v1",
+            count: payload.recipe.input_files.length,
+            total_bytes: payload.recipe.input_files.length * 12,
+            files: payload.recipe.input_files.map(input => ({ ...input, record_id: state.runId, record_version: 1, record_hash: sourceDigest, protocol_version: "1.0.0", file_id: "synthetic-ui-file-id", filename: "synthetic-input.csv", media_type: "text/csv", byte_size: 12, checksum_sha256: "e".repeat(64), mount_name: `${input.input_id}_synthetic.csv`, file_metadata_digest: "f".repeat(64) })),
+            manifest: { filename: "attachments.json", byte_size: 800, checksum_sha256: "a".repeat(64) },
+          },
+        }
+      : {}),
     parameters: structuredClone(payload.recipe.parameters),
     output_files: structuredClone(payload.recipe.output_files),
     approver: state.context.approvers.find(item => item.id === payload.approver_user_id)!,
@@ -561,6 +574,38 @@ test.describe("Advanced Aira UI contract — synthetic code generation and groun
     expect(compute.requests.previews[1].ai_draft_id).toBeUndefined()
     expect(compute.requests.previews[1].recipe.source_code).toBe(edited)
     expect(ai.posts).toHaveLength(1)
+  })
+
+  test("adopting an Aira draft preserves only user-selected attachments and retains edited provenance", async ({ page }, testInfo) => {
+    const fixtures = await loadFixtures()
+    const compute = await installComputeUIContract(page, fixtures)
+    const ai = await installComputeAiraContract(page, fixtures, compute)
+    await openFromFilteredRecords(page, fixtures, true)
+    await page.getByTestId("analysis-question").locator("textarea").fill("Draft a calculation while preserving my explicitly selected attachment fields")
+    await expect(page.getByTestId("analysis-compute-input-declaration")).toHaveCount(0)
+    await page.getByTestId("analysis-compute-add-input").click()
+    await page.getByTestId("analysis-compute-input-id").locator("input").fill("chosen_csv")
+    await page.getByTestId("analysis-compute-input-field").click()
+    await selectVisibleOption(page, "Synthetic attachment [synthetic_attachment] (csv)")
+    await page.getByTestId("analysis-ai-compute_draft-consent").click()
+    await expect(page.getByTestId("analysis-ai-compute_draft-generate")).toBeEnabled()
+    await page.getByTestId("analysis-ai-compute_draft-generate").click()
+    await expect(page.getByTestId("analysis-ai-compute_draft-output")).toBeVisible()
+    expect(ai.posts[0]).not.toHaveProperty("input_files")
+    expect(ai.posts[0]).not.toHaveProperty("attachments")
+    const output = ai.saved.get(ai.posts[0].id)!.output as AnalysisComputeDraftOutput
+    expect(output.recipe).not.toHaveProperty("input_files")
+    await page.getByTestId("analysis-ai-compute-adopt").click()
+    await expect(page.getByTestId("analysis-compute-input-id").locator("input")).toHaveValue("chosen_csv")
+    await expect(page.getByTestId("analysis-compute-input-declaration")).toHaveCount(1)
+    await page.getByTestId("analysis-compute-preview").click()
+    await expect(page.getByTestId("analysis-compute-preview-dialog")).toBeVisible()
+    expect(compute.requests.previews[0]).toMatchObject({ ai_draft_id: ai.posts[0].id, recipe: { input_files: [{ input_id: "chosen_csv", field_path: ["var", "synthetic_attachment"] }] } })
+    await expect(page.getByTestId("analysis-compute-input-file")).toContainText("synthetic-input.csv")
+    await assertPhoneContained(page, page.getByTestId("analysis-compute-preview-dialog"), 16)
+    await waitForStableDialog(page.getByTestId("analysis-compute-preview-dialog"))
+    await page.screenshot({ path: testInfo.outputPath("compute-aira-explicit-attachment-phone.png") })
+    expect(compute.requests.confirms).toEqual([])
   })
 
   test("changing language discards an in-flight response, clears consent and rejects adoption from another environment revision", async ({ page }) => {

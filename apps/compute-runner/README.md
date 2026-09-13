@@ -24,11 +24,15 @@ The source must write one UTF-8 JSON object to `AIRALOGY_RESULT_JSON`. Platform 
 
 The SDK advertises `airalogy.compute-job.v1` and `airalogy.compute-job.analysis.v1`. Private analysis envelopes carry `context.kind=analysis` plus the Analysis, Project and Lab IDs, never fabricated Research Task/Run/Action IDs. Older Runners that do not advertise the analysis schema cannot receive these jobs. Analysis code reads `AIRALOGY_INPUT_DIR/records.json`; Platform rechecks the creator's and selected approver's current source authority during execution and rechecks creator source access on report/file reads.
 
+Explicit Record attachment declarations use the same multi-input transport. Such jobs include the unchanged `records.json`, an `attachments.json` mapping and up to 30 exact managed files. The mapping pairs every logical input with its Record revision and field; read files by their declared `mount_name` under `AIRALOGY_INPUT_DIR`. No storage URL or token is embedded in that mapping, and unselected FileId values are not fetched. Platform bounds files to 256 MiB each and 512 MiB combined; the Runner additionally enforces its configured total workspace bound. Inputs are root-owned/non-writable in the existing tmpfs while research code runs unprivileged, not a separate read-only volume. `input.json` is reserved for parameters and is rejected as an input mount name. Old jobs without attachment declarations retain their original single analysis input.
+
 The reference Runner disables the research container log driver and discards untrusted standard output so code cannot bypass the output limit and fill host storage; use the bounded result object for diagnostics that must be retained. The immutable helper image must provide `tar`, `test`, `wc`, `sha256sum`, `cat`, and `sleep infinity`.
 
 ## Real-container regression
 
 From the repository root, run `pnpm compute-runner:integration` with Docker available. This shared pre-push/CI gate uses a pinned image, four synthetic measurements, signed analysis envelopes and the real workspace/container/output helpers. It verifies non-root execution, read-only input/root boundaries and exact result-file receipts, then cleans up only its own container and temporary volume. Ordinary `pnpm compute-runner:test` does not start containers; the explicit integration gate is required for Runner and analysis transport changes. This regression does not certify a deployment's egress network, GPU or real instrument environment.
+
+The default real-container gates execute Python. Actual R interpreter acceptance additionally requires an explicitly pinned `COMPUTE_TEST_R_IMAGE` with R/jsonlite and `COMPUTE_ENGINE_TEST=1`; synthetic R transport tests do not prove interpreter execution. `pnpm research:integration` also verifies the actual Record attachment → Compute → downstream Protocol file path. The attachment browser tests use stored CSVs and real API approvals with an offline synthetic Runner: they verify review and queueing, not code execution.
 
 ## Configuration
 

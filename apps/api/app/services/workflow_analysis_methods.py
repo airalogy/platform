@@ -148,6 +148,26 @@ async def compute_publication_contract(db, project, recipe, version, result_sche
     from app.services.research_compute import compute_environment_snapshot
     from app.services.workflow_compute_contracts import validate_compute_result_schema
 
+    if recipe.input_files:
+        from app.services.analysis_compute_files import attachment_field_catalog
+
+        fields = attachment_field_catalog(
+            {
+                "records": [{"protocol_version": version.version}],
+                "schemas": [
+                    {
+                        "version": version.version,
+                        "json_schema": version.json_schema,
+                        "fields": version.fields,
+                    }
+                ],
+            }
+        )
+        supported = {tuple(field["field_path"]) for field in fields}
+        if any(tuple(item.field_path) not in supported for item in recipe.input_files):
+            raise ValueError(
+                "Compute attachment declarations require typed FileId fields in the pinned Schema"
+            )
     environment, revision = await environment_for_recipe(db, project, recipe)
     input_contract = {
         "json_schema": deepcopy(version.json_schema),
