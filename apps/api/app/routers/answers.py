@@ -19,6 +19,7 @@ from app.models.user import User
 from app.routers.depends import CurrentUser, OptionalCurrentUser
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(
     prefix="/answers",
@@ -234,6 +235,12 @@ async def create_answer(
         answer.id,
         EmbeddingResourceType.ANSWER,
         params.content,
+        usage_context=create_usage_context(
+            feature="index.answer",
+            user_id=current_user.id,
+            lab_id=project.lab_id,
+            project_id=project.id,
+        ),
     )
 
     if params.parent_id is not None:
@@ -264,12 +271,20 @@ async def update_answer(
     if content != answer.content:
         answer.content = content
         question = await Question.find(db_session, id=answer.question_id)
+        protocol = await Protocol.find(db_session, id=question.protocol_id)
+        project = await Project.find(db_session, id=protocol.project_id)
         background_tasks.add_task(
             Embedding.rebuild_resource,
             question.protocol_id,
             answer.id,
             EmbeddingResourceType.ANSWER,
             content,
+            usage_context=create_usage_context(
+                feature="index.answer",
+                user_id=current_user.id,
+                lab_id=project.lab_id,
+                project_id=project.id,
+            ),
         )
         await db_session.commit()
 

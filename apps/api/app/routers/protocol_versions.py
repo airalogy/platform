@@ -40,6 +40,7 @@ from app.models.research_asset import (
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
+from app.services.model_usage import create_usage_context
 from app.services.research_runtime import emit_research_event, utcnow
 from app.services.schema_governance import (
     SchemaGovernanceError,
@@ -560,21 +561,19 @@ async def upload_package(
     await protocol_version.upload_package(package_file=package_zip_file)
     background_tasks.add_task(os.remove, package_zip_file)
 
-    # 如果存在旧的 protocol，从 Embedding 中删除
-    if protocol_id is not None:
-        background_tasks.add_task(
-            Embedding.remove_resource,
-            protocol_id,
-            EmbeddingResourceType.PROTOCOL,
-        )
-
-    # 添加新的 protocol 的 aimd 到 Embedding
+    # Replace the derived index atomically, independently of model availability.
     background_tasks.add_task(
         Embedding.add_resource,
         protocol.id,
         protocol.id,
         EmbeddingResourceType.PROTOCOL,
         protocol_version.aimd,
+        usage_context=create_usage_context(
+            feature="index.protocol",
+            user_id=current_user.id,
+            lab_id=project.lab_id,
+            project_id=project.id,
+        ),
     )
 
     # New Protocols need the same serialization context as existing ones.

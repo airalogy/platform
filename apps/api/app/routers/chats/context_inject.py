@@ -2,14 +2,15 @@ import json
 import uuid
 from typing import Any
 
+from masterbrain.usage import UsageContext
 from sqlalchemy import and_, select
 
 from app.database import DBSession
-from app.libs.text_splitter import text_to_vectors
+from app.libs.text_splitter import optional_text_to_vectors
 from app.models.answer import Answer
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.lab import Lab
-from app.models.project import Project, ProjectType
+from app.models.project import PermissionType, Project, ProjectType
 from app.models.protocol import Protocol
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
@@ -28,7 +29,9 @@ def _truncate_editor_context(text: str, limit: int = MAX_EDITOR_CONTEXT_SECTION_
 
 
 def _line_number_text(text: str) -> str:
-    return "\n".join(f"{index:04d}: {line}" for index, line in enumerate(text.splitlines(), 1))
+    return "\n".join(
+        f"{index:04d}: {line}" for index, line in enumerate(text.splitlines(), 1)
+    )
 
 
 def _format_editor_context_section(file_name: str, content: str | None) -> str | None:
@@ -187,12 +190,19 @@ async def inject_airalogy_records(
     return {"airalogy_records": data}
 
 
-async def inject_airalogy_discussions(db_session, protocol_id: uuid.UUID, content: str):
+async def inject_airalogy_discussions(
+    db_session,
+    protocol_id: uuid.UUID,
+    content: str,
+    *,
+    usage_context: UsageContext | None = None,
+):
     query_result = await Embedding.retrieval_vector(
         db_session,
         protocol_id,
         [EmbeddingResourceType.QUESTION, EmbeddingResourceType.ANSWER],
         content,
+        usage_context=usage_context,
     )
     data = []
     for result in query_result:
@@ -213,9 +223,18 @@ async def inject_airalogy_discussions(db_session, protocol_id: uuid.UUID, conten
 
 
 async def inject_recommended_airalogy_protocols(
-    db_session, content: str, limit: int = 3
+    db_session,
+    content: str,
+    limit: int = 3,
+    *,
+    usage_context: UsageContext | None = None,
 ):
-    vector = text_to_vectors([content[0:1000]])[0]
+    vectors = await optional_text_to_vectors(
+        [content[0:1000]], usage_context=usage_context
+    )
+    predicate, ordering = Embedding.search_conditions(
+        content, vectors[0] if vectors else None
+    )
 
     sub_query = (
         select(
@@ -234,11 +253,14 @@ async def inject_recommended_airalogy_protocols(
         )
         .where(
             Project.type == ProjectType.PUBLIC,
+            Project.permission_type == PermissionType.INHERIT,
+            Project.deleted_at.is_(None),
+            Protocol.deleted_at.is_(None),
             Protocol.parent_protocol_id.is_(None),
-            Embedding.embedding.cosine_distance(vector) < 0.5,
+            predicate,
         )
         .order_by(
-            Embedding.embedding.cosine_distance(vector).asc(),
+            *ordering,
             Protocol.stars_count.desc(),
             Protocol.forks_count.desc(),
         )

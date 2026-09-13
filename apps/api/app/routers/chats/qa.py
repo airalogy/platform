@@ -211,7 +211,7 @@ async def send_qa_chat_message(
         and isinstance(message["content"], str)
     ):
         discussions = await inject_airalogy_discussions(
-            db_session, protocol.id, message["content"]
+            db_session, protocol.id, message["content"], usage_context=usage_context
         )
         if len(discussions["airalogy_discussions"]) > 0:
             airalogy_discussion_ids = [
@@ -245,6 +245,7 @@ async def send_qa_chat_message(
         recommended_protocols = await inject_recommended_airalogy_protocols(
             db_session,
             message.get("content", ""),
+            usage_context=usage_context,
         )
         recommended_protocol_ids = [
             p["id"] for p in recommended_protocols.get("airalogy_protocols", [])
@@ -299,9 +300,7 @@ async def send_qa_chat_message(
         yield f"data: {json.dumps(response_message, ensure_ascii=False)}\n\n"
 
         # 获取原始的流式响应
-        original_stream = chat_qa_language(
-            chat=chat, usage_context=usage_context
-        )
+        original_stream = chat_qa_language(chat=chat, usage_context=usage_context)
 
         full_response = ""
         try:

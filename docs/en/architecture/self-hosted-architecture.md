@@ -7,7 +7,7 @@ Airalogy Platform Community Edition is designed for team and institutional self-
 - `Airalogy Platform` manages accounts, labs, projects, protocols, records, permissions, search, and collaboration.
 - Large raw files should preferably land in local object storage, such as self-hosted MinIO or an institution-managed object store.
 - The database stores business metadata, permission relations, indexed fields, and object references; it should not hold large file payloads directly.
-- AI and automation features connect through configured model services and the published Airalogy / Masterbrain packages.
+- AI and automation features connect through configured model services and the published Airalogy / Masterbrain packages. See [Platform and Masterbrain AI boundary](./ai-boundary.md) for model ownership, non-AI search and migration requirements.
 - The public edition provides a clear local deployment path. Enterprise-grade multi-site sync, advanced audit, and proprietary storage connectors can extend this foundation.
 
 ## Default Local Topology

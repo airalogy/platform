@@ -1,14 +1,15 @@
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.params import Header, Query
+from masterbrain.usage import UsageContext
 from pydantic import StringConstraints
 from sqlalchemy import and_, distinct, func, select
-from typing_extensions import Annotated
 
 from app.config import config
 from app.database import DBSession
-from app.libs.text_splitter import text_to_vectors, text_to_words
+from app.libs.request_context import request_id_var
+from app.libs.text_splitter import optional_text_to_vectors, text_to_words
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.lab import Lab
 from app.models.project import PermissionType, Project, ProjectType
@@ -194,7 +195,17 @@ async def retrieval(
     if x_api_key != config.INNER_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    vector = text_to_vectors([content])[0]
+    vectors = await optional_text_to_vectors(
+        [content],
+        usage_context=UsageContext(
+            feature="hub.retrieval",
+            request_id=request_id_var.get(),
+            attributes={"actor_type": "internal_service"},
+        ),
+    )
+    predicate, ordering = Embedding.search_conditions(
+        content, vectors[0] if vectors else None, distance
+    )
 
     ids_query = (
         select(
@@ -215,10 +226,12 @@ async def retrieval(
             Project.type == ProjectType.PUBLIC,
             Project.permission_type == PermissionType.INHERIT,
             Protocol.parent_protocol_id.is_(None),
-            Embedding.embedding.cosine_distance(vector) < distance,
+            Protocol.deleted_at.is_(None),
+            Project.deleted_at.is_(None),
+            predicate,
         )
         .order_by(
-            Embedding.embedding.cosine_distance(vector).asc(),
+            *ordering,
             Protocol.stars_count.desc(),
             Protocol.forks_count.desc(),
             Embedding.id.asc(),
@@ -257,6 +270,10 @@ async def retrieval(
         )
         .where(
             Protocol.id.in_(protocol_ids),
+            Project.type == ProjectType.PUBLIC,
+            Project.permission_type == PermissionType.INHERIT,
+            Protocol.deleted_at.is_(None),
+            Project.deleted_at.is_(None),
         )
         .order_by(
             Protocol.id.desc(),

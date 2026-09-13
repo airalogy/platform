@@ -149,7 +149,6 @@ dependencies = [
     { name = "markitdown", extra = ["docx", "pdf"] },
     { name = "masterbrain" },
     { name = "miniopy-async" },
-    { name = "openai" },
     { name = "orjson" },
     { name = "pgvector" },
     { name = "pycryptodome" },
@@ -191,9 +190,8 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "jsonschema", specifier = ">=4.25.1,<5" },
     { name = "markitdown", extras = ["pdf", "docx"], specifier = ">=0.1.4" },
-    { name = "masterbrain", specifier = "==0.11.0" },
+    { name = "masterbrain", specifier = "==0.12.0" },
     { name = "miniopy-async", specifier = "==1.22.1" },
-    { name = "openai", specifier = ">=2.8.0,<3" },
     { name = "orjson", specifier = "==3.11.4" },
     { name = "pgvector", specifier = "==0.4.2" },
     { name = "pycryptodome", specifier = "==3.22.0" },
@@ -1536,7 +1534,7 @@ wheels = [
 
 [[package]]
 name = "masterbrain"
-version = "0.11.0"
+version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "airalogy" },
@@ -1554,9 +1552,9 @@ dependencies = [
     { name = "tavily" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/92/74ac7550639c68d05ad599168176b7b7045b73878fb295e4d29fc2ba3237/masterbrain-0.11.0.tar.gz", hash = "sha256:11a5f315ffcbe6ad3c7f844bad48a59c330066ec31dc733267f8525a0e4a624e", size = 117409, upload-time = "2026-08-13T10:13:21.68Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/19/04a8d2b2f19659e2e0c16b488f9ebbdb6181aa82dbc2bfb6985920ca830a/masterbrain-0.12.0.tar.gz", hash = "sha256:2c3f72c641efe08f52baceb2adae6f1ebfbbe3277596d9299126675cb9e1d117", size = 119374, upload-time = "2026-09-11T11:28:18.018Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/c6/6304fde4652a1832c0c8c0f473e8730fbe2c3c30303906ada0f100dfad46/masterbrain-0.11.0-py3-none-any.whl", hash = "sha256:990a455331c9da8a68eb1231d7fc983bbf4a7bb772b1a9a5e0825ce2db56e524", size = 192753, upload-time = "2026-08-13T10:13:20.248Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/33/f3d45608fda85641efdf3704db39d0a93878c90e5b25e2d0cdf17f4f6153/masterbrain-0.12.0-py3-none-any.whl", hash = "sha256:979b15cebd44a1f5a1773f919cfac717294d0bb08f911dc5e926ddca0b04d07a", size = 195731, upload-time = "2026-09-11T11:28:16.384Z" },
 ]
 
 [[package]]

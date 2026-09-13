@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from importlib import import_module
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -46,6 +50,225 @@ pytestmark = pytest.mark.skipif(
     not DATABASE_URL,
     reason="RESOURCE_TEST_DATABASE_URL is required for PostgreSQL guarantees",
 )
+
+
+def test_optional_embedding_migration_preserves_vectors_and_blocks_lossy_downgrade():
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration = import_module("migrations.versions.0058_optional_embeddings")
+
+    async def exercise():
+        engine = create_async_engine(DATABASE_URL)
+        try:
+            async with engine.begin() as connection:
+                # Connection-private table shadows the live migrated table.
+                await connection.execute(
+                    text(
+                        "CREATE TEMP TABLE embeddings (id int, embedding vector(1024) NOT NULL) ON COMMIT DROP"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO embeddings VALUES (1, array_fill(0.1::real, ARRAY[1024])::vector)"
+                    )
+                )
+
+                def run_migration(sync_connection, operation):
+                    with Operations.context(
+                        MigrationContext.configure(sync_connection)
+                    ):
+                        operation()
+
+                await connection.run_sync(run_migration, migration.upgrade)
+                assert (
+                    await connection.execute(
+                        text(
+                            "SELECT vector_dims(embedding) FROM embeddings WHERE id = 1"
+                        )
+                    )
+                ).scalar_one() == 1024
+                # A populated old index can still be safely downgraded.
+                await connection.run_sync(run_migration, migration.downgrade)
+                await connection.run_sync(run_migration, migration.upgrade)
+                await connection.execute(
+                    text("INSERT INTO embeddings VALUES (2, NULL)")
+                )
+                with pytest.raises(IntegrityError):
+                    async with connection.begin_nested():
+                        await connection.run_sync(run_migration, migration.downgrade)
+                assert (
+                    await connection.execute(text("SELECT count(*) FROM embeddings"))
+                ).scalar_one() == 2
+        finally:
+            await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_keyword_index_replacement_and_public_retrieval_survive_ai_outages(monkeypatch):
+    from sqlalchemy import select
+
+    from app.libs import masterbrain, text_splitter
+    from app.models import embedding as module
+    from app.models.embedding import Embedding, EmbeddingResourceType
+    from app.models.project import PermissionType, Project, ProjectType
+    from app.models.protocol import Protocol
+    from app.models.protocol_version import ProtocolVersion
+    from app.routers import hub
+    from app.routers.chats.context_inject import inject_recommended_airalogy_protocols
+    from app.routers.chats.hub import inject_recommend_airalogy_protocols
+
+    async def exercise():
+        engine = create_async_engine(DATABASE_URL)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            user_id, lab_id, _, _ = await seed_inventory(sessions)
+            protocols = {}
+            async with sessions() as session:
+                for scope in (
+                    "public",
+                    "private",
+                    "restricted",
+                    "deleted_project",
+                    "deleted_protocol",
+                ):
+                    project = Project(
+                        id=uuid4(),
+                        lab_id=lab_id,
+                        uid=f"project_{uuid4().hex}",
+                        name=scope,
+                        create_user_id=user_id,
+                        type=ProjectType.PRIVATE
+                        if scope == "private"
+                        else ProjectType.PUBLIC,
+                        permission_type=PermissionType.PROTOCOL_LEVEL
+                        if scope == "restricted"
+                        else PermissionType.INHERIT,
+                        deleted_at=datetime.now(UTC).replace(tzinfo=None)
+                        if scope == "deleted_project"
+                        else None,
+                    )
+                    session.add(project)
+                    await session.flush()
+                    protocol = Protocol(
+                        id=uuid4(),
+                        project_id=project.id,
+                        user_id=user_id,
+                        uid=f"protocol_{uuid4().hex}",
+                        name=scope,
+                        latest_version="0.0.1",
+                        deleted_at=datetime.now(UTC).replace(tzinfo=None)
+                        if scope == "deleted_protocol"
+                        else None,
+                    )
+                    session.add(protocol)
+                    await session.flush()
+                    session.add(
+                        ProtocolVersion(
+                            protocol_id=protocol.id,
+                            meta_data={"id": protocol.uid},
+                            json_schema={},
+                            assigners={},
+                            fields={},
+                            assigner_graph={},
+                            aimd=scope,
+                        )
+                    )
+                    protocols[scope] = protocol.id
+                await session.commit()
+
+            @asynccontextmanager
+            async def database():
+                async with sessions() as session:
+                    yield session
+
+            settings = SimpleNamespace(effective_embeddings_enabled=False)
+            monkeypatch.setattr(module.sessionmanager, "session", database)
+            monkeypatch.setattr(text_splitter, "config", settings)
+            monkeypatch.setattr(masterbrain, "config", settings)
+            monkeypatch.setattr(text_splitter, "text_to_chunks", lambda value: [value])
+            monkeypatch.setattr(
+                text_splitter, "text_to_words", lambda value: value.split()
+            )
+            monkeypatch.setattr(module, "text_to_words", lambda value: value.split())
+            send = AsyncMock(side_effect=TimeoutError("synthetic outage"))
+            monkeypatch.setattr(masterbrain, "json_request", send)
+            keyword = f"antibody{uuid4().hex}"
+            for protocol_id in protocols.values():
+                await Embedding.add_resource(
+                    protocol_id, protocol_id, EmbeddingResourceType.PROTOCOL, keyword
+                )
+            send.assert_not_awaited()
+
+            # Two concurrent replacements must not leave duplicate committed rows.
+            public_id = protocols["public"]
+            await asyncio.gather(
+                *[
+                    Embedding.add_resource(
+                        public_id, public_id, EmbeddingResourceType.PROTOCOL, keyword
+                    )
+                    for _ in range(2)
+                ]
+            )
+            async with sessions() as session:
+                rows = (
+                    (
+                        await session.execute(
+                            select(Embedding).where(Embedding.protocol_id == public_id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                assert len(rows) == 1 and rows[0].embedding is None
+
+            for mode in ("disabled", "outage", "restored"):
+                settings.effective_embeddings_enabled = mode != "disabled"
+                if mode == "restored":
+                    send.side_effect = None
+                    send.return_value = {
+                        "model": "text-embedding-v4",
+                        "dimensions": 1024,
+                        "vectors": [[0.1] * 1024],
+                    }
+                async with sessions() as session:
+                    # Never mix another Protocol into scoped discussion retrieval.
+                    rows = await Embedding.retrieval_vector(
+                        session, public_id, [EmbeddingResourceType.PROTOCOL], keyword
+                    )
+                    assert len(rows) == 1 and rows[0]["resource_id"] == public_id
+                    assert rows[0]["similarity"] is None
+                    assert await Embedding.retrieval_full_text(
+                        session, public_id, [EmbeddingResourceType.PROTOCOL], keyword
+                    ) == [keyword]
+                    # Punctuation must not be interpreted as invalid tsquery syntax.
+                    await Embedding.retrieval_vector(
+                        session,
+                        public_id,
+                        [EmbeddingResourceType.PROTOCOL],
+                        keyword + ' ! : " ( )',
+                    )
+                    result = await hub.retrieval(
+                        session,
+                        hub.config.INNER_API_KEY,
+                        keyword,
+                        top_k=10,
+                        distance=0.6,
+                    )
+                    assert [row["aimd"] for row in result["result"]] == ["public"]
+                    for recommend in (
+                        inject_recommended_airalogy_protocols,
+                        inject_recommend_airalogy_protocols,
+                    ):
+                        result = await recommend(session, keyword, limit=10)
+                        assert [
+                            row["markdown"] for row in result["airalogy_protocols"]
+                        ] == ["public"]
+        finally:
+            await engine.dispose()
+
+    asyncio.run(exercise())
 
 
 async def seed_inventory(session_factory):

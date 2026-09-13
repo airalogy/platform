@@ -20,6 +20,7 @@ from app.models.upvote import Upvote, UpvoteResourceType
 from app.models.user import User
 from app.routers.depends import CurrentUser, OptionalCurrentUser
 from app.routers.permission import check_user_permission
+from app.services.model_usage import create_usage_context
 
 router = APIRouter(
     prefix="/questions",
@@ -220,6 +221,12 @@ async def create_question(
         question.id,
         EmbeddingResourceType.QUESTION,
         embedding_content,
+        usage_context=create_usage_context(
+            feature="index.question",
+            user_id=current_user.id,
+            lab_id=project.lab_id,
+            project_id=project.id,
+        ),
     )
     await current_user.load_avatar_attachment()
     await db_session.commit()
@@ -257,20 +264,27 @@ async def update_question(
     if question.user_id != current_user.id:
         raise HTTPException(status_code=400, detail="Permission denied")
 
-    is_content_changed = False
-    if params.title != question.title or params.content != question.content:
-        is_content_changed = True
-        embedding_content = params.title + "\n\n" + params.content
+    previous_content = (question.title, question.content)
     question.set_attrs(**params.model_dump(exclude_none=True))
+    is_content_changed = previous_content != (question.title, question.content)
+    embedding_content = question.title + "\n\n" + question.content
     question.updated_at = datetime.now()
     await db_session.commit()
     if is_content_changed:
+        protocol = await Protocol.find(db_session, id=question.protocol_id)
+        project = await Project.find(db_session, id=protocol.project_id)
         background_tasks.add_task(
             Embedding.rebuild_resource,
             question.protocol_id,
             question.id,
             EmbeddingResourceType.QUESTION,
             embedding_content,
+            usage_context=create_usage_context(
+                feature="index.question",
+                user_id=current_user.id,
+                lab_id=project.lab_id,
+                project_id=project.id,
+            ),
         )
 
     return {"message": "success"}

@@ -3,13 +3,19 @@ from enum import IntEnum
 from typing import Any
 from uuid import UUID
 
+from masterbrain.usage import UsageContext
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Integer, delete, func, select
+from sqlalchemy import Integer, delete, false, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import DBSession, sessionmanager
-from app.libs.text_splitter import text_to_embeddings, text_to_vectors, text_to_words
+from app.libs.embedding_config import EMBEDDING_DIMENSIONS
+from app.libs.text_splitter import (
+    optional_text_to_vectors,
+    text_to_embeddings,
+    text_to_words,
+)
 
 from .base import Base
 
@@ -33,8 +39,36 @@ class Embedding(Base):
     )
     text: Mapped[str] = mapped_column(nullable=False)
     tsv: Mapped[TSVECTOR] = mapped_column(TSVECTOR, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIMENSIONS), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(default=func.now())
+
+    @staticmethod
+    def search_conditions(
+        query_str: str, vector: list[float] | None, distance: float = 0.5
+    ):
+        """Use real cosine distance when available, plus a local keyword path.
+
+        Keyword-only rows stay discoverable even after AI is enabled again.
+        No fake vector or confidence score is generated for the fallback.
+        """
+        words = text_to_words(query_str)
+        # Quoted web-search terms preserve OR matching without treating research
+        # punctuation (for example !, :, quotes or parentheses) as tsquery syntax.
+        terms = [f'"{word.replace(chr(34), " ")}"' for word in words if word.strip()]
+        tsquery = (
+            func.websearch_to_tsquery("english", " OR ".join(terms)) if terms else None
+        )
+        keyword_match = Embedding.tsv.bool_op("@@")(tsquery) if terms else false()
+        keyword_rank = func.ts_rank_cd(Embedding.tsv, tsquery) if terms else literal(0)
+        if vector is None:
+            return keyword_match, [keyword_rank.desc()]
+        cosine_distance = Embedding.embedding.cosine_distance(vector)
+        return or_(cosine_distance < distance, keyword_match), [
+            cosine_distance.asc().nulls_last(),
+            keyword_rank.desc(),
+        ]
 
     @staticmethod
     async def retrieval_full_text(
@@ -44,11 +78,7 @@ class Embedding(Base):
         query_str: str,
         limit: int = 3,
     ) -> list[str]:
-        words = text_to_words(query_str)
-        if len(words) == 0:
-            return []
-
-        q = " | ".join(words)
+        predicate, ordering = Embedding.search_conditions(query_str, None)
         query = (
             select(
                 Embedding.text,
@@ -56,10 +86,10 @@ class Embedding(Base):
             .where(
                 Embedding.protocol_id == protocol_id,
                 Embedding.resource_type.in_(resource_type),
-                Embedding.tsv.bool_op("@@")(func.to_tsquery("english", q)),
+                predicate,
             )
             .order_by(
-                func.ts_rank_cd(Embedding.tsv, func.to_tsquery("english", q)).desc(),
+                *ordering,
                 Embedding.id.desc(),
             )
             .limit(limit)
@@ -74,22 +104,32 @@ class Embedding(Base):
         resource_types: list[EmbeddingResourceType],
         query_str: str,
         limit: int = 3,
+        *,
+        usage_context: UsageContext | None = None,
     ) -> list[dict[str, Any]]:
-        vector = text_to_vectors([query_str[0:1000]])[0]
+        vectors = await optional_text_to_vectors(
+            [query_str[0:1000]], usage_context=usage_context
+        )
+        vector = vectors[0] if vectors else None
+        predicate, ordering = Embedding.search_conditions(query_str, vector)
 
         query = (
             select(
                 Embedding.resource_id,
                 Embedding.resource_type,
                 Embedding.text,
-                Embedding.embedding.cosine_distance(vector).label("distance"),
+                (
+                    Embedding.embedding.cosine_distance(vector)
+                    if vector
+                    else literal(None)
+                ).label("distance"),
             )
             .where(
                 Embedding.protocol_id == protocol_id,
                 Embedding.resource_type.in_(resource_types),
-                Embedding.embedding.cosine_distance(vector) < 0.5,
+                predicate,
             )
-            .order_by(Embedding.embedding.cosine_distance(vector).asc())
+            .order_by(*ordering, Embedding.id.desc())
             .limit(limit)
         )
         result = (await db_session.execute(query)).all()
@@ -98,7 +138,9 @@ class Embedding(Base):
                 "resource_id": r.resource_id,
                 "resource_type": r.resource_type,
                 "text": r.text,
-                "similarity": 1 - r.distance,
+                "similarity": 1 - r.distance
+                if r.distance is not None and r.distance < 0.5
+                else None,
             }
             for r in result
         ]
@@ -109,9 +151,13 @@ class Embedding(Base):
         resource_id: UUID,
         resource_type: EmbeddingResourceType,
         text: str,
+        *,
+        usage_context: UsageContext | None = None,
     ):
         embeddings = []
-        for chunk, words, embedding in text_to_embeddings(text):
+        for chunk, words, embedding in await text_to_embeddings(
+            text, usage_context=usage_context
+        ):
             embeddings.append(
                 Embedding(
                     protocol_id=protocol_id,
@@ -123,6 +169,20 @@ class Embedding(Base):
                 )
             )
         async with sessionmanager.session() as db_session:
+            # Serialize replacement per Protocol; model calls happen before this
+            # short transaction. Readers never see a committed delete-only gap.
+            from app.models.protocol import Protocol
+
+            await db_session.execute(
+                select(Protocol.id).where(Protocol.id == protocol_id).with_for_update()
+            )
+            await db_session.execute(
+                delete(Embedding).where(
+                    Embedding.protocol_id == protocol_id,
+                    Embedding.resource_id == resource_id,
+                    Embedding.resource_type == resource_type,
+                )
+            )
             db_session.add_all(embeddings)
             await db_session.commit()
 
@@ -148,10 +208,9 @@ class Embedding(Base):
         resource_id: UUID,
         resource_type: EmbeddingResourceType,
         text: str,
+        *,
+        usage_context: UsageContext | None = None,
     ):
-        async with sessionmanager.session() as db_session:
-            await Embedding.remove_resource(db_session, resource_id, resource_type)
-            await Embedding.add_resource(
-                db_session, protocol_id, resource_id, resource_type, text
-            )
-            await db_session.commit()
+        await Embedding.add_resource(
+            protocol_id, resource_id, resource_type, text, usage_context=usage_context
+        )

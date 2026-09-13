@@ -5,12 +5,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from masterbrain.usage import UsageContext
 from pydantic import BaseModel
 from sqlalchemy import and_, select
 
 from app.database import DBSession
 from app.libs.masterbrain import hub_chat
-from app.libs.text_splitter import text_to_vectors
+from app.libs.text_splitter import optional_text_to_vectors
 from app.models.chat import (
     Chat,
     ChatModel,
@@ -19,7 +20,7 @@ from app.models.chat import (
 )
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.lab import Lab
-from app.models.project import Project, ProjectType
+from app.models.project import PermissionType, Project, ProjectType
 from app.models.protocol import Protocol
 from app.models.protocol_version import ProtocolVersion
 from app.routers.chats.utils import (
@@ -37,8 +38,19 @@ router = APIRouter(
 logger = logging.getLogger("app")
 
 
-async def inject_recommend_airalogy_protocols(db_session, content: str, limit: int = 3):
-    vector = text_to_vectors([content[0:1000]])[0]
+async def inject_recommend_airalogy_protocols(
+    db_session,
+    content: str,
+    limit: int = 3,
+    *,
+    usage_context: UsageContext | None = None,
+):
+    vectors = await optional_text_to_vectors(
+        [content[0:1000]], usage_context=usage_context
+    )
+    predicate, ordering = Embedding.search_conditions(
+        content, vectors[0] if vectors else None
+    )
 
     sub_query = (
         select(
@@ -57,11 +69,14 @@ async def inject_recommend_airalogy_protocols(db_session, content: str, limit: i
         )
         .where(
             Project.type == ProjectType.PUBLIC,
+            Project.permission_type == PermissionType.INHERIT,
+            Project.deleted_at.is_(None),
+            Protocol.deleted_at.is_(None),
             Protocol.parent_protocol_id.is_(None),
-            Embedding.embedding.cosine_distance(vector) < 0.5,
+            predicate,
         )
         .order_by(
-            Embedding.embedding.cosine_distance(vector).asc(),
+            *ordering,
             Protocol.stars_count.desc(),
             Protocol.forks_count.desc(),
         )
@@ -168,6 +183,7 @@ async def send_hub_chat_message(
     protocols = await inject_recommend_airalogy_protocols(
         db_session,
         message.content,
+        usage_context=usage_context,
     )
     airalogy_protocol_ids = [p["id"] for p in protocols["airalogy_protocols"]]
     inject_protocols_tool_call_messages = generate_tool_call_messages(

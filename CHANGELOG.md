@@ -16,6 +16,8 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ### Fixed
 
+- Route built-in embeddings through published Masterbrain 0.12.0 with trusted usage context and strict model/dimension validation. Keep keyword indexing/search available with AI disabled or unavailable, preserve existing 1024-dimensional vectors, atomically replace resource indexes and exclude private/deleted content from public recommendations. Document migration rollback and the separate vector-backfill boundary; remove the API's direct production OpenAI SDK dependency.
+
 - Share local pre-push and CI gates for instrument browser/native checks and real offline GitHub CLI verification. Add checksum-pinned workflow linting and Linux/macOS preflight regressions, test actual portable chmod operands, cover tooling/contract/identity changes, and make full mode execute every registered local gate. Keep pre-commit lightweight and desktop, hardware and release-only acceptance separate.
 
 ## [0.1.0] - 2026-09-11

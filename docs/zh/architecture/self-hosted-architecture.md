@@ -7,7 +7,7 @@ Airalogy Platform Community Edition 面向团队和机构自托管部署。对�
 - `Airalogy Platform` 负责账号、Lab、Project、Protocol、Record、权限、搜索和协作。
 - 原始大文件优先进入本地对象存储，例如自托管 MinIO 或机构已有对象存储。
 - 数据库保存业务元数据、权限关系、索引字段和对象引用，不直接承载大文件本体。
-- AI 与自动化能力通过配置的模型服务和已发布的 Airalogy / Masterbrain 包接入。
+- AI 与自动化能力通过配置的模型服务和已发布的 Airalogy / Masterbrain 包接入。模型职责、非 AI 检索与迁移要求见 [Platform 与 Masterbrain 的 AI 边界](./ai-boundary.md)。
 - 公开版默认提供清晰的本地部署路径，企业级多站点同步、复杂审计和专有存储连接器可以在此基础上扩展。
 
 ## 默认本地拓扑

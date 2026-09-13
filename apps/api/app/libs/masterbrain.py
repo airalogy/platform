@@ -7,9 +7,11 @@ from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from masterbrain.embeddings import EmbeddingRequest, EmbeddingResponse
 from masterbrain.usage import UsageContext, bind_usage_context
 
 from app.config import config
+from app.libs.embedding_config import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
 from app.models.chat import Chat
 from app.services.model_usage import configure_embedded_masterbrain_app
 
@@ -160,10 +162,32 @@ async def json_request(
                 timeout=timeout,
             )
             if response.status_code != 200:
-                print(response)
-                print(response.text)
                 raise _chat_api_error(response)
             return response.json()
+
+
+async def text_embeddings(
+    texts: list[str], *, usage_context: UsageContext | None = None
+) -> list[list[float]]:
+    """All built-in vector model requests use the governed Masterbrain transport."""
+    if not config.effective_embeddings_enabled:
+        raise HTTPException(status_code=503, detail="Text embeddings are disabled")
+    request = EmbeddingRequest(
+        model=EMBEDDING_MODEL, input=texts, dimensions=EMBEDDING_DIMENSIONS
+    )
+    data = await json_request(
+        "endpoints/embeddings", request.model_dump(), usage_context=usage_context
+    )
+    result = EmbeddingResponse.model_validate(data)
+    if (
+        result.model != EMBEDDING_MODEL
+        or result.dimensions != EMBEDDING_DIMENSIONS
+        or len(result.vectors) != len(texts)
+    ):
+        raise ValueError(
+            "Masterbrain embedding response does not match the index contract"
+        )
+    return result.vectors
 
 
 def remove_think_from_message(message: dict) -> dict:

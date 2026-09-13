@@ -113,6 +113,26 @@ def test_ai_capability_is_auto_detected_and_can_be_disabled():
     )
 
 
+def test_embeddings_require_the_existing_vector_provider_and_respect_kill_switch():
+    assert settings().effective_embeddings_enabled is False
+    assert settings(DASHSCOPE_API_KEY="synthetic").effective_embeddings_enabled is True
+    assert not settings(
+        AI_ENABLED=False, DASHSCOPE_API_KEY="synthetic"
+    ).effective_embeddings_enabled
+    assert not settings(
+        OPENAI_API_KEY="synthetic", ENABLE_GPT_MODEL=True
+    ).effective_embeddings_enabled
+    assert settings(
+        MASTERBRAIN_CALL_MODE="external",
+        CHAT_API_ENDPOINT="https://masterbrain.example.test",
+    ).effective_embeddings_enabled
+    assert not settings(
+        AI_ENABLED=False,
+        MASTERBRAIN_CALL_MODE="external",
+        CHAT_API_ENDPOINT="https://masterbrain.example.test",
+    ).effective_embeddings_enabled
+
+
 def test_research_email_notifications_are_opt_in_and_require_smtp():
     assert settings().effective_research_email_notifications_enabled is False
     with pytest.raises(

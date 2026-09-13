@@ -1,17 +1,15 @@
 import contextlib
 import io
-import os
+import logging
 import warnings
 
-from openai import OpenAI
+from masterbrain.usage import UsageContext
 from semantic_text_splitter import TextSplitter
 
 from app.config import config
+from app.libs.embedding_config import EMBEDDING_BATCH_SIZE
 
-qwen_client = OpenAI(
-    api_key=config.DASHSCOPE_API_KEY,
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-)
+logger = logging.getLogger("app")
 
 chunk_splitter = TextSplitter.from_tiktoken_model(
     "gpt-3.5-turbo", capacity=300, overlap=20
@@ -30,8 +28,9 @@ def load_cutter_class():
             module=r"cutword(\..*)?",
         )
         output_buffer = io.StringIO()
-        with contextlib.redirect_stdout(output_buffer), contextlib.redirect_stderr(
-            output_buffer
+        with (
+            contextlib.redirect_stdout(output_buffer),
+            contextlib.redirect_stderr(output_buffer),
         ):
             from cutword import Cutter
 
@@ -75,30 +74,50 @@ def text_to_words(text: str, exclude_stopword: bool = True) -> list[str]:
     return words
 
 
-def create_embeddings(texts: list[str]) -> list[list[float]]:
-    if len(texts) > 6:
-        raise ValueError("文本数量不能大于6")
-    res = qwen_client.embeddings.create(
-        model="text-embedding-v4",
-        input=texts,
-        dimensions=1024,
-        encoding_format="float",
-    )
-    return [embedding.embedding for embedding in res.data]
+async def create_embeddings(
+    texts: list[str], *, usage_context: UsageContext | None = None
+) -> list[list[float]]:
+    # Lazy import avoids a cycle through model registration and usage persistence.
+    from app.libs.masterbrain import text_embeddings
+
+    return await text_embeddings(texts, usage_context=usage_context)
 
 
-def text_to_vectors(texts: list[str]) -> list[list[float]]:
-    if len(texts) > 6:
-        # 如果文本数量大于6，则分批处理
-        res = []
-        for i in range(0, len(texts), 6):
-            res.extend(create_embeddings(texts[i : i + 6]))
-    else:
-        res = create_embeddings(texts)
+async def text_to_vectors(
+    texts: list[str], *, usage_context: UsageContext | None = None
+) -> list[list[float]]:
+    res = []
+    for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        res.extend(
+            await create_embeddings(
+                texts[i : i + EMBEDDING_BATCH_SIZE], usage_context=usage_context
+            )
+        )
     return res
 
 
-def text_to_embeddings(text: str) -> list[tuple[str, list[str], list[float]]]:
+async def optional_text_to_vectors(
+    texts: list[str], *, usage_context: UsageContext | None = None
+) -> list[list[float]] | None:
+    if not config.effective_embeddings_enabled:
+        return None
+    try:
+        return await text_to_vectors(texts, usage_context=usage_context)
+    except Exception as exc:  # noqa: BLE001 - optional provider boundary; never catches cancellation
+        # Only the optional model boundary is degraded, never database errors.
+        # Do not log raw provider responses, credentials, or research text.
+        logger.warning(
+            "Embedding unavailable; using keyword search/index (%s)", type(exc).__name__
+        )
+        return None
+
+
+async def text_to_embeddings(
+    text: str, *, usage_context: UsageContext | None = None
+) -> list[tuple[str, list[str], list[float] | None]]:
     chunks = text_to_chunks(text)
-    vectors = text_to_vectors(chunks)
-    return [(chunk, text_to_words(chunk), vectors[i]) for i, chunk in enumerate(chunks)]
+    vectors = await optional_text_to_vectors(chunks, usage_context=usage_context)
+    return [
+        (chunk, text_to_words(chunk), vectors[i] if vectors is not None else None)
+        for i, chunk in enumerate(chunks)
+    ]

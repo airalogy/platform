@@ -21,6 +21,7 @@ from app.models.protocol import Protocol, ProtocolStatus
 from app.models.protocol_version import ProtocolMetadata, ProtocolVersion
 from app.models.record import Record
 from app.models.user import User
+from app.services.model_usage import create_usage_context
 
 
 @dataclass
@@ -183,7 +184,9 @@ async def import_protocol_directory(
                 protocol=protocol,
             )
             if protocol.uid != meta_data.id:
-                raise HTTPException(status_code=400, detail="Protocol id cannot be changed")
+                raise HTTPException(
+                    status_code=400, detail="Protocol id cannot be changed"
+                )
             if len(env_vars) > 0:
                 protocol.env_vars = env_vars
             protocol.name = meta_data.name or protocol.name
@@ -238,18 +241,18 @@ async def import_protocol_directory(
         await protocol_version.upload_package(package_file=str(package_zip_file))
 
         if background_tasks is not None:
-            if not created_protocol:
-                background_tasks.add_task(
-                    Embedding.remove_resource,
-                    protocol.id,
-                    EmbeddingResourceType.PROTOCOL,
-                )
             background_tasks.add_task(
                 Embedding.add_resource,
                 protocol.id,
                 protocol.id,
                 EmbeddingResourceType.PROTOCOL,
                 protocol_version.aimd,
+                usage_context=create_usage_context(
+                    feature="index.protocol",
+                    user_id=user.id,
+                    lab_id=project.lab_id,
+                    project_id=project.id,
+                ),
             )
 
         return ProtocolImportResult(

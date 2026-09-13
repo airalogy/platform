@@ -261,6 +261,12 @@ class Settings(BaseSettings):
             return False
         return self.qwen_chat_configured or self.gpt_chat_configured
 
+    @property
+    def effective_embeddings_enabled(self) -> bool:
+        # Existing indexes use Qwen v4. An OpenAI chat key does not authorize
+        # switching vector spaces; keyword search remains available instead.
+        return self.effective_ai_enabled and self.qwen_chat_configured
+
     @model_validator(mode="after")
     def validate_deployment_settings(self) -> "Settings":
         uid_pattern = re.compile(r"^[a-z][a-z0-9_]{2,31}$")
