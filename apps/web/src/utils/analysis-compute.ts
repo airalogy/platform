@@ -1,7 +1,8 @@
 import type { AnalysisRecipe, AnalysisRun, BuiltinAnalysisRun } from "@/service/api/analysis"
 import type { AnalysisComputeContext, AnalysisComputeEnvironment, AnalysisComputeInputFile, AnalysisComputeRecipe } from "@/service/api/analysis-compute"
+import type { ProjectAnalysisRecipe } from "@/service/api/project-analysis"
 
-export function isComputeAnalysisRecipe(recipe: AnalysisRecipe | AnalysisComputeRecipe): recipe is AnalysisComputeRecipe {
+export function isComputeAnalysisRecipe(recipe: AnalysisRecipe | AnalysisComputeRecipe | ProjectAnalysisRecipe): recipe is AnalysisComputeRecipe {
   return "kind" in recipe && recipe.kind === "compute"
 }
 

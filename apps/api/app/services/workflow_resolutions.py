@@ -314,6 +314,12 @@ async def verify_workflow_node_resolution(
         )
     for source in resolution.receipt.get("sources", {}).values():
         await _verify_source(db, task=task, run=run, target=action, ref=source)
+    if graph.schema_version >= 5:
+        from app.services.workflow_asset_runtime import verify_asset_resolution
+
+        await verify_asset_resolution(
+            db, task=task, run=run, action=action, resolution=resolution
+        )
     if graph.schema_version >= 4:
         from app.services.workflow_files import verify_resolution_files
 
@@ -340,7 +346,10 @@ async def resolve_workflow_node(db, *, task, run, graph, node, action, parents_b
         )
         return existing
     incoming = [edge for edge in graph.edges if edge.target_node_id == node.node_id]
-    if not incoming or set(parents_by_node) != {
+    has_asset_inputs = any(
+        binding.target_node_id == node.node_id for binding in graph.asset_bindings
+    )
+    if (not incoming and not has_asset_inputs) or set(parents_by_node) != {
         edge.source_node_id for edge in incoming
     }:
         raise HTTPException(
@@ -374,7 +383,19 @@ async def resolve_workflow_node(db, *, task, run, graph, node, action, parents_b
                 project=await db.get(Project, task.project_id),
                 node=item,
             )
-            if method.recipe.get("kind") == "compute":
+            if method.recipe.get("kind") == "project":
+                from app.services.workflow_analysis_contracts import (
+                    project_method_output_catalog,
+                )
+                from app.services.workflow_project_analysis import (
+                    validate_project_node_inputs,
+                )
+
+                validate_project_node_inputs(method, item, versions)
+                catalogs[item.node_id] = project_method_output_catalog(
+                    method.recipe, method.project_contract, item.project_outputs
+                )
+            elif method.recipe.get("kind") == "compute":
                 from app.services.workflow_compute_contracts import (
                     compute_output_catalog,
                 )
@@ -472,6 +493,7 @@ async def resolve_workflow_node(db, *, task, run, graph, node, action, parents_b
     values = deepcopy(node.initial_values)
     binding_receipts = []
     file_receipts = []
+    asset_sources, asset_receipts = {}, []
     analysis_input = None
     if state == "ready":
         savepoint = await db.begin_nested() if graph.schema_version >= 4 else None
@@ -516,6 +538,26 @@ async def resolve_workflow_node(db, *, task, run, graph, node, action, parents_b
                 )
                 values = resolved.initial_values
                 binding_receipts = resolved.bindings
+                if graph.schema_version >= 5 and has_asset_inputs:
+                    from app.services.workflow_asset_runtime import (
+                        resolve_asset_bindings,
+                    )
+
+                    (
+                        asset_values,
+                        asset_sources,
+                        asset_receipts,
+                        asset_files,
+                    ) = await resolve_asset_bindings(
+                        db,
+                        task=task,
+                        run=run,
+                        graph=graph,
+                        node=node,
+                        action=action,
+                    )
+                    values.update(asset_values)
+                    file_receipts.extend(asset_files)
                 validate_initial_values(
                     versions[node.node_id],
                     values,
@@ -530,6 +572,7 @@ async def resolve_workflow_node(db, *, task, run, graph, node, action, parents_b
                 [],
                 [],
             )
+            asset_sources, asset_receipts = {}, []
         except BaseException:
             if savepoint is not None:
                 await savepoint.rollback()
@@ -549,6 +592,9 @@ async def resolve_workflow_node(db, *, task, run, graph, node, action, parents_b
         receipt["analysis_input"] = analysis_input
     if graph.schema_version >= 4:
         receipt["files"] = file_receipts
+    if graph.schema_version >= 5:
+        receipt["asset_sources"] = asset_sources
+        receipt["asset_bindings"] = asset_receipts
     row = WorkflowNodeResolution(
         workflow_revision_id=UUID(
             run.environment_snapshot["manual_workflow"]["revision_id"]

@@ -11,7 +11,14 @@ const compiled = ts.transpileModule(source, {
   reportDiagnostics: true,
 })
 assert.deepEqual(compiled.diagnostics, [])
-const { createAnalysisChartLayouts } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`)
+const { createAnalysisChartLayouts, analysisGroupLabel } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`)
+
+test("shared labels distinguish derived rows from source Records without altering group values", () => {
+  assert.equal(analysisGroupLabel({ key: [] }, "All Records", "Missing"), "All Records")
+  assert.equal(analysisGroupLabel({ key: [] }, "All associated rows", "Missing"), "All associated rows")
+  const group = { key: [{ field: "sample", value: null }, { field: "zero", value: 0 }, { field: "flag", value: false }] }
+  assert.equal(analysisGroupLabel(group, "全部关联行", "缺失"), "sample: 缺失 · zero: 0 · flag: false")
+})
 
 function result(values, type = "bar") {
   return {

@@ -67,14 +67,14 @@
               size="tiny"
               autosize
               :theme-overrides="{ paddingTiny: '0', borderRadius: '0 6px', border: '0' }"
-              :disabled="loading"
+              :disabled="props.disabled || loading"
               :allow-input="(value: string) => !value.startsWith(' ') && !value.endsWith(' ')"
             />
             <n-button
               size="tiny"
               ghost
               :theme-overrides="{ border: '0 0', borderRadiusTiny: '6px 0' }"
-              :disabled="loading"
+              :disabled="props.disabled || loading"
               @click="() => handleRename(file)"
             >
               <template #icon>
@@ -95,8 +95,11 @@ import type { UploadFileInfo, UploadInst, UploadProps } from "naive-ui/es/upload
 import type { OnPreview } from "naive-ui/es/upload/src/interface"
 import { useLoading } from "@/composables"
 import { $t } from "@/locales"
+import { cacheAttachmentMetadata } from "@/service/api/attachments"
 import { putRenameAssets } from "@/service/api/project-protocols"
 import { request } from "@/service/request"
+import { isCurrentFileUpload } from "@/utils/aimd-file-events"
+import { aimdFileReference } from "@/utils/aimd-files"
 import { getUploadProps } from "@/utils/fileType"
 import { FileTypeIcon } from "@airalogy/components"
 import { useClosableMessage } from "@airalogy/composables"
@@ -226,6 +229,10 @@ async function customRequest({
   onError,
   onProgress,
 }: UploadCustomRequestOptions) {
+  if (props.disabled) {
+    onError()
+    return
+  }
   const formData = new FormData()
   if (data) {
     Object.keys(data).forEach((key) => {
@@ -254,6 +261,11 @@ async function customRequest({
       onError()
       return
     }
+
+    // A removed/replaced upload must not be restored by the widget's finish
+    // callback before the field-event bridge gets a chance to reject it.
+    if (props.disabled || !isCurrentFileUpload(mergedFileList.value, file.id))
+      return
 
     onFinish()
     emit("uploaded:file", result, file)
@@ -324,6 +336,8 @@ const fileNameRecord = reactive<Record<string, string>>({})
 
 // Internal event handlers
 function handleRemove(file: UploadFileInfo) {
+  if (props.disabled)
+    return false
   console.log("Removing file:", file.name)
 
   file.status = "removed"
@@ -436,11 +450,12 @@ function handleExceed(files: UploadFileInfo[]) {
 }
 
 async function handleRename(file: UploadFileInfo) {
-  if (!file || !formItemRecord)
+  if (props.disabled || !file || !formItemRecord)
     return
 
   const { id } = file
   const name = fileNameRecord[id]
+  const reference = aimdFileReference(file)
 
   startLoading()
 
@@ -454,9 +469,14 @@ async function handleRename(file: UploadFileInfo) {
       return
     }
 
+    // Validation can be asynchronous. Recheck permission and target identity
+    // before sending the write, not only before entering the dialog action.
+    if (props.disabled || !mergedFileList.value.some(current => reference ? aimdFileReference(current) === reference : current.id === id))
+      return
     const res = await putRenameAssets(id, name)
 
     if (res.data) {
+      cacheAttachmentMetadata(res.data)
       message.success(fileText.value.renameSuccess)
       emit("renamed:file", res.data)
     }

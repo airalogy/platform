@@ -1,5 +1,6 @@
 """Analysis workbench API; all products remain private and source-authorized."""
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response
@@ -29,6 +30,8 @@ from app.services.analysis_generation import (
     authorize_ai_provenance,
     inherited_provenance,
 )
+from app.services.project_analyses import ProjectAnalysisSelection
+from app.services.project_analysis_engine import ProjectAnalysisRecipe
 from app.services.record_analyses import (
     AnalysisPreviewRequest,
     AnalysisSelection,
@@ -66,9 +69,9 @@ class PipelineCreateRequest(BaseModel):
 class PipelineReviseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    recipe: AnalysisRecipe | AnalysisComputeRecipe
+    recipe: AnalysisRecipe | AnalysisComputeRecipe | ProjectAnalysisRecipe
     expected_revision: int = Field(ge=1, strict=True)
-    source_selection: AnalysisSelection | None = None
+    source_selection: AnalysisSelection | ProjectAnalysisSelection | None = None
 
 
 def run_payload(run: AnalysisRun, *, summary: bool = False) -> dict:
@@ -210,8 +213,17 @@ async def download_record_analysis(
     run = await owned_run(db_session, analysis_id, current_user)
     if run.status != "succeeded":
         raise HTTPException(409, "Analysis has not succeeded")
+    payload = run_payload(run)
+    if getattr(run, "source_scope", "protocol") == "project":
+        from app.services.project_analyses import project_interpretations
+
+        # Narrative revisions have their own seals; never rewrite the immutable
+        # computed result or present its digest as covering later interpretation.
+        payload["interpretations"] = await project_interpretations(
+            db_session, run.id, current_user
+        )
     return JSONResponse(
-        jsonable_encoder(run_payload(run)),
+        jsonable_encoder(payload),
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": f'attachment; filename="analysis-{run.id}.json"',
@@ -251,6 +263,7 @@ async def list_record_analyses(
     response: Response,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    source_scope: Literal["protocol", "project"] = "protocol",
 ):
     response.headers["Cache-Control"] = "private, no-store"
     runs = list(
@@ -259,6 +272,7 @@ async def list_record_analyses(
                 select(AnalysisRun)
                 .where(
                     AnalysisRun.project_id == project_id,
+                    AnalysisRun.source_scope == source_scope,
                     AnalysisRun.created_by_user_id == current_user.id,
                 )
                 .order_by(AnalysisRun.created_at.desc(), AnalysisRun.id.desc())
@@ -291,6 +305,7 @@ async def create_analysis_pipeline(
     pipeline = AnalysisPipeline(
         project_id=run.project_id,
         protocol_id=run.protocol_id,
+        source_scope=getattr(run, "source_scope", "protocol"),
         created_by_user_id=current_user.id,
         title=params.title.strip(),
         current_revision=1,
@@ -303,6 +318,10 @@ async def create_analysis_pipeline(
         "result_digest": run.result_digest,
         "engine_version": run.engine_version,
     }
+    if pipeline.source_scope == "project":
+        from app.services.project_analyses import project_input_contracts
+
+        provenance["input_contracts"] = project_input_contracts(run.source_snapshot)
     if run.ai_provenance:
         provenance["ai_provenance"] = run.ai_provenance
     provenance["method_digest"] = method_revision_digest(
@@ -365,6 +384,7 @@ async def list_analysis_pipelines(
     response: Response,
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    source_scope: Literal["protocol", "project"] = "protocol",
 ):
     response.headers["Cache-Control"] = "private, no-store"
     pipelines = list(
@@ -373,6 +393,7 @@ async def list_analysis_pipelines(
                 select(AnalysisPipeline)
                 .where(
                     AnalysisPipeline.project_id == project_id,
+                    AnalysisPipeline.source_scope == source_scope,
                     AnalysisPipeline.created_by_user_id == current_user.id,
                 )
                 .order_by(
@@ -386,7 +407,12 @@ async def list_analysis_pipelines(
     items = []
     for pipeline in pipelines:
         try:
-            await analysis_scope(db_session, pipeline.protocol_id, current_user)
+            if pipeline.source_scope == "project":
+                from app.services.project_analyses import authorize_project_pipeline
+
+                await authorize_project_pipeline(db_session, pipeline, current_user)
+            else:
+                await analysis_scope(db_session, pipeline.protocol_id, current_user)
         except HTTPException as exc:
             if exc.status_code not in {403, 404}:
                 raise
@@ -428,6 +454,23 @@ async def revise_analysis_pipeline(
     current_user: CurrentUser,
 ):
     pipeline = await owned_pipeline(db_session, pipeline_id, current_user, lock=True)
+    if getattr(pipeline, "source_scope", "protocol") == "project":
+        from app.services.project_analyses import revise_project_pipeline
+
+        try:
+            revision = await revise_project_pipeline(
+                db_session, pipeline, params, current_user
+            )
+        except AnalysisError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        await db_session.commit()
+        return revision.as_dict()
+    if isinstance(params.recipe, ProjectAnalysisRecipe) or isinstance(
+        params.source_selection, ProjectAnalysisSelection
+    ):
+        raise HTTPException(
+            409, "Project and Protocol methods require separate source scopes"
+        )
     if pipeline.current_revision != params.expected_revision:
         raise HTTPException(409, "Method changed; reload before revising")
     previous = await db_session.scalar(

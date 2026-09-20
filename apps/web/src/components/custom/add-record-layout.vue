@@ -1,5 +1,26 @@
 <template>
-  <n-split v-bind="splitProps" v-model:size="splitSize">
+  <div v-if="compact" class="record-compact-layout" data-testid="record-compact-layout">
+    <div class="mb-3 flex flex-wrap gap-2">
+      <n-button data-testid="record-open-fields" @click="isCollapsed = false">
+        <template #icon>
+          <n-icon><icon-local-menu-expand /></n-icon>
+        </template>
+        {{ $t('common.fields') }}
+      </n-button>
+    </div>
+    <div class="min-w-0 w-full" :class="props.contentClass" data-testid="record-main-content">
+      <slot name="content" />
+    </div>
+    <n-drawer :show="!isCollapsed" display-directive="show" width="calc(100vw - 2rem)" placement="left" @update:show="value => isCollapsed = !value">
+      <n-drawer-content :title="$t('common.fields')" closable :native-scrollbar="false" body-content-class="record-fields-drawer" data-testid="record-fields-drawer">
+        <slot name="prefix" />
+        <n-tabs v-model:value="selectedTab" type="card" :theme-overrides="props.themeOverrides" pane-class="min-w-0">
+          <slot name="tabs" />
+        </n-tabs>
+      </n-drawer-content>
+    </n-drawer>
+  </div>
+  <n-split v-else v-bind="splitProps" v-model:size="splitSize">
     <template #1>
       <component :is="props.wrapper" v-if="props.wrapper">
         <slot name="prefix" />
@@ -54,6 +75,7 @@
 
 <script setup lang="ts">
 import type { Component } from "vue"
+import { useMediaQuery } from "@vueuse/core"
 
 defineOptions({ name: "AddRecordLayout" })
 
@@ -72,6 +94,7 @@ const props = withDefaults(defineProps<IProps>(), {
   showBackTop: true,
   selectedTab: undefined,
   contentClass: "",
+  responsive: false,
 })
 
 const emit = defineEmits<{
@@ -89,11 +112,18 @@ interface IProps {
   selectedTab?: string
   wrapper?: Component
   contentClass?: string
+  responsive?: boolean
 }
 
 const isCollapsed = useVModel(props, "collapsed")
 const selectedTab = useVModel(props, "selectedTab")
 const splitSize = ref(props.defaultSpiltSize)
+const narrow = useMediaQuery("(max-width: 767px)")
+const compact = computed(() => props.responsive && narrow.value)
+watch(compact, (value) => {
+  if (value)
+    isCollapsed.value = true
+}, { immediate: true })
 
 watch(
   splitSize,
@@ -155,6 +185,14 @@ defineExpose({
 </script>
 
 <style scoped lang="sass">
+.record-compact-layout
+  min-width: 0
+  width: 100%
+
+:global(.record-fields-drawer)
+  min-width: 0
+  overflow-wrap: anywhere
+
 :deep(.n-tabs-nav-scroll-wrapper)
   &:before,&:after
     display: none

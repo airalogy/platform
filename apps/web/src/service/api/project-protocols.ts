@@ -803,7 +803,7 @@ export async function putRenameAssets(id: string | number, filename: string) {
   const response = await request({
     url: `/airalogy_files/${id}/rename`,
     method: "PUT",
-    data: {
+    params: {
       filename,
     },
   })

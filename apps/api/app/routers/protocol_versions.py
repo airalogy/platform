@@ -2,8 +2,9 @@ import os
 import re
 import shutil
 import uuid
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
+from typing import Annotated
 
 from dotenv import dotenv_values
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, UploadFile
@@ -20,6 +21,7 @@ from app.libs.protocol_agent import (
     unzip_file,
     zip_dir,
 )
+from app.libs.protocol_uid import lock_protocol_uid
 from app.models.airalogy_file import AiralogyFile
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.knowledge import (
@@ -37,6 +39,7 @@ from app.models.research_asset import (
     ProtocolImprovementProposal,
     ProtocolImprovementState,
 )
+from app.models.user import User
 from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
@@ -273,7 +276,59 @@ async def upload_package(
     source_knowledge_revision: int | None = Body(None, embed=True),
     source_protocol_improvement_id: UUID | None = Body(None, embed=True),
     source_protocol_improvement_revision: int | None = Body(None, embed=True),
+    source_analysis_protocol_draft_id: Annotated[UUID | None, Body(embed=True)] = None,
+    source_analysis_protocol_revision: Annotated[
+        int | None, Body(embed=True, ge=1)
+    ] = None,
+    source_analysis_protocol_digest: Annotated[
+        str | None, Body(embed=True, pattern=r"^[0-9a-f]{64}$")
+    ] = None,
+    source_analysis_protocol_preview_digest: Annotated[
+        str | None, Body(embed=True, pattern=r"^[0-9a-f]{64}$")
+    ] = None,
+    source_analysis_protocol_preview_token: Annotated[
+        str | None, Body(embed=True, min_length=1, max_length=8000)
+    ] = None,
 ):
+    analysis_source_fields = (
+        source_analysis_protocol_draft_id,
+        source_analysis_protocol_revision,
+        source_analysis_protocol_digest,
+        source_analysis_protocol_preview_digest,
+        source_analysis_protocol_preview_token,
+    )
+    if any(value is not None for value in analysis_source_fields) and any(
+        value is None for value in analysis_source_fields
+    ):
+        raise HTTPException(
+            422, "Analysis draft ID, revision, digest and preview are required together"
+        )
+    if source_analysis_protocol_draft_id is not None:
+        from app.services.analysis_protocol_drafts import get_draft, target_context
+
+        # Both direct uploads and the Draft API lock draft -> target Protocol.
+        # Never invert that order against a concurrent governed publication.
+        early_draft, early_method = await get_draft(
+            db_session, current_user, source_analysis_protocol_draft_id, lock=True
+        )
+        # Validate the caller's exact destination before acquiring any target
+        # lock. Otherwise crossed requests can lock A -> B and B -> A before
+        # the later source check rejects both, creating a needless deadlock.
+        if (
+            early_draft.project_id != project_id
+            or early_draft.target_protocol_id != protocol_id
+        ):
+            raise HTTPException(
+                422, "Analysis draft targets another Protocol or Project"
+            )
+        await target_context(
+            db_session,
+            current_user,
+            early_method,
+            early_draft.target_protocol_id,
+            early_draft.base_protocol_version_id,
+            lock=True,
+        )
     project: Project = await Project.find(db_session, id=project_id)
     lab: Lab = await Lab.find(db_session, id=project.lab_id)
     if protocol_id is not None:
@@ -296,6 +351,77 @@ async def upload_package(
             action="create_protocol",
         )
         protocol = None
+    analysis_draft = analysis_revision = analysis_package = None
+    if any(value is not None for value in analysis_source_fields):
+        if (
+            source_knowledge_item_id is not None
+            or source_protocol_improvement_id is not None
+            or env_vars.strip()
+        ):
+            raise HTTPException(
+                422,
+                "A reviewed analysis Protocol cannot add other sources or environment variables",
+            )
+        from app.services.analysis_protocol_drafts import (
+            ExactRevision,
+            approved_package,
+            preview_publish,
+            verify_receipt,
+        )
+        from app.services.analysis_protocol_packages import (
+            AnalysisProtocolPackageError,
+            read_analysis_protocol_package_zip,
+        )
+
+        exact = ExactRevision(
+            expected_revision=source_analysis_protocol_revision,
+            package_digest=source_analysis_protocol_digest,
+        )
+        (
+            analysis_draft,
+            _,
+            analysis_revision,
+            stored_package,
+            _,
+        ) = await approved_package(
+            db_session,
+            current_user,
+            source_analysis_protocol_draft_id,
+            exact,
+            lock=True,
+        )
+        if (
+            analysis_draft.project_id != project.id
+            or analysis_draft.target_protocol_id != protocol_id
+        ):
+            raise HTTPException(
+                422, "Analysis draft targets another Protocol or Project"
+            )
+        verify_receipt(
+            source_analysis_protocol_preview_token,
+            user_id=current_user.id,
+            purpose=f"publish:{analysis_draft.id}:{analysis_draft.revision}",
+            digest=source_analysis_protocol_preview_digest,
+        )
+        checked_preview = await preview_publish(
+            db_session, current_user, analysis_draft.id, exact, lock=True
+        )
+        if checked_preview["preview_digest"] != source_analysis_protocol_preview_digest:
+            raise HTTPException(409, "Protocol publication preview changed")
+        # Validate the original archive before normal extraction or Engine work.
+        # No added code, inline assigner, symlink or derived manifest is trusted.
+        raw_package = await file.read(2 * 1024 * 1024 + 1)
+        await file.seek(0)
+        try:
+            analysis_package = read_analysis_protocol_package_zip(
+                raw_package, expected_manifest_digest=stored_package.manifest_digest
+            )
+        except (AnalysisProtocolPackageError, ValueError) as error:
+            raise HTTPException(422, str(error)) from error
+        if analysis_package.content_digest != analysis_revision.package_digest:
+            raise HTTPException(
+                409, "Uploaded files differ from the reviewed Protocol draft"
+            )
     if (source_knowledge_item_id is None) != (source_knowledge_revision is None):
         raise HTTPException(
             status_code=422,
@@ -379,12 +505,59 @@ async def upload_package(
             detail=f"Invalid protocol.toml, error: {e.errors()}",
         )
     _validate_resource_definition(info, meta_data.kind)
+    if analysis_draft is not None:
+        # The real parser must not rewrite files after they were reviewed.
+        if any(
+            (Path(tmp_protocol_path) / name).read_bytes() != content.encode("utf-8")
+            for name, content in analysis_package.files.items()
+        ):
+            raise HTTPException(409, "Protocol parser changed the reviewed package")
+        # The parser is an await boundary. Discard only this read-only identity
+        # cache so cached memberships cannot preserve revoked authority.
+        if db_session.new or db_session.dirty or db_session.deleted:
+            raise HTTPException(
+                409, "Protocol publication has unexpected pending changes"
+            )
+        actor_id, draft_id, target_project_id = (
+            current_user.id,
+            analysis_draft.id,
+            project.id,
+        )
+        target_id = protocol.id if protocol is not None else None
+        db_session.expire_all()
+        current_user = await db_session.get(User, actor_id, populate_existing=True)
+        project = await db_session.get(
+            Project, target_project_id, populate_existing=True
+        )
+        lab = await db_session.get(Lab, project.lab_id, populate_existing=True)
+        protocol = (
+            await db_session.get(Protocol, target_id, populate_existing=True)
+            if target_id
+            else None
+        )
+        analysis_draft, _, analysis_revision, _, _ = await approved_package(
+            db_session, current_user, draft_id, exact, lock=True
+        )
+        verify_receipt(
+            source_analysis_protocol_preview_token,
+            user_id=current_user.id,
+            purpose=f"publish:{draft_id}:{exact.expected_revision}",
+            digest=source_analysis_protocol_preview_digest,
+        )
+        final_preview = await preview_publish(
+            db_session, current_user, draft_id, exact, lock=True
+        )
+        if final_preview["preview_digest"] != source_analysis_protocol_preview_digest:
+            raise HTTPException(
+                409, "Protocol publication changed during package validation"
+            )
 
     compatibility_report = None
     migration_manifest: list[dict] | None = None
     source_knowledge = None
     source_protocol_improvement = None
     if protocol is None:
+        await lock_protocol_uid(db_session, project.id, meta_data.id)
         if (
             source_knowledge_item_id is not None
             and source_knowledge_revision is not None
@@ -474,8 +647,8 @@ async def upload_package(
         protocol.latest_version = meta_data.version
         if len(env_vars) > 0:
             protocol.env_vars = env_vars
-        protocol.disciplines = meta_data.disciplines
-        protocol.keywords = meta_data.keywords
+        protocol.disciplines = meta_data.disciplines or []
+        protocol.keywords = meta_data.keywords or []
 
     protocol_version_exists = await ProtocolVersion.exists(
         db_session,
@@ -503,6 +676,17 @@ async def upload_package(
     )
     db_session.add(protocol_version)
     await db_session.flush()
+    if analysis_draft is not None:
+        from app.services.analysis_protocol_drafts import link_published_version
+
+        await link_published_version(
+            db_session,
+            current_user,
+            analysis_draft,
+            analysis_revision,
+            protocol,
+            protocol_version,
+        )
     knowledge_source_payload = None
     if source_knowledge is not None:
         db_session.add(
@@ -557,9 +741,21 @@ async def upload_package(
         os.makedirs(f"{protocol_dir}/tmp")
     package_zip_file = f"{protocol_dir}/tmp/{protocol_version.package_name}.zip"
     remove_exclude_files(protocol_path)
-    zip_dir(protocol_path, package_zip_file)
-    await protocol_version.upload_package(package_file=package_zip_file)
-    background_tasks.add_task(os.remove, package_zip_file)
+    if analysis_package is not None:
+        from app.services.analysis_protocol_packages import (
+            analysis_protocol_package_zip_bytes,
+        )
+
+        # Preserve only the reviewed source files in the distributable package;
+        # runtime-generated model caches do not become reviewed source assets.
+        reviewed_bytes = analysis_protocol_package_zip_bytes(analysis_package)
+        await protocol_version.upload_package(
+            BytesIO(reviewed_bytes), length=len(reviewed_bytes)
+        )
+    else:
+        zip_dir(protocol_path, package_zip_file)
+        await protocol_version.upload_package(package_file=package_zip_file)
+        background_tasks.add_task(os.remove, package_zip_file)
 
     # Replace the derived index atomically, independently of model availability.
     background_tasks.add_task(

@@ -77,7 +77,7 @@ def file_snapshot(file):
 
 
 def binding_payload(row):
-    return {
+    result = {
         "schema": "airalogy.workflow-file-binding.v1",
         **{
             key: str(getattr(row, key))
@@ -98,6 +98,11 @@ def binding_payload(row):
         "source_ref": row.source_ref,
         "snapshot": row.snapshot,
     }
+    if row.source_kind == "data_asset":
+        result["schema"] = "airalogy.workflow-file-binding.v2"
+        result["source_action_id"] = None
+        result["asset_input_id"] = str(row.asset_input_id)
+    return result
 
 
 def verify_binding_seal(row):
@@ -183,22 +188,26 @@ async def _authorize_binding(db, file_id, user):
     task = await db.get(ResearchTask, row.task_id)
     run = await db.get(ResearchRun, row.run_id)
     action = await db.get(ResearchAction, row.action_id)
-    source = await db.get(ResearchAction, row.source_action_id)
+    source = (
+        await db.get(ResearchAction, row.source_action_id)
+        if row.source_action_id
+        else None
+    )
     project = await db.get(Project, task.project_id) if task else None
     protocol = await db.get(Protocol, file.protocol_id)
     if (
         run is None
         or action is None
-        or source is None
+        or (row.source_kind != "data_asset" and source is None)
         or project is None
         or project.deleted_at is not None
         or protocol is None
         or protocol.deleted_at is not None
         or run.task_id != row.task_id
         or action.run_id != run.id
-        or source.run_id != run.id
+        or (source is not None and source.run_id != run.id)
         or protocol.project_id != project.id
-        or source.status != "completed"
+        or (source is not None and source.status != "completed")
         or str(row.workflow_revision_id)
         != ((run.environment_snapshot or {}).get("manual_workflow") or {}).get(
             "revision_id"
@@ -208,6 +217,34 @@ async def _authorize_binding(db, file_id, user):
     await check_user_permission(
         db, project=project, user=user, action="read_protocol", protocol=protocol
     )
+    if row.source_kind == "data_asset":
+        from app.models.workflow_asset import WorkflowRunAssetInput
+        from app.services.workflow_asset_runtime import (
+            asset_rows_for_run,
+            asset_source_ref,
+        )
+        from app.services.workflow_assets import authorize_asset_input
+
+        origin = await db.get(
+            WorkflowRunAssetInput, row.asset_input_id, populate_existing=True
+        )
+        selected, _ = await asset_rows_for_run(db, task=task, run=run)
+        if (
+            origin is None
+            or origin.input_id not in selected
+            or selected[origin.input_id].id != origin.id
+            or origin.run_id != run.id
+            or origin.task_id != task.id
+            or origin.workflow_revision_id != row.workflow_revision_id
+            or origin.blob_id != blob.id
+            or row.source_action_id is not None
+            or row.source_file_id is not None
+            or row.source_ref.get("origin") != asset_source_ref(origin)
+            or row.source_ref.get("source_path") != ["file"]
+        ):
+            raise HTTPException(409, "Workflow DataAsset file lineage changed")
+        await authorize_asset_input(db, origin, user)
+        return row, file, blob
     from app.services.research_action_outputs import (
         action_output_digest,
         action_output_payload,

@@ -1,5 +1,6 @@
 <template>
-  <div class="analysis-page py-8" data-testid="analysis-workbench">
+  <project-analysis-workbench v-if="projectScope && projectInfo" :key="projectInfo.id" :project-id="projectInfo.id" @single="changeAnalysisScope(false)" />
+  <div v-else class="analysis-page py-8" data-testid="analysis-workbench">
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div class="min-w-0">
         <div class="aira-type-eyebrow aira-type-eyebrow--accent">
@@ -12,9 +13,14 @@
           {{ $t("page.analysis.description") }}
         </p>
       </div>
-      <n-button :loading="loading" @click="refreshWorkspace">
-        {{ $t("common.refresh") }}
-      </n-button>
+      <div class="flex flex-wrap gap-2">
+        <n-button data-testid="analysis-open-project" @click="changeAnalysisScope(true)">
+          {{ $t('page.projectAnalysis.open') }}
+        </n-button>
+        <n-button :loading="loading" @click="refreshWorkspace">
+          {{ $t("common.refresh") }}
+        </n-button>
+      </div>
     </header>
 
     <n-alert type="info" class="mb-5">
@@ -224,6 +230,7 @@
               :selection="run.source_selection" :run="run"
               :available="Boolean(context?.ai_available && context.protocol_id === run.protocol_id)"
             />
+            <analysis-publication-panel v-if="builtinRun?.status === 'succeeded'" :key="builtinRun.id" :analysis-id="builtinRun.id" />
             <n-collapse class="mt-4">
               <n-collapse-item :title="$t('page.analysis.provenance')" name="sources">
                 <dl class="analysis-digests aira-type-meta">
@@ -411,6 +418,7 @@ import { useAuthStore } from "@/store/modules/auth"
 import { canAdoptAnalysisDraft } from "@/utils/analysis-ai"
 import { isBuiltinAnalysisRun, isComputeAnalysisRecipe } from "@/utils/analysis-compute"
 import { analysisFieldType, parseAnalysisFieldOperand } from "@/utils/analysis-context"
+import { isProjectAnalysis } from "@/utils/project-analysis"
 import { useProjectInfoStore } from "@/views/project-protocols/hooks/useProjectInfoStore"
 import { downloadAs } from "@airalogy/shared/utils"
 import { useDialog, useMessage } from "naive-ui"
@@ -419,14 +427,20 @@ import AnalysisAiPanel from "./components/analysis-ai-panel.vue"
 import AnalysisComputeForm from "./components/analysis-compute-form.vue"
 import AnalysisComputeReport from "./components/analysis-compute-report.vue"
 import AnalysisMethodPublishModal from "./components/analysis-method-publish-modal.vue"
+import AnalysisPublicationPanel from "./components/analysis-publication-panel.vue"
 import AnalysisResultCharts from "./components/analysis-result-charts.vue"
 import AnalysisResultTable from "./components/analysis-result-table.vue"
+import ProjectAnalysisWorkbench from "./components/project-analysis-workbench.vue"
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { projectInfo } = useProjectInfoStore()
+const projectScope = computed(() => route.query.scope === "project")
+async function changeAnalysisScope(project: boolean) {
+  await router.replace({ name: "project-analysis", params: { labUid: route.params.labUid, projectUid: route.params.projectUid }, query: project ? { scope: "project" } : {} })
+}
 const message = useMessage()
 const dialog = useDialog()
 const protocols = ref<ProtocolModels.ProjectProtocolInfo[]>([])
@@ -729,6 +743,14 @@ async function searchProtocols(name: string) {
   }
 }
 async function initialize() {
+  if (projectScope.value) {
+    initializationSequence += 1
+    reportSequence += 1
+    sequence += 1
+    if (pollTimer)
+      clearTimeout(pollTimer)
+    return
+  }
   if (!projectInfo.value)
     return
   loading.value = true
@@ -836,6 +858,11 @@ async function openRun(id: string, updateRoute = true) {
       return
     if (fetched.project_id !== projectId)
       throw new Error("Analysis report scope mismatch")
+    if (isProjectAnalysis(fetched)) {
+      run.value = null
+      await router.replace({ name: "project-analysis", params: { labUid: route.params.labUid, projectUid: route.params.projectUid }, query: { scope: "project", runId: fetched.id } })
+      return
+    }
     run.value = fetched
     if (updateRoute)
       await router.replace({ name: "project-analysis", params: { labUid: route.params.labUid, projectUid: route.params.projectUid }, query: { protocolId: fetched.protocol_id, runId: fetched.id } })
@@ -1001,7 +1028,7 @@ async function openSource(source: AnalysisSource) {
     loadError.value = errorText(error)
   }
 }
-watch(() => projectInfo.value?.id, () => void initialize(), { immediate: true })
+watch(() => [projectInfo.value?.id, projectScope.value], () => void initialize(), { immediate: true })
 onBeforeUnmount(() => {
   sequence += 1
   initializationSequence += 1

@@ -1,4 +1,8 @@
-import type { AnalysisResult } from "@/service/api/analysis"
+import type { AnalysisGroup, AnalysisResult } from "@/service/api/analysis"
+
+export function analysisGroupLabel(group: AnalysisGroup, ungroupedLabel: string, missingLabel: string): string {
+  return group.key.length ? group.key.map(item => `${item.field}: ${item.value === null ? missingLabel : String(item.value)}`).join(" · ") : ungroupedLabel
+}
 
 export interface AnalysisChartPoint {
   groupIndex: number

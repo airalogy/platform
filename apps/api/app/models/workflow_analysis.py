@@ -34,6 +34,17 @@ class WorkflowAnalysisMethod(Base):
             "source_schema_digest ~ '^[0-9a-f]{64}$'",
             name="ck_workflow_analysis_method_schema",
         ),
+        CheckConstraint(
+            "(engine_version = 'airalogy.project-analysis.v1' "
+            "AND protocol_id IS NULL AND protocol_version_id IS NULL "
+            "AND project_contract::jsonb <> '{}'::jsonb "
+            "AND input_fields::jsonb = '[]'::jsonb "
+            "AND compute_contract::jsonb = '{}'::jsonb) OR "
+            "(engine_version <> 'airalogy.project-analysis.v1' "
+            "AND protocol_id IS NOT NULL AND protocol_version_id IS NOT NULL "
+            "AND project_contract::jsonb = '{}'::jsonb)",
+            name="ck_workflow_analysis_method_project_scope",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -42,10 +53,10 @@ class WorkflowAnalysisMethod(Base):
     project_id: Mapped[UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
     )
-    protocol_id: Mapped[UUID] = mapped_column(
+    protocol_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("protocols.id", ondelete="RESTRICT")
     )
-    protocol_version_id: Mapped[UUID] = mapped_column(
+    protocol_version_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("protocol_versions.id", ondelete="RESTRICT")
     )
     source_pipeline_revision_id: Mapped[UUID] = mapped_column(
@@ -59,6 +70,9 @@ class WorkflowAnalysisMethod(Base):
     compute_contract: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict, server_default="{}"
     )
+    project_contract: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     source_schema_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(
@@ -69,6 +83,35 @@ class WorkflowAnalysisMethod(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class WorkflowAnalysisMethodProjectVersion(Base):
+    """Protected identities for every explicitly selected Project input version."""
+
+    __tablename__ = "workflow_analysis_method_project_versions"
+    __table_args__ = (
+        CheckConstraint(
+            "slot_id ~ '^[a-z][a-z0-9_]{0,23}$'",
+            name="ck_workflow_project_method_slot",
+        ),
+        CheckConstraint(
+            "schema_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_workflow_project_method_schema",
+        ),
+    )
+
+    method_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_analysis_methods.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    slot_id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    protocol_version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocol_versions.id", ondelete="RESTRICT"), primary_key=True
+    )
+    protocol_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocols.id", ondelete="RESTRICT"), index=True
+    )
+    schema_digest: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class ResearchAnalysisAction(Base):

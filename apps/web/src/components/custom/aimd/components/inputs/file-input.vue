@@ -12,6 +12,7 @@
         text
         type="error"
         size="small"
+        :disabled="uploadProps.disabled"
         @click="handleRemove"
       >
         <template #icon>
@@ -69,6 +70,8 @@
     v-else
     v-bind="uploadProps"
     :ref="(el: any) => handleRef(`${props.scope}_${props.prop}`, el, props.type, {}, true)"
+    class="aimd-inline-file-input"
+    data-testid="aimd-inline-file-input"
     :info="props.info"
     :file-type="fileType"
     :any-of-schemas="anyOfSchemas"
@@ -112,9 +115,9 @@ import type { UploadFileInfo } from "naive-ui"
 import type { JsonSchema } from "../../types/aimd-types"
 import type { IAIMDInputProps } from "../../types/props"
 import { getCachedAttachment } from "@/service/api/attachments"
+import { aimdFileReference, loadCurrentAimdFileMetadata } from "@/utils/aimd-files"
 import { FileTypeIcon } from "@airalogy/components"
 import CsvPreview from "@airalogy/components/file-preview/csv-preview.vue"
-import { getFileExtensionFromBasename, getMIMEByExtension } from "@airalogy/shared/utils"
 import IconDownload from "~icons/ion/download-outline"
 import IconOpen from "~icons/ion/open-outline"
 import IconDelete from "~icons/ion/trash-outline"
@@ -127,7 +130,7 @@ interface IEmits {
   (e: "schemaChange", schema: JsonSchema): void
 }
 
-const { effectiveType, uploadProps, previewFileRecord, handleFileChange, handleUploadFile, handleRename, handleRef, handleSchemaChange: innerHandleSchemaChange, anyOfSchemas } = useInputProps(props)
+const { effectiveType, uploadProps, previewFileRecord, handleFileChange, handleUploadFile, handleFileMetadata, handleRename, handleRef, handleSchemaChange: innerHandleSchemaChange, anyOfSchemas } = useInputProps(props)
 const fileType = computed(() => effectiveType.value as IFileType)
 const currentFile = computed(() => uploadProps.value.fileList?.[0] as UploadFileInfo | undefined)
 const showImagePreview = ref(false)
@@ -140,7 +143,7 @@ function handleSchemaChange(schema: JsonSchema) {
 }
 
 function handleRemove() {
-  if (!currentFile.value) {
+  if (uploadProps.value.disabled || !currentFile.value) {
     return
   }
 
@@ -183,23 +186,13 @@ function handlePreview(file: UploadFileInfo) {
 }
 
 // Handle string value (airalogy_file_id) - load file info from cache/API
-watchEffect(async () => {
+watchEffect(async (onCleanup) => {
   const { scope, prop, model, info } = props
-  const modelValue = model.value
-
-  // Check if the value is a string (airalogy_file_id)
-  let fileAiralogyId: string | undefined
-
-  if (typeof modelValue === "string" && modelValue.startsWith("airalogy.id.file.")) {
-    fileAiralogyId = modelValue
-  }
-  else if (typeof modelValue === "object" && modelValue?.airalogy_file_id) {
-    // Already have file object, check if it needs URL
-    if (modelValue.url) {
-      return // Already have complete file info
-    }
-    fileAiralogyId = modelValue.airalogy_file_id
-  }
+  const fileAiralogyId = aimdFileReference(model.value)
+  let active = true
+  onCleanup(() => {
+    active = false
+  })
 
   if (!fileAiralogyId) {
     return
@@ -207,42 +200,42 @@ watchEffect(async () => {
 
   // Check if file is already in the fileList
   const existingFile = uploadProps.value.fileList?.find((file: any) =>
-    file.airalogy_file_id === fileAiralogyId || file.url,
+    file.airalogy_file_id === fileAiralogyId && file.name && file.url,
   )
   if (existingFile) {
     return
   }
 
   // Load file info from cache/API
-  const data = await getCachedAttachment(fileAiralogyId)
+  const data = await loadCurrentAimdFileMetadata(() => props.model.value, getCachedAttachment, () => active)
   if (!data) {
     return
   }
 
-  const { filename, url, airalogy_file_id } = data
-  const mime = getMIMEByExtension(getFileExtensionFromBasename(filename) || "")
-  const fileInfoData: UploadFileInfo & { airalogy_file_id: string, thumbnailUrl?: string } = {
-    status: "finished",
-    url,
-    thumbnailUrl: url,
-    id: airalogy_file_id,
-    name: filename,
-    airalogy_file_id,
-    type: mime,
-  }
-
-  // Update file list through handleFileChange
-  handleFileChange({
+  // Hydrate only this still-current FileId. This is not a new upload and must
+  // never enqueue calculations merely because a file card became visible.
+  handleFileMetadata({
     scope,
     prop,
-    fileInfo: { file: fileInfoData, fileList: [fileInfoData] },
-    id: props.id,
+    file: data,
     info,
   })
 })
 </script>
 
 <style scoped lang="sass">
+.aimd-inline-file-input
+  max-width: 100% !important
+  min-width: 0 !important
+  overflow-wrap: anywhere
+
+  :deep(.platform-aimd-file-preview .n-card-header__main)
+    min-width: 0
+
+  :deep(.platform-aimd-file-preview .n-card-header__main > div > div)
+    min-width: 0
+    flex-wrap: wrap
+
 .file-card
   display: flex
   flex-direction: column

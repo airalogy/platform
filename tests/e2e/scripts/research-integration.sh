@@ -19,6 +19,11 @@ test_files=(
   tests/test_research_integration.py
   tests/test_resource_postgres.py
   tests/test_record_analysis_postgres.py
+  tests/test_project_analyses_postgres.py
+  tests/test_project_analysis_migrations_postgres.py
+  tests/test_analysis_publication_postgres.py
+  tests/test_analysis_publication_knowledge_postgres.py
+  tests/test_analysis_evidence_review_postgres.py
   tests/test_record_analysis_ai_postgres.py
   tests/test_record_analysis_compute_postgres.py
   tests/test_analysis_compute_files_postgres.py
@@ -33,6 +38,9 @@ test_files=(
   tests/test_workflow_analysis_methods_postgres.py
   tests/test_workflow_analysis_runtime_postgres.py
   tests/test_workflow_analysis_lifecycle_postgres.py
+  tests/test_workflow_project_methods_postgres.py
+  tests/test_workflow_project_runtime_postgres.py
+  tests/test_analysis_protocol_drafts_postgres.py
   tests/test_workflow_compute_methods_postgres.py
   tests/test_workflow_compute_runtime_postgres.py
   tests/test_workflow_compute_r_postgres.py
@@ -40,6 +48,8 @@ test_files=(
   tests/test_workflow_conversions_postgres.py
   tests/test_lab_workflow_file_cleanup_postgres.py
   tests/test_workflow_files_postgres.py
+  tests/test_workflow_asset_migrations_postgres.py
+  tests/test_workflow_asset_runtime_postgres.py
   tests/test_research_asset_visibility_postgres.py
   tests/test_research_context_visibility_postgres.py
 )

@@ -12,7 +12,9 @@ alter node identity or the execution contract. Neither digest grants permission.
 
 Data bindings describe bounded, one-to-one Protocol values, separate from
 control edges. Version 4 file references require an independently authorized and
-sealed runtime receipt. A caller must resolve exact source Records and validate
+sealed runtime receipt. Version 5 DataAsset inputs are resources, never synthetic
+execution nodes; their exact versions are sealed separately for each Run.
+A caller must resolve exact source Records and validate
 the target Schema before dispatch. Accepting a valid graph is not a
 promise that every node kind/condition is supported by an execution adapter.
 """
@@ -43,6 +45,8 @@ from pydantic import (
 MAX_WORKFLOW_NODES = 64
 MAX_WORKFLOW_EDGES = 256
 MAX_WORKFLOW_BINDINGS = 128
+MAX_WORKFLOW_ASSET_INPUTS = 32
+MAX_WORKFLOW_ASSET_PATH_KEYS = 16
 MAX_ANALYSIS_OUTPUTS = 128
 MAX_INITIAL_VALUE_BYTES = 128 * 1024
 MAX_GRAPH_BYTES = 1024 * 1024
@@ -118,6 +122,16 @@ class WorkflowPosition(_WorkflowModel):
 class WorkflowAnalysisRecordSource(_WorkflowModel):
     source_node_id: WorkflowIdentifier
     cardinality: Literal["one"] = "one"
+    slot_id: Annotated[StrictStr, Field(pattern=r"^[a-z][a-z0-9_]{0,23}$")] | None = (
+        None
+    )
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_source_json(self, handler):
+        result = handler(self)
+        if self.slot_id is None:
+            result.pop("slot_id", None)
+        return result
 
 
 class WorkflowAnalysisOutput(_WorkflowModel):
@@ -155,6 +169,24 @@ class WorkflowAnalysisOutput(_WorkflowModel):
             raise WorkflowContractError("Analysis output fields must not be blank")
         _bounded_json(self.model_dump(mode="json"), 16 * 1024)
         return self
+
+
+class WorkflowProjectLocalSource(_WorkflowModel):
+    kind: Literal["local"]
+    slot_id: Annotated[StrictStr, Field(pattern=r"^[a-z][a-z0-9_]{0,23}$")]
+
+
+class WorkflowProjectJoinSource(_WorkflowModel):
+    kind: Literal["join"]
+
+
+class WorkflowProjectAnalysisOutput(WorkflowAnalysisOutput):
+    """Choose a stable local slot or the explicit joined report, never an index."""
+
+    source: Annotated[
+        WorkflowProjectLocalSource | WorkflowProjectJoinSource,
+        Field(discriminator="kind"),
+    ]
 
 
 class WorkflowComputeOutput(_WorkflowModel):
@@ -217,7 +249,10 @@ class WorkflowNode(_WorkflowModel):
     analysis_outputs: list[WorkflowAnalysisOutput] = Field(
         default_factory=list, max_length=MAX_ANALYSIS_OUTPUTS
     )
-    analysis_kind: Literal["compute"] | None = None
+    analysis_kind: Literal["compute", "project"] | None = None
+    project_outputs: list[WorkflowProjectAnalysisOutput] = Field(
+        default_factory=list, max_length=MAX_ANALYSIS_OUTPUTS
+    )
     compute_outputs: list[WorkflowComputeOutput] = Field(
         default_factory=list, max_length=MAX_ANALYSIS_OUTPUTS
     )
@@ -228,6 +263,8 @@ class WorkflowNode(_WorkflowModel):
     @model_serializer(mode="wrap")
     def preserve_legacy_node_json(self, handler):
         result = handler(self)
+        if not self.project_outputs:
+            result.pop("project_outputs", None)
         if not self.compute_file_outputs:
             # Additive v4 fields cannot alter sealed v1/v2/v3 graphs.
             result.pop("compute_file_outputs", None)
@@ -254,6 +291,7 @@ class WorkflowNode(_WorkflowModel):
     @field_validator(
         "record_sources",
         "analysis_outputs",
+        "project_outputs",
         "compute_outputs",
         "compute_file_outputs",
         mode="before",
@@ -286,6 +324,7 @@ class WorkflowNode(_WorkflowModel):
                 or self.input_policy is not None
                 or self.analysis_outputs
                 or self.analysis_kind is not None
+                or self.project_outputs
                 or self.compute_outputs
                 or self.compute_file_outputs
             ):
@@ -299,6 +338,33 @@ class WorkflowNode(_WorkflowModel):
         ):
             raise WorkflowContractError("Analysis nodes cannot contain Protocol inputs")
         elif self.method_publication_id is not None:
+            if self.analysis_kind == "project":
+                if (
+                    self.analysis_outputs
+                    or self.compute_outputs
+                    or self.compute_file_outputs
+                ):
+                    raise WorkflowContractError(
+                        "Project nodes cannot contain builtin or Compute outputs"
+                    )
+                if any(source.slot_id is None for source in self.record_sources):
+                    raise WorkflowContractError(
+                        "Project analysis requires every Record source slot"
+                    )
+                if (
+                    not 2
+                    <= len({source.slot_id for source in self.record_sources})
+                    <= 8
+                ):
+                    raise WorkflowContractError(
+                        "Project analysis requires 2 to 8 source slots"
+                    )
+            elif self.project_outputs or any(
+                source.slot_id is not None for source in self.record_sources
+            ):
+                raise WorkflowContractError(
+                    "Project source slots and outputs require a Project node"
+                )
             if self.analysis_kind == "compute" and self.analysis_outputs:
                 raise WorkflowContractError(
                     "Compute nodes cannot contain builtin statistic outputs"
@@ -326,6 +392,7 @@ class WorkflowNode(_WorkflowModel):
                     *self.analysis_outputs,
                     *self.compute_outputs,
                     *self.compute_file_outputs,
+                    *self.project_outputs,
                 )
             ]
             if len(output_ids) != len(set(output_ids)):
@@ -336,6 +403,7 @@ class WorkflowNode(_WorkflowModel):
             or self.input_policy is not None
             or self.analysis_outputs
             or self.analysis_kind is not None
+            or self.project_outputs
             or self.compute_outputs
             or self.compute_file_outputs
         ):
@@ -454,6 +522,77 @@ class WorkflowBinding(_WorkflowModel):
         return self
 
 
+class WorkflowAssetInput(_WorkflowModel):
+    """A public input slot, not a private DataAsset identifier or an Action."""
+
+    input_id: WorkflowIdentifier
+    label: StrictStr = Field(min_length=1, max_length=255)
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        if not value.strip():
+            raise WorkflowContractError("Workflow asset input labels must not be blank")
+        return value
+
+
+class WorkflowAssetBinding(_WorkflowModel):
+    """One verified DataAsset file or JSON scalar into a Protocol variable.
+
+    ``json`` addresses literal object keys in the actual managed JSON document;
+    ``file`` addresses the whole verified file, not a string found inside JSON.
+    These resources do not require or create a control dependency.
+    """
+
+    binding_id: WorkflowIdentifier
+    input_id: WorkflowIdentifier
+    source_path: list[Annotated[StrictStr, Field(min_length=1, max_length=255)]] = (
+        Field(min_length=1, max_length=MAX_WORKFLOW_ASSET_PATH_KEYS + 1)
+    )
+    target_node_id: WorkflowIdentifier
+    target_path: list[Annotated[StrictStr, Field(min_length=1, max_length=255)]] = (
+        Field(min_length=2, max_length=2)
+    )
+    value_type: WorkflowValueType
+    unit: StrictStr | None = Field(default=None, min_length=1, max_length=255)
+    cardinality: Literal["one"] = "one"
+
+    @field_validator("source_path", "target_path", mode="before")
+    @classmethod
+    def validate_paths(cls, value: Any) -> list[str]:
+        if type(value) is not list:
+            raise WorkflowContractError("Workflow asset paths must be JSON key arrays")
+        return value
+
+    @model_validator(mode="after")
+    def validate_asset_binding(self):
+        if self.source_path != ["file"] and (
+            len(self.source_path) < 2 or self.source_path[0] != "json"
+        ):
+            raise WorkflowContractError(
+                "Workflow asset source paths require ['file'] or ['json', literal keys...]"
+            )
+        if self.target_path[0] != "var" or any(
+            not segment.strip() for segment in (*self.source_path, *self.target_path)
+        ):
+            raise WorkflowContractError(
+                "Workflow asset targets require ['var', literal field key] and nonblank paths"
+            )
+        if (self.source_path == ["file"]) != (self.value_type == "file"):
+            raise WorkflowContractError(
+                "Whole-file asset inputs require a file port; JSON inputs require a scalar port"
+            )
+        if self.unit is not None and (
+            self.value_type not in {"number", "integer"}
+            or self.unit != self.unit.strip()
+            or not self.unit.strip()
+        ):
+            raise WorkflowContractError(
+                "Only numeric asset bindings may declare a nonblank exact unit"
+            )
+        return self
+
+
 def _topological_nodes(
     nodes: list[WorkflowNode], edges: list[WorkflowEdge]
 ) -> list[str]:
@@ -491,7 +630,7 @@ def _topological_nodes(
 
 
 class WorkflowGraph(_WorkflowModel):
-    schema_version: Literal[1, 2, 3, 4] = 1
+    schema_version: Literal[1, 2, 3, 4, 5, 6] = 1
     nodes: list[WorkflowNode] = Field(min_length=1, max_length=MAX_WORKFLOW_NODES)
     edges: list[WorkflowEdge] = Field(
         default_factory=list, max_length=MAX_WORKFLOW_EDGES
@@ -499,17 +638,39 @@ class WorkflowGraph(_WorkflowModel):
     bindings: list[WorkflowBinding] = Field(
         default_factory=list, max_length=MAX_WORKFLOW_BINDINGS
     )
+    asset_inputs: list[WorkflowAssetInput] = Field(
+        default_factory=list, max_length=MAX_WORKFLOW_ASSET_INPUTS
+    )
+    asset_bindings: list[WorkflowAssetBinding] = Field(
+        default_factory=list, max_length=MAX_WORKFLOW_BINDINGS
+    )
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_graph_json(self, handler):
+        result = handler(self)
+        if (
+            self.schema_version < 5
+            and not self.asset_inputs
+            and not self.asset_bindings
+        ):
+            # Empty v5 defaults must not alter any sealed v1-v4 JSON/digest.
+            # Nonempty mutated containers remain visible for trust-boundary validation.
+            result.pop("asset_inputs", None)
+            result.pop("asset_bindings", None)
+        return result
 
     @field_validator("schema_version", mode="before")
     @classmethod
     def validate_schema_version(cls, value: Any) -> int:
-        if type(value) is not int or value not in {1, 2, 3, 4}:
+        if type(value) is not int or value not in {1, 2, 3, 4, 5, 6}:
             raise WorkflowContractError(
-                "Workflow schema_version must be integer 1, 2, 3 or 4"
+                "Workflow schema_version must be integer 1, 2, 3, 4, 5 or 6"
             )
         return value
 
-    @field_validator("nodes", "edges", "bindings", mode="before")
+    @field_validator(
+        "nodes", "edges", "bindings", "asset_inputs", "asset_bindings", mode="before"
+    )
     @classmethod
     def validate_lists(cls, value: Any) -> list[Any]:
         if type(value) is not list:
@@ -518,12 +679,32 @@ class WorkflowGraph(_WorkflowModel):
 
     @model_validator(mode="after")
     def validate_graph(self):
+        if self.schema_version < 5 and (
+            self.asset_inputs
+            or self.asset_bindings
+            or {"asset_inputs", "asset_bindings"} & self.model_fields_set
+        ):
+            raise WorkflowContractError(
+                "DataAsset inputs require Workflow schema_version 5"
+            )
         _topological_nodes(self.nodes, self.edges)
         by_node = {node.node_id: node for node in self.nodes}
         direct_edges = {
             (edge.source_node_id, edge.target_node_id) for edge in self.edges
         }
         for node in self.nodes:
+            if self.schema_version < 6 and (
+                node.analysis_kind == "project"
+                or node.project_outputs
+                or "project_outputs" in node.model_fields_set
+                or any(
+                    "slot_id" in source.model_fields_set
+                    for source in node.record_sources
+                )
+            ):
+                raise WorkflowContractError(
+                    "Project analysis ports require Workflow schema_version 6"
+                )
             if self.schema_version < 4 and (
                 node.compute_file_outputs
                 or "compute_file_outputs" in node.model_fields_set
@@ -548,6 +729,7 @@ class WorkflowGraph(_WorkflowModel):
                     raise WorkflowContractError(
                         "Workflow analysis requires a Project method publication"
                     )
+                slot_protocols = {}
                 for reference in node.record_sources:
                     source = by_node.get(reference.source_node_id)
                     if source is None or source.kind != "protocol":
@@ -558,7 +740,21 @@ class WorkflowGraph(_WorkflowModel):
                         raise WorkflowContractError(
                             "Analysis Record sources require direct control dependencies"
                         )
-        binding_ids = [binding.binding_id for binding in self.bindings]
+                    if node.analysis_kind == "project" and (
+                        slot_protocols.setdefault(reference.slot_id, source.protocol_id)
+                        != source.protocol_id
+                    ):
+                        raise WorkflowContractError(
+                            "One Project input slot cannot mix Protocols"
+                        )
+                if len(set(slot_protocols.values())) != len(slot_protocols):
+                    raise WorkflowContractError(
+                        "Project input slots require distinct Protocols"
+                    )
+        all_bindings = [*self.bindings, *self.asset_bindings]
+        if len(all_bindings) > MAX_WORKFLOW_BINDINGS:
+            raise WorkflowContractError("Workflow bindings exceed the combined limit")
+        binding_ids = [binding.binding_id for binding in all_bindings]
         if len(set(binding_ids)) != len(binding_ids):
             raise WorkflowContractError("Workflow binding IDs must be unique")
         targets: set[tuple[str, tuple[str, ...]]] = set()
@@ -592,6 +788,7 @@ class WorkflowGraph(_WorkflowModel):
                     *source.analysis_outputs,
                     *source.compute_outputs,
                     *source.compute_file_outputs,
+                    *source.project_outputs,
                 )
             }:
                 raise WorkflowContractError(
@@ -610,6 +807,29 @@ class WorkflowGraph(_WorkflowModel):
             if binding.target_path[1] in target.initial_values:
                 raise WorkflowContractError(
                     "Workflow bindings cannot overwrite explicit initial values"
+                )
+        input_ids = [item.input_id for item in self.asset_inputs]
+        if len(set(input_ids)) != len(input_ids):
+            raise WorkflowContractError("Workflow asset input IDs must be unique")
+        if {binding.input_id for binding in self.asset_bindings} != set(input_ids):
+            raise WorkflowContractError(
+                "Workflow asset inputs must be declared and used exactly by their bindings"
+            )
+        for binding in self.asset_bindings:
+            target = by_node.get(binding.target_node_id)
+            if target is None or target.kind != "protocol":
+                raise WorkflowContractError(
+                    "Workflow asset bindings require an existing Protocol target"
+                )
+            target_identity = (binding.target_node_id, tuple(binding.target_path))
+            if target_identity in targets:
+                raise WorkflowContractError(
+                    "Workflow binding target fields must be unique across all sources"
+                )
+            targets.add(target_identity)
+            if binding.target_path[1] in target.initial_values:
+                raise WorkflowContractError(
+                    "Workflow asset bindings cannot overwrite explicit initial values"
                 )
         _bounded_json(self.model_dump(mode="json"), MAX_GRAPH_BYTES)
         return self
@@ -657,6 +877,14 @@ def workflow_execution_digest(graph: WorkflowGraph) -> str:
     payload["bindings"] = sorted(
         payload["bindings"], key=lambda item: item["binding_id"]
     )
+    if validated.schema_version >= 5:
+        payload["asset_inputs"] = sorted(
+            [{"input_id": item.input_id} for item in validated.asset_inputs],
+            key=lambda item: item["input_id"],
+        )
+        payload["asset_bindings"] = sorted(
+            payload["asset_bindings"], key=lambda item: item["binding_id"]
+        )
     return hashlib.sha256(_bounded_json(payload, MAX_GRAPH_BYTES)).hexdigest()
 
 

@@ -136,6 +136,10 @@ Compute 方法可通过 `input_files` 明确声明稳定输入标识及字面量
 
 旧 `ProtocolWorkflow` 仍是独立私有执行对象。`/workflow-conversions` 要求归属与项目权限、当前来源摘要、明确的准确版本选择及有向连线；自由文本、执行路径和历史 Records 保留在原对象，不进入新可执行图。预览确认创建普通新定义/修订，以及私有不可变 `WorkflowLegacyConversion` 回执（0067）。幂等确认返回原转换结果，之后编辑不会改写该次转换。旧查看/继续路由保留，不隐式解释自由文本或移动执行状态。
 
+图 Schema v5 / 执行契约 v6 增加独立的 `asset_inputs` 与 `asset_bindings`，不把数据资产当作执行节点或控制连线。共享定义只保存输入槽和类型化映射，不保存私有资产 ID。Run 预览必须逐槽选择准确 `DataAssetVersion`，校验当前 Project、源文件权限、实际托管字节及完整本地 JSON Schema，再封存 `WorkflowRunAssetInput`。完整文件生成保留源授权的文件别名；受限的 JSON 字面对象键路径提供严格类型的标量。元数据不视为科研数据，不支持外部 URL 抓取、自动选最新版、隐式类型转换或单位换算。
+
+每个接收输入的卡片，包括根卡片，都生成不可变解析回执并要求确认实际输入。确认、执行/恢复及派生内容读取时持续检查源权限和归档状态。后续新版本进入草稿既不会使已确认的旧版本输入失效，也不会替换它。Record、SDK 与导出文件路径继续校验源权限。迁移 0071 增加不可变回执及互斥文件来源类型，存在 v5 图或输入回执时拒绝降级。按 Lab 精确清理时先移除相关逻辑别名和输入回执，不删除共享 Blob。该能力使用已有数据资产，不是新的通用上传服务或数组/对象绑定引擎。
+
 ## 人机协作
 
 物理实验是一个异步执行器，不是 AI 流程中的特例：
@@ -216,7 +220,7 @@ Knowledge 到方法的流转必须显式并固定版本。获授权用户先预�
 
 已完成的结构化 Action 输出有独立的晋升边界。获授权用户选择已完成 Action，预览准确输出摘要后确认创建待审核 Evidence。Platform 会锁定 Action，封存一份只可追加的快照，其中包含 Task、Run、Action 修订、类型、输出和规范 SHA-256 摘要；读取及结果包导出都会验证该摘要。在人员审核待定 Evidence 前，系统不会将该输出认定为科学上有效。这使 Tool、Instrument、Resource、Wait、External Service 和 Compute 结果可成为可审计的科研来源，同时不把它们伪装成 Record，也不静默视为事实。结构化 Human Work 将提交审核本身作为这道边界：接受时封存同样的不可变 Action 输出并直接创建已校验 Evidence，因此执行人的提交永远不能自我验证。
 
-反向流转必须经过 Evidence 门禁。具有 Knowledge 写权限的 Project 成员只能选择已校验、且指向准确 Record、DataAsset 版本或不可变 Action 输出快照的 Evidence；在预览保存位置和来源集合后，可创建 Project 范围的可编辑 Suggested Knowledge。确认时会锁定并重新校验每条 Evidence，将预览摘要与审核状态和不可变来源版本绑定，同时保存来源快照和准确的 `Evidence → Knowledge revision` 关系。该结果仍是候选认识，只有通过独立 Knowledge 审核权限才能成为组织已采纳的 Knowledge。待审核或已拒绝 Evidence、外部链接、Paper 及既有 Knowledge 都不能从该路径进入，且整个流程不依赖 AI。
+反向流转必须经过 Evidence 门禁。具有 Knowledge 写权限的 Project 成员只能选择已校验、且指向准确 Record、DataAsset 版本、不可变 Action 输出快照或显式发布的不可变 `AnalysisEvidencePublication` 的 Evidence；在预览保存位置和来源集合后，可创建 Project 范围的可编辑 Suggested Knowledge。分析发布须单独确认创建副本，不支持直接引用私有原报告。确认时会锁定并重新校验每条 Evidence，将预览摘要与审核状态和不可变来源版本绑定，同时保存来源快照和准确的 `Evidence → Knowledge revision` 关系。该结果仍是候选认识，只有通过独立 Knowledge 审核权限才能成为组织已采纳的 Knowledge。待审核或已拒绝 Evidence、外部链接、Paper 及既有 Knowledge 都不能从该路径进入，且整个流程不依赖 AI。
 
 Protocol 演进使用独立的方法改进门禁。获授权用户选择已固定到 Research Task 的 Protocol 版本，再选择已校验的 Record、DataAsset 或不可变 Action 输出 Evidence；系统会先预览准确版本、Evidence 快照、科学依据和建议改动，然后创建待审核的 `Protocol Improvement Proposal`。AI 可用时，Aira 可以基于同一固定上下文生成可编辑的标题、依据和修改建议。模型调用期间不保持数据库事务；模型返回后 Platform 会重新校验来源，并签发同时绑定用户、Task、Protocol、上下文和有效期的凭据。用户预览和确认时会再次验证签名凭据与准确生成快照，而且一个生成 ID 只能确认一次。用户仍可编辑内容，来源记录为 Aira 辅助，而不是 AI 审核。同时具备科研审批权和该 Protocol 更新权的人员采纳建议后，现有 Protocol Editor 才会进入可编辑的新版本草稿。最终保存时会重新锁定建议和 Protocol，确保已审核修订未变、未被使用，且 Protocol 没有超过所固定的基线版本。保存成功会生成普通的更高 Protocol 版本，将建议标记为已应用，并记录准确的 Evidence → 改进建议 → Protocol 新版本来源链。既有版本和正在运行的 Run 固定环境不会被改写。AI 关闭时，完整手工路径仍然可用。
 
@@ -271,6 +275,42 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 运行时契约仅允许 Gateway 在 TLS 下主动领取。Gateway 使用 `X-Airalogy-Gateway-Token` 鉴权并调用 `POST /instrument-gateway/v1/jobs/lease`；成功响应包含规范化 `airalogy.instrument-job.v1` 信封、作业专用租约密钥和 HMAC-SHA256 签名。Gateway 以 `SHA256(Gateway 密钥)` 作为 HMAC 密钥验签，之后只通过 `X-Airalogy-Instrument-Lease` 传递租约密钥，调用 `start`、`heartbeat`、`complete`、`fail` 或 `stopped`。密钥不允许出现在查询参数或设备指令载荷中。心跳返回 `stop_requested: true` 时，适配器必须调用设备特定的安全停止程序，然后确认 `stopped`。
 
 仓库在 `apps/instrument-gateway` 提供独立、仅依赖 Python 标准库的 Gateway 运行时和适配器 SDK。它拒绝跨源重定向、无效签名、过期信封，以及未被本地独立安装适配器按准确版本允许的指令。设备启动前，唯一活动租约会以仅属主可读权限原子记录；完成、失败和停止确认可在网络结果不确定时幂等重放。进程若在物理执行可能仍在进行时重启，必须先调用适配器的幂等安全停止，再与 Platform 对账。关机、控制链路中断、安全停止失败或执行线程无法停止时，进程都不得领取下一项作业。Platform 下发代码和任意 shell 执行不属于此边界。
+
+## 多来源 Workflow 分析契约
+
+发布方法响应中的 `project_input_fields` 由服务端同一 Schema 解释器派生，供字段及分组选择使用；原始 `versions[].fields` 仍为 AIMD 元数据映射。派生目录不写入方法内容或改变已封存摘要，前端不另建 Schema 解析规则。
+
+图 Schema v6 / 执行契约 v7 增加明确的 Project 分析输入槽。同一 `WorkflowAnalysisMethod` 通过封存的 `project_contract` 保存每槽准确 Protocol 及允许的 Schema 版本，不伪造单一 Protocol 身份。迁移 0073 通过不可变的 `WorkflowAnalysisMethodProjectVersion` 外键保护版本引用。发布先将引用字段与原方法含义比较，包括单位和枚举，再固定明确选择的兼容版本；30 分钟签名预览绑定用户、目标范围和内容，已成功确认的幂等恢复不重新发布过期命令。
+
+每张来源卡片只属于一个槽；同槽可接收该 Protocol 的多次独立执行，但同一 Record 即使修订不同也不能重复计入。全部声明的直接前置须激活且完成。解析封存准确的节点、槽、Record 修订映射，各来源快照保留独立 Schema。Task 只固定实际使用的 Protocol 版本，不需固定发布契约允许的全部版本。审批、工作器开始/完成、恢复和报告读取复用普通分析生命周期并检查全部来源权限。明确选择的单来源或关联统计映射成命名标量输出；不选输出即仅生成报告。旧图和发布摘要省略新增空字段。存在 Project 方法或 v6 图时拒绝破坏性降级，保留既有受保护历史的删除限制。
+
+## 经过审核的分析 Protocol 资产
+
+显式发布的 `WorkflowAnalysisMethod` 可通过 `/analysis-protocol-drafts` 提升为普通 Protocol 资产。这是资产治理路径，不是新的科学计算引擎：不会启动 AnalysisRun、创建实验 Record 或宣告科学结论成立。当前编译器支持 `airalogy.analysis.v1` 和 `airalogy.project-analysis.v1`；Compute 方法提升，包括 Python 和 R，明确暂不支持。已有受治理的 Compute 与 Workflow 分析执行仍保持独立，不因方法提升而改变。
+
+迁移 0074 增加 `AnalysisProtocolDraft`、不可变的 `AnalysisProtocolDraftRevision` 与 `AnalysisProtocolDraftReview`，以及准确版本上的 `AnalysisProtocolMethodLink`。草稿固定一份已发布方法和一个 Project：在本项目新建 Protocol，或固定已有目标 Protocol 与准确的当前基线版本。更新须保留 Protocol 标识并明确增加版本号，基线变化时拒绝继续。作者修改会追加修订并恢复为 Draft，审核决定和已应用的发布仍保留为历史事实；Applied 草稿为终态。数据库约束保护来源/目标范围、审核/包身份及提交时状态完整性，存在这些资产时拒绝破坏性降级。
+
+可移植包只包含三个根级 UTF-8 文件：`protocol.toml`、`protocol.aimd` 和 `analysis-method.json`。元数据、普通 AIMD 说明和声明式字段可编辑；清单固定到已发布方法的计算配方，标识为 `airalogy.analysis-protocol-method.v1`。其中仅保留引用标量字段的类型、单位、枚举与明确的 Project 输入槽/关联语义，不包含原始 Protocol/Version/Record 身份、私有 pipeline 身份、原问题、结果、AI 历史或无关的完整 Schema。标签与字面筛选常量仍须经过披露检查；包既不授予输入权限，也不构成可执行 Workflow 节点绑定的授权。
+
+编译器复用现有配方与 Schema 校验，不伪造 Record。读取器限制文件数量、文件名、展开后字节数、UTF-8 和 ZIP 条目类型，拒绝路径穿越、重复条目、可执行附件与符号链接。AIMD 只解析不执行，拒绝连接/赋值器块，并将生成模型的 AST 限制为声明式内置类型和字面字段参数。内容摘要覆盖排序后的文件名、准确 UTF-8 字节长度及哈希，不受 ZIP 时间戳影响；CRLF 也保留在准确字节中。另行封存规范化方法清单摘要，禁止通过草稿编辑器改动配方；元数据、AIMD 或格式变化会产生新的包摘要并要求重新审核。
+
+模板、读取和历史接口只提供当前有权访问的方法及来源。创建和修订通过“预览→确认”，30 分钟签名回执绑定用户、操作、准确内容及保存位置；幂等重试恢复已完成请求，不重复写入。审核是独立明确动作，同时要求 `research.approve` 与目标 Protocol 写入权限；作者也必须另行具备这些能力才能审核。审核固定已保存的准确修订与包摘要，不涵盖未保存的编辑，更不代表科学结果已获验证。发布者须为具备目标写入权的作者或科研审批者，持有准确受审包；发布时分别复核发布者和审核者对全部方法来源的权限，以及审核者当前的审批与目标写入权限。
+
+发布预览和确认绑定准确审核记录、文件及公开/私有保存位置。服务端只将已保存的受审文件交给普通 `POST /protocols` 解析、版本校验和存储；直接向既有接口传入草稿来源字段，也须通过完整回执与摘要校验。锁顺序为 Draft → Project 共享行锁 → 目标 Protocol，使项目身份与可见范围在发布期间保持稳定；新 Protocol 创建与普通上传、导入、复用共用项目/UID advisory lock。真实解析器返回后、写入任何资产前，服务端拒绝意外待写入状态，刷新授权缓存，重新核对原签名预览与包字节。这些检查不宣称将全部成员权限更新全局串行化。
+
+可下载 ZIP 只保留三个受审源文件，不包含执行器生成的模型缓存。新 Protocol 及版本是普通 Platform 资产；受保护的服务端 lineage 将准确版本关联到已审核修订和已发布方法，单凭清单不能建立此联系。可读取普通 Protocol 不等于可读取原来源：用户无法读取方法的全部来源时，来源链接会隐藏。创建、编辑、审核和发布均可在 AI 关闭时完成。跨 Protocol Aira 辅助、显式单位/重复处理算子及可移植 Compute 方法提升仍属 RFC #6/#9 后续工作，本片不代表所有科研自动化能力均已完成。
+
+## 私有跨 Protocol 分析
+
+迁移 0070 为既有 `AnalysisPreview`、`AnalysisRun`、`AnalysisPipeline` 增加明确 `source_scope`，旧行保持 Protocol 范围及原摘要。Project 分析不伪造单个 Protocol 身份；`AnalysisProjectInput` 为每个稳定来源槽保留受保护外键及准确快照摘要。嵌套快照分别保存各自 Records、Schema 版本和字段目录，由同一 `record_analysis` 持久作业分派至固定 `airalogy.project-analysis.v1` 有限引擎，不新增通用调度器，也不在 API 中执行任意代码。
+
+方法明确区分独立证据与用户确认的一对一类型化关联，声明字段语义及单位，保留全部计数和派生行字段来源。执行与披露前重新检查发起人/来源权限、快照及 Schema 完整性。方法固定输入契约，新数据产生新运行；来源契约改变须明确修订。Project 来源身份、已确认输入与方法、预览、方法修订和已结束结果均阻止原地修改；保留 Project 资产时拒绝降级。
+
+`AnalysisInterpretationRevision` 将有界人工综合判断与数值结果分开保存，校验预期修订、原结果摘要，并由服务器解析被引用统计值。导出包含各自封存的判断历史，不改变计算结果摘要的含义。内置方法提升使用上文的受审 Protocol 资产路径；Project AI 辅助、显式单位转换/重复处理及 Compute 方法提升仍为 RFC #9 后续工作。
+
+迁移 0072 增加不可变 `AnalysisEvidencePublication`，仅复制用户显式选择的内置分析结果。带签名和有效期的预览绑定所有者、准确来源/结果/判断、完整保存位置及选择；确认重新授权同项目 Task 与全部来源，串行处理请求幂等，原子创建发布副本、普通待审核 `ResearchEvidence` 与审计事件。不开放原私有报告，也不伪造 Action。副本保留选中字段的完整分组、计数、单位与准确 lineage，不复制原始行、私有问题或未选历史。读取、审核、导出及派生资产均复核来源，选择较少字段不减少权限交集。证据审核锁定行，避免并发覆盖终态。
+
+分析派生的 Suggested/Draft Knowledge 通过统一来源守卫覆盖搜索、结果包及 Log；审核和跨范围发布重新检查全部 Evidence，只复制受保护 lineage，不复制文件授权。Reviewed 正文保持独立 Knowledge 范围，原始来源链接仍受鉴权。发布行、原结果及 Evidence 来源身份不可变；存在发布对象时拒绝降级。Protocol/Record 锁保护准确内容，不等于全局串行锁定所有成员权限变化；每次操作仍会重新校验当前权限。
 
 ## 责任边界
 

@@ -6,11 +6,13 @@ import type { IFieldChangePayload, IFieldItem } from "../types/types"
 import { getInputType } from "@/components/custom/aimd/composables/useAIMDHelpers"
 
 import { request } from "@/service/request"
+import { previewFileFieldChange, protocolFileEventOwnerKey } from "@/utils/aimd-file-events"
+import { normalizeAimdUploadFiles } from "@/utils/aimd-files"
 import { fieldEventKey } from "@/utils/template/eventKey"
 import { useClosableMessage } from "@airalogy/composables"
 import { createInjectionState, useEventBus } from "@vueuse/core"
 import Big from "big.js"
-import { reactive, ref } from "vue"
+import { inject, reactive, ref } from "vue"
 
 export interface IEmits {
   (e: "field:scroll", scope: IRecordDataKey, prop: string, varName?: string): void
@@ -33,6 +35,7 @@ const typeMap: Record<string, any> = {
 // Create injection state
 const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
   (props: any, emit: IEmits) => {
+    const parentOwnsFileEvents = inject(protocolFileEventOwnerKey, false)
     const imageFileList = ref<UploadFileInfo[]>([])
     const imageFileListRecord = ref<Record<string, UploadFileInfo[]>>({})
 
@@ -63,6 +66,8 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
     }
 
     function handleFieldChange(payload: IFieldChangePayload) {
+      if (readonly.value)
+        return
       clearAssignerState(payload.prop, payload.info)
 
       fieldEventBus.emit("form-field-change", payload)
@@ -149,6 +154,8 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
     }
 
     function handleFileChange(scope: IRecordDataKey, prop: string, options: { file: UploadFileInfo, fileList: Array<UploadFileInfo>, event?: Event }, info?: any) {
+      if (readonly.value)
+        return
       const { file: { status }, fileList } = options
 
       if (info?.group) {
@@ -265,26 +272,21 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
       dependent?: { name: string, scope: IRecordDataKey }[]
     }) {
       const { fileInfo, prop, scope, type, assigner, dependent, attachmentInfo, info } = payload
+      if (readonly.value)
+        return
       const value = { ...attachmentInfo, type }
+      const cellKey = info?.group ? `${info.group}_${info.row}_${info.col}_${prop}` : undefined
+      const currentFiles = cellKey ? imageFileListRecord.value[cellKey] : imageFileList.value
+      const change = previewFileFieldChange("preview-file-uploaded", { scope, prop, value, assigner, dependent, info, fileInfo }, currentFiles)
+      if (!change)
+        return
+      const files = normalizeAimdUploadFiles(change.value)
+      if (cellKey)
+        imageFileListRecord.value[cellKey] = files
+      else
+        imageFileList.value = files
 
-      // fieldEventBus.emit("form-file-uploaded", {
-      //   scope,
-      //   prop,
-      //   value,
-      //   assigner,
-      //   dependent,
-      //   fileInfo,
-      //   info,
-      // })
-
-      // TODO: update file url
-
-      // const targetFile = imageFileList.value.find(it => it.id === fileInfo.id)
-      // if (targetFile) {
-      //   targetFile.url = fileInfo.url
-      // }
-
-      handleFieldChange({ scope, prop, value: value as any, assigner, dependent, attachmentInfo, info, fileInfo })
+      handleFieldChange({ ...change, attachmentInfo, fileInfo })
       void formItemValidate(scope, prop)
     }
 
@@ -388,6 +390,7 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
           && event !== "field-update-complete"
           && event !== "preview-file-change"
           && event !== "preview-file-uploaded"
+          && event !== "preview-file-metadata"
           && event !== "draft-restored"
           && event !== "preview-file-renamed"
           && event !== "file-assigned"
@@ -481,7 +484,6 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
 
           const {
             file: { fileList },
-            type,
           } = value as {
             file: {
               file: UploadFileInfo
@@ -499,27 +501,10 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
             imageFileList.value = fileList
           }
 
-          if (type === "remove") {
-            emit("field:change", {
-              scope,
-              prop,
-              value: null,
-              shouldUpdate: true,
-              shouldAssign: true,
-              info,
-            })
-          }
-          else if (type === "add") {
-            // Also sync fileList to main fieldModel when adding files
-            // This ensures validation can access the file value before upload completes
-            emit("field:change", {
-              scope,
-              prop,
-              value: fileList,
-              shouldUpdate: true,
-              shouldAssign: false, // Don't trigger assigner until upload completes
-              info,
-            })
+          if (!parentOwnsFileEvents && !readonly.value) {
+            const change = previewFileFieldChange(event, payload)
+            if (change)
+              emit("field:change", change)
           }
           // Emit field-update-complete after file change
           fieldEventBus.emit("field-update-complete", payload)
@@ -536,28 +521,32 @@ const [useProtocolFormProvide, useProtocolFormInject] = createInjectionState(
           return
         }
 
-        if (event === "preview-file-uploaded") {
-          const { assigner, dependent } = payload
-          emit("field:change", { scope, prop, value, assigner, dependent, info })
+        if (event === "preview-file-uploaded" || event === "preview-file-metadata") {
+          if (!parentOwnsFileEvents && !readonly.value) {
+            const currentValue = info?.group ? props.item.value?.[info.row]?.[prop] : props.item.value
+            const change = previewFileFieldChange(event, payload, currentValue)
+            if (change)
+              emit("field:change", change)
+          }
           // Emit field-update-complete after file upload
           fieldEventBus.emit("field-update-complete", payload)
           return
         }
 
         if (event === "preview-file-renamed") {
-          emit("field:change", {
-            scope,
-            prop,
-            value: { ...value, type: "image" },
-            shouldUpdate: true,
-            shouldAssign: false,
-            info,
-          })
+          if (!parentOwnsFileEvents && !readonly.value) {
+            const currentValue = info?.group ? props.item.value?.[info.row]?.[prop] : props.item.value
+            const change = previewFileFieldChange(event, payload, currentValue)
+            if (change)
+              emit("field:change", change)
+          }
           return
         }
 
         /** Handle assigner */
         if (event === "file-assigned") {
+          if (readonly.value)
+            return
           if (info?.group) {
             const cellKey = `${info.group}_${info.row}_${info.col}_${prop}`
             imageFileListRecord.value[cellKey] = value

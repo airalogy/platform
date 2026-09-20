@@ -2518,7 +2518,7 @@ async def materialize_manual_workflow(
         raise ValueError("The Workflow revision does not match this pinned Run")
     if any(node.kind == "analysis" for node in graph.nodes) and marker.get(
         "execution_contract_version"
-    ) not in {3, 4, 5}:
+    ) not in {3, 4, 5, 6, 7}:
         raise ValueError("Analysis cards require Workflow execution contract v3")
     if not _workflow_resolution_v2(run) and (
         graph.bindings or any(edge.condition is not None for edge in graph.edges)
@@ -2914,9 +2914,9 @@ def _aira_action_graph(action: ResearchAction) -> dict[str, Any] | None:
 def _workflow_resolution_v2(run: ResearchRun) -> bool:
     marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
     version = marker.get("execution_contract_version", 1)
-    if version not in {1, 2, 3, 4, 5}:
+    if version not in {1, 2, 3, 4, 5, 6, 7}:
         raise ValueError("Unsupported fixed Workflow execution contract version")
-    return version in {2, 3, 4, 5}
+    return version in {2, 3, 4, 5, 6, 7}
 
 
 def _workflow_edge_contract(edge: Any, *, resolved: bool) -> dict[str, Any]:
@@ -3024,7 +3024,10 @@ async def _resolve_fixed_workflow_candidate(
         }
     if resolution.state == "ready" and (
         node.kind == "analysis"
-        or any(binding.target_node_id == node.node_id for binding in graph.bindings)
+        or any(
+            binding.target_node_id == node.node_id
+            for binding in [*graph.bindings, *graph.asset_bindings]
+        )
     ):
         # The graph confirmation could not show these values. Bind the newly
         # resolved input and lineage to a fresh deterministic Action approval.
@@ -3762,7 +3765,16 @@ async def hold_or_release_aira_action_group(
                 continue
             parents = dependencies[candidate.id]
             resolved_ready = False
-            if resolved_workflow and parents:
+            has_asset_inputs = resolved_workflow and (
+                ((run.environment_snapshot or {}).get("manual_workflow") or {}).get(
+                    "execution_contract_version"
+                ) in {6, 7}
+            ) and any(
+                binding.target_node_id
+                == (_aira_action_graph(candidate) or {}).get("node_id")
+                for binding in workflow_graph.asset_bindings
+            )
+            if resolved_workflow and (parents or has_asset_inputs):
                 # A condition is evaluated only after every incoming edge can
                 # be classified. A false branch is not an execution failure.
                 if not all(
@@ -4139,6 +4151,7 @@ async def verify_manual_workflow_execution(
         ) - set(by_node):
             raise ValueError("The Workflow node resolution set has changed")
     non_root_ids = {edge.target_node_id for edge in graph.edges}
+    non_root_ids.update(binding.target_node_id for binding in graph.asset_bindings)
     for node in graph.nodes:
         action = by_node[node.node_id]
         typed_run = typed_by_action.get(action.id)
@@ -4190,7 +4203,8 @@ async def verify_manual_workflow_execution(
                 elif resolution.state != "ready":
                     raise ValueError("The Workflow resolution state is unsupported")
                 elif any(
-                    binding.target_node_id == node.node_id for binding in graph.bindings
+                    binding.target_node_id == node.node_id
+                    for binding in [*graph.bindings, *graph.asset_bindings]
                 ):
                     if (action.requirements or {}).get(
                         "approval_policy"
@@ -4206,7 +4220,7 @@ async def verify_manual_workflow_execution(
             from app.services.workflow_analysis_runtime import verify_analysis_card
 
             if (
-                marker.get("execution_contract_version") not in {3, 4, 5}
+                marker.get("execution_contract_version") not in {3, 4, 5, 6, 7}
                 or action.kind != "analysis_run"
             ):
                 raise ValueError("Analysis card execution contract changed")
@@ -4225,12 +4239,18 @@ async def verify_manual_workflow_execution(
             ):
                 raise ValueError("A fixed Workflow Analysis occurrence has changed")
             if getattr(node, "analysis_kind", "builtin") == "compute" and (
-                marker.get("execution_contract_version") not in {4, 5}
+                marker.get("execution_contract_version") not in {4, 5, 6, 7}
                 or data.get("analysis_kind") != "compute"
                 or data.get("compute_outputs")
                 != [item.model_dump(mode="json") for item in node.compute_outputs]
             ):
                 raise ValueError("A fixed Workflow Compute occurrence has changed")
+            if getattr(node, "analysis_kind", None) == "project" and (
+                marker.get("execution_contract_version") != 7
+                or data.get("analysis_kind") != "project"
+                or data.get("project_outputs") != [item.model_dump(mode="json") for item in node.project_outputs]
+            ):
+                raise ValueError("A fixed Workflow Project analysis occurrence has changed")
             if graph.schema_version >= 4 and data.get("compute_file_outputs", []) != [
                 item.model_dump(mode="json") for item in node.compute_file_outputs
             ]:

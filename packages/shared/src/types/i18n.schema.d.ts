@@ -742,6 +742,42 @@ declare namespace I18n {
           group: string
         }
       }
+      workflowAssets: {
+        title: string
+        definitionHint: string
+        label: string
+        bindingCount: string
+        removeHint: string
+        add: string
+        defaultLabel: string
+        bindings: string
+        bindingHint: string
+        addBeforeBinding: string
+        sourceInput: string
+        valueKind: string
+        jsonPathHint: string
+        pathKey: string
+        addPathKey: string
+        unit: string
+        wholeFile: string
+        wholeFileHint: string
+        addBinding: string
+        selectVersions: string
+        runHint: string
+        noVersions: string
+        chooseVersion: string
+        loadMoreVersions: string
+        retryVersions: string
+        loadFailed: string
+        versionId: string
+        availableFields: string
+        confirmedInputs: string
+        previewHint: string
+        resolvedValue: string
+        sourceDetails: string
+        assetId: string
+        sourceDigest: string
+      }
       workflowFiles: {
         outputs: string
         outputHint: string
@@ -784,6 +820,71 @@ declare namespace I18n {
         openCreated: string
         exactGraph: string
         targetCard: string
+      }
+      analysisProtocolDraft: {
+        title: string
+        entry: string
+        boundary: string
+        computeUnsupported: string
+        history: string
+        newDraft: string
+        reload: string
+        destination: string
+        publicScope: string
+        privateScope: string
+        historical: string
+        reviewInvalidated: string
+        applied: string
+        openProtocol: string
+        nextVersion: string
+        increaseVersion: string
+        renderPreview: string
+        manifestReadOnly: string
+        reason: string
+        packageDigest: string
+        manifestDigest: string
+        revisionAuthor: string
+        unsavedSeal: string
+        savePreview: string
+        publishPreview: string
+        expires: string
+        disclosure: string
+        reviewTitle: string
+        reviewHint: string
+        reviewNote: string
+        reviewDisclosure: string
+        approve: string
+        reject: string
+        reviews: string
+        confirmPublish: string
+        confirmSave: string
+        previewSave: string
+        previewPublish: string
+        revisionSaved: string
+        reviewSaved: string
+        publishSaved: string
+        unsavedTitle: string
+        unsavedHint: string
+        discard: string
+        states: {
+          draft: string
+          reviewed: string
+          rejected: string
+          applied: string
+        }
+      }
+      workflowProjectAnalysis: {
+        publicationHint: string
+        allowedVersions: string
+        excluded: string
+        sourcesHint: string
+        outputsHint: string
+        outputSource: string
+        localResult: string
+        joinResult: string
+        inputPreview: string
+        methodChangeBlocked: string
+        methodChanged: string
       }
       workflowAnalysis: {
         computeSupported: string
@@ -984,6 +1085,146 @@ declare namespace I18n {
           invalidCondition: string
           invalidBinding: string
           cycle: string
+        }
+      }
+      analysisPublication: {
+        title: string
+        description: string
+        open: string
+        saved: string
+        receipt: string
+        openTask: string
+        destination: string
+        permissions: string
+        knowledgeNotice: string
+        task: string
+        moreTasks: string
+        noTasks: string
+        name: string
+        summary: string
+        selectionHint: string
+        humanInterpretation: string
+        interpretationHint: string
+        reviewHint: string
+        preview: string
+        edit: string
+        confirm: string
+        expires: string
+        expired: string
+        expiredRetry: string
+        loadError: string
+        previewError: string
+        confirmError: string
+      }
+      projectAnalysis: {
+        open: string
+        title: string
+        singleProtocol: string
+        description: string
+        privateHint: string
+        mode: string
+        modes: {
+          evidence_synthesis: string
+          relational: string
+        }
+        separateEvidence: string
+        associationOnly: string
+        sourceNumber: string
+        sourceLabel: string
+        sourceSlot: string
+        addSource: string
+        chooseRecords: string
+        exactRecordsHint: string
+        useSelected: string
+        sourceCounts: string
+        joinConfiguration: string
+        joinHint: string
+        leftSource: string
+        rightSource: string
+        joinKind: string
+        joinKinds: {
+          inner: string
+          left: string
+        }
+        missingKeys: string
+        keyPolicies: {
+          error: string
+          exclude: string
+        }
+        oneToOne: string
+        joinKeys: string
+        leftKey: string
+        rightKey: string
+        addKey: string
+        outputFields: string
+        outputHint: string
+        outputId: string
+        semanticLabel: string
+        sourceUnit: string
+        addOutput: string
+        joinStatistics: string
+        semanticConfirmation: string
+        joinedResult: string
+        allJoinedRows: string
+        joinedSources: string
+        lineageHint: string
+        unmatchedSource: string
+        joinAudit: string
+        outputRows: string
+        audit: {
+          total: string
+          filtered_out: string
+          key_missing: string
+          invalid_keys: string
+          excluded: string
+          duplicate_keys: string
+          duplicate_rows: string
+          matched: string
+          unmatched: string
+        }
+        destination: string
+        previewReviewed: string
+        validation: {
+          invalidSlots: string
+          incompleteSlot: string
+          invalidFields: string
+          invalidJoin: string
+          incompatibleKeys: string
+          invalidOutputs: string
+          confirmSemantics: string
+        }
+        relations: {
+          supports: string
+          contradicts: string
+          inconclusive: string
+        }
+        interpretation: {
+          title: string
+          hint: string
+          judgement: string
+          summary: string
+          relation: string
+          note: string
+          addFinding: string
+          limitations: string
+          questions: string
+          saveRevision: string
+          history: string
+          sealedResult: string
+          confirm: string
+        }
+        comparison: {
+          title: string
+          hint: string
+          baseline: string
+          compare: string
+          recipeChanged: string
+          sameRecipe: string
+          sourceChanges: string
+          changed: string
+          unchanged: string
+          before: string
+          after: string
         }
       }
       analysis: {
@@ -2404,6 +2645,7 @@ declare namespace I18n {
           validation: string
         }
         artifactType: {
+          analysis_publication: string
           record: string
           data_asset: string
           knowledge: string

@@ -24,6 +24,7 @@ from app.config import config
 from app.models.knowledge import (
     KnowledgeAccessGrant,
     KnowledgeItem,
+    KnowledgeState,
     OwnerScope,
     PaperImportDraft,
     PaperLibraryEntry,
@@ -496,6 +497,12 @@ async def authorize_knowledge_item(
         )
     ):
         raise HTTPException(status_code=404, detail="Knowledge item not found")
+    if item.state in {KnowledgeState.SUGGESTED.value, KnowledgeState.DRAFT.value}:
+        from app.services.research_asset_visibility import (
+            require_analysis_knowledge_evidence_readable,
+        )
+
+        await require_analysis_knowledge_evidence_readable(db_session, item, user)
     return scope
 
 

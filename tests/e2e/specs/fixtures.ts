@@ -14,9 +14,11 @@ export interface E2EFixtures {
   }
   resourceType: { id: string }
   analysis: { protocol_id: string, protocol_uid: string }
+  project_analysis: { inputs: Array<{ slot_id: string, protocol_id: string, protocol_uid: string, key_field: string, value_field: string, unit: string }> }
   workflow_compute: { pipeline_id: string, pipeline_title: string, environment_id: string, environment_revision_id: string, environment_name: string, protocol_id: string, protocol_version_id: string }
   workflow_compute_attachments: { pipeline_id: string, pipeline_title: string, environment_id: string, environment_revision_id: string, environment_name: string, protocol_id: string, protocol_version_id: string }
   workflow_files: { protocol_id: string, protocol_uid: string, protocol_version_id: string, record_id: string, record_version: number, file_ref: string, field: string }
+  workflow_assets: { protocol_id: string, protocol_uid: string, protocol_version_id: string, data_asset_id: string, data_asset_version_id: string, version: number, latest_version: number, name: string, value: number, sha256: string, byte_size: number, filename: string, source_path: string[], unit: string, scalar_field: string, file_field: string }
   labResource: { id: string }
   restrictedResource: { id: string }
   container: { id: string }
@@ -29,7 +31,8 @@ export async function loadFixtures(): Promise<E2EFixtures> {
 }
 
 export async function selectVisibleOption(page: Page, label: string | RegExp) {
-  const option = page.locator(".n-base-select-option").filter({ hasText: label })
+  // Naive UI keeps closed menus mounted; only the open menu is actionable.
+  const option = page.locator(".n-base-select-option:visible").filter({ hasText: label })
   await option.last().click()
 }
 

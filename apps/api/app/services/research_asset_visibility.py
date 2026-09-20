@@ -1,16 +1,23 @@
 """Live source authorization for Evidence and its derived read models.
 
 Task membership never grants access to a Workflow's source Records or files.
-Published Knowledge has its own scope; only its original source links use these
-checks. Checks are per artifact so independent readable branches stay usable.
+Reviewed Knowledge has its own scope; its original source links still use these
+checks. Unreviewed analysis-derived candidates also require their sources.
+Checks are per artifact so independent readable branches stay usable.
 """
 
+from contextvars import ContextVar
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.knowledge import KnowledgeItem, PaperLibraryEntry, ResearchFile
+from app.models.knowledge import (
+    KnowledgeItem,
+    KnowledgeState,
+    PaperLibraryEntry,
+    ResearchFile,
+)
 from app.models.project import Project
 from app.models.record import Record
 from app.models.research import (
@@ -22,6 +29,8 @@ from app.models.research import (
 from app.models.research_asset import (
     DataAsset,
     DataAssetVersion,
+    EvidenceQuality,
+    KnowledgeEvidenceLink,
     ProtocolImprovementProposal,
     ResearchActionOutputSnapshot,
     ResearchClaimEvidence,
@@ -30,6 +39,9 @@ from app.models.research_asset import (
 
 SOURCE_RESTRICTED = "Research Evidence source is unavailable or not readable"
 HIDDEN_SOURCE_STATUSES = {400, 403, 404, 409, 422}
+_knowledge_source_stack: ContextVar[frozenset] = ContextVar(
+    "analysis_knowledge_source_stack", default=frozenset()
+)
 
 
 async def require_artifact_source_readable(
@@ -55,6 +67,18 @@ async def require_artifact_source_readable(
     if project is None or project.deleted_at is not None:
         raise HTTPException(403, SOURCE_RESTRICTED)
 
+    if artifact_type == "analysis_publication":
+        from app.services.analysis_publications import (
+            require_analysis_publication_readable,
+        )
+
+        publication = await require_analysis_publication_readable(
+            db, identity, user, task_id=task.id
+        )
+        if artifact_version != publication.digest:
+            raise HTTPException(409, SOURCE_RESTRICTED)
+        return
+
     if artifact_type == "action_output":
         from app.services.research_action_outputs import (
             ResearchActionOutputError,
@@ -76,7 +100,7 @@ async def require_artifact_source_readable(
         # A mutable Action must not authorize a different sealed historical output.
         # Ordinary Action snapshots retain their existing immutable-history contract.
         marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
-        is_workflow = marker.get("execution_contract_version") in {2, 3, 4, 5}
+        is_workflow = marker.get("execution_contract_version") in {2, 3, 4, 5, 6, 7}
         # Ordinary Protocol Evidence uses its immutable historical output below.
         # The UI's live-output guard must not replace that exact source with a
         # later Action payload (or invalidate readable history after it changes).
@@ -159,7 +183,7 @@ async def require_artifact_source_readable(
         from app.services.knowledge import authorize_knowledge_item
 
         item = await db.get(KnowledgeItem, identity)
-        if item is None or item.archived_at is not None:
+        if item is None or item.state == KnowledgeState.ARCHIVED.value:
             raise HTTPException(403, SOURCE_RESTRICTED)
         await authorize_knowledge_item(db, user, item)
         return
@@ -302,6 +326,75 @@ async def visible_knowledge_evidence_links(db, links, user):
     return visible
 
 
+async def require_analysis_knowledge_evidence_readable(db, item, user):
+    """Reauthorize sources when reading or promoting analysis candidates.
+
+    Links survive ordinary text revisions. A new review or cross-scope copy
+    must not silently drop an unreadable source, even if another link is still
+    readable. Existing adopted prose keeps its own scope on ordinary reads.
+    """
+    checked = _knowledge_source_stack.get()
+    if item.id in checked:
+        raise HTTPException(409, "Knowledge source lineage is cyclic")
+    token = _knowledge_source_stack.set(checked | {item.id})
+    try:
+        return await _analysis_knowledge_evidence_links(db, item, user)
+    finally:
+        _knowledge_source_stack.reset(token)
+
+
+async def _analysis_knowledge_evidence_links(db, item, user):
+    links = list(
+        (
+            await db.scalars(
+                select(KnowledgeEvidenceLink)
+                .where(KnowledgeEvidenceLink.knowledge_item_id == item.id)
+                .order_by(
+                    KnowledgeEvidenceLink.knowledge_revision,
+                    KnowledgeEvidenceLink.created_at,
+                    KnowledgeEvidenceLink.id,
+                )
+            )
+        ).all()
+    )
+    # Preserve the existing contract for Knowledge not derived from a governed
+    # analysis publication. Check both sides so a damaged link cannot hide its
+    # provenance simply by changing the cached artifact type.
+    evidence_by_id = {
+        link.evidence_id: await db.get(ResearchEvidence, link.evidence_id)
+        for link in links
+    }
+    if not any(
+        (
+            isinstance(link.source_snapshot, dict)
+            and link.source_snapshot.get("artifact_type") == "analysis_publication"
+        )
+        or getattr(evidence_by_id[link.evidence_id], "artifact_type", None)
+        == "analysis_publication"
+        for link in links
+    ):
+        return []
+    for link in links:
+        evidence = evidence_by_id[link.evidence_id]
+        source = link.source_snapshot
+        if (
+            evidence is None
+            or not isinstance(source, dict)
+            or link.knowledge_revision > item.revision
+            or any(
+                str(source.get(key)) != str(getattr(evidence, key))
+                for key in (
+                    "id", "task_id", "artifact_type", "artifact_id", "artifact_version"
+                )
+            )
+        ):
+            raise HTTPException(409, SOURCE_RESTRICTED)
+        if evidence.quality_state != EvidenceQuality.VALIDATED.value:
+            raise HTTPException(409, "Knowledge requires validated source Evidence")
+        await require_evidence_source_readable(db, evidence, user)
+    return links
+
+
 async def require_task_asset_sources_readable(db, *, task_id, user):
     """Fail closed for indivisible review/result/AI contexts, never silently omit."""
     from app.services.research_assets import research_asset_bundle
@@ -380,7 +473,10 @@ async def require_asset_snapshot_sources_readable(db, *, task_id, payload, user)
                     from app.services.knowledge import authorize_knowledge_item
 
                     knowledge = await db.get(KnowledgeItem, identity)
-                    if knowledge is None or knowledge.archived_at is not None:
+                    if (
+                        knowledge is None
+                        or knowledge.state == KnowledgeState.ARCHIVED.value
+                    ):
                         raise HTTPException(403, SOURCE_RESTRICTED)
                     await authorize_knowledge_item(db, user, knowledge)
                 else:

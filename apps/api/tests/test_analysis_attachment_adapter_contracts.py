@@ -35,7 +35,12 @@ def test_each_workflow_recipient_needs_attachment_source_access(monkeypatch, den
             "analysis_input": {"summary": {"compute": {"input_files": envelope}}}
         },
     )
-    snapshot = {"protocol_id": str(uuid4()), "records": []}
+    # A resolved Workflow occurrence always has an exact nonempty Record set;
+    # reach the attachment authorization boundary with a valid source envelope.
+    snapshot = {
+        "protocol_id": str(uuid4()),
+        "records": [{"record_id": str(uuid4()), "record_version": 1}],
+    }
     db = SimpleNamespace(
         get=AsyncMock(side_effect=lambda model, identity: by_id[identity])
     )

@@ -10,6 +10,16 @@ interface CachedAttachment {
 }
 export const cachedAttachments = new Map<string, CachedAttachment>()
 
+/** Keep later mounts and in-flight readers consistent with a confirmed rename. */
+export function cacheAttachmentMetadata(data: Api.Attachment.AttachmentItem) {
+  if (!data?.id)
+    return
+  const parsed = typeof data.id === "string" ? parseAiralogyId(data.id) : undefined
+  const id = parsed?.type === "file" ? parsed.uuid : data.id
+  const now = Date.now()
+  cachedAttachments.set(id, { data, expiresAt: now + 60000, isLoading: false, lastAccessed: now })
+}
+
 export async function getAttachments(id: string | number) {
   if (!id) {
     throw new Error("id is required")
@@ -69,24 +79,8 @@ export async function postAddAttachments(file: File, protocolId?: string | null)
     })
   }
 
-  if (res.data && res.data.id) {
-    const now = Date.now()
-    // Cache under UUID key if possible
-    let cacheKey = res.data.id
-    if (typeof cacheKey === "string" && cacheKey.startsWith(AIRALOGY_FILE_ID_PREFIX)) {
-      const parsed = parseAiralogyId(cacheKey)
-      if (parsed?.type === "file") {
-        cacheKey = parsed.uuid
-      }
-    }
-
-    cachedAttachments.set(cacheKey, {
-      data: res.data,
-      expiresAt: now + 60000, // 1 minute
-      isLoading: false,
-      lastAccessed: now,
-    })
-  }
+  if (res.data)
+    cacheAttachmentMetadata(res.data)
 
   return res
 }
@@ -173,7 +167,10 @@ export async function getCachedAttachment(id: string) {
 
   // No valid cache - fetch new data
   // We must pass the ORIGINAL id to getAttachments so it can decide whether to use getReferenceAssets
-  const promise = getAttachments(id).then((res) => {
+  const promise: Promise<Api.Attachment.AttachmentItem | null> = getAttachments(id).then((res) => {
+    const latest = cachedAttachments.get(lookupId)
+    if (latest && latest.data !== promise && !latest.isLoading && latest.expiresAt > Date.now())
+      return latest.data as Api.Attachment.AttachmentItem
     if (res.data) {
       // Cache the result for 1 minute
       cachedAttachments.set(lookupId, {
@@ -187,7 +184,8 @@ export async function getCachedAttachment(id: string) {
     return null
   }).catch((error) => {
     console.error("Error fetching attachment data:", error)
-    cachedAttachments.delete(lookupId)
+    if (cachedAttachments.get(lookupId)?.data === promise)
+      cachedAttachments.delete(lookupId)
     return null
   })
 

@@ -34,9 +34,10 @@
 
 <script setup lang="ts">
 import type { AnalysisGroup, AnalysisResult } from "@/service/api/analysis"
+import { analysisGroupLabel } from "@/utils/analysis-chart"
 import { useI18n } from "vue-i18n"
 
-defineProps<{ result: AnalysisResult }>()
+const props = defineProps<{ result: Pick<AnalysisResult, "fields" | "groups">, ungroupedLabel?: string }>()
 const { t, locale } = useI18n()
 const statistics = ["count", "missing", "invalid", "mean", "median", "min", "max", "sample_stddev"] as const
 const columns = ["group", "field", ...statistics] as const
@@ -44,7 +45,7 @@ function number(value: number | null) {
   return value === null ? "—" : value.toLocaleString(locale.value, { maximumSignificantDigits: 8 })
 }
 function groupLabel(group: AnalysisGroup) {
-  return group.key.length ? group.key.map(item => `${item.field}: ${item.value === null ? t("page.analysis.missingGroup") : String(item.value)}`).join(" · ") : t("page.analysis.allRecords")
+  return analysisGroupLabel(group, props.ungroupedLabel ?? t("page.analysis.allRecords"), t("page.analysis.missingGroup"))
 }
 </script>
 

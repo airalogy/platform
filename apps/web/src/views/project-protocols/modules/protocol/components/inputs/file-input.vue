@@ -14,6 +14,7 @@
           text
           type="error"
           size="small"
+          :disabled="isDisabled"
           @click="handleRemove"
         >
           <template #icon>
@@ -116,6 +117,7 @@
           text
           type="error"
           size="small"
+          :disabled="isDisabled"
           @click="handleRemove"
         >
           <template #icon>
@@ -211,6 +213,7 @@ import type { ComponentPublicInstance } from "vue"
 import type { InputPropsOptions } from "../../types/input-props"
 import FormUploadFile from "@/components/common/form-upload-file.vue"
 import { getCachedAttachment } from "@/service/api/attachments"
+import { aimdFileReference, loadCurrentAimdFileMetadata, normalizeAimdUploadFiles } from "@/utils/aimd-files"
 import { FileTypeIcon } from "@airalogy/components"
 import CsvPreview from "@airalogy/components/file-preview/csv-preview.vue"
 import { getBaseUploadProps, getFileExtensionFromBasename, getFileType, getMIMEByExtension, type IFileType } from "@airalogy/shared/utils"
@@ -218,7 +221,6 @@ import IconDownload from "~icons/ion/download-outline"
 import IconPreview from "~icons/ion/eye-outline"
 import IconOpen from "~icons/ion/open-outline"
 import IconDelete from "~icons/ion/trash-outline"
-import { get as _get } from "lodash-es"
 import { useInputProps } from "../../composables/useInputProps"
 
 const props = defineProps<InputPropsOptions>()
@@ -347,6 +349,8 @@ function handlePreviewClick() {
 }
 
 function handleRemove() {
+  if (isDisabled.value)
+    return
   // Emit file change with removed status
   if (currentFile.value) {
     const removedFile = { ...currentFile.value, status: "removed" as const }
@@ -389,36 +393,39 @@ function handlePreview(file: UploadFileInfo) {
   }
 }
 
-watchEffect(async () => {
-  const { scope, prop, info } = props
-  const modelValue = props.model.value
+watchEffect(async (onCleanup) => {
+  const { prop, info } = props
+  const reference = aimdFileReference(props.model.value)
+  let active = true
+  onCleanup(() => {
+    active = false
+  })
+  if (!reference)
+    return
 
-  // Handle both object format and string format (Airalogy file ID)
-  let fileAiralogyId: string | undefined
-  let fileId: string | undefined
-
-  if (typeof modelValue === "string" && modelValue.startsWith("airalogy.id.file.")) {
-    // Direct Airalogy file ID string
-    fileAiralogyId = modelValue
+  function updateDisplay(files: UploadFileInfo[]) {
+    if (JSON.stringify(targetFileList.value) === JSON.stringify(files))
+      return
+    // Hydration updates only the display list, including in readonly forms.
+    // It must never emit a user edit or restore an obsolete canonical value.
+    if (info?.group)
+      imageFileListRecord.value[`${info.group}_${info.row}_${info.col}_${prop}`] = files
+    else
+      imageFileList.value = files
   }
-  else if (typeof modelValue === "object" && modelValue) {
-    // Object with airalogy_file_id or id field
-    fileAiralogyId = _get(modelValue, ["airalogy_file_id"])
-    fileId = _get(modelValue, ["id"])
-  }
 
-  const existingFile = targetFileList.value.find(file =>
-    (file as any).airalogy_file_id === fileAiralogyId || (file as any).id === fileId,
-  )
-
-  if (!fileAiralogyId || existingFile) {
+  const currentMetadata = normalizeAimdUploadFiles(props.model.value)
+  if (currentMetadata[0]?.name && currentMetadata[0]?.url) {
+    updateDisplay(currentMetadata)
     return
   }
-
-  const data = await getCachedAttachment(fileAiralogyId)
-  if (!data) {
+  const existingFile = targetFileList.value.find(file => aimdFileReference(file) === reference && file.name && file.url)
+  if (existingFile)
     return
-  }
+
+  const data = await loadCurrentAimdFileMetadata(() => props.model.value, getCachedAttachment, () => active)
+  if (!data)
+    return
 
   const { filename, url, airalogy_file_id } = data
   const mime = getMIMEByExtension(getFileExtensionFromBasename(filename) || "")
@@ -426,13 +433,13 @@ watchEffect(async () => {
     status: "finished",
     url,
     thumbnailUrl: url,
-    id: fileId || airalogy_file_id,
+    id: airalogy_file_id,
     name: filename,
     airalogy_file_id,
     type: mime,
   }
 
-  handleFileChange(scope, prop, { file: fileInfoData, fileList: [fileInfoData] }, info)
+  updateDisplay([fileInfoData])
 })
 </script>
 
@@ -458,6 +465,8 @@ watchEffect(async () => {
   background-color: #f8f8fa
   transition: all 0.2s ease
   width: 100%
+  min-width: 0
+  box-sizing: border-box
 
   &:hover
     border-color: #d0d0d6
@@ -467,6 +476,8 @@ watchEffect(async () => {
   display: flex
   align-items: center
   gap: 8px
+  min-width: 0
+  flex-wrap: wrap
 
 .file-card__icon
   flex-shrink: 0
@@ -474,18 +485,19 @@ watchEffect(async () => {
 
 .file-card__name
   flex: 1
+  min-width: 0
   font-size: 14px
   font-weight: 500
   color: #333
-  overflow: hidden
-  text-overflow: ellipsis
-  white-space: nowrap
+  overflow-wrap: anywhere
+  white-space: normal
 
 .file-card__type
   flex-shrink: 0
 
 .file-card__actions
   display: flex
+  flex-wrap: wrap
   align-items: center
   gap: 12px
   padding-top: 8px

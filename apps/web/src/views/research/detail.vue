@@ -378,7 +378,7 @@
                       {{ $t("page.research.dependsOn", { actions: actionDependencyLabel(action) }) }}
                     </p>
                     <workflow-resolution-summary :input-data="action.input_data" :source-titles="workflowSourceTitles" :restricted="action.workflow_data_restricted" />
-                    <workflow-analysis-execution :action="action" :task-id="task.id" :project-route="{ labUid: task.lab.uid, projectUid: task.project.uid }" />
+                    <workflow-analysis-execution :action="action" :task-id="task.id" :project-route="{ labUid: task.lab.uid, projectUid: task.project.uid }" :source-titles="workflowSourceTitles" />
                     <p
                       v-if="action.input_data.action_graph?.result_bindings?.length"
                       class="aira-type-meta mb-0 mt-1"

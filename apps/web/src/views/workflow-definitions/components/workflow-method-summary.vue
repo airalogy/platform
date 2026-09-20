@@ -26,6 +26,15 @@
       </h4><pre tabindex="0" data-testid="workflow-published-result-schema">{{ JSON.stringify(method.compute_contract?.result_schema, null, 2) }}</pre>
       <details><summary>{{ t('page.analysis.compute.resources') }} · {{ t('page.workflowAnalysis.inputContract') }}</summary><pre tabindex="0">{{ JSON.stringify({ resources: method.compute_contract?.environment.metadata.resource_limits, input: method.compute_contract?.input_schema_contract }, null, 2) }}</pre></details>
     </template>
+    <template v-else-if="projectRecipe">
+      <p class="aira-type-meta">{{ t('page.workflowProjectAnalysis.excluded') }}</p>
+      <article v-for="slot in method.project_contract?.slots ?? []" :key="slot.slot_id" class="my-3" data-testid="workflow-project-method-slot">
+        <strong>{{ slot.label }} · {{ slot.slot_id }}</strong>
+        <p class="aira-type-meta my-1">Protocol · {{ slot.protocol_id }}</p>
+        <p class="aira-type-meta my-1">{{ t('page.workflowProjectAnalysis.allowedVersions') }}: {{ slot.versions.map(version => version.version).join(' · ') }}</p>
+        <details><summary>{{ t('page.workflowAnalysis.inputContract') }}</summary><pre tabindex="0">{{ JSON.stringify(slot.versions, null, 2) }}</pre></details>
+      </article>
+    </template>
     <template v-else-if="builtinRecipe">
       <dl class="method-grid aira-type-meta">
         <dt>{{ t('page.analysis.numericFields') }}</dt><dd>{{ builtinRecipe.numeric_fields.map(fieldLabel).join(' · ') }}</dd>
@@ -47,14 +56,16 @@
 <script setup lang="ts">
 import type { WorkflowAnalysisPublication } from "@/service/api/workflow-analysis-methods"
 import { isComputeAnalysisRecipe } from "@/utils/analysis-compute"
+import { isWorkflowProjectRecipe } from "@/utils/workflow-editor"
 import AnalysisComputeInputDeclarations from "@/views/analysis/components/analysis-compute-input-declarations.vue"
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 
-const props = defineProps<{ method: Pick<WorkflowAnalysisPublication, "recipe" | "compute_contract" | "input_fields"> }>()
+const props = defineProps<{ method: Pick<WorkflowAnalysisPublication, "recipe" | "compute_contract" | "project_contract" | "input_fields"> }>()
 const { t } = useI18n()
 const computeRecipe = computed(() => isComputeAnalysisRecipe(props.method.recipe) ? props.method.recipe : null)
-const builtinRecipe = computed(() => !isComputeAnalysisRecipe(props.method.recipe) ? props.method.recipe : null)
+const projectRecipe = computed(() => isWorkflowProjectRecipe(props.method.recipe) ? props.method.recipe : null)
+const builtinRecipe = computed(() => !isComputeAnalysisRecipe(props.method.recipe) && !isWorkflowProjectRecipe(props.method.recipe) ? props.method.recipe : null)
 function fieldLabel(key: string) {
   const field = props.method.input_fields.find(field => field.key === key)
   return `${field?.title || key} [${key}]${field?.unit ? ` (${field.unit})` : ""}`

@@ -54,7 +54,7 @@ def governance(run, action):
     marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
     node_id = (action.input_data.get("action_graph") or {}).get("node_id")
     value = (marker.get("compute_governance") or {}).get(node_id)
-    if marker.get("execution_contract_version") not in {4, 5} or not isinstance(
+    if marker.get("execution_contract_version") not in {4, 5, 6, 7} or not isinstance(
         value, dict
     ):
         raise HTTPException(409, "Compute Workflow governance is not sealed")
@@ -264,7 +264,7 @@ async def settlement_only_workflow(db, *, run, actions=None):
     if not pending:
         return True
     marker = (run.environment_snapshot or {}).get("manual_workflow") or {}
-    if marker.get("execution_contract_version") not in {4, 5} or any(
+    if marker.get("execution_contract_version") not in {4, 5, 6, 7} or any(
         item.status != "blocked" for item in actions if item.id in pending
     ):
         return False

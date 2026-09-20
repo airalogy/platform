@@ -60,11 +60,11 @@
 <script setup lang="ts">
 import type { AnalysisGroup, AnalysisResult } from "@/service/api/analysis"
 import type { AnalysisChartPoint } from "@/utils/analysis-chart"
-import { createAnalysisChartLayouts } from "@/utils/analysis-chart"
+import { analysisGroupLabel, createAnalysisChartLayouts } from "@/utils/analysis-chart"
 import { useId } from "vue"
 import { useI18n } from "vue-i18n"
 
-const props = defineProps<{ result: AnalysisResult }>()
+const props = defineProps<{ result: AnalysisResult, ungroupedLabel?: string }>()
 const { t, locale } = useI18n()
 const id = useId()
 const layout = computed(() => {
@@ -79,7 +79,7 @@ function tickLabel(value: number) {
   return value.toLocaleString(locale.value, { maximumSignificantDigits: 3, notation: Math.abs(value) >= 1e5 || (value !== 0 && Math.abs(value) < 0.001) ? "scientific" : "standard" })
 }
 function groupLabel(group: AnalysisGroup) {
-  return group.key.length ? group.key.map(item => `${item.field}: ${item.value === null ? t("page.analysis.missingGroup") : String(item.value)}`).join(" · ") : t("page.analysis.allRecords")
+  return analysisGroupLabel(group, props.ungroupedLabel ?? t("page.analysis.allRecords"), t("page.analysis.missingGroup"))
 }
 function pointDescription(point: AnalysisChartPoint) {
   return `${groupLabel(props.result.groups[point.groupIndex])} · ${t("page.analysis.statistics.mean")}: ${point.value === null ? t("page.analysis.charts.missingMean") : point.value.toLocaleString(locale.value, { maximumSignificantDigits: 8 })} · n = ${point.count}`

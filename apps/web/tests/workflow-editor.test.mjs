@@ -8,7 +8,7 @@ import ts from "typescript"
 const source = readFileSync(new URL("../src/utils/workflow-editor.ts", import.meta.url), "utf8")
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }, reportDiagnostics: true })
 assert.deepEqual(compiled.diagnostics, [])
-const { createWorkflowComputeFileOutput, createWorkflowComputeOutput, createWorkflowAnalysisNode, createWorkflowId, normalizeWorkflowGraph, emptyWorkflowGraph, workflowGraphProblem, removeWorkflowNode, duplicateWorkflowNode, moveWorkflowNode, taskSupportsWorkflow, workflowDataProblem, workflowFields, workflowFieldsCompatible, workflowScalarFields, workflowPathKey, parseWorkflowScalar, workflowConditionText, workflowAnalysisProblem, workflowAnalysisOutputKey } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`)
+const { addWorkflowAssetInput, removeWorkflowAssetInput, workflowAssetSourceField, workflowAssetVersionCompatible, loadWorkflowAssetPage, createWorkflowComputeFileOutput, createWorkflowComputeOutput, createWorkflowAnalysisNode, createWorkflowId, normalizeWorkflowGraph, emptyWorkflowGraph, workflowGraphProblem, removeWorkflowNode, duplicateWorkflowNode, moveWorkflowNode, taskSupportsWorkflow, workflowDataProblem, workflowFields, workflowFieldsCompatible, workflowScalarFields, workflowPathKey, parseWorkflowScalar, workflowConditionText, workflowAnalysisProblem, workflowAnalysisOutputKey } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`)
 
 function node(id, version = "version-1") {
   return { node_id: id, kind: "protocol", protocol_id: "protocol-1", protocol_version_id: version, title: `Card ${id}`, position: { x: 12, y: 24 }, initial_values: {} }
@@ -133,6 +133,146 @@ function condition(update = {}) {
 function binding(update = {}) {
   return { binding_id: "binding-a", source_node_id: "a", source_path: ["var", "measurement"], target_node_id: "b", target_path: ["var", "measurement"], value_type: "number", unit: "mg/L", cardinality: "one", ...update }
 }
+
+function assetBinding(update = {}) {
+  return { binding_id: "asset_binding_1", input_id: "asset_1", source_path: ["json", "metrics", "mean"], target_node_id: "a", target_path: ["var", "measurement"], value_type: "number", unit: "mg/L", cardinality: "one", ...update }
+}
+
+test("asset versions load one page at a time and keep previously loaded exact versions", async () => {
+  const original = { items: [], nextOffset: 0 }
+  const requested = []
+  const first = await loadWorkflowAssetPage(original, async (offset) => {
+    requested.push(offset)
+    return { items: [{ version_id: "fixed-old", version: 1 }], next_offset: 100 }
+  })
+  assert.deepEqual(requested, [0])
+  assert.deepEqual(original, { items: [], nextOffset: 0 })
+  assert.equal(first.nextOffset, 100)
+  const second = await loadWorkflowAssetPage(first, async (offset) => {
+    requested.push(offset)
+    return { items: [{ version_id: "fixed-old", version: 999 }, { version_id: "new", version: 2 }, { version_id: "new", version: 2 }], next_offset: null }
+  })
+  assert.deepEqual(requested, [0, 100])
+  assert.deepEqual(second.items.map(item => item.version), [1, 2])
+  assert.equal(second.items[0], first.items[0])
+  assert.equal(await loadWorkflowAssetPage(second, () => {
+    throw new Error("must not request after last page")
+  }), second)
+})
+
+test("asset version page failures preserve prior choices and cursor for a successful retry", async () => {
+  const original = { items: [{ version_id: "chosen-version" }], nextOffset: 100 }
+  const before = JSON.stringify(original)
+  await assert.rejects(loadWorkflowAssetPage(original, async (offset) => {
+    assert.equal(offset, 100)
+    throw new Error("temporary directory failure")
+  }), /temporary directory failure/)
+  assert.equal(JSON.stringify(original), before)
+  const retried = await loadWorkflowAssetPage(original, async (offset) => {
+    assert.equal(offset, 100)
+    return { items: [{ version_id: "another-version" }], next_offset: null }
+  })
+  assert.deepEqual(retried.items.map(item => item.version_id), ["chosen-version", "another-version"])
+  assert.equal(JSON.stringify(original), before)
+})
+
+test("repeated, backwards or malformed asset pagination cursors fail without advancing", async () => {
+  const original = { items: [{ version_id: "chosen-version" }], nextOffset: 100 }
+  for (const next_offset of [100, 0, -1, 100.5, Number.NaN]) {
+    await assert.rejects(loadWorkflowAssetPage(original, async () => ({ items: [{ version_id: "discarded-page" }], next_offset })), /pagination cursor/)
+    assert.deepEqual(original, { items: [{ version_id: "chosen-version" }], nextOffset: 100 })
+  }
+  const retried = await loadWorkflowAssetPage(original, async () => ({ items: [], next_offset: 200 }))
+  assert.equal(retried.nextOffset, 200)
+})
+
+test("DataAsset slots upgrade only edited graphs, never become execution nodes or default old keys", () => {
+  const original = graph([node("a")])
+  const serialized = JSON.stringify(original)
+  const next = addWorkflowAssetInput(original, "Calibrated measurements")
+  assert.equal(next.schema_version, 5)
+  assert.deepEqual(next.asset_inputs, [{ input_id: "asset_1", label: "Calibrated measurements" }])
+  assert.deepEqual(next.asset_bindings, [])
+  assert.equal(next.nodes, original.nodes)
+  assert.equal(JSON.stringify(original), serialized)
+  assert.equal(JSON.stringify(normalizeWorkflowGraph(original)), serialized)
+  for (const schema_version of [1, 2, 3, 4]) {
+    assert.equal(workflowGraphProblem({ ...original, schema_version, asset_inputs: [] }), "incomplete")
+    assert.equal(workflowGraphProblem({ ...original, schema_version, asset_bindings: [] }), "incomplete")
+  }
+  const bound = { ...next, asset_bindings: [assetBinding()] }
+  assert.equal(workflowGraphProblem(bound), null)
+  assert.equal(workflowDataProblem(bound, fieldCatalog()), null)
+  assert.equal(workflowDataProblem(next, fieldCatalog()), "invalidBinding")
+  assert.deepEqual(removeWorkflowAssetInput(bound, "asset_1").asset_bindings, [])
+  assert.deepEqual(removeWorkflowNode(bound, "a").asset_bindings, [])
+  assert.equal(bound.asset_bindings.length, 1)
+})
+
+test("resource mappings share target and binding ID uniqueness with all card mappings", () => {
+  const base = { ...addWorkflowAssetInput(graph([node("a"), node("b")], [edge("a", "b")]), "Source"), asset_bindings: [assetBinding({ target_node_id: "b" })] }
+  assert.equal(workflowDataProblem({ ...base, bindings: [binding()] }, fieldCatalog()), "invalidBinding")
+  assert.equal(workflowDataProblem({ ...base, bindings: [binding({ binding_id: "asset_binding_1", target_path: ["var", "a.b"] })] }, fieldCatalog()), "invalidBinding")
+  assert.equal(workflowDataProblem({ ...base, asset_bindings: [assetBinding(), assetBinding({ binding_id: "another" })] }, fieldCatalog()), "invalidBinding")
+  base.nodes[1].initial_values = { measurement: 0 }
+  assert.equal(workflowDataProblem(base, fieldCatalog()), "invalidBinding")
+})
+
+test("DataAsset JSON declarations preserve literal keys and reject unsupported paths or units", () => {
+  const base = addWorkflowAssetInput(graph([node("a")]), "Source")
+  const validate = update => workflowDataProblem({ ...base, asset_bindings: [assetBinding(update)] }, fieldCatalog())
+  assert.equal(validate({ source_path: ["json", "literal.with.dots"] }), null)
+  assert.equal(validate({ source_path: ["json", "literal", "with", "dots"] }), null)
+  for (const update of [
+    { source_path: ["json"] },
+    { source_path: ["json", ""] },
+    { source_path: ["json", 0] },
+    { source_path: ["json", ...Array.from({ length: 17 }, () => "nested")] },
+    { source_path: ["json", "a".repeat(256)] },
+    { source_path: ["var", "value"] },
+    { input_id: "missing" },
+    { binding_id: "INVALID" },
+    { unit: "mg" },
+    { unit: " mg/L" },
+    { value_type: "string", target_path: ["var", "note"], unit: "mg/L" },
+  ])
+    assert.equal(validate(update), "invalidBinding", JSON.stringify(update))
+  assert.equal(validate({ value_type: "string", target_path: ["var", "note"], unit: null }), null)
+})
+
+test("exact DataAsset version choices require declared fields and compatible targets, without latest fallback", () => {
+  const base = { ...addWorkflowAssetInput(graph([node("a")]), "Source"), asset_bindings: [assetBinding()] }
+  const version = { version_id: "fixed-version", fields: [{ ...scalarField("unused"), path: ["json", "metrics", "mean"] }] }
+  assert.equal(workflowAssetVersionCompatible(version, base.asset_bindings, fieldCatalog(), base), true)
+  assert.equal(workflowAssetVersionCompatible({ ...version, fields: [{ ...version.fields[0], unit: "g/L" }] }, base.asset_bindings, fieldCatalog(), base), false)
+  assert.equal(workflowAssetVersionCompatible({ ...version, fields: [{ ...version.fields[0], path: ["json", "metrics.mean"] }] }, base.asset_bindings, fieldCatalog(), base), false)
+  assert.equal(workflowAssetVersionCompatible({ ...version, fields: [] }, base.asset_bindings, fieldCatalog(), base), false)
+  assert.equal(workflowAssetVersionCompatible(version, [], fieldCatalog(), base), false)
+})
+
+test("full DataAsset files bind only to FileId fields and enforce extension compatibility at selection", () => {
+  const file = { path: ["var", "attachment"], title: "Attachment", value_type: "file", nullable: false, unit: null, file_extensions: ["csv"] }
+  const catalog = [{ id: "protocol-1", versions: [{ id: "version-1", fields: [file] }] }]
+  const base = { ...addWorkflowAssetInput(graph([node("a")]), "Source"), asset_bindings: [assetBinding({ source_path: ["file"], value_type: "file", unit: null, target_path: file.path })] }
+  assert.equal(workflowDataProblem(base, catalog), null)
+  assert.deepEqual(workflowAssetSourceField(base.asset_bindings[0]).file_extensions, null)
+  const version = { fields: [{ ...file, path: ["file"] }] }
+  assert.equal(workflowAssetVersionCompatible(version, base.asset_bindings, catalog, base), true)
+  assert.equal(workflowAssetVersionCompatible({ fields: [{ ...version.fields[0], file_extensions: ["pdf"] }] }, base.asset_bindings, catalog, base), false)
+  assert.equal(workflowDataProblem({ ...base, asset_bindings: [{ ...base.asset_bindings[0], source_path: ["file", "path"] }] }, catalog), "invalidBinding")
+})
+
+test("DataAsset UI translations and source receipts stay separate from Record sources", () => {
+  const en = JSON.parse(readFileSync(new URL("../../../packages/shared/src/locales/langs/en-us.json", import.meta.url), "utf8")).page.workflowAssets
+  const zh = JSON.parse(readFileSync(new URL("../../../packages/shared/src/locales/langs/zh-cn.json", import.meta.url), "utf8")).page.workflowAssets
+  assert.deepEqual(Object.keys(en).sort(), Object.keys(zh).sort())
+  for (const value of Object.values(zh))
+    assert.ok(value.trim())
+  const receipt = readFileSync(new URL("../src/views/workflow-definitions/components/workflow-resolution-summary.vue", import.meta.url), "utf8")
+  assert.match(receipt, /receipt\.asset_sources/)
+  assert.match(receipt, /data-testid="workflow-resolved-asset"/)
+  assert.match(receipt, /source\.data_asset_version_id/)
+})
 
 test("conditional comparison values remain strict and unsafe numbers cannot silently round", () => {
   assert.equal(parseWorkflowScalar("false", "boolean"), false)

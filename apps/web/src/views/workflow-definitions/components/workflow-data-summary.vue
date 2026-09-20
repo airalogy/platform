@@ -1,5 +1,22 @@
 <template>
-  <section v-if="graph.edges.length || graph.bindings.length || analysisNodes.length" class="workflow-data-summary" data-testid="workflow-data-summary">
+  <section v-if="graph.edges.length || graph.bindings.length || analysisNodes.length || graph.asset_inputs?.length" class="workflow-data-summary" data-testid="workflow-data-summary">
+    <section v-if="graph.asset_inputs?.length" class="mb-4" data-testid="workflow-asset-definition-summary">
+      <h4 class="aira-type-label">
+        {{ $t('page.workflowAssets.title') }}
+      </h4>
+      <p class="aira-type-meta">
+        {{ $t('page.workflowAssets.definitionHint') }}
+      </p>
+      <article v-for="input in graph.asset_inputs" :key="input.input_id" class="my-3">
+        <strong>{{ input.label }}</strong> · {{ input.input_id }}
+        <ul class="pl-5">
+          <li v-for="binding in graph.asset_bindings?.filter(binding => binding.input_id === input.input_id) ?? []" :key="binding.binding_id">
+            {{ workflowPathLabel(binding.source_path) }} → {{ nodeTitle(binding.target_node_id) }} · {{ workflowPathLabel(binding.target_path) }}
+            <span> · {{ $t(`page.workflowDefinitions.fieldTypes.${binding.value_type}`) }}</span><span v-if="binding.unit"> · {{ binding.unit }}</span>
+          </li>
+        </ul>
+      </article>
+    </section>
     <article v-for="node in analysisNodes" :key="node.node_id" class="mb-4" data-testid="workflow-analysis-summary">
       <h4 class="aira-type-label">
         {{ node.title }} · {{ $t('page.workflowAnalysis.analysisCard') }}
@@ -8,7 +25,12 @@
       <p class="aira-type-meta">
         {{ $t('page.workflowAnalysis.snapshotDigest') }}: {{ method(node.method_publication_id)?.digest ?? '—' }}
       </p>
-      <p>{{ $t('page.workflowAnalysis.selectedSources') }}: {{ node.record_sources.map(source => nodeTitle(source.source_node_id)).join(' · ') }}</p>
+      <ul v-if="node.analysis_kind === 'project'" data-testid="workflow-project-source-summary">
+        <li v-for="slot in method(node.method_publication_id)?.project_contract?.slots ?? []" :key="slot.slot_id">
+          <strong>{{ slot.label }} · {{ slot.slot_id }}</strong>: {{ node.record_sources.filter(source => source.slot_id === slot.slot_id).map(source => nodeTitle(source.source_node_id)).join(' · ') || '—' }}
+        </li>
+      </ul>
+      <p v-else>{{ $t('page.workflowAnalysis.selectedSources') }}: {{ node.record_sources.map(source => nodeTitle(source.source_node_id)).join(' · ') }}</p>
       <n-alert type="info" class="mb-3">
         {{ $t('page.workflowAnalysis.pendingRecords') }}
       </n-alert>
@@ -20,21 +42,26 @@
           {{ output.output_id }}: {{ output.mount_name }} · {{ $t('page.workflowDefinitions.fieldTypes.file') }}
         </li>
       </ul>
+      <ul v-else-if="node.analysis_kind === 'project'">
+        <li v-for="output in node.project_outputs" :key="output.output_id">
+          {{ output.output_id }}: {{ output.source.kind === 'join' ? $t('page.workflowProjectAnalysis.joinResult') : `${$t('page.workflowProjectAnalysis.localResult')} · ${output.source.slot_id}` }} · {{ output.field }} · {{ $t(`page.analysis.statistics.${output.statistic}`) }} · {{ JSON.stringify(output.group) }}
+        </li>
+      </ul>
       <ul v-else>
         <li v-for="output in node.analysis_outputs" :key="output.output_id">
           {{ output.output_id }}: {{ output.field }} · {{ $t(`page.analysis.statistics.${output.statistic}`) }} · {{ JSON.stringify(output.group) }}
         </li>
       </ul>
-      <workflow-method-summary v-if="method(node.method_publication_id)?.compute_contract" :method="method(node.method_publication_id)!" />
+      <workflow-method-summary v-if="method(node.method_publication_id)?.compute_contract || method(node.method_publication_id)?.project_contract" :method="method(node.method_publication_id)!" />
       <details v-if="method(node.method_publication_id)">
         <summary>{{ $t('page.workflowAnalysis.recipe') }}</summary>
         <pre class="analysis-recipe" tabindex="0">{{ JSON.stringify(method(node.method_publication_id)?.recipe, null, 2) }}</pre>
       </details>
     </article>
-    <h4 class="aira-type-label mb-2">
+    <h4 v-if="graph.edges.length" class="aira-type-label mb-2">
       {{ $t("page.workflowDefinitions.conditions.previewTitle") }}
     </h4>
-    <ol class="workflow-summary-list">
+    <ol v-if="graph.edges.length" class="workflow-summary-list">
       <li v-for="edge in graph.edges" :key="edge.edge_id">
         <strong>{{ nodeTitle(edge.source_node_id) }} → {{ nodeTitle(edge.target_node_id) }}</strong>
         <div class="mt-1">
@@ -78,7 +105,7 @@ import { workflowConditionText, workflowPathLabel } from "@/utils/workflow-edito
 import { computed } from "vue"
 import WorkflowMethodSummary from "./workflow-method-summary.vue"
 
-const props = defineProps<{ graph: Pick<WorkflowGraph, "nodes" | "edges" | "bindings">, methods?: WorkflowAnalysisPublication[], fieldCatalog?: Record<string, WorkflowField[]> }>()
+const props = defineProps<{ graph: Pick<WorkflowGraph, "nodes" | "edges" | "bindings" | "asset_inputs" | "asset_bindings">, methods?: WorkflowAnalysisPublication[], fieldCatalog?: Record<string, WorkflowField[]> }>()
 function fileDescription(nodeId: string, path: string[]) {
   const field = props.fieldCatalog?.[nodeId]?.find(field => JSON.stringify(field.path) === JSON.stringify(path))
   return `${field?.title || workflowPathLabel(path)} (${field?.value_type === "file" ? field.file_extensions?.join(", ") || "*" : "—"})`

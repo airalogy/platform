@@ -48,11 +48,44 @@
         </li>
       </ul>
     </div>
+    <div v-for="(source, inputId) in resolution.receipt.asset_sources ?? {}" :key="inputId" class="workflow-resolution-source mt-3" data-testid="workflow-resolved-asset">
+      <strong>{{ $t('page.workflowAssets.sourceInput') }} · {{ inputId }}</strong>
+      <p class="aira-type-meta my-1">
+        {{ $t('page.workflowAssets.assetId') }}: {{ source.data_asset_id }} · v{{ source.version }}
+      </p>
+      <p class="aira-type-meta my-1">
+        {{ $t('page.workflowAssets.versionId') }}: {{ source.data_asset_version_id }}
+      </p>
+      <ul class="mb-0 mt-2 pl-5">
+        <li v-for="binding in assetBindings(inputId)" :key="binding.binding_id" class="my-2">
+          {{ workflowPathLabel(binding.source_path) }} → {{ workflowPathLabel(binding.target_path) }}<span v-if="binding.unit"> · {{ binding.unit }}</span>
+          <p v-if="binding.value_type !== 'file' && Object.hasOwn(binding, 'value')" class="aira-type-meta my-1">
+            {{ $t('page.workflowAssets.resolvedValue') }}: {{ JSON.stringify(binding.value) }}
+          </p>
+          <div v-if="fileReceipt(binding.binding_id)" class="workflow-resolved-file mt-2" data-testid="workflow-resolved-file">
+            <strong>{{ $t('page.workflowFiles.receipt') }}</strong>
+            <p class="aira-type-meta my-1">
+              {{ fileReceipt(binding.binding_id)?.filename }} · {{ fileReceipt(binding.binding_id)?.content_type }} · {{ fileReceipt(binding.binding_id)?.size_bytes }} B
+            </p>
+            <p class="aira-type-meta my-1">
+              SHA-256 · {{ fileReceipt(binding.binding_id)?.sha256 }}
+            </p>
+            <p class="aira-type-meta my-1">
+              {{ $t('page.workflowFiles.destinationHint') }}
+            </p>
+          </div>
+        </li>
+      </ul>
+      <details class="aira-type-meta mt-2">
+        <summary>{{ $t('page.workflowAssets.sourceDetails') }}</summary>
+        <p>{{ $t('page.workflowAssets.sourceDigest') }}: {{ source.source_digest }}</p>
+      </details>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { WorkflowControlEdge, WorkflowScalarBinding } from "@/service/api/workflow-definitions"
+import type { WorkflowAssetBinding, WorkflowControlEdge, WorkflowScalarBinding } from "@/service/api/workflow-definitions"
 import { workflowConditionText, workflowPathLabel } from "@/utils/workflow-editor"
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
@@ -64,6 +97,8 @@ interface Resolution {
     bindings: WorkflowScalarBinding[]
     edges: WorkflowControlEdge[]
     files?: Array<{ binding_id: string, file_id: string, digest: string, filename: string, content_type: string, size_bytes: number, sha256: string }>
+    asset_sources?: Record<string, { kind: "data_asset", asset_input_id: string, input_id: string, data_asset_id: string, data_asset_version_id: string, version: number, research_file_id: string, source_digest: string }>
+    asset_bindings?: Array<WorkflowAssetBinding & { value?: string | number | boolean | null, value_digest?: string }>
   }
 }
 const props = defineProps<{ inputData: Record<string, unknown>, restricted?: boolean, pendingApproval?: boolean, sourceTitles?: Record<string, string> }>()
@@ -81,6 +116,9 @@ const stateLabel = computed(() => {
 })
 function sourceBindings(nodeId: string) {
   return resolution.value?.receipt.bindings.filter(binding => binding.source_node_id === nodeId) ?? []
+}
+function assetBindings(inputId: string) {
+  return resolution.value?.receipt.asset_bindings?.filter(binding => binding.input_id === inputId) ?? []
 }
 function fileReceipt(bindingId: string) {
   return resolution.value?.receipt.files?.find(file => file.binding_id === bindingId)

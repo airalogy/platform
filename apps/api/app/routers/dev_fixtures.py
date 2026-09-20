@@ -636,6 +636,47 @@ async def ensure_analysis_fixture(
     return protocol
 
 
+async def ensure_project_analysis_fixture(db, project, owner):
+    """Two real, distinct Schemas with explicit sample keys; no sealed reports."""
+    inputs = []
+    definitions = (
+        ("concentration", "sample", "concentration", "mg/L", [("S1", 2), ("S2", 4), ("S3", 6)]),
+        ("response", "specimen", "response", "%", [("S1", 10), ("S2", 20), ("S4", 40)]),
+    )
+    for slot_id, key, field, unit, measurements in definitions:
+        uid = f"project_analysis_{slot_id}_e2e"
+        protocol = await Protocol.find_by(db, [Protocol.project_id == project.id, Protocol.uid == uid])
+        if protocol is None:
+            protocol = Protocol(
+                project_id=project.id, user_id=owner.id, uid=uid,
+                name=f"Synthetic Project {slot_id}", latest_version="1.0.0",
+                description="Development-only explicit sample matching fixture.",
+            )
+            db.add(protocol)
+            await db.flush()
+            db.add(ProtocolVersion(
+                protocol_id=protocol.id, version="1.0.0",
+                meta_data={"id": uid, "version": "1.0.0", "name": protocol.name},
+                json_schema={"vars": {"type": "object", "properties": {
+                    key: {"type": "string", "title": "Synthetic sample identifier"},
+                    field: {"type": "number", "title": field.title(), "unit": unit},
+                }}},
+                fields={"vars": [key, field]}, assigners={}, assigner_graph={},
+                aimd=f"# Synthetic {slot_id}\n\n{{{{var|{key}: str}}}}\n\n{{{{var|{field}: float}}}}",
+            ))
+            for number, (sample, value) in enumerate(measurements, 1):
+                data = {"var": {key: sample, field: value}, "step": {}, "check": {}}
+                db.add(Record(
+                    protocol_id=protocol.id, protocol_version="1.0.0", user_id=owner.id,
+                    number=number, version=1, data=data,
+                    hash=get_data_sha1({"data": data}), report=f"Synthetic {slot_id} {sample}",
+                ))
+            await db.flush()
+        inputs.append({"slot_id": slot_id, "protocol_id": str(protocol.id), "protocol_uid": protocol.uid,
+            "key_field": key, "value_field": field, "unit": unit})
+    return {"inputs": inputs}
+
+
 async def ensure_workflow_compute_fixture(
     db, project, owner, protocol, *, attachment_method=False
 ):
@@ -915,6 +956,208 @@ async def ensure_second_analysis_attachment(db, project, owner, protocol):
     await db.flush()
 
 
+async def ensure_workflow_asset_fixture(db, project, owner):
+    """Managed synthetic JSON versions; never fabricates Actions or experimental results."""
+    import hashlib
+    from io import BytesIO
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    from sqlalchemy import select
+
+    from app.libs.file_storage import (
+        default_storage_backend,
+        default_storage_namespace,
+        upload_file,
+    )
+    from app.models.knowledge import ResearchFile, ResearchFileBlob
+    from app.models.research import ResearchTask
+    from app.models.research_asset import DataAsset, DataAssetVersion
+
+    uid = "workflow_assets_e2e"
+    name = "Synthetic Workflow JSON input (not experimental evidence)"
+    protocol = await Protocol.find_by(
+        db, [Protocol.project_id == project.id, Protocol.uid == uid]
+    )
+    if protocol is None:
+        protocol = Protocol(
+            project_id=project.id,
+            user_id=owner.id,
+            uid=uid,
+            name="Synthetic Workflow Asset Receiver",
+            latest_version="1.0.0",
+            description="Development-only receiver of exact synthetic DataAsset inputs.",
+        )
+        db.add(protocol)
+        await db.flush()
+        db.add(
+            ProtocolVersion(
+                protocol_id=protocol.id,
+                version="1.0.0",
+                meta_data={"id": uid, "version": "1.0.0", "name": protocol.name},
+                json_schema={
+                    "vars": {
+                        "type": "object",
+                        "properties": {
+                            "dose": {"type": "number", "unit": "mg", "title": "Dose"},
+                            "attachment": {
+                                "type": "string",
+                                "airalogy_type": "FileId",
+                                "file_extension": "json",
+                                "title": "JSON attachment",
+                            },
+                        },
+                        "required": ["dose", "attachment"],
+                    }
+                },
+                fields={"vars": ["dose", "attachment"]},
+                assigners={},
+                assigner_graph={},
+                aimd="# Synthetic asset input verification\n\nDose (mg): {{var|dose: float}}\n\nSource file: {{var|attachment: FileIdJSON}}",
+            )
+        )
+        await db.flush()
+    asset = await db.scalar(
+        select(DataAsset).where(DataAsset.project_id == project.id, DataAsset.name == name)
+    )
+    if asset is None:
+        source_task = ResearchTask(
+            lab_id=project.lab_id,
+            project_id=project.id,
+            title="Synthetic Workflow asset storage (no execution)",
+            goal="Store explicit synthetic JSON fixtures, not a completed experiment.",
+            status="draft",
+            owner_user_id=owner.id,
+            created_by_user_id=owner.id,
+        )
+        db.add(source_task)
+        await db.flush()
+        asset = DataAsset(
+            lab_id=project.lab_id,
+            project_id=project.id,
+            task_id=source_task.id,
+            name=name,
+            description="Two synthetic versions; version 1 is intentionally not latest.",
+            kind="file",
+            status="ready",
+            current_version=2,
+            created_by_user_id=owner.id,
+        )
+        db.add(asset)
+        await db.flush()
+        for number, value in [(1, 2.5), (2, 9.5)]:
+            content = json.dumps(
+                {"metrics": {"calibration.mean": value}, "note": "Synthetic fixture, not scientific evidence."},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+            checksum = hashlib.sha256(content).hexdigest()
+            blob = await db.scalar(
+                select(ResearchFileBlob).where(ResearchFileBlob.checksum_sha256 == checksum)
+            )
+            if blob is None:
+                key = f"knowledge/blobs/{checksum[:2]}/{checksum}"
+                await upload_file(key, BytesIO(content), content_type="application/json", length=len(content))
+                blob = ResearchFileBlob(
+                    checksum_sha256=checksum,
+                    content_type="application/json",
+                    size_bytes=len(content),
+                    storage_backend=default_storage_backend(),
+                    storage_namespace=default_storage_namespace(),
+                    storage_object_key=key,
+                )
+                db.add(blob)
+                await db.flush()
+            file = ResearchFile(
+                blob_id=blob.id,
+                filename=f"synthetic-workflow-input-v{number}.json",
+                scope_type="project",
+                lab_id=project.lab_id,
+                project_id=project.id,
+                visibility="project",
+                uploaded_by_user_id=owner.id,
+            )
+            db.add(file)
+            await db.flush()
+            db.add(
+                DataAssetVersion(
+                    data_asset_id=asset.id,
+                    version=number,
+                    research_file_id=file.id,
+                    external_uri="",
+                    media_type="application/json",
+                    checksum=checksum,
+                    byte_size=len(content),
+                    data_schema={
+                        "type": "object",
+                        "properties": {
+                            "metrics": {
+                                "type": "object",
+                                "properties": {"calibration.mean": {"type": "number", "unit": "mg"}},
+                                "required": ["calibration.mean"],
+                                "additionalProperties": False,
+                            },
+                            "note": {"type": "string"},
+                        },
+                        "required": ["metrics", "note"],
+                        "additionalProperties": False,
+                    },
+                    version_metadata={"synthetic_ui_fixture": True},
+                    source={"type": "synthetic_ui_fixture", "executed": False},
+                    change_summary="Explicit synthetic input fixture, not an execution output.",
+                    created_by_user_id=owner.id,
+                )
+            )
+            await db.flush()
+    protocol_version = await db.scalar(
+        select(ProtocolVersion).where(ProtocolVersion.protocol_id == protocol.id, ProtocolVersion.version == "1.0.0")
+    )
+    # The Record form must use the real executor, including when reseeding a
+    # development database whose earlier fixture only had a display Schema.
+    package_files = {
+        "protocol.aimd": protocol_version.aimd,
+        "protocol.toml": (
+            "[airalogy_protocol]\n"
+            f"id = {json.dumps(uid)}\n"
+            f"name = {json.dumps(protocol.name)}\n"
+            f"version = {json.dumps(protocol_version.version)}\n"
+        ),
+        "model.py": (
+            "from airalogy.types import FileIdJSON\n"
+            "from pydantic import BaseModel, Field\n\n"
+            "class VarModel(BaseModel):\n"
+            '    dose: float = Field(title="Dose", json_schema_extra={"unit": "mg"})\n'
+            '    attachment: FileIdJSON = Field(title="JSON attachment")\n'
+        ),
+    }
+    package = BytesIO()
+    with ZipFile(package, "w", compression=ZIP_DEFLATED) as archive:
+        for filename, content in package_files.items():
+            archive.writestr(filename, content)
+    package.seek(0)
+    await protocol_version.upload_package(package, length=package.getbuffer().nbytes)
+    version = await db.scalar(
+        select(DataAssetVersion).where(DataAssetVersion.data_asset_id == asset.id, DataAssetVersion.version == 1)
+    )
+    return {
+        "protocol_id": str(protocol.id),
+        "protocol_uid": protocol.uid,
+        "protocol_version_id": str(protocol_version.id),
+        "data_asset_id": str(asset.id),
+        "data_asset_version_id": str(version.id),
+        "version": version.version,
+        "latest_version": asset.current_version,
+        "name": asset.name,
+        "value": 2.5,
+        "sha256": version.checksum,
+        "byte_size": version.byte_size,
+        "filename": "synthetic-workflow-input-v1.json",
+        "source_path": ["json", "metrics", "calibration.mean"],
+        "unit": "mg",
+        "scalar_field": "dose",
+        "file_field": "attachment",
+    }
+
+
 async def ensure_workflow_file_fixture(db, project, owner):
     """Real small managed file and submitted Record; no execution is fabricated."""
     import hashlib
@@ -1093,6 +1336,8 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
     workflow_compute_attachments = await ensure_workflow_compute_fixture(
         db_session, project, owner, file_protocol, attachment_method=True
     )
+    project_analysis = await ensure_project_analysis_fixture(db_session, project, owner)
+    workflow_assets = await ensure_workflow_asset_fixture(db_session, project, owner)
     lab.projects_count = await Project.count(
         db_session,
         [Project.lab_id == lab.id, Project.deleted_at.is_(None)],
@@ -1146,6 +1391,8 @@ async def ensure_quickstart_fixtures(db_session: DBSession):
         },
         "workflow_compute": workflow_compute,
         "workflow_files": workflow_files,
+        "workflow_assets": workflow_assets,
         "workflow_compute_attachments": workflow_compute_attachments,
+        "project_analysis": project_analysis,
         "warnings": warnings,
     }

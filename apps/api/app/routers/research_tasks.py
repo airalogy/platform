@@ -583,7 +583,6 @@ async def _aira_task_draft_catalog(
                     KnowledgeItem.lab_id == project.lab_id,
                     KnowledgeItem.state == KnowledgeState.REVIEWED.value,
                     KnowledgeItem.visibility != Visibility.RESTRICTED.value,
-                    KnowledgeItem.archived_at.is_(None),
                     or_(
                         and_(
                             KnowledgeItem.scope_type == OwnerScope.PROJECT.value,
@@ -5691,7 +5690,7 @@ async def submit_research_work_item(
     await authorize_record_files(db_session, record.data, current_user)
     if ((run.environment_snapshot or {}).get("manual_workflow") or {}).get(
         "execution_contract_version"
-    ) == 5:
+    ) in {5, 6, 7}:
         from app.models.workflow_file import WorkflowFileBinding
 
         bindings = list(

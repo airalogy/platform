@@ -1,4 +1,5 @@
 import type { UploadSettledFileInfo } from "naive-ui"
+import { normalizeAimdUploadFiles } from "@/utils/aimd-files"
 import FilePreview from "@airalogy/components/file-preview/index.vue"
 import { getBaseUploadProps, getFileInfo } from "@airalogy/shared"
 import { h } from "vue"
@@ -8,11 +9,12 @@ export function getUploadProps(type: string, filePreviewProps?: Record<string, a
 
   const renderIcon = (file: UploadSettledFileInfo) => {
     // Ensure file has proper name and type for FilePreview
-    const fileName = file.name || `file.${type || "unknown"}`
+    const uploadFile = normalizeAimdUploadFiles(file)[0]
+    const fileName = uploadFile.name || `file.${type || "unknown"}`
     const fileInfo = getFileInfo(fileName)
 
     const normalizedFile = {
-      ...file,
+      ...uploadFile,
       name: fileName,
       // Use detected type from filename first, then fall back to provided type
       // Note: file.type is MIME type (e.g., "text/csv"), we need simple type (e.g., "csv")
@@ -20,6 +22,7 @@ export function getUploadProps(type: string, filePreviewProps?: Record<string, a
     }
 
     return h(FilePreview, {
+      class: "platform-aimd-file-preview",
       file: normalizedFile,
       ...(filePreviewProps || {}),
     })

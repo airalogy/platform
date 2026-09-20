@@ -38,8 +38,19 @@ async def method_for_node(db, *, user, project, node):
 
     method = await get_method(db, user, node.method_publication_id, project=project)
     from app.services.analysis_compute_contracts import COMPUTE_ENGINE_VERSION
+    from app.services.project_analysis_engine import (
+        ENGINE_VERSION as PROJECT_ENGINE_VERSION,
+    )
 
-    if method.engine_version not in {ENGINE_VERSION, COMPUTE_ENGINE_VERSION}:
+    expected = {
+        ENGINE_VERSION: None,
+        COMPUTE_ENGINE_VERSION: "compute",
+        PROJECT_ENGINE_VERSION: "project",
+    }
+    if (
+        method.engine_version not in expected
+        or node.analysis_kind != expected[method.engine_version]
+    ):
         raise HTTPException(422, "This Workflow analysis engine is unsupported")
     return method
 
@@ -102,6 +113,15 @@ async def materialize_analysis_card(
             action.input_data["compute_file_outputs"] = [
                 item.model_dump(mode="json") for item in node.compute_file_outputs
             ]
+    elif method.recipe.get("kind") == "project":
+        action.input_data.update(
+            {
+                "analysis_kind": "project",
+                "project_outputs": [
+                    item.model_dump(mode="json") for item in node.project_outputs
+                ],
+            }
+        )
     action.preview_digest = _workflow_action_preview(action)
     db.add(action)
     await db.flush()
@@ -129,23 +149,34 @@ async def authorize_analysis_sources(
             .get("compute", {})
             .get("input_files")
         )
+    from app.services.workflow_project_analysis import analysis_source_snapshots
+
+    sources = analysis_source_snapshots(snapshot)
+    if snapshot.get("project_id") not in {None, str(task.project_id)}:
+        raise HTTPException(409, "Workflow analysis source Project changed")
     for user_id in identities:
         user = await db.get(User, user_id) if user_id else None
         if user is None:
             raise HTTPException(403, "Workflow analysis recipient is unavailable")
-        _, project, own_only = await analysis_scope(
-            db, UUID(snapshot["protocol_id"]), user
-        )
-        if project.id != task.project_id:
-            raise HTTPException(409, "Workflow analysis source Project changed")
-        await authorize_source_manifest(
-            db,
-            UUID(snapshot["protocol_id"]),
-            user,
-            snapshot["records"],
-            own_only=own_only,
-        )
+        for source in sources:
+            _, project, own_only = await analysis_scope(
+                db, UUID(source["protocol_id"]), user
+            )
+            if project.id != task.project_id:
+                raise HTTPException(409, "Workflow analysis source Project changed")
+            await authorize_source_manifest(
+                db,
+                UUID(source["protocol_id"]),
+                user,
+                source["records"],
+                own_only=own_only,
+            )
         if input_files:
+            if len(sources) != 1:
+                raise HTTPException(
+                    409,
+                    "Project analysis cannot inherit a single-source attachment contract",
+                )
             from app.services.analysis_compute_files import (
                 authorize_preview_input_files,
             )
@@ -168,6 +199,30 @@ async def prepare_analysis_inputs(
     method = await method_for_node(
         db, user=user, project=await db.get(Project, task.project_id), node=node
     )
+    if method.recipe.get("kind") == "project":
+        from app.services.workflow_project_analysis import capture_project_node_inputs
+
+        selection, snapshot, summary, source_nodes = await capture_project_node_inputs(
+            db,
+            task=task,
+            method=method,
+            node=node,
+            graph=graph,
+            parents_by_node=parents_by_node,
+            user=user,
+        )
+        await authorize_analysis_sources(
+            db, task=task, run=run, action=action, snapshot=snapshot
+        )
+        return await seal_analysis_inputs(
+            db,
+            action=action,
+            method=method,
+            selection=selection,
+            snapshot=snapshot,
+            summary=summary,
+            source_nodes=source_nodes,
+        )
     records = []
     graph_nodes = {item.node_id: item for item in graph.nodes}
     for node_id in sorted(requested):
@@ -219,6 +274,21 @@ async def prepare_analysis_inputs(
             snapshot["records"],
             snapshot["fields"],
         )
+    return await seal_analysis_inputs(
+        db,
+        action=action,
+        method=method,
+        selection=selection,
+        snapshot=snapshot,
+        summary=summary,
+    )
+
+
+async def seal_analysis_inputs(
+    db, *, action, method, selection, snapshot, summary, source_nodes=None
+):
+    from app.services.research_runtime import canonical_digest
+
     bridge = await db.get(ResearchAnalysisAction, action.id)
     if bridge is None or bridge.source_digest is not None:
         raise HTTPException(
@@ -227,13 +297,16 @@ async def prepare_analysis_inputs(
     # This field is sealed with its digests by the caller in the same transaction
     # after WorkflowNodeResolution receives its immutable identity.
     bridge.input_snapshot = deepcopy(snapshot)
-    return {
+    result = {
         "source_digest": canonical_digest(snapshot),
         "method_digest": method.digest,
         "engine_version": method.engine_version,
         "selection": selection.model_dump(mode="json"),
         "summary": summary,
     }
+    if source_nodes is not None:
+        result["source_nodes"] = source_nodes
+    return result
 
 
 async def verify_analysis_card(db, *, task, run, action, node, resolution=None):
@@ -281,6 +354,7 @@ async def verify_analysis_card(db, *, task, run, action, node, resolution=None):
             or analysis.created_by_user_id != action.assignee_user_id
             or analysis.project_id != task.project_id
             or analysis.protocol_id != method.protocol_id
+            or analysis.engine_version != method.engine_version
         ):
             raise HTTPException(409, "Workflow analysis execution contract changed")
         if action.status == "completed":
@@ -290,7 +364,7 @@ async def verify_analysis_card(db, *, task, run, action, node, resolution=None):
                 method=method,
                 node=node,
                 analysis=analysis,
-                fields=bridge.input_snapshot["fields"],
+                fields=bridge.input_snapshot.get("fields", []),
             )
             if (
                 analysis.status != "succeeded"
@@ -320,7 +394,7 @@ async def verify_analysis_execution(db, *, task, run, action):
         select(WorkflowRunBinding).where(WorkflowRunBinding.run_id == run.id)
     )
     if (
-        marker.get("execution_contract_version") not in {3, 4, 5}
+        marker.get("execution_contract_version") not in {3, 4, 5, 6, 7}
         or revision is None
         or revision.digest != marker.get("revision_digest")
         or binding is None
@@ -395,12 +469,19 @@ async def approve_workflow_analysis(db, *, task, run, action, current_user):
         bridge.method_publication_id,
         project=await db.get(Project, task.project_id),
     )
-    selection = AnalysisSelection(
-        mode="selected",
-        records=[
-            {"id": item["record_id"], "version": item["record_version"]}
-            for item in bridge.input_snapshot["records"]
-        ],
+    from app.services.workflow_project_analysis import project_selection_from_snapshot
+
+    is_project = method.recipe.get("kind") == "project"
+    selection = (
+        project_selection_from_snapshot(bridge.input_snapshot)
+        if is_project
+        else AnalysisSelection(
+            mode="selected",
+            records=[
+                {"id": item["record_id"], "version": item["record_version"]}
+                for item in bridge.input_snapshot["records"]
+            ],
+        )
     )
     if method.recipe.get("kind") == "compute":
         from app.services.workflow_compute_runtime import approve_compute_card
@@ -432,19 +513,39 @@ async def approve_workflow_analysis(db, *, task, run, action, current_user):
             idempotency_key=f"workflow-analysis:{action.id}:queued",
         )
         return analysis
-    recipe = AnalysisRecipe.model_validate(method.recipe)
+    confirm = confirm_analysis
     # Ordinary private analysis APIs retain their owner-only policy. This explicit
     # publication is copied as a recipe, never forged as someone's private method.
-    preview = await create_preview(
-        db,
-        AnalysisPreviewRequest(
-            protocol_id=method.protocol_id,
-            recipe=recipe,
-            selection=selection,
-            question=action.title,
-        ),
-        user,
-    )
+    if is_project:
+        from app.services.project_analyses import (
+            ProjectPreviewRequest,
+            confirm_project_analysis,
+            create_project_preview,
+        )
+        from app.services.project_analysis_engine import ProjectAnalysisRecipe
+
+        preview = await create_project_preview(
+            db,
+            ProjectPreviewRequest(
+                project_id=task.project_id,
+                recipe=ProjectAnalysisRecipe.model_validate(method.recipe),
+                selection=selection,
+                question=action.title,
+            ),
+            user,
+        )
+        confirm = confirm_project_analysis
+    else:
+        preview = await create_preview(
+            db,
+            AnalysisPreviewRequest(
+                protocol_id=method.protocol_id,
+                recipe=AnalysisRecipe.model_validate(method.recipe),
+                selection=selection,
+                question=action.title,
+            ),
+            user,
+        )
     if (
         preview.source_digest != bridge.source_digest
         or preview.recipe_digest != canonical_digest(method.recipe)
@@ -453,7 +554,7 @@ async def approve_workflow_analysis(db, *, task, run, action, current_user):
             409,
             "Resolved analysis data or Schema changed; use a newly confirmed Workflow",
         )
-    analysis = await confirm_analysis(
+    analysis = await confirm(
         db,
         preview_id=preview.id,
         preview_digest=preview.preview_digest,
@@ -633,7 +734,7 @@ async def sync_workflow_analysis(db, analysis):
                 method=method,
                 node=node,
                 analysis=analysis,
-                fields=bridge.input_snapshot["fields"],
+                fields=bridge.input_snapshot.get("fields", []),
             )
         except ValueError as error:
             action.status = "failed"
@@ -776,27 +877,30 @@ async def analysis_action_readable(db, *, task, run, action, user):
             or action.preview_digest != bridge.preview_digest
         ):
             return False
-        _, project, own_only = await analysis_scope(
-            db, UUID(bridge.input_snapshot["protocol_id"]), user
-        )
-        if project.id != task.project_id:
-            return False
-        await authorize_source_manifest(
-            db,
-            UUID(bridge.input_snapshot["protocol_id"]),
-            user,
-            bridge.input_snapshot["records"],
-            own_only=own_only,
-        )
-        for record in bridge.input_snapshot["records"]:
-            actual = await _readable_record(
-                db,
-                source={**record, "protocol_id": bridge.input_snapshot["protocol_id"]},
-                current_user=user,
-                project=project,
+        from app.services.workflow_project_analysis import analysis_source_snapshots
+
+        for source in analysis_source_snapshots(bridge.input_snapshot):
+            _, project, own_only = await analysis_scope(
+                db, UUID(source["protocol_id"]), user
             )
-            if canonical_digest(actual.data) != canonical_digest(record["data"]):
+            if project.id != task.project_id:
                 return False
+            await authorize_source_manifest(
+                db,
+                UUID(source["protocol_id"]),
+                user,
+                source["records"],
+                own_only=own_only,
+            )
+            for record in source["records"]:
+                actual = await _readable_record(
+                    db,
+                    source={**record, "protocol_id": source["protocol_id"]},
+                    current_user=user,
+                    project=project,
+                )
+                if canonical_digest(actual.data) != canonical_digest(record["data"]):
+                    return False
         input_files = (
             (action.input_data or {})
             .get("analysis_input", {})
@@ -853,7 +957,7 @@ async def analysis_action_readable(db, *, task, run, action, user):
                     method=method,
                     node=node,
                     analysis=analysis,
-                    fields=bridge.input_snapshot["fields"],
+                    fields=bridge.input_snapshot.get("fields", []),
                 ):
                     return False
     except (HTTPException, KeyError, ValueError, TypeError):
@@ -862,6 +966,22 @@ async def analysis_action_readable(db, *, task, run, action, user):
 
 
 async def projected_analysis_result(db, *, method, node, analysis, fields):
+    if method.recipe.get("kind") == "project":
+        from app.services.workflow_analysis_contracts import (
+            project_method_output_catalog,
+            project_workflow_outputs,
+        )
+
+        catalog = project_method_output_catalog(
+            method.recipe, method.project_contract, node.project_outputs
+        )
+        return project_workflow_outputs(
+            method.recipe,
+            method.project_contract,
+            analysis.result,
+            node.project_outputs,
+            catalog,
+        )
     if method.recipe.get("kind") == "compute":
         from app.services.research_instruments import validate_schema_payload
         from app.services.workflow_compute_contracts import (

@@ -103,6 +103,10 @@ async def _compute_environment_context(db, project, user, revision_id, language)
 
 async def _interpretation_run(db, analysis_id, user):
     run = await owned_run(db, analysis_id, user)
+    if getattr(run, "source_scope", "protocol") == "project":
+        raise HTTPException(
+            409, "Project analysis uses its separate multi-source interpretation contract"
+        )
     if run.engine_version == COMPUTE_ENGINE_VERSION:
         from app.services.analysis_compute import owned_compute
 

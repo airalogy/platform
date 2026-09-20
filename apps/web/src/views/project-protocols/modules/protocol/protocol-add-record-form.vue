@@ -6,6 +6,7 @@
     v-model:selected-tab="selectedTab"
     :dom-mounted="domMounted"
     :default-spilt-size="props.defaultSpiltSize"
+    responsive
   >
     <template #tabs>
       <n-tab-pane
@@ -141,7 +142,7 @@
           :content="templateRef"
           :mode="previewMode"
           :value="previewValue"
-          class="px-6"
+          class="record-inline-content"
           :render-options="previewAimdRenderOptions"
           :readonly-record-data="readonlyRecordData"
           :mermaid-component="MermaidBlock"
@@ -200,6 +201,7 @@ import { useAppStore } from "@/store/modules/app"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { themeSettings } from "@/theme/settings"
+import { protocolFileEventOwnerKey, syncPreviewFileEvent } from "@/utils/aimd-file-events"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import { bubbleMenuEventKey, fieldEventKey } from "@/utils/template/eventKey"
 import { AimdMarkdownPreview } from "@airalogy/aimd-renderer/vue"
@@ -950,6 +952,14 @@ updateFieldRef.value = updateField
 
 // Create fieldEventBus for syncing left form changes to right AIMD preview
 const localFieldEventBus = useEventBus<string>(fieldEventKey)
+provide(protocolFileEventOwnerKey, true)
+
+// The field drawer is lazy on mobile. Keep canonical file updates in this
+// always-mounted form; field items only synchronize their local preview state.
+localFieldEventBus.on((event, payload: IFieldChangePayload) => {
+  if (!props.readonly)
+    syncPreviewFileEvent(event, payload, fieldModel, handleFieldChange)
+})
 
 // Wrap handleFieldChange to emit preview-field-change event for queue-based processing
 // This ensures field changes go through the debounced queue mechanism
@@ -1563,6 +1573,13 @@ defineExpose({
 
 <style scoped lang="sass">
 @use "@styles/sass/list.sass" as *
+
+.record-inline-content
+  padding-inline: 24px
+
+@media (max-width: 767px)
+  .record-inline-content
+    padding-inline: 0
 
 :deep(.n-form-item-blank)
   flex-direction: column

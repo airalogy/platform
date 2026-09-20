@@ -98,19 +98,40 @@ test("minimal manual Research Task does not require optional infrastructure", as
 
 test("My Log is reachable and a progress entry survives reloading", async ({ page }) => {
   const title = `Journey progress ${Date.now()}`
+  const body = "Synthetic progress note; no Protocol or experimental Record is needed for this log."
+  const selectLogEntries = async () => {
+    const loaded = page.waitForResponse(response =>
+      response.url().includes("/api/research-log/timeline")
+      && new URL(response.url()).searchParams.get("source") === "manual",
+    )
+    await page.getByText("All activity", { exact: true }).click()
+    await page.getByText("Log entries", { exact: true }).click()
+    expect((await loaded).ok()).toBeTruthy()
+  }
   await page.goto("/home")
   await page.getByRole("link", { name: "Log", exact: true }).click()
   await expect(page.getByRole("heading", { name: "My Log", exact: true })).toBeVisible()
+  // Persistence does not imply first-page position in a mixed activity feed.
+  await selectLogEntries()
   await page.getByRole("button", { name: "New Log entry", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("textbox").nth(1).fill(title)
-  await dialog.getByRole("textbox").nth(2).fill("Synthetic progress note; no Protocol or experimental Record is needed for this log.")
+  await dialog.getByRole("textbox").nth(2).fill(body)
   await dialog.getByRole("button", { name: "Preview entry", exact: true }).click()
   await expect(dialog).toContainText("My Log")
+  const saved = page.waitForResponse(response =>
+    response.url().endsWith("/api/research-log/entries") && response.request().method() === "POST",
+  )
   await dialog.getByRole("button", { name: "Confirm and save", exact: true }).click()
-  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible()
+  expect((await saved).ok()).toBeTruthy()
+  await expect(dialog).toHaveCount(0)
+  const entry = page.getByRole("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
+  await expect(entry.getByRole("heading", { name: title, exact: true })).toBeVisible()
+  await expect(entry.getByText(body, { exact: true })).toBeVisible()
   await page.reload()
-  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible()
+  await selectLogEntries()
+  await expect(entry.getByRole("heading", { name: title, exact: true })).toBeVisible()
+  await expect(entry.getByText(body, { exact: true })).toBeVisible()
 })
 
 test("tablet workbench leads and Record draft has one reliable save entry", async ({ page }) => {

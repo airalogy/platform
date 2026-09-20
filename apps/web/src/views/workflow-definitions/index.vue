@@ -80,7 +80,8 @@
                 <n-input v-model:value="description" type="textarea" :maxlength="4000" :autosize="{ minRows: 2, maxRows: 4 }" data-testid="workflow-description" />
               </n-form-item>
             </n-form>
-            <n-radio-group v-model:value="addKind" :disabled="!editable" class="mb-3" data-testid="workflow-card-kind">
+            <workflow-asset-inputs v-model:graph="graph" :disabled="!editable" />
+            <n-radio-group v-model:value="addKind" :disabled="busy || loading" class="mb-3" data-testid="workflow-card-kind">
               <n-radio value="protocol">
                 {{ $t('page.workflowAnalysis.protocolCard') }}
               </n-radio>
@@ -100,10 +101,18 @@
             </div>
             <div v-else class="mb-4">
               <div class="workflow-add-row mb-3">
-                <n-select v-model:value="addMethodId" :options="methodOptions" :disabled="!editable" filterable :placeholder="$t('page.workflowAnalysis.selectMethod')" data-testid="workflow-add-analysis-method" />
+                <n-select v-model:value="addMethodId" :options="methodOptions" :disabled="busy || loading" filterable :placeholder="$t('page.workflowAnalysis.selectMethod')" data-testid="workflow-add-analysis-method" />
                 <n-button :disabled="!editable || !addMethodId || graph.nodes.length >= 40" data-testid="workflow-add-analysis-card" @click="addAnalysisCard">
                   {{ $t('page.workflowAnalysis.addCard') }}
                 </n-button>
+              </div>
+              <div v-if="addMethodId" class="mb-3">
+                <n-button :disabled="busy || loading || !supportsAnalysisProtocolDraft(analysisMethod(addMethodId))" data-testid="workflow-analysis-protocol-draft" @click="openAnalysisProtocolDraft(addMethodId)">
+                  {{ $t('page.analysisProtocolDraft.entry') }}
+                </n-button>
+                <p v-if="!supportsAnalysisProtocolDraft(analysisMethod(addMethodId))" class="aira-type-meta mb-0">
+                  {{ $t('page.analysisProtocolDraft.computeUnsupported') }}
+                </p>
               </div>
               <n-button :disabled="!editable" data-testid="workflow-publish-method" @click="publishMethodVisible = true">
                 {{ $t('page.workflowAnalysis.publishAction') }}
@@ -207,6 +216,14 @@
                   </template>
                 </n-form-item>
               </n-form>
+              <div v-if="selectedNode.kind === 'analysis'" class="mb-3">
+                <n-button :disabled="busy || loading || !supportsAnalysisProtocolDraft(analysisMethod(selectedNode.method_publication_id))" data-testid="workflow-card-protocol-draft" @click="openAnalysisProtocolDraft(selectedNode.method_publication_id)">
+                  {{ $t('page.analysisProtocolDraft.entry') }}
+                </n-button>
+                <p v-if="!supportsAnalysisProtocolDraft(analysisMethod(selectedNode.method_publication_id))" class="aira-type-meta mb-0">
+                  {{ $t('page.analysisProtocolDraft.computeUnsupported') }}
+                </p>
+              </div>
               <section v-if="incomingEdges(selectedNode.node_id).length" class="mb-4">
                 <h4 class="aira-type-label mb-2 mt-0">
                   {{ $t("page.workflowDefinitions.conditions.title") }}
@@ -222,7 +239,7 @@
                   />
                 </div>
               </section>
-              <workflow-analysis-inputs v-if="selectedNode.kind === 'analysis'" :graph="graph" :node="selectedNode" :method="analysisMethod(selectedNode.method_publication_id)" :disabled="!editable" @sources="selectedNode.record_sources = $event" @outputs="updateBuiltinOutputs" @compute-outputs="updateComputeOutputs" @compute-files="updateComputeFiles" />
+              <workflow-analysis-inputs v-if="selectedNode.kind === 'analysis'" :graph="graph" :node="selectedNode" :method="analysisMethod(selectedNode.method_publication_id)" :disabled="!editable" @sources="selectedNode.record_sources = $event" @outputs="updateBuiltinOutputs" @compute-outputs="updateComputeOutputs" @compute-files="updateComputeFiles" @project-outputs="updateProjectOutputs" />
               <n-alert v-if="selectedNode.kind === 'analysis' && outputCatalogs[selectedNode.node_id]?.pending" type="info" class="mt-3">
                 {{ $t('page.workflowAnalysis.previewOutputs') }}
               </n-alert>
@@ -236,6 +253,7 @@
                 v-if="selectedNode.kind === 'protocol'" :graph="graph" :node="selectedNode" :protocols="context.protocols" :analysis-fields="analysisFields" :disabled="!editable"
                 class="mb-4" @change="updateBindings"
               />
+              <workflow-asset-bindings v-if="selectedNode.kind === 'protocol'" :graph="graph" :node="selectedNode" :protocols="context.protocols" :disabled="!editable" @change="updateAssetBindings" />
               <div v-if="selectedNode.kind === 'protocol' && Object.keys(selectedNode.initial_values).length" class="mb-4">
                 <h4 class="aira-type-label mb-2">
                   {{ $t("page.workflowDefinitions.initialValues") }}
@@ -296,6 +314,7 @@
       </div>
     </n-spin>
     <analysis-method-publish-modal v-if="projectInfo" v-model:show="publishMethodVisible" :project-id="projectInfo.id" :project-name="projectInfo.name" @published="methodPublished" />
+    <analysis-protocol-draft-modal v-model:show="protocolDraftVisible" :method="protocolDraftMethod" />
 
     <n-modal v-model:show="saveVisible" preset="card" class="aira-dialog" style="--aira-dialog-width: 44rem" :title="$t('page.workflowDefinitions.savePreview')" :mask-closable="false" :closable="!busy && !confirmationUncertain" :close-on-esc="!busy && !confirmationUncertain">
       <template v-if="savePreview">
@@ -354,6 +373,7 @@
       <n-form-item :label="$t('page.workflowDefinitions.researchTask')" label-placement="top">
         <n-select v-model:value="taskId" :options="taskOptions" :disabled="busy || !!runPreview" :placeholder="$t('page.workflowDefinitions.selectTask')" data-testid="workflow-task" />
       </n-form-item>
+      <workflow-asset-run-inputs v-if="!runPreview" v-model="assetVersions" :graph="graph" :protocols="context?.protocols ?? []" :versions="assetVersionChoices" :disabled="busy" :loading="assetVersionsLoading" :error="assetVersionsError" :has-more="assetVersionPage.nextOffset !== null" @load-more="loadMoreAssetVersions" />
       <section v-if="computeNodes.length && !runPreview" class="mb-4">
         <p class="aira-type-meta">
           {{ $t('page.workflowAnalysis.runComputeGovernance') }}
@@ -401,7 +421,8 @@
             <span>{{ pin.name }} · {{ pin.kind === 'analysis' ? `${pin.engine_version} · ${pin.content_digest}` : pin.version }}</span>
           </li>
         </ol>
-        <workflow-data-summary :graph="{ nodes: runPreview.nodes, edges: runPreview.edges ?? [], bindings: runPreview.bindings ?? [] }" :methods="context?.analysis_methods" :field-catalog="fieldCatalog" />
+        <workflow-data-summary :graph="{ nodes: runPreview.nodes, edges: runPreview.edges ?? [], bindings: runPreview.bindings ?? [], asset_inputs: runPreview.asset_inputs, asset_bindings: runPreview.asset_bindings }" :methods="context?.analysis_methods" :field-catalog="fieldCatalog" />
+        <workflow-asset-preview :inputs="runPreview.asset_inputs ?? []" :nodes="runPreview.nodes" />
         <template v-for="node in runPreview.nodes" :key="node.node_id">
           <div v-if="node.kind === 'protocol' && Object.keys(node.initial_values).length" class="mt-3">
             <strong>{{ node.title }} · {{ $t("page.workflowDefinitions.initialValues") }}</strong>
@@ -414,7 +435,7 @@
           <n-button :disabled="busy || confirmationUncertain" @click="runPreview ? runPreview = null : runVisible = false">
             {{ runPreview ? $t("page.workflowDefinitions.backToEdit") : $t("common.cancel") }}
           </n-button>
-          <n-button v-if="!runPreview" type="primary" :loading="busy" :disabled="!selectedTask" data-testid="workflow-preview-run" @click="previewRun">
+          <n-button v-if="!runPreview" type="primary" :loading="busy" :disabled="!selectedTask || !validAssetVersions" data-testid="workflow-preview-run" @click="previewRun">
             {{ $t("page.workflowDefinitions.previewRun") }}
           </n-button>
           <n-button v-else type="primary" :loading="busy" data-testid="workflow-confirm-run" @click="confirmRun">
@@ -428,14 +449,17 @@
 </template>
 
 <script setup lang="ts">
-import type { WorkflowAnalysisOutput, WorkflowAnalysisPublication, WorkflowComputeFileOutput, WorkflowComputeOutput } from "@/service/api/workflow-analysis-methods"
+import type { WorkflowAnalysisOutput, WorkflowAnalysisPublication, WorkflowComputeFileOutput, WorkflowComputeOutput, WorkflowProjectOutput } from "@/service/api/workflow-analysis-methods"
 import type { WorkflowConversionResult } from "@/service/api/workflow-conversions"
-import type { WorkflowAnalysisNode, WorkflowCondition, WorkflowContext, WorkflowDefinition, WorkflowDefinitionDetail, WorkflowField, WorkflowGraph, WorkflowNode, WorkflowProtocolNode, WorkflowRunPreview, WorkflowRunRequest, WorkflowSavePreview, WorkflowSaveRequest, WorkflowScalarBinding } from "@/service/api/workflow-definitions"
+import type { WorkflowAnalysisNode, WorkflowAssetBinding, WorkflowCondition, WorkflowContext, WorkflowDefinition, WorkflowDefinitionDetail, WorkflowField, WorkflowGraph, WorkflowNode, WorkflowProtocolNode, WorkflowRunPreview, WorkflowRunRequest, WorkflowSavePreview, WorkflowSaveRequest, WorkflowScalarBinding } from "@/service/api/workflow-definitions"
+import type { WorkflowAssetPageState } from "@/utils/workflow-editor"
+import { supportsAnalysisProtocolDraft } from "@/service/api/analysis-protocol-drafts"
 import { previewWorkflowAnalysisOutputs } from "@/service/api/workflow-analysis-methods"
-import { confirmWorkflowDefinition, confirmWorkflowRun, fetchWorkflowContext, fetchWorkflowDefinition, fetchWorkflowDefinitions, previewWorkflowDefinition, previewWorkflowRun } from "@/service/api/workflow-definitions"
+import { confirmWorkflowDefinition, confirmWorkflowRun, fetchWorkflowAssetVersions, fetchWorkflowContext, fetchWorkflowDefinition, fetchWorkflowDefinitions, previewWorkflowDefinition, previewWorkflowRun } from "@/service/api/workflow-definitions"
 import { isComputeAnalysisRecipe } from "@/utils/analysis-compute"
-import { createWorkflowAnalysisNode, createWorkflowId, duplicateWorkflowNode, emptyWorkflowGraph, moveWorkflowNode, normalizeWorkflowGraph, removeWorkflowNode, taskSupportsWorkflow, workflowAnalysisOutputKey, workflowAnalysisProblem, workflowConditionText, workflowDataProblem, workflowFields, workflowGraphProblem, workflowScalarFields } from "@/utils/workflow-editor"
+import { createWorkflowAnalysisNode, createWorkflowId, duplicateWorkflowNode, emptyWorkflowGraph, loadWorkflowAssetPage, moveWorkflowNode, normalizeWorkflowGraph, removeWorkflowNode, replaceWorkflowAnalysisMethod, taskSupportsWorkflow, workflowAnalysisOutputKey, workflowAnalysisProblem, workflowAnalysisSchemaVersion, workflowAssetVersionCompatible, workflowConditionText, workflowDataProblem, workflowFields, workflowGraphProblem, workflowScalarFields } from "@/utils/workflow-editor"
 import AnalysisMethodPublishModal from "@/views/analysis/components/analysis-method-publish-modal.vue"
+import AnalysisProtocolDraftModal from "@/views/analysis/components/analysis-protocol-draft-modal.vue"
 import { useProjectInfoStore } from "@/views/project-protocols/hooks/useProjectInfoStore"
 import dagre from "@dagrejs/dagre"
 import { useMediaQuery } from "@vueuse/core"
@@ -444,6 +468,10 @@ import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from "vue-router"
 import WorkflowAnalysisInputs from "./components/workflow-analysis-inputs.vue"
+import WorkflowAssetBindings from "./components/workflow-asset-bindings.vue"
+import WorkflowAssetInputs from "./components/workflow-asset-inputs.vue"
+import WorkflowAssetPreview from "./components/workflow-asset-preview.vue"
+import WorkflowAssetRunInputs from "./components/workflow-asset-run-inputs.vue"
 import WorkflowCanvas from "./components/workflow-canvas.vue"
 import WorkflowConversionModal from "./components/workflow-conversion-modal.vue"
 import WorkflowDataSummary from "./components/workflow-data-summary.vue"
@@ -471,6 +499,15 @@ const addProtocolId = ref<string | null>(null)
 const addKind = ref<"protocol" | "analysis">("protocol")
 const addMethodId = ref<string | null>(null)
 const publishMethodVisible = ref(false)
+const protocolDraftVisible = ref(false)
+const protocolDraftMethod = ref<WorkflowAnalysisPublication | null>(null)
+function openAnalysisProtocolDraft(id: string) {
+  const method = analysisMethod(id)
+  if (!method || !supportsAnalysisProtocolDraft(method))
+    return
+  protocolDraftMethod.value = method
+  protocolDraftVisible.value = true
+}
 const outputCatalogs = ref<Record<string, { key: string, fields: WorkflowField[], error?: string, pending?: boolean }>>({})
 const loading = ref(false)
 const busy = ref(false)
@@ -487,13 +524,23 @@ const runKey = ref("")
 const confirmationUncertain = ref(false)
 const taskId = ref<string | null>(null)
 const computeApprovers = ref<Record<string, string>>({})
+const assetVersions = ref<Record<string, string>>({})
+const assetVersionPage = ref<WorkflowAssetPageState>({ items: [], nextOffset: 0 })
+const assetVersionChoices = computed(() => assetVersionPage.value.items)
+const assetVersionsLoading = ref(false)
+const assetVersionsError = ref("")
+let assetVersionLoadSequence = 0
+const validAssetVersions = computed(() => (graph.value.asset_inputs ?? []).every((input) => {
+  const version = assetVersionChoices.value.find(version => version.version_id === assetVersions.value[input.input_id])
+  return version && workflowAssetVersionCompatible(version, (graph.value.asset_bindings ?? []).filter(binding => binding.input_id === input.input_id), context.value?.protocols ?? [], graph.value)
+}))
 const computeNodes = computed(() => graph.value.nodes.filter(node => node.kind === "analysis" && node.analysis_kind === "compute"))
 const computeApproverOptions = computed(() => (context.value?.compute_approvers ?? []).map(user => ({ label: user.name || user.username || user.id, value: user.id })))
 let loadSequence = 0
 
 const fingerprint = computed(() => JSON.stringify({ title: title.value, description: description.value, graph: graph.value }))
 const dirty = computed(() => !!baseline.value && fingerprint.value !== baseline.value)
-const editable = computed(() => !!context.value?.capabilities.write && !busy.value && !loading.value && !saveVisible.value && !runVisible.value && !publishMethodVisible.value)
+const editable = computed(() => !!context.value?.capabilities.write && !busy.value && !loading.value && !saveVisible.value && !runVisible.value && !publishMethodVisible.value && !protocolDraftVisible.value)
 const selectedNode = computed(() => graph.value.nodes.find(node => node.node_id === selectedNodeId.value))
 const analysisFields = computed(() => Object.fromEntries(graph.value.nodes.filter((node): node is WorkflowAnalysisNode => node.kind === "analysis").map(node => [node.node_id, outputCatalogs.value[node.node_id]?.key === workflowAnalysisOutputKey(node) ? outputCatalogs.value[node.node_id].fields : []])))
 const fieldCatalog = computed(() => Object.fromEntries(graph.value.nodes.map(node => [node.node_id, fieldsForNode(node.node_id)])))
@@ -548,16 +595,21 @@ function selectAnalysisMethod(id: string) {
   const method = analysisMethod(id)
   if (!editable.value || node?.kind !== "analysis" || !method || node.method_publication_id === id)
     return
-  const replacement = createWorkflowAnalysisNode(method, node.node_id, node.position)
-  replacement.title = node.title
-  replacement.record_sources = node.record_sources
-  graph.value.nodes = graph.value.nodes.map(item => item.node_id === node.node_id ? replacement : item)
-  if (replacement.analysis_kind === "compute" && graph.value.schema_version < 3)
-    graph.value.schema_version = 3
+  if (graph.value.edges.some(edge => edge.source_node_id === node.node_id && edge.condition)) {
+    error.value = t("page.workflowProjectAnalysis.methodChangeBlocked")
+    return
+  }
+  graph.value = replaceWorkflowAnalysisMethod(graph.value, node.node_id, method)
+  error.value = ""
+  notice.value = t("page.workflowProjectAnalysis.methodChanged")
 }
 function updateBuiltinOutputs(outputs: WorkflowAnalysisOutput[]) {
-  if (selectedNode.value?.kind === "analysis" && selectedNode.value.analysis_kind !== "compute")
+  if (selectedNode.value?.kind === "analysis" && selectedNode.value.analysis_kind !== "compute" && selectedNode.value.analysis_kind !== "project")
     selectedNode.value.analysis_outputs = outputs
+}
+function updateProjectOutputs(outputs: WorkflowProjectOutput[]) {
+  if (selectedNode.value?.kind === "analysis" && selectedNode.value.analysis_kind === "project")
+    selectedNode.value.project_outputs = outputs
 }
 function updateComputeOutputs(outputs: WorkflowComputeOutput[]) {
   if (selectedNode.value?.kind === "analysis" && selectedNode.value.analysis_kind === "compute")
@@ -566,14 +618,20 @@ function updateComputeOutputs(outputs: WorkflowComputeOutput[]) {
 function updateComputeFiles(outputs: WorkflowComputeFileOutput[]) {
   if (selectedNode.value?.kind === "analysis" && selectedNode.value.analysis_kind === "compute") {
     selectedNode.value.compute_file_outputs = outputs
-    if (outputs.length)
+    if (outputs.length && graph.value.schema_version < 4)
       graph.value.schema_version = 4
   }
 }
 function updateBindings(bindings: WorkflowScalarBinding[]) {
   graph.value.bindings = bindings
-  if (bindings.some(binding => binding.value_type === "file"))
+  if (bindings.some(binding => binding.value_type === "file") && graph.value.schema_version < 4)
     graph.value.schema_version = 4
+}
+function updateAssetBindings(bindings: WorkflowAssetBinding[]) {
+  graph.value.asset_bindings = bindings
+  graph.value.asset_inputs ??= []
+  if (graph.value.schema_version < 5)
+    graph.value.schema_version = 5
 }
 function versionLabel(node: WorkflowProtocolNode) {
   return context.value?.protocols.find(protocol => protocol.id === node.protocol_id)?.versions.find(version => version.id === node.protocol_version_id)?.version ?? node.protocol_version_id
@@ -760,9 +818,10 @@ function addAnalysisCard() {
   if (!editable.value || !method)
     return
   const id = `node_${createWorkflowId()}`
-  if (graph.value.schema_version < (isComputeAnalysisRecipe(method.recipe) ? 3 : 2))
-    graph.value.schema_version = isComputeAnalysisRecipe(method.recipe) ? 3 : 2
-  graph.value.nodes.push(createWorkflowAnalysisNode(method, id, { x: 40 + graph.value.nodes.length % 3 * 310, y: 40 + Math.floor(graph.value.nodes.length / 3) * 150 }))
+  const node = createWorkflowAnalysisNode(method, id, { x: 40 + graph.value.nodes.length % 3 * 310, y: 40 + Math.floor(graph.value.nodes.length / 3) * 150 })
+  if (graph.value.schema_version < workflowAnalysisSchemaVersion(node))
+    graph.value.schema_version = workflowAnalysisSchemaVersion(node)
+  graph.value.nodes.push(node)
   selectedNodeId.value = id
 }
 function duplicateCard(node: WorkflowNode) {
@@ -889,9 +948,16 @@ async function openRunDialog() {
     const compatible = context.value.tasks.filter(task => taskSupportsWorkflow(task, graph.value, context.value?.analysis_methods))
     taskId.value = compatible.length === 1 ? compatible[0].id : null
     computeApprovers.value = {}
+    assetVersions.value = {}
+    assetVersionLoadSequence++
+    assetVersionPage.value = { items: [], nextOffset: 0 }
+    assetVersionsLoading.value = false
+    assetVersionsError.value = ""
     runPreview.value = null
     confirmationUncertain.value = false
     runVisible.value = true
+    if (graph.value.asset_inputs?.length)
+      void loadMoreAssetVersions()
   }
   catch (cause) {
     error.value = errorText(cause)
@@ -900,8 +966,29 @@ async function openRunDialog() {
     busy.value = false
   }
 }
+async function loadMoreAssetVersions() {
+  const projectId = projectInfo.value?.id
+  if (!projectId || !runVisible.value || runPreview.value || assetVersionsLoading.value || assetVersionPage.value.nextOffset === null)
+    return
+  const sequence = ++assetVersionLoadSequence
+  assetVersionsLoading.value = true
+  assetVersionsError.value = ""
+  try {
+    const page = await loadWorkflowAssetPage(assetVersionPage.value, offset => fetchWorkflowAssetVersions(projectId, offset))
+    if (sequence === assetVersionLoadSequence && projectInfo.value?.id === projectId && runVisible.value)
+      assetVersionPage.value = page
+  }
+  catch (cause) {
+    if (sequence === assetVersionLoadSequence)
+      assetVersionsError.value = errorText(cause)
+  }
+  finally {
+    if (sequence === assetVersionLoadSequence)
+      assetVersionsLoading.value = false
+  }
+}
 async function previewRun() {
-  if (!detail.value || !selectedTask.value || !revisionId.value || busy.value)
+  if (!detail.value || !selectedTask.value || !revisionId.value || !validAssetVersions.value || busy.value)
     return
   busy.value = true
   error.value = ""
@@ -909,6 +996,8 @@ async function previewRun() {
     runRequest.value = { task_id: selectedTask.value.id, expected_task_revision: selectedTask.value.revision, workflow_revision_id: revisionId.value }
     if (computeNodes.value.length)
       runRequest.value.compute_approvers = Object.fromEntries(computeNodes.value.filter(node => computeApprovers.value[node.node_id]).map(node => [node.node_id, computeApprovers.value[node.node_id]]))
+    if (graph.value.asset_inputs?.length)
+      runRequest.value.asset_versions = { ...assetVersions.value }
     runPreview.value = await previewWorkflowRun(detail.value.id, runRequest.value)
     runKey.value = createWorkflowId()
   }
@@ -954,7 +1043,7 @@ async function loadOutputCatalog(node: WorkflowAnalysisNode) {
   const key = workflowAnalysisOutputKey(node)
   outputCatalogs.value[node.node_id] = { key, fields: [], pending: true }
   try {
-    const response = await previewWorkflowAnalysisOutputs(node.method_publication_id, node.analysis_kind === "compute" ? node.compute_outputs : node.analysis_outputs, node.analysis_kind === "compute" ? node.compute_file_outputs : undefined)
+    const response = await previewWorkflowAnalysisOutputs(node.method_publication_id, node.analysis_kind === "project" ? node.project_outputs : node.analysis_kind === "compute" ? node.compute_outputs : node.analysis_outputs, node.analysis_kind === "compute" ? node.compute_file_outputs : undefined)
     if (outputCatalogs.value[node.node_id]?.key === key)
       outputCatalogs.value[node.node_id] = { key, fields: response.fields }
   }
@@ -966,7 +1055,14 @@ async function loadOutputCatalog(node: WorkflowAnalysisNode) {
 window.addEventListener("beforeunload", beforeUnload)
 onBeforeUnmount(() => {
   loadSequence++
+  assetVersionLoadSequence++
   window.removeEventListener("beforeunload", beforeUnload)
+})
+watch(runVisible, (visible) => {
+  if (!visible) {
+    assetVersionLoadSequence++
+    assetVersionsLoading.value = false
+  }
 })
 onBeforeRouteLeave(async () => busy.value || confirmationUncertain.value ? false : confirmDiscard())
 onBeforeRouteUpdate(async () => busy.value || confirmationUncertain.value ? false : confirmDiscard())

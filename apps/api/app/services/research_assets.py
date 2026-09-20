@@ -143,6 +143,40 @@ async def research_asset_bundle(
         raise ResearchActionOutputError(
             "Action output Evidence is missing its immutable source snapshot"
         )
+    publication_evidence = [
+        item for item in evidence if item.artifact_type == "analysis_publication"
+    ]
+    publication_snapshots: dict[UUID, dict[str, Any]] = {}
+    if publication_evidence:
+        from app.models.analysis_publication import AnalysisEvidencePublication
+        from app.services.analysis_publications import publication_payload
+
+        publications = list(
+            (
+                await db_session.scalars(
+                    select(AnalysisEvidencePublication).where(
+                        AnalysisEvidencePublication.id.in_(
+                            [UUID(item.artifact_id) for item in publication_evidence]
+                        )
+                    )
+                )
+            ).all()
+        )
+        by_id = {row.id: row for row in publications}
+        for item in publication_evidence:
+            publication = by_id.get(UUID(item.artifact_id))
+            if (
+                publication is None
+                or publication.task_id != task_id
+                or publication.evidence_id != item.id
+                or publication.digest != item.artifact_version
+            ):
+                raise HTTPException(
+                    409, "Analysis Evidence is missing its exact publication snapshot"
+                )
+            # The payload verifies its sealed digest even for internal assembly;
+            # live source access is checked before public views or result export.
+            publication_snapshots[item.id] = publication_payload(publication)
     claims = list(
         (
             await db_session.scalars(
@@ -305,7 +339,7 @@ async def research_asset_bundle(
                 "artifact_snapshot": (
                     action_output_by_action_id.get(UUID(item.artifact_id))
                     if item.artifact_type == "action_output"
-                    else None
+                    else publication_snapshots.get(item.id)
                 ),
             }
             for item in evidence

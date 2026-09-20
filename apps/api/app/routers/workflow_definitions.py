@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import select
 
 from app.database import DBSession
@@ -62,7 +62,9 @@ def workflow_version_context(version):
                 "bindable_target": path in targets,
                 **spec.model_dump(mode="json"),
             }
-            for path, spec in protocol_field_catalog(version, include_files=True).items()
+            for path, spec in protocol_field_catalog(
+                version, include_files=True
+            ).items()
         ],
     }
 
@@ -194,6 +196,24 @@ async def workflow_context(
         "tasks": tasks,
         "capabilities": await capabilities(db_session, current_user, project),
     }
+
+
+@router.get("/asset-versions")
+async def workflow_asset_versions(
+    project_id: UUID,
+    current_user: CurrentUser,
+    db_session: DBSession,
+    response: Response,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    from app.services.workflow_assets import list_asset_versions
+
+    response.headers["Cache-Control"] = "private, no-store"
+    project = await scope(db_session, current_user, project_id)
+    return await list_asset_versions(
+        db_session, user=current_user, project=project, offset=offset, limit=limit
+    )
 
 
 @router.post("/preview")
@@ -448,6 +468,23 @@ async def run_preview(db, user, definition_id, params, *, lock=False):
     }
     if graph.schema_version >= 3:
         command["compute_governance"] = governance
+    asset_previews = []
+    if graph.schema_version >= 5 or params.asset_versions:
+        from app.services.workflow_asset_runtime import asset_preview_summary
+        from app.services.workflow_assets import preview_asset_inputs
+
+        asset_previews = await preview_asset_inputs(
+            db,
+            user=user,
+            owner=owner,
+            project=project,
+            graph=graph,
+            asset_versions=params.asset_versions,
+        )
+        try:
+            command["asset_inputs"] = asset_preview_summary(graph, asset_previews)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     return (
         {
             **command,
@@ -457,6 +494,7 @@ async def run_preview(db, user, definition_id, params, *, lock=False):
         run,
         revision,
         graph,
+        asset_previews,
     )
 
 
@@ -530,8 +568,17 @@ async def confirm_workflow_run(
         # Recheck all sources, but never start or queue another Action on replay.
         revision = await db_session.get(WorkflowRevision, previous.workflow_revision_id)
         await resolve_pins(db_session, current_user, project, verify_revision(revision))
+        if (revision.graph or {}).get("schema_version") in {5, 6}:
+            from app.services.workflow_asset_runtime import authorize_run_asset_inputs
+
+            await authorize_run_asset_inputs(
+                db_session,
+                task=await db_session.get(ResearchTask, previous.task_id),
+                run=await db_session.get(ResearchRun, previous.run_id),
+                user=current_user,
+            )
         return await run_result(db_session, previous)
-    preview, task, run, revision, graph = await run_preview(
+    preview, task, run, revision, graph, asset_previews = await run_preview(
         db_session, current_user, definition_id, params, lock=True
     )
     if preview["preview_digest"] != params.preview_digest:
@@ -545,6 +592,24 @@ async def confirm_workflow_run(
     }
     if graph.schema_version >= 3:
         marker["compute_governance"] = preview["compute_governance"]
+    run.environment_snapshot = {
+        **run.environment_snapshot,
+        "manual_workflow": dict(marker),
+    }
+    run.requested_by_user_id = current_user.id
+    await db_session.flush()
+    if graph.schema_version >= 5:
+        from app.services.workflow_assets import materialize_asset_inputs
+
+        inputs = await materialize_asset_inputs(
+            db_session,
+            previews=asset_previews,
+            workflow_revision_id=revision.id,
+            task=task,
+            run=run,
+            user=current_user,
+        )
+        marker["asset_input_digests"] = {row.input_id: row.digest for row in inputs}
     run.environment_snapshot = {**run.environment_snapshot, "manual_workflow": marker}
     run.requested_by_user_id = current_user.id
     binding = WorkflowRunBinding(

@@ -39,6 +39,11 @@ class AnalysisRunStatus(StrEnum):
 class AnalysisPipeline(Base):
     __tablename__ = "analysis_pipelines"
     __table_args__ = (
+        CheckConstraint(
+            "(source_scope = 'protocol' AND protocol_id IS NOT NULL) OR "
+            "(source_scope = 'project' AND protocol_id IS NULL)",
+            name="ck_analysis_pipeline_source_scope",
+        ),
         CheckConstraint("current_revision >= 1", name="ck_analysis_pipeline_revision"),
         Index(
             "ix_analysis_pipelines_owner_protocol_created",
@@ -54,8 +59,11 @@ class AnalysisPipeline(Base):
     project_id: Mapped[UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    protocol_id: Mapped[UUID] = mapped_column(
-        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=False, index=True
+    protocol_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    source_scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="protocol", server_default="protocol"
     )
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -109,6 +117,11 @@ class AnalysisPipelineRevision(Base):
 class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
     __table_args__ = (
+        CheckConstraint(
+            "(source_scope = 'protocol' AND protocol_id IS NOT NULL) OR "
+            "(source_scope = 'project' AND protocol_id IS NULL)",
+            name="ck_analysis_run_source_scope",
+        ),
         UniqueConstraint(
             "created_by_user_id",
             "client_idempotency_key",
@@ -153,8 +166,11 @@ class AnalysisRun(Base):
     project_id: Mapped[UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    protocol_id: Mapped[UUID] = mapped_column(
-        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=False, index=True
+    protocol_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    source_scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="protocol", server_default="protocol"
     )
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -197,6 +213,11 @@ class AnalysisPreview(Base):
     __tablename__ = "analysis_previews"
     __table_args__ = (
         CheckConstraint(
+            "(source_scope = 'protocol' AND protocol_id IS NOT NULL) OR "
+            "(source_scope = 'project' AND protocol_id IS NULL)",
+            name="ck_analysis_preview_source_scope",
+        ),
+        CheckConstraint(
             "source_digest ~ '^[0-9a-f]{64}$'", name="ck_analysis_preview_source_digest"
         ),
         CheckConstraint(
@@ -214,8 +235,11 @@ class AnalysisPreview(Base):
     project_id: Mapped[UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    protocol_id: Mapped[UUID] = mapped_column(
-        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=False, index=True
+    protocol_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    source_scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="protocol", server_default="protocol"
     )
     created_by_user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -238,6 +262,70 @@ class AnalysisPreview(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class AnalysisProjectInput(Base):
+    """Exact source slots preserve Protocol referential integrity, not access."""
+
+    __tablename__ = "analysis_project_inputs"
+    __table_args__ = (
+        CheckConstraint(
+            "source_digest ~ '^[0-9a-f]{64}$'", name="ck_analysis_project_input_digest"
+        ),
+        CheckConstraint(
+            "slot_id ~ '^[a-z][a-z0-9_]{0,23}$'", name="ck_analysis_project_input_slot"
+        ),
+        UniqueConstraint(
+            "run_id", "protocol_id", name="uq_analysis_project_input_protocol"
+        ),
+    )
+
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    slot_id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    protocol_id: Mapped[UUID] = mapped_column(
+        ForeignKey("protocols.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class AnalysisInterpretationRevision(Base):
+    """Human interpretation is versioned separately from computed evidence."""
+
+    __tablename__ = "analysis_interpretation_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "analysis_run_id", "revision", name="uq_analysis_interpretation_revision"
+        ),
+        CheckConstraint("revision >= 1", name="ck_analysis_interpretation_revision"),
+        CheckConstraint(
+            "result_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_analysis_interpretation_result_digest",
+        ),
+        CheckConstraint(
+            "content_digest ~ '^[0-9a-f]{64}$'",
+            name="ck_analysis_interpretation_content_digest",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=func.uuid_generate_v7()
+    )
+    analysis_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision: Mapped[int] = mapped_column(nullable=False)
+    result_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[dict] = mapped_column(JSON, nullable=False)
+    resolved_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

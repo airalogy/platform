@@ -82,7 +82,17 @@ async def preview_outputs(
 
     method = await get_method(db_session, current_user, publication_id)
     try:
-        if method.compute_contract:
+        if getattr(method, "project_contract", None):
+            from app.services.workflow_analysis_contracts import (
+                project_method_output_catalog,
+            )
+
+            if params.file_outputs:
+                raise ValueError("Project analysis methods do not produce file ports")
+            catalog = project_method_output_catalog(
+                method.recipe, method.project_contract, params.outputs
+            )
+        elif method.compute_contract:
             from app.services.workflow_compute_contracts import compute_output_catalog
 
             catalog = compute_output_catalog(
@@ -121,6 +131,28 @@ async def output_catalog(
 ):
     response.headers["Cache-Control"] = "private, no-store"
     method = await get_method(db_session, current_user, publication_id)
+    if getattr(method, "project_contract", None):
+        from app.services.workflow_analysis_contracts import (
+            validate_project_method_inputs,
+        )
+
+        catalogs = validate_project_method_inputs(
+            method.recipe, method.project_contract
+        )
+        return {
+            "kind": "project",
+            "slots": [
+                {
+                    "slot_id": slot["slot_id"],
+                    "label": slot["label"],
+                    "fields": catalogs[slot["slot_id"]],
+                }
+                for slot in method.project_contract["slots"]
+            ],
+            "join_outputs": method.recipe["join"]["outputs"]
+            if method.recipe.get("join")
+            else [],
+        }
     if not method.compute_contract:
         return {"kind": "builtin", "fields": []}
     from app.services.workflow_compute_contracts import compute_result_fields

@@ -1,3 +1,4 @@
+import type { AnalysisPublication } from "./analysis-publications"
 import { request } from "../request"
 
 export type DataAssetKind = "file" | "table" | "image" | "model" | "archive" | "external"
@@ -6,7 +7,7 @@ export type EvidenceKind = "observation" | "measurement" | "analysis" | "citatio
 export type EvidenceQuality = "pending" | "validated" | "rejected"
 export type ClaimState = "suggested" | "draft" | "reviewed" | "rejected" | "superseded" | "archived"
 export type ClaimEvidenceRelation = "supports" | "contradicts" | "context"
-export type EvidenceArtifactType = "record" | "data_asset" | "knowledge" | "paper_library_entry" | "action_output" | "external"
+export type EvidenceArtifactType = "record" | "data_asset" | "knowledge" | "paper_library_entry" | "action_output" | "analysis_publication" | "external"
 export type ResearchKnowledgeKind = "note" | "method" | "decision" | "finding"
 export type ProtocolImprovementState = "suggested" | "reviewed" | "rejected" | "applied"
 
@@ -71,7 +72,7 @@ export interface ResearchEvidence {
     digest: string
     created_by_user_id?: string | null
     created_at?: string | null
-  } | null
+  } | AnalysisPublication | null
 }
 
 export interface ClaimEvidenceLink {

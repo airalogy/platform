@@ -398,6 +398,11 @@ async def protocol_response(
             )
 
     # Build response
+    from app.services.analysis_protocol_drafts import protocol_method_sources
+
+    analysis_method_sources = await protocol_method_sources(
+        db_session, current_user, protocol, protocol_version
+    )
     protocol.lab_uid = lab.uid
     protocol.project_uid = project.uid
     protocol.version = version
@@ -423,6 +428,7 @@ async def protocol_response(
         assigners=protocol_version.assigners,
         assigner_graph=protocol_version.assigner_graph,
         knowledge_sources=knowledge_sources,
+        analysis_method_sources=analysis_method_sources,
         metadata=protocol_version.meta_data,
         records_count=records_count,
         folder_ids=folder_ids,
@@ -629,6 +635,10 @@ async def reuse_protocol(
         params.uid = parent_protocol.uid
     if params.name is None:
         params.name = parent_protocol.name
+
+    from app.libs.protocol_uid import lock_protocol_uid
+
+    await lock_protocol_uid(db_session, project.id, params.uid)
 
     protocol = await Protocol.find_by(
         db_session,

@@ -77,7 +77,11 @@ def test_private_analysis_scope_does_not_create_visibility_or_implicit_sharing()
     for model in (AnalysisPipeline, AnalysisRun, AnalysisPreview):
         columns = model.__table__.c
         assert not columns.project_id.nullable
-        assert not columns.protocol_id.nullable
+        assert columns.protocol_id.nullable
+        assert not columns.source_scope.nullable
+        assert columns.source_scope.server_default.arg == "protocol"
+        assert "source_scope = 'protocol' AND protocol_id IS NOT NULL" in ddl(model)
+        assert "source_scope = 'project' AND protocol_id IS NULL" in ddl(model)
         assert not columns.created_by_user_id.nullable
         assert "visibility" not in columns
         assert "public" not in columns
@@ -183,15 +187,22 @@ def test_frozen_migration_matches_models_columns_constraints_and_indexes(monkeyp
         declared = model.__table__
         migrated = tables[model.__tablename__]
         assert {column.name: _column_signature(column) for column in migrated.c} == {
-            column.name: _column_signature(column)
+            column.name: (
+                (_column_signature(column)[0], False, *_column_signature(column)[2:])
+                if column.name == "protocol_id" else _column_signature(column)
+            )
             for column in declared.c
             # Introduced by frozen revision 0060 and verified by its own tests.
-            if not (
+            if column.name != "source_scope" and not (
                 declared.name in {"analysis_previews", "analysis_runs"}
                 and column.name == "ai_provenance"
             )
         }
-        assert _constraint_signature(migrated) == _constraint_signature(declared)
+        assert _constraint_signature(migrated) == {
+            item for item in _constraint_signature(declared)
+            # Added in 0070, after legacy Protocol-only assets existed.
+            if not (item[0] == "check" and item[1].endswith("_source_scope"))
+        }
         # Compiling the migration also resolves every internal/external FK.
         assert str(CreateTable(migrated).compile(dialect=postgresql.dialect()))
         declared_indexes = {

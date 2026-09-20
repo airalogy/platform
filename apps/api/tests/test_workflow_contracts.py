@@ -162,7 +162,7 @@ def test_node_identifiers_are_bounded_and_not_coerced(invalid_id):
         validate_workflow_graph(graph([protocol(invalid_id)]))
 
 
-@pytest.mark.parametrize("schema_version", [True, False, "1", 1.0, 5, None])
+@pytest.mark.parametrize("schema_version", [True, False, "1", 1.0, 7, None])
 def test_schema_version_requires_exact_supported_integer(schema_version):
     with pytest.raises(ValidationError):
         validate_workflow_graph(graph(schema_version=schema_version))

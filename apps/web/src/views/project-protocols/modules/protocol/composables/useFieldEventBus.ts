@@ -616,6 +616,10 @@ export function useFieldEventBus(
         // Preserve the user's input immediately. Only dependent calculations
         // are debounced; Save draft or navigation must not miss the last edit.
         await updateField(fieldModel, payload)
+        if (payload.shouldAssign === false) {
+          fieldEventBus.emit("field-update-complete", payload)
+          return
+        }
         // Add change to queue for batched processing with debounce
         enqueueFieldChange({
           scope: payload.scope,

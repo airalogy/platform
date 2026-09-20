@@ -249,6 +249,21 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     analysis_input_file_revision = import_module("migrations.versions.0069_analysis_compute_input_files")
     assert analysis_input_file_revision.down_revision == workflow_file_revision.revision
     later_tables.update(analysis_input_file_revision.TABLE_NAMES)
+    project_analysis_revision = import_module("migrations.versions.0070_project_analysis")
+    assert project_analysis_revision.down_revision == analysis_input_file_revision.revision
+    later_tables.update(project_analysis_revision.TABLE_NAMES)
+    workflow_asset_revision = import_module("migrations.versions.0071_workflow_asset_inputs")
+    assert workflow_asset_revision.down_revision == "0070_project_analysis"
+    later_tables.update(workflow_asset_revision.TABLE_NAMES)
+    analysis_publication_revision = import_module("migrations.versions.0072_analysis_publications")
+    assert analysis_publication_revision.down_revision == workflow_asset_revision.revision
+    later_tables.update(analysis_publication_revision.TABLE_NAMES)
+    workflow_project_revision = import_module("migrations.versions.0073_workflow_project_analysis")
+    assert workflow_project_revision.down_revision == analysis_publication_revision.revision
+    later_tables.update(workflow_project_revision.TABLE_NAMES)
+    analysis_protocol_revision = import_module("migrations.versions.0074_analysis_protocol_drafts")
+    assert analysis_protocol_revision.down_revision == workflow_project_revision.revision
+    later_tables.update(analysis_protocol_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

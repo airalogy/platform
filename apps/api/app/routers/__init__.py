@@ -33,6 +33,8 @@ from .airalogy_files import router as airalogy_files_router
 from .analyses import router as analyses_router
 from .analysis_ai import router as analysis_ai_router
 from .analysis_compute import router as analysis_compute_router
+from .analysis_publications import router as analysis_publications_router
+from .analysis_protocol_drafts import router as analysis_protocol_drafts_router
 from .answers import router as answers_router
 from .attachments import router as attachments_router
 from .chats import router as chats_router
@@ -112,6 +114,7 @@ from .workflow_conversions import router as workflow_conversions_router
 from .workflow_definitions import router as workflow_definitions_router
 from .workflow_analysis_methods import router as workflow_analysis_methods_router
 from .workflow_files import router as workflow_files_router
+from .project_analyses import router as project_analyses_router
 
 if config.APP_ENV != "production":
     from .dev_fixtures import router as dev_fixtures_router
@@ -244,9 +247,13 @@ async def logger_middleware(request: Request, call_next):
     request_id_var.set(request_id)
     request.state.request_id = request_id
     body = ""
-    if config.LOG_REQUEST_BODIES and request.headers.get("content-type", "").startswith(
-        "application/json"
+    if (
+        config.LOG_REQUEST_BODIES
+        and not request.url.path.startswith("/analysis-protocol-drafts")
+        and request.headers.get("content-type", "").startswith("application/json")
     ):
+        # Protocol drafts carry unpublished scientific text and signed preview
+        # receipts. Opt-in diagnostic body logging must not copy those assets.
         request_body = await request.body()
         body = safe_json_body(request_body)
 
@@ -294,6 +301,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(login_router)
+app.include_router(analysis_protocol_drafts_router)
 app.include_router(access_router)
 app.include_router(instance_router)
 app.include_router(health_router)
@@ -309,8 +317,10 @@ app.include_router(protocol_versions_router)
 app.include_router(records_router)
 app.include_router(record_exports_router)
 app.include_router(analyses_router)
+app.include_router(project_analyses_router)
 app.include_router(analysis_ai_router)
 app.include_router(analysis_compute_router)
+app.include_router(analysis_publications_router)
 app.include_router(research_tasks_router)
 app.include_router(research_work_items_router)
 app.include_router(research_approvals_router)

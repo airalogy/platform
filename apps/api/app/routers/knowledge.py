@@ -2042,6 +2042,11 @@ async def review_knowledge_item(
         raise HTTPException(
             status_code=409, detail="Only draft or suggested Knowledge can be reviewed"
         )
+    from app.services.research_asset_visibility import (
+        require_analysis_knowledge_evidence_readable,
+    )
+
+    await require_analysis_knowledge_evidence_readable(db_session, item, current_user)
     item.state = KnowledgeState.REVIEWED.value
     item.reviewed_by_user_id = current_user.id
     item.reviewed_at = utcnow()
@@ -2066,6 +2071,13 @@ async def _publish_command(
     params: KnowledgePublishParams,
 ) -> tuple[ScopeContext, dict[str, Any]]:
     await authorize_knowledge_item(db_session, current_user, item)
+    from app.services.research_asset_visibility import (
+        require_analysis_knowledge_evidence_readable,
+    )
+
+    evidence_links = await require_analysis_knowledge_evidence_readable(
+        db_session, item, current_user
+    )
     source_scope = OwnerScope(item.scope_type)
     if (
         source_scope == OwnerScope.PERSONAL
@@ -2125,6 +2137,16 @@ async def _publish_command(
         "private_files_omitted": sorted(str(value) for value in source_files),
         "new_state": KnowledgeState.DRAFT.value,
     }
+    if evidence_links:
+        # This is explicit provenance, not a grant to original Records or files.
+        # Bind the preview to every exact source, including inherited revisions.
+        command["analysis_evidence_sources"] = [
+            {
+                "evidence_id": str(link.evidence_id),
+                "source_snapshot": link.source_snapshot,
+            }
+            for link in evidence_links
+        ]
     return target, command
 
 
@@ -2201,6 +2223,20 @@ async def confirm_knowledge_publish(
             created_by_user_id=current_user.id,
         )
     )
+    publication_sources = {
+        source["evidence_id"]: source
+        for source in command.get("analysis_evidence_sources", [])
+    }
+    for source in publication_sources.values():
+        db_session.add(
+            KnowledgeEvidenceLink(
+                knowledge_item_id=published.id,
+                knowledge_revision=1,
+                evidence_id=UUID(source["evidence_id"]),
+                source_snapshot=source["source_snapshot"],
+                created_by_user_id=current_user.id,
+            )
+        )
     source_links = list(
         (
             await db_session.scalars(

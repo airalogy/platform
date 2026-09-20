@@ -129,7 +129,15 @@
                   <div class="aira-type-meta mt-1 break-all">
                     {{ artifactLabel(item) }}
                   </div>
-                  <n-collapse v-if="item.artifact_snapshot" class="mt-3">
+                  <n-collapse v-if="item.artifact_snapshot && 'snapshot' in item.artifact_snapshot" class="mt-3">
+                    <n-collapse-item :title="$t('page.analysisPublication.title')" :name="item.id">
+                      <div class="aira-type-meta break-all">
+                        SHA-256 · {{ item.artifact_snapshot.digest }}
+                      </div>
+                      <analysis-publication-report :snapshot="item.artifact_snapshot.snapshot" />
+                    </n-collapse-item>
+                  </n-collapse>
+                  <n-collapse v-else-if="item.artifact_snapshot && 'output_data' in item.artifact_snapshot" class="mt-3">
                     <n-collapse-item :title="$t('page.research.actionOutputSnapshot')" :name="item.id">
                       <div class="aira-type-meta break-all">
                         SHA-256 · {{ item.artifact_snapshot.digest }}
@@ -283,8 +291,8 @@
     </n-spin>
 
     <n-modal
-      style="--aira-dialog-width: 42rem"
       v-model:show="modalVisible"
+      style="--aira-dialog-width: 42rem"
       preset="card"
       class="aira-dialog research-asset-modal"
       :title="modalTitle"
@@ -581,6 +589,8 @@ import {
   updateDataAssetStatus,
 } from "@/service/api/research-assets"
 import { useInstanceStore } from "@/store/modules/instance"
+import { researchArtifactTypeKey, researchArtifactVersionLabel } from "@/utils/knowledge-presentation"
+import AnalysisPublicationReport from "@/views/analysis/components/analysis-publication-report.vue"
 import { $t } from "@airalogy/shared/locales"
 import { useDialog } from "naive-ui"
 import { useRouter } from "vue-router"
@@ -675,7 +685,7 @@ const validatedEvidenceIds = computed(() => new Set(
 const knowledgeKindValues: ResearchKnowledgeKind[] = ["note", "method", "decision", "finding"]
 const knowledgeKindOptions = computed(() => knowledgeKindValues.map(value => ({ value, label: knowledgeKindLabel(value) })))
 const knowledgeEvidenceOptions = computed(() => bundle.value.evidence
-  .filter(item => item.quality_state === "validated" && ["record", "data_asset", "action_output"].includes(item.artifact_type))
+  .filter(item => item.quality_state === "validated" && ["record", "data_asset", "action_output", "analysis_publication"].includes(item.artifact_type))
   .map(item => ({
     value: item.id,
     label: item.summary || artifactLabel(item),
@@ -804,6 +814,7 @@ function openProjectKnowledge() {
   return router.push({
     name: "project-knowledge",
     params: { labUid: props.labUid, projectUid: props.projectUid },
+    query: { view: "items" },
   })
 }
 
@@ -1084,9 +1095,7 @@ function currentVersion(asset: DataAsset) {
 }
 
 function artifactLabel(item: ResearchEvidence) {
-  if (item.artifact_type === "action_output")
-    return `${artifactTypeLabel(item.artifact_type)} · ${item.artifact_id} · sha256:${item.artifact_version.slice(0, 12)}`
-  return `${artifactTypeLabel(item.artifact_type)} · ${item.artifact_id}${item.artifact_version ? ` · v${item.artifact_version}` : ""}`
+  return [artifactTypeLabel(item.artifact_type), item.artifact_id, researchArtifactVersionLabel(item.artifact_type, item.artifact_version, true)].filter(Boolean).join(" · ")
 }
 
 function formatActionOutput(value: Record<string, unknown>) {
@@ -1153,7 +1162,7 @@ function evidenceKindLabel(value: EvidenceKind) {
 }
 
 function artifactTypeLabel(value: EvidenceArtifactType) {
-  return $t(`page.research.artifactType.${value}` as I18n.I18nKey)
+  return $t(researchArtifactTypeKey(value))
 }
 
 function dataAssetKindLabel(value: DataAssetKind) {

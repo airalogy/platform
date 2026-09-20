@@ -22,7 +22,9 @@ class WorkflowFileBinding(Base):
     __table_args__ = (
         UniqueConstraint("action_id", "binding_id", name="uq_workflow_file_binding"),
         CheckConstraint(
-            "source_kind IN ('record', 'compute')", name="ck_workflow_file_source"
+            "(source_kind IN ('record', 'compute') AND source_action_id IS NOT NULL AND asset_input_id IS NULL) OR "
+            "(source_kind = 'data_asset' AND source_action_id IS NULL AND asset_input_id IS NOT NULL AND source_file_id IS NULL)",
+            name="ck_workflow_file_source",
         ),
         CheckConstraint("digest ~ '^[0-9a-f]{64}$'", name="ck_workflow_file_digest"),
     )
@@ -43,8 +45,11 @@ class WorkflowFileBinding(Base):
         ForeignKey("research_actions.id", ondelete="RESTRICT"), index=True
     )
     binding_id: Mapped[str] = mapped_column(String(64))
-    source_action_id: Mapped[UUID] = mapped_column(
+    source_action_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("research_actions.id", ondelete="RESTRICT")
+    )
+    asset_input_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("workflow_run_asset_inputs.id", ondelete="RESTRICT"), index=True
     )
     source_file_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("airalogy_files.id", ondelete="RESTRICT"), index=True

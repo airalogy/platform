@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from sqlalchemy import select, text
 
 from app.models.project import Project
@@ -57,6 +57,14 @@ class WorkflowRunDraft(BaseModel):
     task_id: UUID
     expected_task_revision: int = Field(ge=1, strict=True)
     compute_approvers: dict[str, UUID] = Field(default_factory=dict, max_length=64)
+    asset_versions: dict[str, UUID] = Field(default_factory=dict, max_length=32)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_request(self, handler):
+        result = handler(self)
+        if not self.asset_versions:
+            result.pop("asset_versions", None)
+        return result
 
 
 class WorkflowRunConfirm(WorkflowRunDraft):
@@ -153,7 +161,10 @@ async def resolve_pins(db, user, project, graph):
         catalogs[node.node_id] = protocol_field_catalog(
             version, include_files=graph.schema_version >= 4
         )
-        if any(binding.target_node_id == node.node_id for binding in graph.bindings):
+        if any(
+            binding.target_node_id == node.node_id
+            for binding in [*graph.bindings, *graph.asset_bindings]
+        ):
             target_catalogs[node.node_id] = protocol_field_catalog(
                 version, for_target=True, include_files=graph.schema_version >= 4
             )
@@ -183,7 +194,10 @@ async def resolve_pins(db, user, project, graph):
     for node in graph.nodes:
         if node.kind != "analysis":
             continue
-        if graph.schema_version not in {2, 3, 4} or not node.method_publication_id:
+        if (
+            graph.schema_version not in {2, 3, 4, 5, 6}
+            or not node.method_publication_id
+        ):
             raise HTTPException(
                 422,
                 "Analysis cards require an explicitly published Project method and a version 2, 3 or 4 graph",
@@ -199,7 +213,8 @@ async def resolve_pins(db, user, project, graph):
         source_versions = [
             versions[source.source_node_id] for source in node.record_sources
         ]
-        if any(
+        is_project = method.recipe.get("kind") == "project"
+        if not is_project and any(
             version.protocol_id != method.protocol_id for version in source_versions
         ):
             raise HTTPException(
@@ -207,14 +222,30 @@ async def resolve_pins(db, user, project, graph):
                 "This saved method requires explicitly selected Records from its Protocol; cross-Protocol analysis needs a separate mapping",
             )
         try:
-            if method.compute_contract:
+            if is_project:
+                from app.services.workflow_analysis_contracts import (
+                    project_method_output_catalog,
+                )
+                from app.services.workflow_project_analysis import (
+                    validate_project_node_inputs,
+                )
+
+                if graph.schema_version < 6:
+                    raise ValueError(
+                        "Project analysis requires Workflow schema version 6"
+                    )
+                validate_project_node_inputs(method, node, versions)
+                catalogs[node.node_id] = project_method_output_catalog(
+                    method.recipe, method.project_contract, node.project_outputs
+                )
+            elif method.compute_contract:
                 from app.services.workflow_compute_contracts import (
                     compute_output_catalog,
                     validate_compute_method_inputs,
                 )
 
                 if (
-                    graph.schema_version not in {3, 4}
+                    graph.schema_version not in {3, 4, 5, 6}
                     or node.analysis_kind != "compute"
                 ):
                     raise ValueError(
@@ -237,8 +268,10 @@ async def resolve_pins(db, user, project, graph):
                         )
                     )
             else:
-                if node.analysis_kind == "compute":
-                    raise ValueError("A Compute card cannot use a builtin method")
+                if node.analysis_kind is not None:
+                    raise ValueError(
+                        "A specialized analysis card cannot use a single-Protocol builtin method"
+                    )
                 fields = validate_analysis_method_inputs(method.recipe, source_versions)
                 # Publication fixes meaning and units, not only field names.
                 validate_recipe(
@@ -262,8 +295,22 @@ async def resolve_pins(db, user, project, graph):
                 "content_digest": method.digest,
             }
         )
+        if is_project:
+            pins[-1].update(
+                {
+                    "protocol_id": None,
+                    "protocol_version_id": None,
+                    "project_contract": method.project_contract,
+                }
+            )
     try:
         validate_workflow_data(graph, catalogs)
+        if graph.schema_version >= 5:
+            from app.services.workflow_asset_contracts import (
+                validate_workflow_asset_targets,
+            )
+
+            validate_workflow_asset_targets(graph, target_catalogs)
         if any(
             tuple(binding.target_path)
             not in target_catalogs.get(binding.target_node_id, {})

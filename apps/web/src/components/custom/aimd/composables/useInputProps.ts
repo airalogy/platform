@@ -7,6 +7,7 @@ import type { FormValidationStatus } from "naive-ui/es/form/src/interface"
 import type { JsonSchema } from "../types/aimd-types"
 import type { IAIMDInputProps } from "../types/props"
 import CustomInputNumber from "@/components/custom/custom-input-number/custom-input-number.vue"
+import { normalizeAimdUploadFiles } from "@/utils/aimd-files"
 import { getUploadProps } from "@/utils/fileType"
 import { BuiltInType } from "@airalogy/shared/enum/airalogy"
 import dayjs from "dayjs"
@@ -275,23 +276,13 @@ export function useInputProps(props: IAIMDInputProps) {
     // - array of file objects: use directly
     // - single file object: wrap in array
     // - string (airalogy_file_id): skip, let watchEffect in file-input.vue handle loading
-    let fileList: any[] = []
-    const value = model.value.value
-
-    if (Array.isArray(value)) {
-      // Filter out string values (airalogy_file_id) from the array
-      fileList = value.filter(item => typeof item === "object" && item !== null)
-    }
-    else if (typeof value === "object" && value !== null) {
-      // Single file object
-      fileList = [value]
-    }
+    const fileList = normalizeAimdUploadFiles(model.value.value)
     // If value is a string (airalogy_file_id), fileList remains empty
     // The file-input.vue watchEffect will detect this and load the file info
 
     return {
       ...commonProps.value,
-      disabled: false, // Allow editing for all fields including assigner
+      disabled: Boolean(commonProps.value.disabled || injectContext.readonly.value),
       id: `${id.value}-upload`,
       fileList,
       // endpoint: `/researches/${researchId.value}/upload`,

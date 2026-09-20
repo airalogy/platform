@@ -151,7 +151,7 @@
       </div>
       <pre>{{ formatted(action.protocol_run.initial_values) }}</pre>
     </div>
-    <workflow-analysis-execution :action="action" />
+    <workflow-analysis-execution :action="action" :source-titles="sourceTitles" />
     <workflow-resolution-summary :input-data="action.input_data" :source-titles="sourceTitles" :restricted="action.workflow_data_restricted" :pending-approval="action.approval?.status === 'pending'" />
   </div>
 </template>

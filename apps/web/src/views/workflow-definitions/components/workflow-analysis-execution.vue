@@ -17,7 +17,25 @@
       </template>
       <details><summary>{{ t('page.workflowAnalysis.recipe') }}</summary><pre class="analysis-execution-json" tabindex="0">{{ JSON.stringify(method.recipe, null, 2) }}</pre></details>
     </template>
-    <template v-if="input">
+    <template v-if="projectInput">
+      <p class="aira-type-meta">{{ t('page.workflowAnalysis.actualInput') }}: {{ projectInput.selection.inputs.reduce((total, input) => total + (input.selection.mode === 'selected' ? input.selection.records.length : 0), 0) }}</p>
+      <article v-for="slot in projectInput.selection.inputs" :key="slot.slot_id" class="my-3" data-testid="workflow-project-resolved-slot">
+        <strong>{{ method?.project_contract?.slots.find(item => item.slot_id === slot.slot_id)?.label || slot.slot_id }} · {{ slot.slot_id }}</strong>
+        <p class="aira-type-meta my-1">Protocol · {{ slot.protocol_id }}</p>
+        <ul class="pl-5">
+          <li v-for="source in projectInput.source_nodes.filter(source => source.slot_id === slot.slot_id)" :key="source.source_node_id" class="aira-type-meta my-2">
+            {{ sourceTitles?.[source.source_node_id] || source.source_node_id }} → {{ t('page.workflowDefinitions.resolution.record') }} · {{ source.record_id }} · {{ t('page.workflowDefinitions.revision', { number: source.record_version }) }}
+            <div>{{ t('page.workflowDefinitions.protocolVersion') }} · {{ source.protocol_version_id }}</div>
+          </li>
+        </ul>
+      </article>
+      <p class="aira-type-meta">{{ t('page.workflowAnalysis.sourceDigest') }}: {{ projectInput.source_digest }}</p>
+      <template v-if="action.approval?.status === 'pending'">
+        <n-alert type="info" class="my-3">{{ t('page.workflowAnalysis.actualApproval') }}</n-alert>
+        <details v-if="projectInput.summary?.schema === 'airalogy.project-result.v1'"><summary>{{ t('page.workflowProjectAnalysis.inputPreview') }}</summary><project-analysis-result :result="projectInput.summary" /></details>
+      </template>
+    </template>
+    <template v-else-if="input">
       <p v-if="input.summary?.counts" class="aira-type-meta">
         {{ t('page.analysis.countSummary', { ...input.summary.counts }) }}
       </p>
@@ -53,11 +71,18 @@
         </li>
       </ul>
     </div>
+    <div v-if="projectOutputs.length" class="aira-type-meta mt-2" data-testid="workflow-project-output-summary">
+      <strong>{{ t('page.workflowAnalysis.outputs') }}</strong>
+      <ul class="pl-5"><li v-for="output in projectOutputs" :key="output.output_id">
+        {{ output.output_id }}: {{ output.source.kind === 'join' ? t('page.workflowProjectAnalysis.joinResult') : `${t('page.workflowProjectAnalysis.localResult')} · ${output.source.slot_id}` }} · {{ output.field }} · {{ t(`page.analysis.statistics.${output.statistic}`) }} · {{ JSON.stringify(output.group) }}
+      </li></ul>
+    </div>
     <template v-if="result?.report">
       <h4 class="aira-type-label">
         {{ t('page.workflowAnalysis.analysisResult') }}
       </h4>
-      <template v-if="builtinReport">
+      <project-analysis-result v-if="projectReport" :result="projectReport" />
+      <template v-else-if="builtinReport">
         <p class="aira-type-meta">
           {{ t('page.analysis.countSummary', { ...builtinReport.counts }) }}
         </p>
@@ -107,31 +132,44 @@
 <script setup lang="ts">
 import type { AnalysisResult } from "@/service/api/analysis"
 import type { AnalysisComputeResult } from "@/service/api/analysis-compute"
+import type { ProjectAnalysisSelection, ProjectAnalysisResult as ProjectResult } from "@/service/api/project-analysis"
 import type { ResearchAction } from "@/service/api/research-tasks"
-import type { WorkflowAnalysisOutput, WorkflowComputeOutput } from "@/service/api/workflow-analysis-methods"
+import type { WorkflowAnalysisOutput, WorkflowComputeOutput, WorkflowProjectOutput } from "@/service/api/workflow-analysis-methods"
 import { downloadWorkflowAnalysisOutput } from "@/service/api/research-tasks"
 import { isComputeAnalysisRecipe } from "@/utils/analysis-compute"
+import { isWorkflowProjectRecipe } from "@/utils/workflow-editor"
 import AnalysisComputeContract from "@/views/analysis/components/analysis-compute-contract.vue"
 import AnalysisResultCharts from "@/views/analysis/components/analysis-result-charts.vue"
 import AnalysisResultTable from "@/views/analysis/components/analysis-result-table.vue"
+import ProjectAnalysisResult from "@/views/analysis/components/project-analysis-result.vue"
 import { downloadAs } from "@airalogy/shared/utils"
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 import WorkflowMethodSummary from "./workflow-method-summary.vue"
 
-const props = defineProps<{ action: ResearchAction, taskId?: string, projectRoute?: { labUid: string, projectUid: string } }>()
+const props = defineProps<{ action: ResearchAction, taskId?: string, projectRoute?: { labUid: string, projectUid: string }, sourceTitles?: Record<string, string> }>()
 const { t } = useI18n()
 const router = useRouter()
 const method = computed(() => props.action.analysis_run?.method)
 const computeJob = computed(() => props.action.analysis_run?.compute_job)
 const downloading = ref("")
 const downloadError = ref("")
-const input = computed(() => props.action.input_data.analysis_input as { source_digest: string, selection: { records: Array<{ id: string, version: number }> }, summary?: { counts?: AnalysisResult["counts"] } } | undefined)
+const input = computed(() => props.action.input_data.analysis_kind !== "project" ? props.action.input_data.analysis_input as { source_digest: string, selection: { records: Array<{ id: string, version: number }> }, summary?: { counts?: AnalysisResult["counts"] } } | undefined : undefined)
+const projectInput = computed(() => props.action.input_data.analysis_kind === "project"
+  ? props.action.input_data.analysis_input as {
+    source_digest: string
+    selection: ProjectAnalysisSelection
+    source_nodes: Array<{ slot_id: string, source_node_id: string, protocol_id: string, protocol_version_id: string, record_id: string, record_version: number }>
+    summary?: ProjectResult
+  } | undefined
+  : undefined)
 const outputs = computed(() => (props.action.input_data.analysis_outputs ?? []) as WorkflowAnalysisOutput[])
 const computeOutputs = computed(() => (props.action.input_data.compute_outputs ?? []) as WorkflowComputeOutput[])
-const result = computed(() => props.action.output_data.analysis_result as { analysis_id: string, result_digest: string, outputs: { analysis?: Record<string, unknown> }, report?: AnalysisResult | AnalysisComputeResult } | undefined)
-const builtinReport = computed(() => method.value && !isComputeAnalysisRecipe(method.value.recipe) ? result.value?.report as AnalysisResult | undefined : undefined)
+const projectOutputs = computed(() => (props.action.input_data.project_outputs ?? []) as WorkflowProjectOutput[])
+const result = computed(() => props.action.output_data.analysis_result as { analysis_id: string, result_digest: string, outputs: { analysis?: Record<string, unknown> }, report?: AnalysisResult | AnalysisComputeResult | ProjectResult } | undefined)
+const projectReport = computed(() => result.value?.report && "schema" in result.value.report && result.value.report.schema === "airalogy.project-result.v1" ? result.value.report as ProjectResult : undefined)
+const builtinReport = computed(() => method.value && !isComputeAnalysisRecipe(method.value.recipe) && !isWorkflowProjectRecipe(method.value.recipe) ? result.value?.report as AnalysisResult | undefined : undefined)
 async function download(id: string, name: string, mediaType: string) {
   if (!props.taskId || props.action.workflow_data_restricted)
     return
@@ -147,7 +185,7 @@ async function download(id: string, name: string, mediaType: string) {
 async function openReport() {
   if (!props.projectRoute || !props.action.analysis_run?.can_open_private_report || !props.action.analysis_run.id)
     return
-  await router.push({ name: "project-analysis", params: props.projectRoute, query: { runId: props.action.analysis_run.id } })
+  await router.push({ name: "project-analysis", params: props.projectRoute, query: { runId: props.action.analysis_run.id, ...(method.value && isWorkflowProjectRecipe(method.value.recipe) ? { scope: "project" } : {}) } })
 }
 </script>
 

@@ -63,7 +63,7 @@ const sourceFields = computed(() => workflowFields(sources.value.find(node => no
 const sourceField = computed(() => sourceFields.value.find(field => workflowPathKey(field.path) === sourcePathKey.value))
 const targetFields = computed(() => workflowFields(props.node, props.protocols).filter((field) => {
   return sourceField.value && workflowFieldsCompatible(sourceField.value, field)
-    && !nodeBindings.value.some(binding => workflowPathKey(binding.target_path) === workflowPathKey(field.path))
+    && ![...nodeBindings.value, ...(props.graph.asset_bindings ?? []).filter(binding => binding.target_node_id === props.node.node_id)].some(binding => workflowPathKey(binding.target_path) === workflowPathKey(field.path))
     && !Object.hasOwn(props.node.initial_values, field.path[1])
 }))
 const targetField = computed(() => targetFields.value.find(field => workflowPathKey(field.path) === targetPathKey.value))
@@ -83,7 +83,7 @@ function removeBinding(id: string) {
   emit("change", props.graph.bindings.filter(binding => binding.binding_id !== id))
 }
 function addBinding() {
-  if (!sourceNodeId.value || !sourceField.value || !targetField.value || props.disabled)
+  if (!sourceNodeId.value || !sourceField.value || !targetField.value || props.disabled || props.graph.bindings.length + (props.graph.asset_bindings?.length ?? 0) >= 128)
     return
   emit("change", [...props.graph.bindings, {
     binding_id: `binding_${createWorkflowId()}`,

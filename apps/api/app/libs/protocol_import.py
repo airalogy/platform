@@ -14,6 +14,7 @@ from sqlalchemy import update
 from app.config import config
 from app.database import DBSession
 from app.libs.protocol_agent import protocol_exec, remove_exclude_files, zip_dir
+from app.libs.protocol_uid import lock_protocol_uid
 from app.libs.version import Version
 from app.models.embedding import Embedding, EmbeddingResourceType
 from app.models.project import Project
@@ -127,6 +128,7 @@ async def import_protocol_directory(
             protocol=None,
         )
 
+        await lock_protocol_uid(db_session, project.id, meta_data.id)
         protocol = await Protocol.find_by(
             db_session,
             [

@@ -212,8 +212,10 @@ async def _delete_lab_from_database(
         raise ValueError("Lab deletion manifest does not match the confirmed Lab")
     # This is deliberately in the same transaction as the existing Lab delete.
     # A later protected research FK failure rolls back these lineage deletions.
+    await _delete_lab_analysis_publications(db_session, lab.id)
     await _delete_lab_analysis_input_file_references(db_session, lab.id)
     await _delete_lab_workflow_file_references(db_session, lab.id)
+    await _delete_lab_workflow_asset_inputs(db_session, lab.id)
     project_ids = manifest["project_ids"]
     project_group_ids = manifest["project_group_ids"]
     protocol_folder_ids = manifest["protocol_folder_ids"]
@@ -363,6 +365,68 @@ async def _delete_lab_from_database(
         )
 
 
+async def _delete_lab_analysis_publications(db_session: AsyncSession, lab_id):
+    """Release only this confirmed Lab's publication FKs before its sources.
+
+    Publications never own the source analyses, Records, or files. An unexpected
+    cross-Lab reference blocks the entire deletion, rather than deleting foreign
+    lineage or bypassing the source RESTRICT constraints.
+    """
+    from app.models.analysis import AnalysisInterpretationRevision, AnalysisRun
+    from app.models.analysis_publication import AnalysisEvidencePublication
+    from app.models.research import ResearchTask
+    from app.models.research_asset import ResearchEvidence
+
+    project_ids = select(Project.id).where(Project.lab_id == lab_id)
+    analysis_ids = select(AnalysisRun.id).where(AnalysisRun.project_id.in_(project_ids))
+    task_ids = select(ResearchTask.id).where(ResearchTask.lab_id == lab_id)
+    evidence_ids = select(ResearchEvidence.id).where(ResearchEvidence.task_id.in_(task_ids))
+    foreign = await db_session.scalar(
+        select(AnalysisEvidencePublication.id).where(
+            or_(
+                AnalysisEvidencePublication.analysis_run_id.in_(analysis_ids),
+                AnalysisEvidencePublication.task_id.in_(task_ids),
+                AnalysisEvidencePublication.evidence_id.in_(evidence_ids),
+            ),
+            AnalysisEvidencePublication.project_id.not_in(project_ids),
+        ).limit(1)
+    )
+    if foreign is not None:
+        raise ValueError("Another Lab references these analysis publications; deletion is blocked")
+    publications = list((await db_session.scalars(
+        select(AnalysisEvidencePublication).where(
+            AnalysisEvidencePublication.project_id.in_(project_ids),
+        ).with_for_update()
+    )).all())
+    for publication in publications:
+        project = await db_session.get(Project, publication.project_id)
+        analysis = await db_session.get(AnalysisRun, publication.analysis_run_id)
+        task = await db_session.get(ResearchTask, publication.task_id)
+        evidence = await db_session.get(ResearchEvidence, publication.evidence_id)
+        interpretation = (
+            await db_session.get(AnalysisInterpretationRevision, publication.interpretation_revision_id)
+            if publication.interpretation_revision_id is not None else None
+        )
+        if (
+            project is None or project.lab_id != lab_id
+            or analysis is None or analysis.project_id != project.id
+            or task is None or task.lab_id != lab_id or task.project_id != project.id
+            or evidence is None or evidence.task_id != task.id
+            or evidence.artifact_type != "analysis_publication"
+            or evidence.artifact_id != str(publication.id)
+            or evidence.artifact_version != publication.digest
+            or (publication.interpretation_revision_id is not None and (
+                interpretation is None or interpretation.analysis_run_id != analysis.id
+            ))
+        ):
+            raise ValueError("Analysis publication does not belong to the confirmed Lab")
+    if publications:
+        await db_session.execute(delete(AnalysisEvidencePublication).where(
+            AnalysisEvidencePublication.id.in_([row.id for row in publications]),
+            AnalysisEvidencePublication.project_id.in_(project_ids),
+        ))
+
+
 async def _delete_lab_analysis_input_file_references(db_session: AsyncSession, lab_id):
     """Drop only confirmed Lab attachment receipts before deleting their sources.
 
@@ -386,6 +450,51 @@ async def _delete_lab_analysis_input_file_references(db_session: AsyncSession, l
         raise ValueError("Another Lab still references these analysis attachment files; deletion is blocked")
     await db_session.execute(delete(AnalysisComputeInputFile).where(
         AnalysisComputeInputFile.analysis_run_id.in_(analysis_ids)
+    ))
+
+
+async def _delete_lab_workflow_asset_inputs(db_session: AsyncSession, lab_id):
+    """Delete only confirmed Lab input receipts, after their dependent aliases."""
+    from app.models.knowledge import ResearchFile
+    from app.models.research import ResearchTask
+    from app.models.research_asset import DataAsset, DataAssetVersion
+    from app.models.workflow_asset import WorkflowRunAssetInput
+    from app.models.workflow_file import WorkflowFileBinding
+
+    task_ids = select(ResearchTask.id).where(ResearchTask.lab_id == lab_id)
+    sources = select(DataAssetVersion.id).join(DataAsset).where(DataAsset.lab_id == lab_id)
+    files = select(ResearchFile.id).where(ResearchFile.lab_id == lab_id)
+    foreign = await db_session.scalar(select(WorkflowRunAssetInput.id).where(
+        or_(WorkflowRunAssetInput.data_asset_version_id.in_(sources), WorkflowRunAssetInput.research_file_id.in_(files)),
+        WorkflowRunAssetInput.task_id.not_in(task_ids),
+    ).limit(1))
+    if foreign is not None:
+        raise ValueError("Another Lab references these Workflow DataAsset inputs; deletion is blocked")
+    rows = list((await db_session.scalars(select(WorkflowRunAssetInput).where(
+        WorkflowRunAssetInput.task_id.in_(task_ids),
+    ).with_for_update())).all())
+    if not rows:
+        return
+    for row in rows:
+        task = await db_session.get(ResearchTask, row.task_id)
+        project = await db_session.get(Project, task.project_id)
+        version = await db_session.get(DataAssetVersion, row.data_asset_version_id)
+        asset = await db_session.get(DataAsset, version.data_asset_id) if version else None
+        file = await db_session.get(ResearchFile, row.research_file_id)
+        if (
+            project is None or project.lab_id != lab_id or asset is None
+            or asset.project_id != project.id or asset.lab_id != lab_id
+            or file is None or file.lab_id != lab_id or file.project_id not in {None, project.id}
+            or version.research_file_id != file.id or file.blob_id != row.blob_id
+        ):
+            raise ValueError("Workflow DataAsset input does not belong to the confirmed Lab")
+    ids = [row.id for row in rows]
+    if await db_session.scalar(select(WorkflowFileBinding.file_id).where(
+        WorkflowFileBinding.asset_input_id.in_(ids),
+    ).limit(1)) is not None:
+        raise ValueError("Workflow DataAsset file aliases must be removed before input receipts")
+    await db_session.execute(delete(WorkflowRunAssetInput).where(
+        WorkflowRunAssetInput.id.in_(ids), WorkflowRunAssetInput.task_id.in_(task_ids),
     ))
 
 

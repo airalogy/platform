@@ -1,5 +1,5 @@
 import type { ResearchComputeRequirement } from "./research-tasks"
-import type { WorkflowAnalysisOutput, WorkflowAnalysisPublication, WorkflowComputeFileOutput, WorkflowComputeOutput } from "./workflow-analysis-methods"
+import type { WorkflowAnalysisOutput, WorkflowAnalysisPublication, WorkflowComputeFileOutput, WorkflowComputeOutput, WorkflowProjectContract, WorkflowProjectOutput } from "./workflow-analysis-methods"
 import { request } from "../request"
 
 export interface WorkflowProtocolNode {
@@ -16,7 +16,7 @@ interface WorkflowAnalysisNodeBase {
   node_id: string
   kind: "analysis"
   method_publication_id: string
-  record_sources: Array<{ source_node_id: string, cardinality: "one" }>
+  record_sources: Array<{ source_node_id: string, cardinality: "one", slot_id?: string }>
   input_policy: "all_declared"
   title: string
   position: { x: number, y: number }
@@ -27,14 +27,23 @@ export interface WorkflowBuiltinAnalysisNode extends WorkflowAnalysisNodeBase {
   analysis_outputs: WorkflowAnalysisOutput[]
   compute_outputs?: never
   compute_file_outputs?: never
+  project_outputs?: never
 }
 export interface WorkflowComputeAnalysisNode extends WorkflowAnalysisNodeBase {
   analysis_kind: "compute"
   compute_outputs: WorkflowComputeOutput[]
   compute_file_outputs?: WorkflowComputeFileOutput[]
   analysis_outputs?: never
+  project_outputs?: never
 }
-export type WorkflowAnalysisNode = WorkflowBuiltinAnalysisNode | WorkflowComputeAnalysisNode
+export interface WorkflowProjectAnalysisNode extends WorkflowAnalysisNodeBase {
+  analysis_kind: "project"
+  project_outputs: WorkflowProjectOutput[]
+  analysis_outputs?: never
+  compute_outputs?: never
+  compute_file_outputs?: never
+}
+export type WorkflowAnalysisNode = WorkflowBuiltinAnalysisNode | WorkflowComputeAnalysisNode | WorkflowProjectAnalysisNode
 
 export type WorkflowNode = WorkflowProtocolNode | WorkflowAnalysisNode
 
@@ -84,11 +93,58 @@ export interface WorkflowControlEdge {
   condition: WorkflowCondition | null
 }
 
+export interface WorkflowAssetInput {
+  input_id: string
+  label: string
+}
+
+export interface WorkflowAssetBinding {
+  binding_id: string
+  input_id: string
+  source_path: string[]
+  target_node_id: string
+  target_path: string[]
+  value_type: WorkflowScalarType | "file"
+  unit: string | null
+  cardinality: "one"
+}
+
+export interface WorkflowAssetVersion {
+  data_asset_id: string
+  name: string
+  version_id: string
+  version: number
+  research_file_id: string
+  filename: string
+  media_type: string
+  byte_size: number
+  sha256: string
+  fields: WorkflowField[]
+}
+
+export interface WorkflowAssetInputPreview {
+  input_id: string
+  label: string
+  data_asset_id: string
+  name: string
+  data_asset_version_id: string
+  version: number
+  research_file_id: string
+  filename: string
+  media_type: string
+  byte_size: number
+  sha256: string
+  source_digest: string
+  bindings: Array<WorkflowAssetBinding & { value?: string | number | boolean | null }>
+}
+
 export interface WorkflowGraph {
-  schema_version: 1 | 2 | 3 | 4
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6
   nodes: WorkflowNode[]
   edges: WorkflowControlEdge[]
   bindings: WorkflowScalarBinding[]
+  asset_inputs?: WorkflowAssetInput[]
+  asset_bindings?: WorkflowAssetBinding[]
 }
 
 export interface WorkflowCapabilities {
@@ -110,8 +166,9 @@ export interface WorkflowAnalysisPin {
   node_id: string
   kind: "analysis"
   method_publication_id: string
-  protocol_id: string
-  protocol_version_id: string
+  protocol_id: string | null
+  protocol_version_id: string | null
+  project_contract?: WorkflowProjectContract
   engine_version: string
   name: string
   content_digest: string
@@ -187,6 +244,7 @@ export interface WorkflowRunRequest {
   task_id: string
   expected_task_revision: number
   compute_approvers?: Record<string, string>
+  asset_versions?: Record<string, string>
 }
 
 export interface WorkflowRunPreview extends WorkflowRunRequest {
@@ -194,6 +252,8 @@ export interface WorkflowRunPreview extends WorkflowRunRequest {
   nodes: WorkflowNode[]
   edges: WorkflowControlEdge[]
   bindings: WorkflowScalarBinding[]
+  asset_inputs?: WorkflowAssetInputPreview[]
+  asset_bindings?: WorkflowAssetBinding[]
   pins: WorkflowPin[]
   warnings?: string[]
   compute_governance?: Record<string, { approver_user_id: string, max_cost: string | null, budget_currency: string | null, deadline_at: string | null }>
@@ -220,6 +280,10 @@ export async function fetchWorkflowDefinitions(projectId: string) {
 
 export async function fetchWorkflowContext(projectId: string) {
   return getData<WorkflowContext>({ url: "/workflow-definitions/context", method: "GET", params: { project_id: projectId } })
+}
+
+export async function fetchWorkflowAssetVersions(projectId: string, offset = 0) {
+  return getData<{ items: WorkflowAssetVersion[], next_offset: number | null }>({ url: "/workflow-definitions/asset-versions", method: "GET", params: { project_id: projectId, offset, limit: 100 } })
 }
 
 export async function fetchWorkflowDefinition(id: string) {

@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from app.models.knowledge import KnowledgeItem
 from app.models.record import Record
 from app.models.research import ResearchAction, ResearchRun, ResearchTask
 from app.models.research_asset import ResearchActionOutputSnapshot
@@ -336,7 +337,7 @@ def test_malformed_package_sources_fail_closed(payload):
 
 def test_snapshot_checks_knowledge_scope_even_without_evidence_links(monkeypatch):
     db, task, _, _, user = context()
-    knowledge = SimpleNamespace(id=uuid4(), archived_at=None)
+    knowledge = KnowledgeItem(id=uuid4(), state="reviewed")
     db.get.side_effect = [task, knowledge]
     check = AsyncMock(side_effect=HTTPException(404, "Restricted Knowledge"))
     monkeypatch.setattr("app.services.knowledge.authorize_knowledge_item", check)

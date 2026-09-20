@@ -277,6 +277,31 @@ async def capture_sources(
 async def authorize_snapshot(db: AsyncSession, run: AnalysisRun, user: User) -> None:
     if run.created_by_user_id != user.id:
         raise HTTPException(404, "Analysis not found")
+    if getattr(run, "source_scope", "protocol") == "project":
+        from app.services.project_analyses import authorize_project_snapshot
+
+        await authorize_project_snapshot(db, run, user)
+        return
+    await authorize_analysis_sources(db, run, user)
+    if getattr(run, "ai_provenance", None):
+        from app.services.analysis_generation import authorize_ai_provenance
+
+        await authorize_ai_provenance(db, run.ai_provenance, user)
+
+
+async def authorize_analysis_sources(
+    db: AsyncSession, run: AnalysisRun, user: User
+) -> None:
+    """Check source rights only; callers must authorize their separate read object.
+
+    This does not grant access to a private AnalysisRun or its AI history. The
+    private report wrapper above always retains its independent owner check.
+    """
+    if getattr(run, "source_scope", "protocol") == "project":
+        from app.services.project_analyses import authorize_project_sources
+
+        await authorize_project_sources(db, run, user)
+        return
     _, _, own_only = await analysis_scope(db, run.protocol_id, user)
     verify_run_integrity(run)
     await authorize_source_manifest(
@@ -292,10 +317,6 @@ async def authorize_snapshot(db: AsyncSession, run: AnalysisRun, user: User) -> 
         from app.services.analysis_compute_files import authorize_input_files
 
         await authorize_input_files(db, run, user)
-    if getattr(run, "ai_provenance", None):
-        from app.services.analysis_generation import authorize_ai_provenance
-
-        await authorize_ai_provenance(db, run.ai_provenance, user)
 
 
 async def authorize_source_manifest(
@@ -420,7 +441,12 @@ async def owned_pipeline(
     pipeline = await db.scalar(stmt)
     if pipeline is None or pipeline.created_by_user_id != user.id:
         raise HTTPException(404, "Analysis method not found")
-    await analysis_scope(db, pipeline.protocol_id, user)
+    if getattr(pipeline, "source_scope", "protocol") == "project":
+        from app.services.project_analyses import authorize_project_pipeline
+
+        await authorize_project_pipeline(db, pipeline, user)
+    else:
+        await analysis_scope(db, pipeline.protocol_id, user)
     return pipeline
 
 
@@ -668,25 +694,37 @@ async def process_record_analysis(db: AsyncSession, analysis_id: UUID) -> dict:
         raise AnalysisError("Analysis owner is unavailable")
     try:
         await authorize_snapshot(db, run, user)
+        from app.services.project_analysis_engine import (
+            ENGINE_VERSION as PROJECT_ENGINE_VERSION,
+        )
+        from app.services.project_analysis_engine import (
+            ProjectAnalysisRecipe,
+            compute_project_analysis,
+        )
+
+        is_project = getattr(run, "source_scope", "protocol") == "project"
+        expected_engine = PROJECT_ENGINE_VERSION if is_project else ENGINE_VERSION
         if (
-            run.engine_version != ENGINE_VERSION
+            run.engine_version != expected_engine
             or canonical_digest(run.source_snapshot) != run.source_digest
             or canonical_digest(run.recipe) != run.recipe_digest
         ):
             raise AnalysisError("Pinned analysis inputs or engine no longer match")
         run.status = "running"
         run.started_at = run.started_at or utcnow()
-        recipe = AnalysisRecipe.model_validate(run.recipe)
+        recipe = (
+            ProjectAnalysisRecipe if is_project else AnalysisRecipe
+        ).model_validate(run.recipe)
         snapshot = run.source_snapshot
         # Publish running status and release the row lock before bounded CPU work.
         # Cancellation and permission revocation can then win before result sealing.
         await db.commit()
-        result = await asyncio.to_thread(
-            compute_analysis,
-            recipe,
-            snapshot["records"],
-            snapshot["fields"],
-        )
+        if is_project:
+            result = await asyncio.to_thread(compute_project_analysis, recipe, snapshot)
+        else:
+            result = await asyncio.to_thread(
+                compute_analysis, recipe, snapshot["records"], snapshot["fields"]
+            )
         if not await before_workflow_analysis_execution(
             db, analysis_id, finishing=True
         ):

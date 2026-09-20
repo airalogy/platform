@@ -84,7 +84,7 @@ async def workflow_data_readable(db, *, run, current_user, project=None):
     marker = (getattr(run, "environment_snapshot", None) or {}).get(
         "manual_workflow"
     ) or {}
-    if marker.get("execution_contract_version") not in {2, 3, 4, 5}:
+    if marker.get("execution_contract_version") not in {2, 3, 4, 5, 6, 7}:
         return True
     if current_user is None:
         return False
@@ -93,6 +93,20 @@ async def workflow_data_readable(db, *, run, current_user, project=None):
         project = await db.get(Project, task.project_id) if task else None
     if project is None or project.deleted_at is not None:
         return False
+    if marker.get("execution_contract_version") in {6, 7}:
+        from app.services.workflow_asset_runtime import authorize_run_asset_inputs
+
+        try:
+            await authorize_run_asset_inputs(
+                db,
+                task=await db.get(ResearchTask, run.task_id),
+                run=run,
+                user=current_user,
+            )
+        except HTTPException as error:
+            if error.status_code in {400, 403, 404, 409, 413, 422}:
+                return False
+            raise
     from app.services.workflow_resolutions import verify_resolution_seal
 
     rows = list(
@@ -157,7 +171,7 @@ async def workflow_action_data_readable(db, *, run, action, current_user, projec
     marker = (getattr(run, "environment_snapshot", None) or {}).get(
         "manual_workflow"
     ) or {}
-    if marker.get("execution_contract_version") not in {2, 3, 4, 5}:
+    if marker.get("execution_contract_version") not in {2, 3, 4, 5, 6, 7}:
         # Ordinary Protocol cards also expose a complete Record in output_data.
         # Check the exact *displayed* payload, not a possibly older Evidence
         # snapshot. Cards that have not produced a Record keep their prior path.
@@ -198,6 +212,18 @@ async def workflow_action_data_readable(db, *, run, action, current_user, projec
     from app.services.workflow_resolutions import verify_resolution_seal
 
     try:
+        if marker.get("execution_contract_version") in {6, 7}:
+            from app.services.workflow_asset_runtime import authorize_run_asset_inputs
+
+            await authorize_run_asset_inputs(
+                db,
+                task=await db.get(ResearchTask, run.task_id),
+                run=run,
+                user=current_user,
+                node_id=((action.input_data or {}).get("action_graph") or {}).get(
+                    "node_id"
+                ),
+            )
         if action.run_id == run.id and action.kind == "analysis_run":
             from app.services.workflow_analysis_runtime import analysis_action_readable
 
@@ -224,7 +250,7 @@ async def workflow_action_data_readable(db, *, run, action, current_user, projec
         )
         if row is not None:
             verify_resolution_seal(row)
-            if marker.get("execution_contract_version") == 5:
+            if marker.get("execution_contract_version") in {5, 6, 7}:
                 from app.services.workflow_files import verify_resolution_files
 
                 task = await db.get(ResearchTask, run.task_id)
@@ -236,6 +262,19 @@ async def workflow_action_data_readable(db, *, run, action, current_user, projec
                     resolution=row,
                     user=current_user,
                 )
+                if marker.get("execution_contract_version") in {6, 7}:
+                    from app.services.workflow_asset_runtime import (
+                        verify_asset_resolution,
+                    )
+
+                    await verify_asset_resolution(
+                        db,
+                        task=task,
+                        run=run,
+                        action=action,
+                        resolution=row,
+                        user=current_user,
+                    )
             reference = {
                 "id": str(row.id),
                 "digest": row.digest,
@@ -294,7 +333,7 @@ async def workflow_action_data_readable(db, *, run, action, current_user, projec
     except (KeyError, TypeError, ValueError):
         return False
     except HTTPException as error:
-        if error.status_code in {400, 403, 404, 409}:
+        if error.status_code in {400, 403, 404, 409, 413, 422}:
             return False
         raise
     return True

@@ -196,9 +196,11 @@
                       <n-tag size="small" type="success" round>
                         {{ $t("page.research.evidenceQuality.validated") }}
                       </n-tag>
-                      <span class="aira-type-meta">
-                        {{ source.source_snapshot.artifact_type === "record" ? "Record" : "DataAsset" }}
-                        · v{{ source.source_snapshot.artifact_version }}
+                      <span class="aira-type-meta min-w-0 break-all" data-testid="knowledge-evidence-source-identity">
+                        {{ $t(researchArtifactTypeKey(source.source_snapshot.artifact_type)) }}
+                        <template v-if="source.source_snapshot.artifact_version">
+                          · {{ researchArtifactVersionLabel(source.source_snapshot.artifact_type, source.source_snapshot.artifact_version) }}
+                        </template>
                         · {{ $t("page.knowledge.revision", { revision: source.knowledge_revision }) }}
                       </span>
                     </div>
@@ -507,6 +509,7 @@ import { getProjectInfo } from "@/service/api/projects"
 import { fetchUserProjects } from "@/service/api/users"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
+import { knowledgeViewFromQuery, researchArtifactTypeKey, researchArtifactVersionLabel } from "@/utils/knowledge-presentation"
 import { $t } from "@airalogy/shared/locales"
 import { useRoute } from "vue-router"
 import ImportPaperModal from "./components/import-paper-modal.vue"
@@ -527,7 +530,7 @@ const authStore = useAuthStore()
 const instanceStore = useInstanceStore()
 const { routerPushByKey } = useRouterPush()
 const editorRef = ref<KnowledgeEditorHandle | null>(null)
-const activeView = ref<"papers" | "items">("papers")
+const activeView = ref(knowledgeViewFromQuery(route.query.view))
 const loading = ref(false)
 const contextsLoading = ref(false)
 const loadError = ref(false)
@@ -1075,6 +1078,7 @@ function stateType(value: KnowledgeState): TagProps["type"] {
 }
 
 watch(() => route.fullPath, async () => {
+  activeView.value = knowledgeViewFromQuery(route.query.view)
   routeProject.value = null
   routeLab.value = null
   await loadContexts()

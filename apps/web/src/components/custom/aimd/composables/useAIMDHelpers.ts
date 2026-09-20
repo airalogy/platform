@@ -13,12 +13,12 @@ import type {
 } from "../types/aimd-types"
 import { request } from "@/service/request"
 import { useAuthStore } from "@/store/modules/auth"
-
+import { previewFileFieldChange, previewFileTarget } from "@/utils/aimd-file-events"
 import { fieldEventKey } from "@/utils/template/eventKey"
 
 import { getSubvarDef, getSubvarNames } from "@airalogy/aimd-core"
 import { useClosableMessage } from "@airalogy/composables"
-import { formatRawValue, getFileType, schemaToInputType, scopeKeyRecord } from "@airalogy/shared/utils"
+import { formatRawValue, getFileType, isUploadFileType, schemaToInputType, scopeKeyRecord } from "@airalogy/shared/utils"
 import { createInjectionState, useDebounceFn, useEventBus } from "@vueuse/core"
 import { get as _get, set as _set, get } from "lodash-es"
 import { computed, nextTick, reactive, ref, toRefs, watchEffect } from "vue"
@@ -123,7 +123,9 @@ export function getInputType(info: JsonSchema & { anyOf?: JsonSchema[] } | undef
 
   const fileType = getFileType(file_extension, true)
   if ((airalogy_type === "FileId" || airalogy_built_in_type === "FileId")) {
-    return fileType === "unknown" ? "file" : fileType
+    // Display categories such as code/text are not input widgets. A declared
+    // FileId still uses a file control; its schema retains the exact extension.
+    return isUploadFileType(fileType) ? fileType : "file"
   }
 
   if (anyOf) {
@@ -133,7 +135,7 @@ export function getInputType(info: JsonSchema & { anyOf?: JsonSchema[] } | undef
     for (const schema of schemas) {
       if (schema.airalogy_type === "FileId" || schema.airalogy_built_in_type === "FileId") {
         const schemaFileType = getFileType(schema.file_extension, true)
-        return schemaFileType === "unknown" ? "file" : schemaFileType
+        return isUploadFileType(schemaFileType) ? schemaFileType : "file"
       }
     }
 
@@ -649,11 +651,37 @@ function useAIMDFieldHandlers(
 // File handlers composable
 function useAIMDFileHandlers(
   fieldModel: IFieldModel,
+  tableVariableRecord: Ref<Record<string, Record<string, any>>>,
   previewFileRecord: Ref<Record<string, { content: null | string, file: null | File, visible: boolean } & Partial<UploadSettledFileInfo>>>,
   formItemRef: Record<string, { value: FormItemInst | null }>,
   fieldEventBus: any,
+  readonly: Ref<boolean | undefined>,
   minimal: boolean,
 ) {
+  function applyFileEvent(event: string, payload: Parameters<typeof previewFileFieldChange>[1]) {
+    if (minimal || (readonly.value && event !== "preview-file-metadata"))
+      return false
+    const target = previewFileTarget(fieldModel, payload)
+    if (!target)
+      return false
+    const change = previewFileFieldChange(event, payload, target.owner[target.key])
+    if (!change)
+      return false
+
+    // Emit before updating local state so the canonical owner can independently
+    // check the pending upload or current exact FileId against its own value.
+    if (!readonly.value)
+      fieldEventBus.emit(event, payload)
+    target.owner[target.key] = change.value
+    if (payload.scope === "var_table" && payload.info) {
+      const { group, row } = payload.info
+      const cell = tableVariableRecord.value[group]?.[row]?.[payload.prop]
+      if (cell?.model)
+        cell.model.value = change.value
+    }
+    return true
+  }
+
   function handleFileChange(payload: {
     scope: IRecordDataKey
     prop: string
@@ -665,32 +693,29 @@ function useAIMDFileHandlers(
     id: string
     info?: any
   }) {
-    if (minimal)
-      return
-
     const { fileInfo, id, scope, prop, info } = payload
 
     const { status } = fileInfo.file
     if (status === "removed") {
-      fieldEventBus.emit("preview-file-change", {
+      if (!applyFileEvent("preview-file-change", {
         scope,
         prop,
         value: { file: fileInfo, type: "remove" },
         info,
-      })
-      _set(fieldModel, `${scope}.${prop}.value`, undefined)
+      })) {
+        return
+      }
 
       previewFileRecord.value[id] = { content: null, file: null, visible: false }
       return
     }
 
-    fieldEventBus.emit("preview-file-change", {
+    applyFileEvent("preview-file-change", {
       scope,
       prop,
       value: { file: fileInfo, type: "add" },
       info,
     })
-    _set(fieldModel, `${scope}.${prop}.value`, fileInfo.fileList)
   }
 
   function handleUploadFile(payload: {
@@ -703,30 +728,20 @@ function useAIMDFileHandlers(
     dependent?: any
     info?: any
   }) {
-    if (minimal)
-      return
-
     const { scope, prop, type, file: fileInfo, rawFile, assigner, dependent, info } = payload
     if (!fileInfo) {
       return
     }
-    fieldEventBus.emit("preview-file-uploaded", {
+    if (!applyFileEvent("preview-file-uploaded", {
       scope,
       prop,
       value: { ...fileInfo, type },
+      fileInfo: rawFile,
       assigner,
       dependent,
       info,
-    })
-
-    const targetFile = (fieldModel[scope]?.[prop]?.value as unknown as UploadFileInfo[])?.find(
-      it => it.id === rawFile.id,
-    )
-    if (targetFile) {
-      targetFile.airalogyId = fileInfo.id
-      targetFile.url = fileInfo.url
-      targetFile.status = "finished"
-      targetFile.thumbnailUrl = fileInfo.url
+    })) {
+      return
     }
 
     const formItem = formItemRef[`${scope}.${prop}.value`]?.value
@@ -735,29 +750,23 @@ function useAIMDFileHandlers(
     }
   }
 
+  function handleFileMetadata(payload: {
+    scope: ScopeFieldKey
+    prop: string
+    file: Api.Attachment.AttachmentItem
+    info?: any
+  }) {
+    const { scope, prop, file, info } = payload
+    applyFileEvent("preview-file-metadata", { scope, prop, value: file, info, shouldAssign: false })
+  }
+
   function handleRename(
     scope: ScopeFieldKey,
     prop: string,
     fileInfo: Partial<Api.Attachment.AttachmentItem>,
     info?: any,
   ) {
-    if (minimal)
-      return
-
-    const { id, filename, url } = fileInfo
-    const targetFile = (fieldModel[scope]?.[prop]?.value as unknown as UploadFileInfo[])?.find(
-      (f: any) => f.id === id,
-    )
-
-    if (!targetFile) {
-      return
-    }
-
-    targetFile.name = filename ?? targetFile.name
-    targetFile.url = url
-    targetFile.thumbnailUrl = url
-
-    fieldEventBus.emit("preview-file-renamed", {
+    applyFileEvent("preview-file-renamed", {
       scope,
       prop,
       value: fileInfo,
@@ -810,6 +819,7 @@ function useAIMDFileHandlers(
   return {
     handleFileChange,
     handleUploadFile,
+    handleFileMetadata,
     handleRename,
     handlePreviewFile,
   }
@@ -1533,7 +1543,7 @@ const [useAIMDProvide, useAIMDInject] = createInjectionState(
     const { fieldEventBus, message } = useAIMDEventHandling(props, minimal)
     const { variableList, refList, tableList, stepRefList } = useAIMDComputed(props, fieldModel, authStore, tableRecord, minimal)
     const { handleFieldChange, handleCheckedChange } = useAIMDFieldHandlers(props, fieldModel, tableVariableRecord, assignerLoadingRecord, assignerErrorRecord, formItemRef, fieldEventBus, message, minimal)
-    const { handleFileChange, handleUploadFile, handleRename, handlePreviewFile } = useAIMDFileHandlers(fieldModel, previewFileRecord, formItemRef, fieldEventBus, minimal)
+    const { handleFileChange, handleUploadFile, handleFileMetadata, handleRename, handlePreviewFile } = useAIMDFileHandlers(fieldModel, tableVariableRecord, previewFileRecord, formItemRef, fieldEventBus, readonly, minimal)
     const { handleGetTableHeader, restoreTableVariableRecord, handleSetTableVariableRecord, handleAddVarTableRow, handleRemoveVarTableRow } = useAIMDTableOperations(props, fieldModel, tableVariableRecord, record, readonly, message, minimal, emit)
     const { handleRef, handleInputBlur, handleAssignerClick, handleAssignerCancel, handleScrollField, handleFormItemRef, isVarTable } = useAIMDUtilities(props, itemRef, formItemRef, fieldEventBus, minimal)
 
@@ -1567,6 +1577,7 @@ const [useAIMDProvide, useAIMDInject] = createInjectionState(
       handleInputBlur,
       handleFileChange,
       handleUploadFile,
+      handleFileMetadata,
       handleRename,
       handleAddVarTableRow,
       handleRemoveVarTableRow,

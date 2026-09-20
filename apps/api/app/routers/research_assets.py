@@ -109,6 +109,7 @@ ArtifactType = Literal[
     "knowledge",
     "paper_library_entry",
     "action_output",
+    "analysis_publication",
     "external",
 ]
 ALLOWED_EXTERNAL_SCHEMES = {"https", "s3", "gs", "oss", "minio"}
@@ -218,6 +219,14 @@ class EvidenceDraft(BaseModel):
             raise ValueError("Evidence artifact is required")
         if self.artifact_type == "external":
             validate_external_uri(self.artifact_id)
+        if self.artifact_type == "analysis_publication" and (
+            self.kind != EvidenceKind.ANALYSIS
+            or self.run_id is not None
+            or self.action_id is not None
+        ):
+            raise ValueError(
+                "Analysis publication Evidence has kind analysis and no execution references"
+            )
         return self
 
 
@@ -555,6 +564,20 @@ async def _validate_evidence_artifact(
             status_code=422, detail="Artifact ID must be a UUID"
         ) from exc
 
+    if artifact_type == "analysis_publication":
+        from app.services.analysis_publications import (
+            require_analysis_publication_readable,
+        )
+
+        publication = await require_analysis_publication_readable(
+            db_session, parsed_id, current_user, task_id=context.task.id
+        )
+        if artifact_version and artifact_version != publication.digest:
+            raise HTTPException(
+                status_code=409, detail="Analysis publication digest does not match"
+            )
+        return publication.digest
+
     if artifact_type == "action_output":
         if action is None:
             action = await db_session.get(ResearchAction, parsed_id)
@@ -657,7 +680,7 @@ async def _validate_evidence_artifact(
 
     if artifact_type == "knowledge":
         item = await db_session.get(KnowledgeItem, parsed_id)
-        if item is None or item.archived_at is not None:
+        if item is None or item.state == KnowledgeState.ARCHIVED.value:
             raise HTTPException(status_code=404, detail="Knowledge item not found")
         await authorize_knowledge_item(db_session, current_user, item)
         if (
@@ -887,12 +910,14 @@ async def _knowledge_suggestion_evidence(
                 status_code=409,
                 detail="Only validated Evidence can become Suggested Knowledge",
             )
-        if item.artifact_type not in {"record", "data_asset", "action_output"}:
+        if item.artifact_type not in {
+            "record", "data_asset", "action_output", "analysis_publication"
+        }:
             raise HTTPException(
                 status_code=422,
                 detail=(
                     "Suggested Knowledge requires Record, DataAsset, or immutable "
-                    "Action output Evidence"
+                    "Action output or published Analysis Evidence"
                 ),
             )
         version = await _validate_evidence_artifact(
@@ -1357,6 +1382,8 @@ async def create_data_asset_version(
         idempotency_key=f"data-asset:{asset.id}:version:{new_version}",
     )
     await db_session.commit()
+    await db_session.refresh(asset)
+    await db_session.refresh(version)
     return _data_asset_payload(asset, version)
 
 
@@ -1395,6 +1422,7 @@ async def update_data_asset_status(
         idempotency_key=f"data-asset:{asset.id}:status:{asset.status}:{asset.current_version}",
     )
     await db_session.commit()
+    await db_session.refresh(asset)
     return asset.as_dict()
 
 
@@ -1514,7 +1542,9 @@ async def review_evidence(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
-    evidence = await db_session.get(ResearchEvidence, evidence_id)
+    evidence = await db_session.get(
+        ResearchEvidence, evidence_id, with_for_update=True, populate_existing=True
+    )
     if evidence is None:
         raise HTTPException(status_code=404, detail="Evidence not found")
     context = await _task_context(
@@ -1526,14 +1556,14 @@ async def review_evidence(
     if evidence.quality_state != EvidenceQuality.PENDING.value:
         raise HTTPException(status_code=409, detail="Evidence review is already final")
     if (
-        evidence.artifact_type == "action_output"
+        evidence.artifact_type in {"action_output", "analysis_publication"}
         and params.quality_state == EvidenceQuality.VALIDATED.value
     ):
         await _validate_evidence_artifact(
             db_session,
             current_user,
             context,
-            artifact_type="action_output",
+            artifact_type=evidence.artifact_type,
             artifact_id=evidence.artifact_id,
             artifact_version=evidence.artifact_version,
         )

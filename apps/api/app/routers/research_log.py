@@ -9,16 +9,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import String, case, cast, func, literal, select, union_all
+from sqlalchemy import String, case, cast, func, literal, or_, select, union_all
 
 from app.database import DBSession
-from app.models.knowledge import KnowledgeItem
+from app.models.knowledge import KnowledgeItem, KnowledgeState
 from app.models.lab import Lab, LabRole, LabUser
 from app.models.project import Project
 from app.models.protocol import Protocol
 from app.models.protocol_version import ProtocolVersion
 from app.models.record import Record
 from app.models.research import ResearchEvent, ResearchTask
+from app.models.research_asset import KnowledgeEvidenceLink, ResearchEvidence
 from app.models.research_log import (
     ResearchLogEntry,
     ResearchLogEntryKind,
@@ -478,6 +479,7 @@ def _event_selects(scope: LogScopeContext):
 async def _system_event_payload(
     db_session: DBSession,
     row: Any,
+    current_user: User,
 ) -> dict[str, Any] | None:
     actor = await db_session.get(User, row.actor_user_id) if row.actor_user_id else None
     lab = await db_session.get(Lab, row.lab_id) if row.lab_id else None
@@ -543,6 +545,15 @@ async def _system_event_payload(
         item = await db_session.get(KnowledgeItem, source_id)
         if item is None:
             return None
+        from app.services.knowledge import authorize_knowledge_item
+        from app.services.research_asset_visibility import HIDDEN_SOURCE_STATUSES
+
+        try:
+            await authorize_knowledge_item(db_session, current_user, item)
+        except HTTPException as exc:
+            if exc.status_code in HIDDEN_SOURCE_STATUSES:
+                return None
+            raise
         return {
             **base,
             "title": item.title,
@@ -568,6 +579,39 @@ async def _system_event_payload(
             "asset": {"type": "research_task", "id": str(task.id), "version": ""},
         }
     return None
+
+
+async def _hidden_analysis_knowledge_ids(db_session, current_user, scope):
+    """Exclude private candidate events before counting or paging the timeline."""
+    if scope.scope_type == ResearchLogScope.PERSONAL:
+        return []
+    from app.services.knowledge import authorize_knowledge_item
+    from app.services.research_asset_visibility import HIDDEN_SOURCE_STATUSES
+
+    items = list((await db_session.scalars(
+        select(KnowledgeItem)
+        .join(KnowledgeEvidenceLink, KnowledgeEvidenceLink.knowledge_item_id == KnowledgeItem.id)
+        .join(ResearchEvidence, ResearchEvidence.id == KnowledgeEvidenceLink.evidence_id)
+        .where(
+            KnowledgeItem.project_id == scope.project_id
+            if scope.scope_type == ResearchLogScope.PROJECT else KnowledgeItem.lab_id == scope.lab_id,
+            KnowledgeItem.state.in_([KnowledgeState.SUGGESTED.value, KnowledgeState.DRAFT.value]),
+            or_(
+                ResearchEvidence.artifact_type == "analysis_publication",
+                KnowledgeEvidenceLink.source_snapshot["artifact_type"].as_string() == "analysis_publication",
+            ),
+        )
+    )).unique().all())
+    hidden = []
+    for item in items:
+        try:
+            await authorize_knowledge_item(db_session, current_user, item)
+        except HTTPException as exc:
+            if exc.status_code in HIDDEN_SOURCE_STATUSES:
+                hidden.append(str(item.id))
+                continue
+            raise
+    return hidden
 
 
 @router.get("/timeline")
@@ -596,6 +640,15 @@ async def get_research_log_timeline(
     )
     event_union = union_all(*_event_selects(scope)).subquery("research_log_events")
     conditions = []
+    if source in {"all", "knowledge"}:
+        hidden_knowledge = await _hidden_analysis_knowledge_ids(
+            db_session, current_user, scope
+        )
+        if hidden_knowledge:
+            conditions.append(or_(
+                event_union.c.source_type != "knowledge",
+                event_union.c.source_id.not_in(hidden_knowledge),
+            ))
     if source != "all":
         conditions.append(event_union.c.source_type == source)
     if actor_user_id is not None:
@@ -629,7 +682,7 @@ async def get_research_log_timeline(
             if entry is not None:
                 items.append(await _entry_payload(db_session, entry, current_user))
             continue
-        payload = await _system_event_payload(db_session, row)
+        payload = await _system_event_payload(db_session, row, current_user)
         if payload is not None:
             items.append(payload)
     try:
