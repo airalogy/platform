@@ -33,7 +33,15 @@ export async function loadFixtures(): Promise<E2EFixtures> {
 export async function selectVisibleOption(page: Page, label: string | RegExp) {
   // Naive UI keeps closed menus mounted; only the open menu is actionable.
   const option = page.locator(".n-base-select-option:visible").filter({ hasText: label })
-  await option.last().click()
+  // Long lists are virtualized. Type in the actual focused search field rather
+  // than waiting for an offscreen option that has not been rendered at all.
+  // Non-filterable menus and regex selections retain their visible-option path.
+  if (typeof label === "string" && await option.count() === 0) {
+    const search = page.locator("input.n-base-selection-input:focus")
+    if (await search.count() === 1 && await search.isVisible() && await search.isEditable())
+      await search.fill(label)
+  }
+  await option.last().click({ timeout: 15_000 })
 }
 
 export function instrumentWorkspaceUrl(labUid: string, gatewayId: string, resourceId: string, step: "connect" | "prepare" | "install" | "use", tool = "reuse") {
