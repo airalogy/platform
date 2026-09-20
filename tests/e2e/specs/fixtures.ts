@@ -31,8 +31,9 @@ export async function loadFixtures(): Promise<E2EFixtures> {
 }
 
 export async function selectVisibleOption(page: Page, label: string | RegExp) {
-  // Naive UI keeps closed menus mounted; only the open menu is actionable.
-  const option = page.locator(".n-base-select-option:visible").filter({ hasText: label })
+  // Closed menus remain visible during their leave transition. They can contain
+  // the same label as the newly opened menu, but must never receive the click.
+  const option = page.locator(".n-base-select-menu:visible:not(.fade-in-scale-up-transition-leave-active) .n-base-select-option:visible").filter({ hasText: label })
   // Long lists are virtualized. Type in the actual focused search field rather
   // than waiting for an offscreen option that has not been rendered at all.
   // Non-filterable menus and regex selections retain their visible-option path.
