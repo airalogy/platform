@@ -1,7 +1,11 @@
 /* eslint-disable test/no-import-node-test */
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import test from "node:test"
-import { assertNodeConfiguration, assertNodeRuntime, checkNodeRuntime } from "./check-node-runtime.mjs"
+import { assertNodeConfiguration, assertNodeRuntime, checkNodeConfiguration, checkNodeRuntime } from "./check-node-runtime.mjs"
 
 test("local checks accept the supported Node line and reject incompatible versions early", () => {
   for (const version of ["22.12.0", "22.23.2"])
@@ -28,4 +32,17 @@ test("CI pins cannot drift back to Node 20 or override the shared version file",
 
 test("checked-in CI, runtime declarations and Docker use the same supported line", () => {
   checkNodeRuntime()
+  checkNodeConfiguration()
+})
+
+test("Python-only CI gates start without a frontend node_modules installation", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "platform-node-guard-"))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  mkdirSync(join(directory, "scripts"))
+  for (const file of [".node-version", "package.json", "scripts/pre-push.mjs", "scripts/check-node-runtime.mjs"])
+    copyFileSync(new URL(`../${file}`, import.meta.url), join(directory, file))
+  const result = spawnSync(process.execPath, ["scripts/pre-push.mjs", "--check", "unknown-check"], { cwd: directory, encoding: "utf8" })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Specify one registered check ID/, "must reach check dispatch without loading YAML")
+  assert.doesNotMatch(result.stderr, /MODULE_NOT_FOUND|Cannot find package/)
 })

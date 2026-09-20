@@ -5,6 +5,9 @@ on:
     paths:
       - "apps/compute-runner/**"
       - "scripts/compute-runner-integration.mjs"
+      - "scripts/pre-push*"
+      - "scripts/check-node-runtime*"
+      - ".node-version"
       - "apps/api/app/routers/analysis_compute.py"
       - "apps/api/app/routers/research_compute_jobs.py"
       - "apps/api/app/services/analysis_compute*.py"
@@ -14,6 +17,9 @@ on:
     paths:
       - "apps/compute-runner/**"
       - "scripts/compute-runner-integration.mjs"
+      - "scripts/pre-push*"
+      - "scripts/check-node-runtime*"
+      - ".node-version"
       - "apps/api/app/routers/analysis_compute.py"
       - "apps/api/app/routers/research_compute_jobs.py"
       - "apps/api/app/services/analysis_compute*.py"
@@ -43,6 +49,10 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: ".node-version"
 
       - name: Verify lockfile
         run: uv lock --check
