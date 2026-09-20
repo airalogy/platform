@@ -20,6 +20,8 @@ on:
         "pnpm-workspace.yaml",
         "tests/e2e/**",
         "package.json",
+        ".node-version",
+        "scripts/check-node-runtime*",
         ".github/workflows/research-integration.yml",
       ]
   push:
@@ -42,6 +44,8 @@ on:
         "pnpm-workspace.yaml",
         "tests/e2e/**",
         "package.json",
+        ".node-version",
+        "scripts/check-node-runtime*",
         ".github/workflows/research-integration.yml",
       ]
   workflow_dispatch:
@@ -57,7 +61,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: ".node-version"
       - name: Install locked browser interface runtime
         run: |
           corepack enable

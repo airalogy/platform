@@ -14,6 +14,8 @@ on:
       - "scripts/instrument-authoring-example.mjs"
       - "scripts/prepare-instrument-ci*"
       - "scripts/pre-push*"
+      - ".node-version"
+      - "scripts/check-node-runtime*"
       - ".github/workflows/instrument-gateway.yml"
   pull_request:
     paths:
@@ -28,6 +30,8 @@ on:
       - "scripts/instrument-authoring-example.mjs"
       - "scripts/prepare-instrument-ci*"
       - "scripts/pre-push*"
+      - ".node-version"
+      - "scripts/check-node-runtime*"
       - ".github/workflows/instrument-gateway.yml"
 
 concurrency:
@@ -51,7 +55,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: ".node-version"
 
       - name: Set up Python
         uses: actions/setup-python@v6

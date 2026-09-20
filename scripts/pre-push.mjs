@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { checkNodeRuntime } from "./check-node-runtime.mjs"
 
 const ZERO_SHA = "0".repeat(40)
 const AI_E2E_SPEC = "tests/e2e/specs/ai-protocol-editor.spec.ts"
@@ -208,7 +209,7 @@ function hasPath(files, exactFiles, prefixes = []) {
 }
 
 export function buildCheckPlan(files, fullRequested = false, hostPlatform = process.platform) {
-  if (fullRequested) {
+  if (fullRequested || files.some(file => file === ".node-version" || file.startsWith("scripts/check-node-runtime"))) {
     // Full means every registered local gate, except the focused E2E subset
     // (already in full-e2e) and macOS compilation on a non-macOS host.
     return Object.values(checks).filter(check => check.id !== "ai-e2e"
@@ -216,9 +217,9 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   }
   const plan = [checks.version, checks.lint, checks.types, checks.apiCompile]
   const toolingChanged = files.some(file => file.startsWith(".github/")
-    || /^scripts\/(?:actionlint|prepare-instrument-ci|pre-push|e2e-(?:runner|matrix))/.test(file)
+    || /^scripts\/(?:check-node-runtime|actionlint|prepare-instrument-ci|pre-push|e2e-(?:runner|matrix))/.test(file)
     || file.startsWith(".husky/")
-    || ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"].includes(file))
+    || [".node-version", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"].includes(file))
   if (toolingChanged)
     plan.unshift(checks.ci)
   for (const [directory, check] of [["api", checks.apiLock], ["instrument-gateway", checks.gatewayLock], ["compute-runner", checks.computeLock]]) {
@@ -412,6 +413,7 @@ export function runCheck(check) {
 }
 
 function main() {
+  checkNodeRuntime()
   // CI invokes these same gates directly, without reading Git hook stdin or
   // guessing a diff. Unknown identifiers/flags fail rather than silently skip.
   if (process.argv[2] === "--check") {

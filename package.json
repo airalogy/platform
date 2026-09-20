@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
   "description": "Airalogy Platform Community Edition monorepo",
   "scripts": {
     "api:dev": "uv --directory apps/api run fastapi dev app --host 0.0.0.0 --port 4000 --reload",
@@ -57,7 +60,7 @@
     "prepush:full": "node scripts/pre-push.mjs --full",
     "prepush:test": "node --test scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
     "ci:tools:install": "node scripts/actionlint.mjs --install",
-    "ci:check": "node scripts/actionlint.mjs && eslint scripts/actionlint*.mjs scripts/pre-push*.mjs scripts/prepare-instrument-ci*.mjs scripts/e2e-*.mjs --quiet && node --test scripts/actionlint.test.mjs scripts/prepare-instrument-ci.test.mjs scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
+    "ci:check": "node scripts/check-node-runtime.mjs && node scripts/actionlint.mjs && eslint scripts/check-node-runtime*.mjs scripts/actionlint*.mjs scripts/pre-push*.mjs scripts/prepare-instrument-ci*.mjs scripts/e2e-*.mjs --quiet && node --test scripts/check-node-runtime.test.mjs scripts/actionlint.test.mjs scripts/prepare-instrument-ci.test.mjs scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
     "i18n:generate": "node scripts/generate-i18n-types.mjs",
     "version:check": "node scripts/check-version.mjs",
     "build:info": "node scripts/write-build-info.mjs apps/api/app/build-info.json",

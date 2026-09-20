@@ -34,6 +34,8 @@ test("local and hosted full browser gates share both actual AI capability modes"
 })
 
 test("CI and hook changes select real tooling regressions before expensive checks", () => {
+  for (const file of [".node-version", "scripts/check-node-runtime.mjs", "scripts/check-node-runtime.test.mjs"])
+    assert.equal(ids([file])[0], "ci-config", file)
   for (const file of ["scripts/prepare-instrument-ci.mjs", "scripts/prepare-instrument-ci.test.mjs", "scripts/actionlint.mjs", "scripts/actionlint.test.mjs", "scripts/pre-push.mjs", "scripts/pre-push.test.mjs", ".husky/pre-push", ".github/workflows/release.yml", ".github/workflows/ci-preflight.yml"]) {
     assert.equal(ids([file])[0], "ci-config", file)
   }
@@ -54,6 +56,8 @@ test("full mode includes every local gate even for an empty or docs-only diff", 
   }
   const registered = new Set(Object.values(checks).map(check => check.id))
   assert.deepEqual(new Set([...ids([], true, "darwin"), "ai-e2e"]), registered)
+  for (const file of [".node-version", "scripts/check-node-runtime.mjs", "scripts/check-node-runtime.test.mjs"])
+    assert.deepEqual(ids([file]), ids([], true), `${file}: runtime policy changes require full verification`)
 })
 
 test("native compilation never opts into graphical or physical equipment tests", () => {

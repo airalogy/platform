@@ -6,6 +6,8 @@ on:
       - "apps/web/**"
       - "packages/**"
       - "package.json"
+      - ".node-version"
+      - "scripts/check-node-runtime*"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig*.json"
@@ -17,6 +19,8 @@ on:
       - "apps/web/**"
       - "packages/**"
       - "package.json"
+      - ".node-version"
+      - "scripts/check-node-runtime*"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig*.json"
@@ -45,7 +49,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version-file: ".node-version"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 

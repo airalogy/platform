@@ -4,7 +4,7 @@ The repository root is the pnpm workspace for Airalogy Platform Community Editio
 
 ## Requirements
 
-- Node.js 20.19+ or 22.12+
+- Node.js 22.12+ within the 22.x line (`.node-version` is shared by local version managers and all GitHub Node setup steps). The pre-push check rejects a different runtime or drifting CI/Docker configuration before running the suite.
 - pnpm 10.15+
 
 ## Setup

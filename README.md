@@ -46,7 +46,7 @@ Prerequisites:
 
 - Python 3.13
 - uv
-- Node.js 20+
+- Node.js 22.12+ (22.x; see `.node-version`)
 - Corepack-managed pnpm 10.15+
 - Docker or another local PostgreSQL / Redis / S3-compatible stack
 

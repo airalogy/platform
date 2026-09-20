@@ -46,7 +46,7 @@ platform/
 
 - Python 3.13
 - uv
-- Node.js 20+
+- Node.js 22.12+（22.x，见 `.node-version`）
 - 通过 Corepack 管理的 pnpm 10.15+
 - Docker，或本地 PostgreSQL / Redis / S3-compatible stack
 

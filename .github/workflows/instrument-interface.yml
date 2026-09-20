@@ -17,6 +17,8 @@ on:
       - "scripts/prepare-instrument-ci*"
       - "scripts/pre-push*"
       - "package.json"
+      - ".node-version"
+      - "scripts/check-node-runtime*"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
       - ".github/workflows/instrument-interface.yml"
@@ -36,6 +38,8 @@ on:
       - "scripts/prepare-instrument-ci*"
       - "scripts/pre-push*"
       - "package.json"
+      - ".node-version"
+      - "scripts/check-node-runtime*"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
       - ".github/workflows/instrument-interface.yml"
@@ -58,7 +62,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version-file: ".node-version"
       - uses: actions/setup-python@v6
         if: runner.os == 'macOS'
         with:

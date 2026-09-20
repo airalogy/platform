@@ -7,6 +7,8 @@ on:
       - docs/**
       - .github/workflows/docs.yml
       - package.json
+      - .node-version
+      - scripts/check-node-runtime*
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
   workflow_dispatch:
@@ -25,7 +27,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: ".node-version"
       - name: Enable pnpm
         run: corepack enable
       - run: pnpm install --frozen-lockfile
