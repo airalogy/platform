@@ -8,7 +8,7 @@ import { loadFixtures, selectVisibleOption } from "./fixtures"
 // Setup creates real analysis jobs over submitted synthetic Records. Every
 // publication, Evidence review and Knowledge write below uses ordinary UI/API.
 for (const locale of ["en-US", "zh-CN"] as const) {
-  test(`selected computed results become reviewed evidence and Knowledge (${locale}, AI off, phone)`, async ({ page, request }, testInfo) => {
+  test(`selected computed results become reviewed evidence and Knowledge (${locale}, AI independent, phone)`, async ({ page, request }, testInfo) => {
     test.setTimeout(180_000)
     page.setDefaultTimeout(15_000)
     const messages = JSON.parse(await readFile(new URL(`../../../packages/shared/src/locales/langs/${locale === "en-US" ? "en-us" : "zh-cn"}.json`, import.meta.url), "utf8"))
@@ -24,7 +24,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       expect(response.ok(), `${path}: ${await response.text()}`).toBe(true)
       return response.json()
     }
-    expect((await call("/instance")).ai_enabled).toBe(false)
+    if (process.env.AI_ENABLED !== undefined)
+      expect((await call("/instance")).ai_enabled).toBe(process.env.AI_ENABLED === "true")
     const unique = randomUUID().slice(0, 8)
     const title = `Synthetic evidence ${locale} ${unique}`
     const summary = `Synthetic computed comparison ${unique}; no causal conclusion.`

@@ -8,6 +8,7 @@ on:
       - "packages/**"
       - "tests/e2e/**"
       - "scripts/e2e-runner.test.mjs"
+      - "scripts/e2e-matrix.mjs"
       - "scripts/pre-push*.mjs"
       - "playwright.config.ts"
       - "package.json"
@@ -21,6 +22,7 @@ on:
       - "packages/**"
       - "tests/e2e/**"
       - "scripts/e2e-runner.test.mjs"
+      - "scripts/e2e-matrix.mjs"
       - "scripts/pre-push*.mjs"
       - "playwright.config.ts"
       - "package.json"
@@ -69,7 +71,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run browser E2E
-        run: pnpm e2e
+        run: node scripts/pre-push.mjs --check full-e2e
 
       - name: Upload E2E diagnostics
         if: always()

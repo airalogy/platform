@@ -153,8 +153,8 @@ export const checks = {
   fullE2e: {
     id: "full-e2e",
     label: "full browser E2E",
-    command: "corepack",
-    args: ["pnpm", "e2e"],
+    command: "node",
+    args: ["scripts/e2e-matrix.mjs"],
   },
 }
 
@@ -171,6 +171,7 @@ const FULL_E2E_FILES = new Set([
   "playwright.config.ts",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "scripts/e2e-matrix.mjs",
 ])
 
 const AI_E2E_FILES = new Set([
@@ -215,7 +216,7 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   }
   const plan = [checks.version, checks.lint, checks.types, checks.apiCompile]
   const toolingChanged = files.some(file => file.startsWith(".github/")
-    || /^scripts\/(?:actionlint|prepare-instrument-ci|pre-push|e2e-runner)/.test(file)
+    || /^scripts\/(?:actionlint|prepare-instrument-ci|pre-push|e2e-(?:runner|matrix))/.test(file)
     || file.startsWith(".husky/")
     || ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"].includes(file))
   if (toolingChanged)

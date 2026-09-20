@@ -2,10 +2,12 @@ import { defineConfig, devices } from "@playwright/test"
 
 const webBaseURL = process.env.E2E_WEB_URL || "http://127.0.0.1:3100"
 const apiBaseURL = process.env.E2E_API_URL || "http://127.0.0.1:4100"
+const outputDir = process.env.E2E_OUTPUT_DIR || "test-results"
+const htmlReportDir = process.env.E2E_HTML_REPORT_DIR || "playwright-report"
 
 export default defineConfig({
   testDir: "./tests/e2e/specs",
-  outputDir: "./test-results",
+  outputDir,
   globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
@@ -16,12 +18,12 @@ export default defineConfig({
   reporter: process.env.CI
     ? [
         ["line"],
-        ["html", { outputFolder: "playwright-report", open: "never" }],
-        ["junit", { outputFile: "test-results/junit.xml" }],
+        ["html", { outputFolder: htmlReportDir, open: "never" }],
+        ["junit", { outputFile: `${outputDir}/junit.xml` }],
       ]
     : [
         ["list"],
-        ["html", { outputFolder: "playwright-report", open: "never" }],
+        ["html", { outputFolder: htmlReportDir, open: "never" }],
       ],
   use: {
     baseURL: webBaseURL,

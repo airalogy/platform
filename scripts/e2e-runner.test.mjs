@@ -7,6 +7,40 @@ import { delimiter, join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { computeTestImage } from "./compute-runner-integration.mjs"
+import { aiIndependentSpecs, runBrowserMatrix } from "./e2e-matrix.mjs"
+
+test("full browser acceptance starts real AI-on and AI-off instances with separate artifacts", () => {
+  const calls = []
+  const status = runBrowserMatrix((...args) => {
+    calls.push(args)
+    return { status: 0 }
+  }, { AI_ENABLED: "inherited-must-not-win", E2E_KEEP_INFRA: "1", PRESERVED: "value" })
+  assert.equal(status, 0)
+  assert.equal(calls.length, 2)
+  for (const [index, [command, args, options]] of calls.entries()) {
+    assert.equal(command, "corepack")
+    assert.deepEqual(args, ["pnpm", "e2e", ...(index ? aiIndependentSpecs : [])])
+    assert.equal(options.env.AI_ENABLED, index ? "false" : "true")
+    assert.equal(options.env.E2E_KEEP_INFRA, "0")
+    assert.equal(options.env.PRESERVED, "value")
+    assert.equal(options.stdio, "inherit")
+  }
+  assert.notEqual(calls[0][2].env.E2E_OUTPUT_DIR, calls[1][2].env.E2E_OUTPUT_DIR)
+  assert.notEqual(calls[0][2].env.E2E_HTML_REPORT_DIR, calls[1][2].env.E2E_HTML_REPORT_DIR)
+  for (const feature of ["first-record", "analysis-protocol-drafts", "analysis-publication", "project-analysis", "workflow-assets", "workflow-project-analysis"])
+    assert.ok(aiIndependentSpecs.includes(`tests/e2e/specs/${feature}.spec.ts`))
+})
+
+test("browser matrix never hides failure or launches another instance after a failed gate", () => {
+  for (const failedMode of [0, 1]) {
+    let calls = 0
+    const status = runBrowserMatrix(() => ({ status: calls++ === failedMode ? 9 : 0 }), {})
+    assert.equal(status, 9)
+    assert.equal(calls, failedMode + 1)
+  }
+  assert.equal(runBrowserMatrix(() => ({ status: null, signal: "SIGTERM" }), {}), 1)
+  assert.throws(() => runBrowserMatrix(() => ({ error: new Error("could not start") }), {}), /could not start/)
+})
 
 test("E2E wrapper preserves exact test filters with or without pnpm's separator", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "platform-e2e-wrapper-"))

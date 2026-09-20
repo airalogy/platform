@@ -90,7 +90,7 @@ async function stablePhoneSurface(page: Page, surface: Locator) {
 }
 
 for (const locale of ["en-US", "zh-CN"] as const) {
-  test(`published Project method becomes an exact reviewed ordinary Protocol (${locale}, AI off, phone)`, async ({ page, request }, testInfo) => {
+  test(`published Project method becomes an exact reviewed ordinary Protocol (${locale}, AI independent, phone)`, async ({ page, request }, testInfo) => {
     test.setTimeout(300_000)
     page.setDefaultTimeout(15_000)
     const messages = JSON.parse(await readFile(new URL(`../../../packages/shared/src/locales/langs/${locale === "en-US" ? "en-us" : "zh-cn"}.json`, import.meta.url), "utf8"))
@@ -107,7 +107,8 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       expect(response.ok(), `${path}: ${await response.text()}`).toBe(true)
       return response.json()
     }
-    expect((await call("/instance")).ai_enabled).toBe(false)
+    if (process.env.AI_ENABLED !== undefined)
+      expect((await call("/instance")).ai_enabled).toBe(process.env.AI_ENABLED === "true")
     const unique = randomUUID().replaceAll("-", "").slice(0, 12)
     const methodTitle = `Synthetic reusable Project method ${locale} ${unique}`
     const protocolTitle = `Synthetic analysis Protocol ${locale} ${unique}`

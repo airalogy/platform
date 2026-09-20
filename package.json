@@ -57,7 +57,7 @@
     "prepush:full": "node scripts/pre-push.mjs --full",
     "prepush:test": "node --test scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
     "ci:tools:install": "node scripts/actionlint.mjs --install",
-    "ci:check": "node scripts/actionlint.mjs && eslint scripts/actionlint*.mjs scripts/pre-push*.mjs scripts/prepare-instrument-ci*.mjs --quiet && node --test scripts/actionlint.test.mjs scripts/prepare-instrument-ci.test.mjs scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
+    "ci:check": "node scripts/actionlint.mjs && eslint scripts/actionlint*.mjs scripts/pre-push*.mjs scripts/prepare-instrument-ci*.mjs scripts/e2e-*.mjs --quiet && node --test scripts/actionlint.test.mjs scripts/prepare-instrument-ci.test.mjs scripts/pre-push.test.mjs scripts/e2e-runner.test.mjs",
     "i18n:generate": "node scripts/generate-i18n-types.mjs",
     "version:check": "node scripts/check-version.mjs",
     "build:info": "node scripts/write-build-info.mjs apps/api/app/build-info.json",

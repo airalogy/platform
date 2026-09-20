@@ -48,6 +48,8 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ### Fixed
 
+- Run the shared local/CI browser gate with a real AI-enabled instance and a fresh AI-disabled instance for core deterministic research journeys. Preserve separate reports, assert the actual server capability, and stop on either failure instead of assuming every browser run has AI disabled.
+
 - Share the same Project Protocol-ID lock across draft publication, ordinary uploads, imports and reuse. Keep the confirmed publication destination stable, refresh authorization and recheck its signed preview after package parsing, and preserve exact reviewed UTF-8 bytes, including CRLF, without exporting parser-generated caches. Normalize omitted disciplines and keywords to empty lists when updating an ordinary Protocol, avoiding writes of null to required columns.
 
 - Open task Knowledge review links directly in Knowledge Notes and share accurate Evidence source labels between task and Knowledge views; published analysis and Action-output digests are displayed as SHA-256, not DataAsset version numbers.

@@ -23,6 +23,16 @@ test("ordinary docs and AI edits retain focused checks", () => {
   assert.ok(!ids(["README.md"]).includes("gateway-cli"))
 })
 
+test("local and hosted full browser gates share both actual AI capability modes", () => {
+  includes(["scripts/e2e-matrix.mjs"], ["ci-config", "full-e2e"])
+  assert.equal(checks.fullE2e.command, "node")
+  assert.deepEqual(checks.fullE2e.args, ["scripts/e2e-matrix.mjs"])
+  const workflow = load(readFileSync(".github/workflows/e2e.yml", "utf8"))
+  for (const event of ["push", "pull_request"])
+    assert.ok(workflow.on[event].paths.includes("scripts/e2e-matrix.mjs"))
+  assert.ok(workflow.jobs.chromium.steps.some(step => step.run === "node scripts/pre-push.mjs --check full-e2e"))
+})
+
 test("CI and hook changes select real tooling regressions before expensive checks", () => {
   for (const file of ["scripts/prepare-instrument-ci.mjs", "scripts/prepare-instrument-ci.test.mjs", "scripts/actionlint.mjs", "scripts/actionlint.test.mjs", "scripts/pre-push.mjs", "scripts/pre-push.test.mjs", ".husky/pre-push", ".github/workflows/release.yml", ".github/workflows/ci-preflight.yml"]) {
     assert.equal(ids([file])[0], "ci-config", file)
