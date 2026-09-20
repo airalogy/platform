@@ -48,6 +48,8 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 修复
 
+- 修正独立 Docker Protocol 执行器构建命令的镜像名称，使其与 API 默认配置一致；保存/导入不再隐式拉取镜像，缺失镜像或容器启动失败时明确提示保留草稿并修复运行环境，而非仅显示返回码 125。API 日志不再打印执行参数及成功输出。
+
 - 将前端 CI 与本地工具、生产构建统一到 Node 22.12+（22.x）。所有 GitHub Node 安装步骤读取 `.node-version`，本地推送和 CI 检查运行版本及配置漂移，避免 Node 20 缺少 `Promise.withResolvers` 导致测试失败；忽略可再生成的本地 pnpm 缓存。
 
 - 浏览器选择辅助逻辑排除关闭动画中仍可见的旧菜单，避免同名选项误改其他 Workflow 输入；新增独立选择器回归和 Project 槽位选中状态断言。

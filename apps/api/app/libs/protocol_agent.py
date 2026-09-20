@@ -472,6 +472,7 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
             "docker",
             "run",
             "--rm",
+            "--pull=never",
             "--cpus=1",
             "--memory=512m",
             "--add-host=airalogy-server-host:host-gateway",
@@ -497,21 +498,39 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
             json.dumps(params, separators=(",", ":")),
         ]
 
-    print(f"protocol_exec, cmd: {cmd}")
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        env={**os.environ, "PROTOCOL_DIR": str(config.PROTOCOL_DIR)},
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    # Parameters can contain API credentials and private Record values. Never
+    # print the command line or runner output to the API console.
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            env={**os.environ, "PROTOCOL_DIR": str(config.PROTOCOL_DIR)},
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError:
+        logger.error("Protocol runner could not start: mode=%s action=%s", config.PROTOCOL_RUN_ENV, action)
+        return {
+            "success": False,
+            "error_type": "ProtocolRunnerUnavailable",
+            "message": "The Protocol execution service could not start. Keep your draft and ask the administrator to check the configured runner.",
+        }
 
     # 等待子进程完成并获取输出
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
-        print(
-            f"Subprocess failed with package_name: {package_name}, action: {action}, return code {process.returncode}, output: {stdout.decode().strip()}"
-        )
+        logger.error("Protocol runner failed: mode=%s action=%s exit_code=%s", config.PROTOCOL_RUN_ENV, action, process.returncode)
+        if config.PROTOCOL_RUN_ENV == "docker" and process.returncode == 125:
+            missing_image = "no such image" in stderr.decode(errors="replace").lower()
+            return {
+                "success": False,
+                "error_type": "ProtocolExecutorImageMissing" if missing_image else "ProtocolRunnerUnavailable",
+                "message": (
+                    "The configured Protocol executor image is not installed on the server. Keep your draft and ask the administrator to build or install AIRALOGY_PROTOCOL_EXECUTOR_IMAGE for this deployment."
+                    if missing_image else
+                    "The Protocol execution container could not start (Docker exit 125). Keep your draft and ask the administrator to check the executor image, Docker service and mount permissions."
+                ),
+            }
         # 如果子进程返回非零状态码,表示发生错误
         return {
             "success": False,
@@ -521,7 +540,6 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
 
     result = stdout.decode().strip()
     try:
-        print(result)
         json_result = json.loads(result)
     except json.JSONDecodeError:
         return {

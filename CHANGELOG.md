@@ -48,6 +48,8 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ### Fixed
 
+- Correct the standalone Docker Protocol executor build tag to match the API default. Prevent implicit image pulls during save/import and report missing images or container startup failures with actionable draft-preserving guidance instead of only exit code 125. Do not print runner parameters or successful output into API logs.
+
 - Align frontend CI with Node 22.12+ (22.x), the local tooling and production builder. All GitHub Node setup steps read `.node-version`; pre-push and CI guard against runtime/configuration drift, including the Node 20 `Promise.withResolvers` test failure. Ignore regenerable local pnpm stores.
 
 - Browser selection helpers exclude closing dropdown menus even while their leave animation keeps them visible, preventing same-label options from changing the wrong Workflow input. Cover this with an isolated selector regression and explicit Project slot selection assertions.

@@ -2,7 +2,8 @@ FROM m.daocloud.io/docker.io/library/python:3.13.5-slim AS builder
 
 WORKDIR /builder
 
-# build: docker build -t airalogy-protocol-executor:latest -f protocol_executor.Dockerfile .
+# Local build (must match AIRALOGY_PROTOCOL_EXECUTOR_IMAGE):
+# docker build -t airalogy-platform-protocol-executor:local -f protocol_executor.Dockerfile .
 COPY protocol_requirements.txt ./
 
 # set pip source

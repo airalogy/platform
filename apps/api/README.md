@@ -84,6 +84,17 @@ Development quick-start fixtures use protocol examples packaged in the published
 
 ## Manual Development
 
+### Host API with Docker Protocol execution
+
+`PROTOCOL_RUN_ENV=docker` requires the exact image configured by `AIRALOGY_PROTOCOL_EXECUTOR_IMAGE` on the API's Docker daemon. From `apps/api`, build the default development image before saving or importing a Protocol:
+
+```bash
+docker build -t airalogy-platform-protocol-executor:local -f protocol_executor.Dockerfile .
+docker image inspect airalogy-platform-protocol-executor:local
+```
+
+For production use the deployment's version/SHA-pinned executor image, not an unrelated legacy `latest` image. Rebuild when executor dependencies change and keep its Airalogy version aligned with the API. Requests never pull images implicitly or fall back to executing Protocol code on the API host. Docker exit 125 is a container startup failure, not proof of an invalid Protocol. Check the configured image first, then Docker availability and host bind-mount paths. Keep the editor draft while an administrator repairs the execution environment.
+
 If you run dependencies through Docker but the API directly on the host, adjust `.env` hostnames from Docker service names to localhost:
 
 ```env
