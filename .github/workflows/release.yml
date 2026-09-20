@@ -57,6 +57,7 @@ jobs:
       - run: uv --directory apps/api run --with pytest python -m pytest tests
       - run: pnpm compute-runner:test
       - run: pnpm gateway:test
+      - run: node scripts/pre-push.mjs --check gateway-sandbox
       - run: pnpm lint
       - run: pnpm type-check
       - run: pnpm build

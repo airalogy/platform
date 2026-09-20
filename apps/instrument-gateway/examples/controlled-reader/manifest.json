@@ -11,7 +11,7 @@
     "sources": ["Public fixed controlled-reader specification and independent fake-transport tests"]
   },
   "compatibility": {
-    "gateway_versions": ["0.1.0"],
+    "gateway_versions": ["0.1.0", "0.2.0"],
     "python_versions": ["3.11", "3.12", "3.13", "3.14"],
     "declared": [
       {

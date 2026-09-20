@@ -14,6 +14,8 @@ on:
       - "scripts/instrument-authoring-example.mjs"
       - "scripts/prepare-instrument-ci*"
       - "scripts/pre-push*"
+      - "scripts/gateway-sandbox-integration.mjs"
+      - "scripts/compute-runner-integration.mjs"
       - ".node-version"
       - "scripts/check-node-runtime*"
       - ".github/workflows/instrument-gateway.yml"
@@ -30,6 +32,8 @@ on:
       - "scripts/instrument-authoring-example.mjs"
       - "scripts/prepare-instrument-ci*"
       - "scripts/pre-push*"
+      - "scripts/gateway-sandbox-integration.mjs"
+      - "scripts/compute-runner-integration.mjs"
       - ".node-version"
       - "scripts/check-node-runtime*"
       - ".github/workflows/instrument-gateway.yml"
@@ -96,9 +100,5 @@ jobs:
           python tests/check_bootstrap_install.py --wheel "dist/airalogy_instrument_gateway-$(cat ../../VERSION)-py3-none-any.whl" --release-tag "v$(cat ../../VERSION)"
 
       - name: Exercise adapter package isolation and timeout
-        env:
-          ADAPTER_TEST_IMAGE: python@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280
-        run: |
-          docker pull "$ADAPTER_TEST_IMAGE"
-          export ADAPTER_TEST_SDK_WHEEL="$(pwd)/dist/airalogy_instrument_gateway-$(cat ../../VERSION)-py3-none-any.whl"
-          RUN_ADAPTER_SANDBOX_TESTS=1 PYTHONPATH=src python -m unittest discover -s tests -p 'test_package*.py' -v
+        working-directory: .
+        run: node scripts/pre-push.mjs --check gateway-sandbox

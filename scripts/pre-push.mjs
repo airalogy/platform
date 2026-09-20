@@ -100,6 +100,12 @@ export const checks = {
     command: "corepack",
     args: ["pnpm", "gateway:test"],
   },
+  gatewaySandbox: {
+    id: "gateway-sandbox",
+    label: "real release SDK and offline adapter container compatibility",
+    command: "node",
+    args: ["scripts/gateway-sandbox-integration.mjs"],
+  },
   interfaceTests: {
     id: "interface-tests",
     label: "bounded browser interface and private evidence tests",
@@ -190,6 +196,8 @@ const AI_E2E_PREFIXES = [
 ]
 
 const GATEWAY_FILES = new Set([
+  "scripts/gateway-sandbox-integration.mjs",
+  "scripts/compute-runner-integration.mjs",
   ".github/workflows/instrument-gateway.yml",
   "apps/api/app/services/instrument_adapter_contract.py",
   "apps/api/app/services/instrument_package_contract.py",
@@ -300,6 +308,8 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   if (gatewayChanged) {
     plan.push(checks.gatewayTests)
   }
+  if (gatewayChanged || files.some(file => ["VERSION", ".github/workflows/release.yml", "scripts/check-version.mjs"].includes(file)))
+    plan.push(checks.gatewaySandbox)
 
   if (interfaceChanged) {
     plan.push(checks.interfaceTests)

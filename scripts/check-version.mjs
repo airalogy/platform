@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 
 const repositoryRoot = new URL("../", import.meta.url)
 const readText = async path => readFile(new URL(path, repositoryRoot), "utf8")
 const readJson = async path => JSON.parse(await readText(path))
 
 const version = (await readText("VERSION")).trim()
-if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+if (!/^\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?$/i.test(version)) {
   throw new Error(`VERSION is not a valid semantic version: ${version}`)
 }
 
@@ -31,6 +31,16 @@ for (const projectFile of [
 }
 
 const deploymentEnvironment = await readText("deploy/single-lab/.env.example")
+for (const entry of await readdir(new URL("apps/instrument-gateway/examples/", repositoryRoot), { withFileTypes: true })) {
+  if (!entry.isDirectory())
+    continue
+  const files = await readdir(new URL(`apps/instrument-gateway/examples/${entry.name}/`, repositoryRoot))
+  if (!files.includes("manifest.json"))
+    continue
+  const manifest = await readJson(`apps/instrument-gateway/examples/${entry.name}/manifest.json`)
+  if (manifest.schema === "airalogy.adapter-package.v1" && !manifest.compatibility.gateway_versions.includes(version))
+    throw new Error(`${entry.name}: bundled adapter must declare tested compatibility with Gateway ${version}`)
+}
 const deploymentVersion = /^PLATFORM_VERSION=(.+)$/mu.exec(deploymentEnvironment)?.[1]?.trim()
 if (deploymentVersion !== version) {
   throw new Error(

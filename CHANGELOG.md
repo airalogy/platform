@@ -52,6 +52,8 @@ Research analysis and governed Workflow release. See the [release overview and u
 
 ### Fixed
 
+- Declare and test bundled adapter compatibility with Gateway 0.2.0 while preserving 0.1.0 support. Local push and release checks now build the real SDK wheel and run the same offline container acceptance as hosted Gateway CI; version checks reject stale bundled declarations.
+
 - Keep Python-only CI gates independent of frontend dependencies: the Node startup guard does not load YAML, while the dedicated configuration gate still validates every workflow. Pin the Compute Runner's Node runtime and regress the clean-install boundary.
 
 - Allow the hosted browser gate enough bounded time for cold setup and both isolated AI capability modes; retain per-test timeouts so a successful second mode is not cancelled by the old 35-minute job limit.

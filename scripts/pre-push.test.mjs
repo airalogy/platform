@@ -7,6 +7,13 @@ import { load } from "js-yaml"
 import { buildCheckPlan, checks } from "./pre-push.mjs"
 
 const ids = (files, full = false, host = "linux") => buildCheckPlan(files, full, host).map(check => check.id)
+
+test("release SDK changes run actual adapter containers locally and in CI", () => {
+  for (const file of ["VERSION", "apps/instrument-gateway/pyproject.toml", "apps/instrument-gateway/examples/adapter-package/manifest.json", "scripts/gateway-sandbox-integration.mjs", ".github/workflows/release.yml"])
+    assert.ok(ids([file]).includes("gateway-sandbox"), file)
+  for (const file of [".github/workflows/instrument-gateway.yml", ".github/workflows/release.yml"])
+    assert.match(readFileSync(file, "utf8"), /node scripts\/pre-push\.mjs --check gateway-sandbox/)
+})
 function includes(files, expected, host = "linux") {
   const actual = ids(files, false, host)
   for (const id of expected)
@@ -52,7 +59,7 @@ test("CI and hook changes select real tooling regressions before expensive check
 })
 
 test("full mode includes every local gate even for an empty or docs-only diff", () => {
-  const required = ["ci-config", "version", "gateway-cli", "api-lock", "gateway-lock", "compute-lock", "lint", "types", "api-compile", "api-tests", "release-metadata", "deployment-identity", "instrument-contract", "research-integration", "gateway-tests", "interface-tests", "interface-demo", "compute-runner-tests", "compute-engine", "docs", "build", "full-e2e"]
+  const required = ["ci-config", "version", "gateway-cli", "api-lock", "gateway-lock", "compute-lock", "lint", "types", "api-compile", "api-tests", "release-metadata", "deployment-identity", "instrument-contract", "research-integration", "gateway-tests", "gateway-sandbox", "interface-tests", "interface-demo", "compute-runner-tests", "compute-engine", "docs", "build", "full-e2e"]
   for (const files of [[], ["README.md"]]) {
     assert.deepEqual(new Set(ids(files, true)), new Set(required))
     assert.deepEqual(new Set(ids(files, true, "darwin")), new Set([...required, "native-build-tests"]))
