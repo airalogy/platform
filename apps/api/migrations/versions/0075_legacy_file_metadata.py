@@ -18,20 +18,15 @@ def upgrade():
     columns = {c["name"] for c in sa.inspect(bind).get_columns("airalogy_files")}
     backend = None
     if "storage_backend" not in columns:
-        has_files = bind.execute(
-            sa.text("SELECT EXISTS (SELECT 1 FROM airalogy_files)")
-        ).scalar()
         backend = context.get_x_argument(as_dictionary=True).get(
             "legacy_storage_backend"
         )
-        if has_files and backend not in ("oss", "minio"):
+        if backend not in ("oss", "minio"):
             raise RuntimeError(
-                "Existing files require an explicit verified storage backend: "
+                "Legacy file tables require an explicit verified storage backend: "
                 "alembic -x legacy_storage_backend=oss (or minio) upgrade head. "
                 "No objects are copied or moved."
             )
-        if backend is not None and backend not in ("oss", "minio"):
-            raise RuntimeError("legacy_storage_backend must be oss or minio")
     additions = (
         sa.Column("content_type", sa.String(), nullable=True),
         sa.Column("size_bytes", sa.BigInteger(), nullable=True),
@@ -48,8 +43,8 @@ def upgrade():
     for column in additions:
         if column.name not in columns:
             op.add_column("airalogy_files", column)
-    if "storage_backend" not in columns and backend is not None:
-        op.alter_column("airalogy_files", "storage_backend", server_default=None)
+    # Retain the explicitly verified default for old application writers during
+    # rollback. Modern writers supply their configured backend explicitly.
     indexes = {i["name"] for i in sa.inspect(bind).get_indexes("airalogy_files")}
     if "ix_airalogy_files_project_id" not in indexes:
         op.create_index(

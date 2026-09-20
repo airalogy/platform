@@ -28,15 +28,20 @@ def setup_migration(monkeypatch, *, backend=None, has_files=True, existing=()):
 
 
 @pytest.mark.parametrize("backend", [None, "external", "unknown"])
-def test_existing_files_require_verified_backend_before_any_ddl(monkeypatch, backend):
-    migration, operations = setup_migration(monkeypatch, backend=backend)
+@pytest.mark.parametrize("has_files", [True, False])
+def test_existing_files_require_verified_backend_before_any_ddl(
+    monkeypatch, backend, has_files
+):
+    migration, operations = setup_migration(
+        monkeypatch, backend=backend, has_files=has_files
+    )
     with pytest.raises(RuntimeError, match="explicit verified storage backend"):
         migration.upgrade()
     operations.add_column.assert_not_called()
 
 
 @pytest.mark.parametrize("backend", ["oss", "minio"])
-def test_verified_backend_is_only_used_for_existing_rows(monkeypatch, backend):
+def test_verified_backend_preserves_legacy_writer_rollback(monkeypatch, backend):
     migration, operations = setup_migration(monkeypatch, backend=backend)
     migration.upgrade()
     columns = {
@@ -44,9 +49,7 @@ def test_verified_backend_is_only_used_for_existing_rows(monkeypatch, backend):
     }
     assert len(columns) == 9
     assert columns["storage_backend"].server_default.arg == backend
-    operations.alter_column.assert_called_once_with(
-        "airalogy_files", "storage_backend", server_default=None
-    )
+    operations.alter_column.assert_not_called()
 
 
 def test_existing_modern_columns_are_never_rewritten(monkeypatch):
