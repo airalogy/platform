@@ -52,6 +52,8 @@ Research analysis and governed Workflow release. See the [release overview and u
 
 ### Fixed
 
+- Allow the hosted browser gate enough bounded time for cold setup and both isolated AI capability modes; retain per-test timeouts so a successful second mode is not cancelled by the old 35-minute job limit.
+
 - Add an explicit-backend legacy file metadata migration for previously stamped databases, preserving original file contents and paths and refusing to guess where existing files reside. Retain the verified backend default for compatibility with old application writers during rollback.
 
 - Repair upgrades from early `0008` installations that lack the legacy Workflow table before research-task foreign keys are created. Preserve existing Workflow data and verify release identity against the canonical product version rather than a hard-coded first-release value.

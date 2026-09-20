@@ -31,6 +31,9 @@ test("local and hosted full browser gates share both actual AI capability modes"
   for (const event of ["push", "pull_request"])
     assert.ok(workflow.on[event].paths.includes("scripts/e2e-matrix.mjs"))
   assert.ok(workflow.jobs.chromium.steps.some(step => step.run === "node scripts/pre-push.mjs --check full-e2e"))
+  const budgetMinutes = workflow.jobs.chromium["timeout-minutes"]
+  assert.ok(budgetMinutes >= 45 && budgetMinutes <= 60, "cold setup and both modes need a bounded 45–60 minute job budget")
+  assert.match(readFileSync("playwright.config.ts", "utf8"), /timeout:\s*60_000/, "retain the one-minute per-test timeout")
 })
 
 test("CI and hook changes select real tooling regressions before expensive checks", () => {

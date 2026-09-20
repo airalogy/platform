@@ -41,7 +41,9 @@ concurrency:
 jobs:
   chromium:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Includes cold dependencies and two sequential, isolated capability modes.
+    # Keep Playwright's per-test timeout unchanged so stalled tests still fail.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
