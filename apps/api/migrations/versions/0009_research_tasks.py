@@ -8,6 +8,7 @@ Create Date: 2026-09-02 00:00:00.000000
 from collections.abc import Sequence
 
 from alembic import op
+import sqlalchemy as sa
 
 from migrations.model_registry import import_models
 
@@ -38,6 +39,7 @@ def _tables(metadata):
 
 def upgrade() -> None:
     bind = op.get_bind()
+    _ensure_legacy_workflow_table(bind)
     import_models()
     from app.models.base import Base
 
@@ -73,3 +75,49 @@ def downgrade() -> None:
     from app.models.base import Base
 
     Base.metadata.drop_all(bind=bind, tables=list(reversed(_tables(Base.metadata))))
+
+
+def _ensure_legacy_workflow_table(bind) -> None:
+    """Repair early 0008 installations before research_runs references this table.
+
+    Later initial-schema definitions include it, but already-stamped installations
+    never re-run 0001. Keep this prerequisite frozen rather than importing a future
+    Workflow model. Existing tables and their data are left untouched. The table
+    belongs to the initial schema, so downgrading 0009 must not remove it.
+    """
+    if sa.inspect(bind).has_table("protocol_workflows"):
+        return
+    metadata = sa.MetaData()
+    for name in ("projects", "users", "protocols"):
+        sa.Table(name, metadata, sa.Column("id", sa.UUID(), primary_key=True))
+    table = sa.Table(
+        "protocol_workflows",
+        metadata,
+        sa.Column(
+            "id",
+            sa.UUID(),
+            primary_key=True,
+            index=True,
+            server_default=sa.func.uuid_generate_v7(),
+        ),
+        sa.Column(
+            "project_id",
+            sa.UUID(),
+            sa.ForeignKey("projects.id"),
+            nullable=False,
+            index=True,
+        ),
+        sa.Column(
+            "user_id", sa.UUID(), sa.ForeignKey("users.id"), nullable=False, index=True
+        ),
+        sa.Column(
+            "root_protocol_id", sa.UUID(), sa.ForeignKey("protocols.id"), index=True
+        ),
+        sa.Column("title", sa.String(256), nullable=False),
+        sa.Column("workflow_info", sa.JSON(), nullable=False),
+        sa.Column("path_data", sa.JSON(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime()),
+    )
+    table.create(bind=bind)

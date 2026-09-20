@@ -2,12 +2,12 @@ name: ${COMPOSE_PROJECT_NAME:-airalogy-single-lab}
 
 services:
   protocol-executor-image:
-    image: ${AIRALOGY_PROTOCOL_EXECUTOR_IMAGE:-airalogy-platform-protocol-executor:0.1.0}
+    image: ${AIRALOGY_PROTOCOL_EXECUTOR_IMAGE:-airalogy-platform-protocol-executor:0.2.0}
     build:
       context: ../../apps/api
       dockerfile: protocol_executor.Dockerfile
       args:
-        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.2.0}
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
         GIT_TAG: ${GIT_TAG:-}
         BUILD_TIME: ${BUILD_TIME:-}
@@ -16,7 +16,7 @@ services:
     command: ["true"]
 
   web:
-    image: ${AIRALOGY_WEB_IMAGE:-airalogy-platform-web:0.1.0}
+    image: ${AIRALOGY_WEB_IMAGE:-airalogy-platform-web:0.2.0}
     build:
       context: ../..
       dockerfile: deploy/single-lab/web.Dockerfile
@@ -27,7 +27,7 @@ services:
         VITE_DOCS_URL: ${VITE_DOCS_URL:-/docs/}
         NODE_COMPONENT_BUILD_MEMORY_MB: ${COMPONENT_BUILD_MEMORY_MB:-3072}
         NODE_BUILD_MEMORY_MB: ${WEB_BUILD_MEMORY_MB:-6144}
-        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.2.0}
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
         GIT_TAG: ${GIT_TAG:-}
         BUILD_TIME: ${BUILD_TIME:-}
@@ -59,12 +59,12 @@ services:
       - no-new-privileges:true
 
   api-server:
-    image: ${AIRALOGY_API_IMAGE:-airalogy-platform-api:0.1.0}
+    image: ${AIRALOGY_API_IMAGE:-airalogy-platform-api:0.2.0}
     build:
       context: ../../apps/api
       dockerfile: Dockerfile
       args:
-        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.2.0}
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
         GIT_TAG: ${GIT_TAG:-}
         BUILD_TIME: ${BUILD_TIME:-}
@@ -82,7 +82,7 @@ services:
       - ${AIRALOGY_ENV_FILE:-.env}
     environment:
       APP_ENV: production
-      PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+      PLATFORM_VERSION: ${PLATFORM_VERSION:-0.2.0}
       GIT_COMMIT: ${GIT_COMMIT:-unknown}
       GIT_TAG: ${GIT_TAG:-}
       BUILD_TIME: ${BUILD_TIME:-}
@@ -126,7 +126,7 @@ services:
       - no-new-privileges:true
 
   db:
-    image: ${AIRALOGY_POSTGRES_IMAGE:-airalogy-platform-postgres:0.1.0}
+    image: ${AIRALOGY_POSTGRES_IMAGE:-airalogy-platform-postgres:0.2.0}
     build:
       context: ../../apps/api
       dockerfile: postgresql.Dockerfile
@@ -134,7 +134,7 @@ services:
         APT_DEBIAN_MIRROR: ${APT_DEBIAN_MIRROR:-http://deb.debian.org/debian}
         APT_DEBIAN_SECURITY_MIRROR: ${APT_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         APT_POSTGRES_MIRROR: ${APT_POSTGRES_MIRROR:-http://apt.postgresql.org/pub/repos/apt}
-        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.1.0}
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.2.0}
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
         GIT_TAG: ${GIT_TAG:-}
         BUILD_TIME: ${BUILD_TIME:-}

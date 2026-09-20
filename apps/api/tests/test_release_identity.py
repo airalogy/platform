@@ -31,9 +31,9 @@ def test_release_workflow_builds_the_complete_component_set():
 
 
 def test_single_lab_release_identity_is_versioned_and_not_customer_named():
-    environment = (
-        REPOSITORY_ROOT / "deploy/single-lab/.env.example"
-    ).read_text(encoding="utf-8")
+    environment = (REPOSITORY_ROOT / "deploy/single-lab/.env.example").read_text(
+        encoding="utf-8"
+    )
     compose = (REPOSITORY_ROOT / "deploy/single-lab/compose.yml").read_text(
         encoding="utf-8"
     )
@@ -41,7 +41,8 @@ def test_single_lab_release_identity_is_versioned_and_not_customer_named():
         REPOSITORY_ROOT / "deploy/single-lab/scripts/support-bundle.sh"
     ).read_text(encoding="utf-8")
 
-    assert "PLATFORM_VERSION=0.1.0" in environment
+    version = (REPOSITORY_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert f"PLATFORM_VERSION={version}\n" in environment
     assert "AIRALOGY_DEPLOYMENT_ID=dep_00000000000000000000000000000000" in environment
     assert "AIRALOGY_RELEASE_METADATA_REQUIRED=false" in environment
     assert "AIRALOGY_PROTOCOL_EXECUTOR_IMAGE" in compose

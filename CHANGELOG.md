@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-21
+
+Research analysis and governed Workflow release. See the [release overview and upgrade boundaries](docs/en/releases/v0.2.0.md).
+
 ### Added
 
 - Turn explicitly published built-in single-Protocol and Project analysis methods into reviewed, ordinary Protocol drafts in the same Project. Edit `protocol.toml` and `protocol.aimd` while retaining the exact declarative `analysis-method.json`; preview, save immutable revisions, make a separate authorized review decision, and publish the server-stored reviewed files through the normal Protocol parser/version path. Support new Protocols and explicitly higher versions from an exact existing baseline, preserve protected method lineage and current source/publisher/reviewer permissions, and recover successful confirmations without duplication. This neither runs an analysis nor validates a scientific conclusion; Compute method promotion remains unsupported.
@@ -47,6 +51,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 - Add schema-v4 file bindings from fixed Record FileId fields and declared Compute output files into downstream Protocols. Seal exact sources, bytes and target references, retain source/target permission intersection across preview, download, export and reuse, and preserve prior graph digests. Files are not text or arbitrary URLs; array/object bindings remain future work.
 
 ### Fixed
+
+- Add an explicit-backend legacy file metadata migration for previously stamped databases, preserving original file contents and paths and refusing to guess where existing files reside.
+
+- Repair upgrades from early `0008` installations that lack the legacy Workflow table before research-task foreign keys are created. Preserve existing Workflow data and verify release identity against the canonical product version rather than a hard-coded first-release value.
 
 - Correct the standalone Docker Protocol executor build tag to match the API default. Prevent implicit image pulls during save/import and report missing images or container startup failures with actionable draft-preserving guidance instead of only exit code 125. Do not print runner parameters or successful output into API logs.
 

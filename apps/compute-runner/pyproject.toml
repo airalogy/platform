@@ -1,6 +1,6 @@
 [project]
 name = "airalogy-compute-runner"
-version = "0.1.0"
+version = "0.2.0"
 description = "Isolated pull-only runtime for governed Airalogy Compute Jobs"
 readme = "README.md"
 requires-python = ">=3.11"

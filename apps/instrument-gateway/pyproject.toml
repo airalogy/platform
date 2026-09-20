@@ -1,6 +1,6 @@
 [project]
 name = "airalogy-instrument-gateway"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pull-only local runtime for governed Airalogy Instrument Jobs"
 readme = "README.md"
 requires-python = ">=3.11"
