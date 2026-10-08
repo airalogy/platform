@@ -14,6 +14,10 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ## [未发布]
 
+## [0.3.0] - 2026-10-08
+
+Protocol 编写、可移植归档与 Records 引导导入版本。参见[版本概览与升级边界](docs/zh/releases/v0.3.0.md)。
+
 ### 新增
 
 - Protocol 下载增加标准 `.aira` 归档与 ZIP 源文件包选项，按权限导出确切存储版本，排除数据库 Records、环境密钥及执行缓存；保留原有 ZIP 接口兼容性。

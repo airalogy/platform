@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-08
+
+Protocol authoring, portable archives and guided Record imports. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.0.md).
+
 ### Added
 
 - Offer validated Protocol `.aira` archives and ZIP source packages through shared download choices. Export the authorized, exact stored version without database Records, environment secrets or executor caches; preserve legacy ZIP integrations.
