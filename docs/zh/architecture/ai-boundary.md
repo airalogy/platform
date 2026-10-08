@@ -1,6 +1,6 @@
 # Platform 与 Masterbrain 的 AI 边界
 
-Platform 的内置模型调用统一通过正式发布的 `masterbrain==0.12.0` Python 包完成，包括文本向量。默认包模式不要求单独部署 AI 服务。统一的是模型能力入口，不是把整个科研系统移入 Masterbrain。
+Platform 的内置模型调用统一通过正式发布的 `masterbrain==0.13.0` Python 包完成，包括文本向量。默认包模式不要求单独部署 AI 服务。统一的是模型能力入口，不是把整个科研系统移入 Masterbrain。
 
 | 层级 | 职责 |
 | --- | --- |
@@ -9,6 +9,14 @@ Platform 的内置模型调用统一通过正式发布的 `masterbrain==0.12.0` 
 | Instrument Gateway / Compute Runner | 明确授权的执行，以及独立的结果和停止状态观测。 |
 
 依赖 Platform 业务对象的提示词和上下文组装仍保留在 Platform。模型输出不能授予权限、自行审批、写入正式资产或授权设备操作。离线回归检查禁止 API 产品代码直接导入模型供应商 SDK；统一从 `app/libs/masterbrain.py` 接入。用户提供的 Protocol 执行代码属于独立执行边界，不属于内置模型能力。
+
+## Protocol 编写与客户端计算
+
+Platform 在单文件 Protocol 生成和代码编辑时明确设置 `prefer_client_assigners=true`。Masterbrain 将简单确定性计算优先生成在 `protocol.aimd` 的客户端 Assigner 代码块中，外部服务、特权操作和重型计算仍使用服务端 Python。编辑时保留已有运行时选择，生成代码仍须校验与用户审核。
+
+受限浏览器运行时、依赖调度和输入/输出校验由 Platform 负责。CSV/API 导入须提供派生值，不会执行浏览器计算。客户端计算不依赖 AI，也不会绕过服务端 Record 校验或权限。
+
+外部模式需要 Masterbrain 0.13.0 或更高版本才能使用该偏好。更新 Platform 的 Python 依赖不会升级独立部署的 Masterbrain 服务，旧服务保留原有生成行为。本次依赖升级不新增数据库迁移，也不要求重建向量索引。
 
 ## 向量与非 AI 检索
 

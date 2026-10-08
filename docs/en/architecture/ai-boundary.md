@@ -1,6 +1,6 @@
 # Platform and Masterbrain AI boundary
 
-Platform uses the published `masterbrain==0.12.0` Python package for built-in model calls, including text embeddings. It does not require a separate AI service in the default package mode. This unifies model access, not ownership of the research system.
+Platform uses the published `masterbrain==0.13.0` Python package for built-in model calls, including text embeddings. It does not require a separate AI service in the default package mode. This unifies model access, not ownership of the research system.
 
 | Layer | Owns |
 | --- | --- |
@@ -9,6 +9,14 @@ Platform uses the published `masterbrain==0.12.0` Python package for built-in mo
 | Instrument Gateway / Compute Runner | Explicitly authorized execution and independent result/stop observations. |
 
 Prompts and context assembly that depend on Platform objects remain in Platform. A model response cannot grant access, approve itself, write a final asset or authorize an instrument operation. Built-in provider SDK imports in API product code are guarded by an offline regression test; integration goes through `app/libs/masterbrain.py`. Protocol executor code supplied by users is a separate execution boundary, not a built-in model capability.
+
+## Protocol authoring and client calculations
+
+Platform opts in to `prefer_client_assigners=true` for single-file Protocol generation and code editing. Masterbrain prefers small deterministic calculations in `protocol.aimd` client Assigner blocks, while external services, privileged operations and heavy computation remain server-side Python. Existing runtime choices are preserved when editing; generated code still requires validation and user review.
+
+Platform owns the restricted browser runtime, dependency scheduling and input/output validation. CSV/API imports must supply derived values; they do not execute browser calculations. Client calculations are available without AI and do not bypass server-side Record validation or permissions.
+
+This preference requires Masterbrain 0.13.0 or newer in external mode. Updating Platform's Python dependency does not upgrade a separately deployed Masterbrain service; older services retain their prior generation behavior. No new database migration or embedding reindex is required for this dependency upgrade.
 
 ## Embeddings and non-AI search
 

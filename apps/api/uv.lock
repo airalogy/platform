@@ -190,7 +190,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "jsonschema", specifier = ">=4.25.1,<5" },
     { name = "markitdown", extras = ["pdf", "docx"], specifier = ">=0.1.4" },
-    { name = "masterbrain", specifier = "==0.12.0" },
+    { name = "masterbrain", specifier = "==0.13.0" },
     { name = "miniopy-async", specifier = "==1.22.1" },
     { name = "orjson", specifier = "==3.11.4" },
     { name = "pgvector", specifier = "==0.4.2" },
@@ -1534,7 +1534,7 @@ wheels = [
 
 [[package]]
 name = "masterbrain"
-version = "0.12.0"
+version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "airalogy" },
@@ -1552,9 +1552,9 @@ dependencies = [
     { name = "tavily" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/19/04a8d2b2f19659e2e0c16b488f9ebbdb6181aa82dbc2bfb6985920ca830a/masterbrain-0.12.0.tar.gz", hash = "sha256:2c3f72c641efe08f52baceb2adae6f1ebfbbe3277596d9299126675cb9e1d117", size = 119374, upload-time = "2026-09-11T11:28:18.018Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/1b/af2bc5ffd1654f2e9dd8090c37909b44856727f8d03eb14b768eb421d1f5/masterbrain-0.13.0.tar.gz", hash = "sha256:327e70f1a21d0ac47baad2e7126962a95859a00e3af76f805c6572836aae6fb2", size = 121128, upload-time = "2026-10-08T08:39:34.452Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/33/f3d45608fda85641efdf3704db39d0a93878c90e5b25e2d0cdf17f4f6153/masterbrain-0.12.0-py3-none-any.whl", hash = "sha256:979b15cebd44a1f5a1773f919cfac717294d0bb08f911dc5e926ddca0b04d07a", size = 195731, upload-time = "2026-09-11T11:28:16.384Z" },
+    { url = "https://files.pythonhosted.org/packages/79/fa/8dba5b1a9975688c5a92e4aba1074c41badc606c863aa07750b023c771ee/masterbrain-0.13.0-py3-none-any.whl", hash = "sha256:776ec11a0c5dfe5fedf19408cab3b421fdf73b3ba9eb75bff38e155a4af32a83", size = 197801, upload-time = "2026-10-08T08:39:32.707Z" },
 ]
 
 [[package]]

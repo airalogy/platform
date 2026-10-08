@@ -21,6 +21,7 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 修复
 
+- 锁定正式发布的 Masterbrain 0.13.0，使 Protocol 生成和代码编辑实际启用客户端 Assigner 优先策略，不使用本地依赖补丁。特权操作、外部服务和重型计算仍使用服务端 Python；独立 Masterbrain 服务须另行升级。新增针对已安装包请求模型和提示词的离线 HTTP 集成回归。
 - 计算队列纳入后续依赖的 Assigner，上游失败时停止下游计算；计算未完成或失败时阻止提交 Record，避免提交旧的计算结果。
 - Records 导入增加当前 Protocol 的 CSV 标准模板、字段要求、校验预览和明确确认。支持 UTF-8 BOM，拒绝未知或重复 CSV/TSV 列，不猜测表头；识别表格错误，按字段和文件行号提供中英文提示。预检不创建记录，确认时重新校验数据与权限并拒绝过期预检。保留既有 API 直接导入及 `.aira` 归档兼容，不引入旧表格映射功能。
 
