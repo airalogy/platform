@@ -15,3 +15,18 @@ test("synthetic selector contract ignores same-label options in a closing menu",
   await selectVisibleOption(page, "Synthetic response")
   await expect(page.locator("body")).toHaveAttribute("data-picked", "current")
 })
+
+for (const inputClass of ["n-base-selection-input", "n-base-selection-input-tag__input"]) {
+  test(`synthetic selector searches virtualized options through ${inputClass}`, async ({ page }) => {
+    await page.setContent(`
+      <input class="${inputClass}" oninput="document.querySelector('button').hidden = this.value !== 'Synthetic distant option'">
+      <div class="n-base-select-menu">
+        <button hidden class="n-base-select-option" onclick="document.body.dataset.picked='searched'">Synthetic distant option</button>
+      </div>
+    `)
+    await page.locator("input").focus()
+    await selectVisibleOption(page, "Synthetic distant option")
+    await expect(page.locator("input")).toHaveValue("Synthetic distant option")
+    await expect(page.locator("body")).toHaveAttribute("data-picked", "searched")
+  })
+}

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { loadFixtures, selectVisibleOption } from "./fixtures"
 
 // Successful writes and capability discovery use the real isolated API.
 // Only failure tests inject unavailable network/storage boundaries.
@@ -47,6 +48,35 @@ test("failed Knowledge writes retain text and show persistent retry guidance", a
   await expect(page.getByRole("heading", { name: "Unsaved synthetic note", exact: true })).toBeVisible()
 })
 
+test("Project task creation waits for context and inherits the current Project", async ({ page }) => {
+  const fixtures = await loadFixtures()
+  let release!: () => void
+  const contextReady = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/api/research-tasks?**", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("project_id") === fixtures.project.id)
+      await contextReady
+    await route.continue()
+  })
+  try {
+    await page.goto(`/labs/${fixtures.lab.uid}/projects/${fixtures.project.uid}/research`)
+    const create = page.getByRole("button", { name: "New Research Task", exact: true }).first()
+    await expect(create).toBeDisabled()
+    release()
+    await expect(create).toBeEnabled()
+    await create.click()
+    const dialog = page.getByRole("dialog")
+    await expect(dialog.locator(".n-select").first()).toContainText("Quickstart Protocol Testing")
+    await expect(dialog.locator(".n-select").first().locator("input")).toBeDisabled()
+    await expect(page.getByTestId("research-task-environment-summary")).toContainText("1 tools")
+  }
+  finally {
+    release()
+    await page.unrouteAll({ behavior: "wait" })
+  }
+})
+
 test("minimal manual Research Task does not require optional infrastructure", async ({ page }) => {
   const instance = await page.request.get("/api/instance")
   expect(instance.ok()).toBeTruthy()
@@ -54,6 +84,9 @@ test("minimal manual Research Task does not require optional infrastructure", as
   await page.goto("/research/tasks")
   await page.getByRole("button", { name: "New Research Task", exact: true }).first().click()
   const dialog = page.getByRole("dialog")
+  // Other journeys may create Projects; never rely on global fixture order.
+  await dialog.locator(".n-select").first().click()
+  await selectVisibleOption(page, "Quickstart Protocol Testing")
   await expect(dialog).toContainText("Quickstart Protocol Testing")
   if (!aiEnabled)
     await expect(dialog.getByText("Autonomy level", { exact: true })).toHaveCount(0)

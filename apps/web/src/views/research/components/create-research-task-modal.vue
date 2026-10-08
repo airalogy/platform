@@ -1,5 +1,5 @@
 <template>
-  <n-button type="primary" @click="openModal">
+  <n-button type="primary" :disabled="contextLoading" @click="openModal">
     <template #icon>
       <n-icon><icon-tabler-sparkles /></n-icon>
     </template>
@@ -528,7 +528,7 @@ interface ProjectContext {
   lab_name?: string
 }
 
-const props = defineProps<{ project?: ProjectContext | null }>()
+const props = defineProps<{ project?: ProjectContext | null, contextLoading?: boolean }>()
 const emit = defineEmits<{ created: [task: ResearchTaskDetail] }>()
 
 const authStore = useAuthStore()
@@ -884,6 +884,8 @@ async function handleAiraDraft() {
 }
 
 async function openModal() {
+  if (props.contextLoading)
+    return
   visible.value = true
   if (props.project) {
     form.project_id = String(props.project.id)

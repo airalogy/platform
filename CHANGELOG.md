@@ -25,6 +25,8 @@ Protocol authoring, portable archives and guided Record imports. See the [releas
 
 ### Fixed
 
+- Keep Project task creation disabled until its context is ready, preventing a fast click from opening a blank, locked Project selector.
+- Fix Protocol name/UID search when associating instrument files with Records, retaining Project permissions and pagination. Browser acceptance now selects explicit Project context and searches virtualized single/multiple selections instead of relying on fixture order or visible first-page options.
 - Pin the published Masterbrain 0.13.0 dependency so Protocol generation and code editing honor Platform's client-first Assigner preference, without local package patches. Keep server Python for privileged, external and heavy computations; external Masterbrain services require a separate upgrade. Cover the installed package request models and prompts with offline HTTP-level integration tests.
 - Include downstream Assigners in queued calculation plans, stop dependents when an upstream calculation fails, and block Record submission while calculations are pending or failed so stale results cannot be submitted.
 - Guide Record imports through a current-Protocol CSV template, field requirements, validation preview and explicit confirmation. Accept UTF-8 BOM, reject unknown or duplicate CSV/TSV columns without guessing aliases, flag spreadsheet errors, and group bilingual feedback by field and file line. Previews do not create Records; confirmations revalidate data and permissions and reject stale previews. Preserve direct API and `.aira` archive compatibility without adding a legacy-table mapping feature.

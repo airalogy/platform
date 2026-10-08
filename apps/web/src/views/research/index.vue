@@ -24,6 +24,7 @@
         <create-research-task-modal
           v-if="activeView === 'tasks'"
           :project="projectContext"
+          :context-loading="projectContextPending"
           @created="openTask"
         />
       </div>
@@ -100,7 +101,7 @@
         </div>
         <n-empty v-else-if="!loading" class="research-empty" :description="$t('page.research.noTasks')">
           <template #extra>
-            <create-research-task-modal :project="projectContext" @created="openTask" />
+            <create-research-task-modal :project="projectContext" :context-loading="projectContextPending" @created="openTask" />
           </template>
         </n-empty>
       </template>
@@ -304,6 +305,9 @@ const page = ref(1)
 const pageSize = 20
 const startingId = ref("")
 const projectContext = ref<Api.Project.MyProjectInfo | null>(null)
+// The Project route must never open a context-free task dialog while its
+// asynchronous context is still loading (or failed to load).
+const projectContextPending = computed(() => route.name === "project-research" && (loading.value || !projectContext.value))
 
 const activeView = computed<"tasks" | "work-items" | "approvals" | "notifications">(() => {
   if (route.name === "research-work-items")

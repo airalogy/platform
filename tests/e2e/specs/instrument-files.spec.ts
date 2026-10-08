@@ -15,6 +15,19 @@ test("instrument originals: mobile review, exact Record, receipt loss, stale pre
     const { fixtures, api, headers, call, confirm, task, outputsUrl, output } = setup
     const file = output.items[0]
     const record = fixtures.schema_governance
+    // Name/UID search must actually narrow the server response, not leave a
+    // virtualized first page unchanged when the desired Protocol is offscreen.
+    const search = (value: string) => call(`/protocols?${new URLSearchParams({
+      project_id: fixtures.project.id,
+      search_by: "name_or_uid",
+      search_str: value,
+      page_size: "25",
+    })}`, undefined, "GET")
+    const byUid = await search(record.protocol_uid)
+    expect(byUid.protocols.map((item: { id: string }) => item.id)).toEqual([record.protocol_id])
+    const byName = await search(byUid.protocols[0].name)
+    expect(byName.protocols.map((item: { id: string }) => item.id)).toContain(record.protocol_id)
+    expect((await search(`missing-${randomUUID()}`)).total_count).toBe(0)
     const recordUrl = `/protocols/${record.protocol_id}/records/${record.record_id}?version=${record.record_version}`
     const original = await call(recordUrl, undefined, "GET")
     const associationUrl = `${outputsUrl}/${file.id}/associations`

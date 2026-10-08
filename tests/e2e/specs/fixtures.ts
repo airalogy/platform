@@ -38,7 +38,7 @@ export async function selectVisibleOption(page: Page, label: string | RegExp) {
   // than waiting for an offscreen option that has not been rendered at all.
   // Non-filterable menus and regex selections retain their visible-option path.
   if (typeof label === "string" && await option.count() === 0) {
-    const search = page.locator("input.n-base-selection-input:focus")
+    const search = page.locator("input.n-base-selection-input:focus, input.n-base-selection-input-tag__input:focus")
     if (await search.count() === 1 && await search.isVisible() && await search.isEditable())
       await search.fill(label)
   }

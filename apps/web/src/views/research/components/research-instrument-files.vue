@@ -565,7 +565,8 @@ async function loadProtocols(more = false) {
       projectId: snapshot.value.context.project_id,
       page,
       pageSize: 25,
-      name: protocolQuery.value || undefined,
+      search_by: "name_or_uid",
+      search_str: protocolQuery.value || undefined,
     })
     if (result.error || !result.data)
       throw new Error("Protocol options unavailable")

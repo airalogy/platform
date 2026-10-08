@@ -42,7 +42,7 @@ async def get_protocols(
     project_uid: UidStr | None = None,
     project_id: UUID | None = None,
     uid: UidStr | None = None,
-    search_by: Literal["uid", "name"] | None = "name",
+    search_by: Literal["uid", "name", "name_or_uid"] | None = "name",
     search_str: str | None = None,
     sorted_by: Literal["stars_count", "forks_count", "updated_at"] | None = None,
     folder_id: int | None = None,
@@ -184,6 +184,13 @@ async def get_protocols(
             conditions.append(Protocol.uid.ilike(f"%{search_str}%"))
         elif search_by == "name":
             conditions.append(Protocol.name.ilike(f"%{search_str}%"))
+        elif search_by == "name_or_uid":
+            conditions.append(
+                or_(
+                    Protocol.name.ilike(f"%{search_str}%"),
+                    Protocol.uid.ilike(f"%{search_str}%"),
+                )
+            )
 
     # Start building the query
     query = (

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { loadFixtures, selectVisibleOption } from "./fixtures"
 
 function useChinese(page: import("@playwright/test").Page) {
   return page.addInitScript(() => {
@@ -8,6 +9,7 @@ function useChinese(page: import("@playwright/test").Page) {
 
 test("Aira turns a research question into an editable Task draft without creating it", async ({ page }) => {
   await useChinese(page)
+  const fixtures = await loadFixtures()
   let draftRequests = 0
   await page.route("**/api/research-tasks/draft-with-aira", async (route) => {
     draftRequests += 1
@@ -20,6 +22,7 @@ test("Aira turns a research question into an editable Task draft without creatin
     expect(request.research_question).toBe("哪些条件能提高候选化合物的细胞响应？")
     expect(request.additional_constraints).toBe("不超过已批准的安全阈值。")
     expect(request.autonomy_level).toBe("assisted")
+    expect(request.project_id).toBe(fixtures.project.id)
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -50,6 +53,10 @@ test("Aira turns a research question into an editable Task draft without creatin
 
   await page.goto("/research/tasks")
   await page.getByRole("button", { name: "新建科研任务", exact: true }).first().click()
+  // Archive round-trip coverage creates other Projects. Select the intended
+  // context explicitly instead of assuming the account has exactly one.
+  await page.getByRole("dialog").locator(".n-select").first().click()
+  await selectVisibleOption(page, "Quickstart Protocol Testing")
 
   const aira = page.getByTestId("research-task-aira")
   await expect(aira).toBeVisible()
