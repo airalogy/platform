@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test"
 import { expect, test } from "@playwright/test"
-import { loadFixtures } from "./fixtures"
+import { loadFixtures, selectVisibleOption } from "./fixtures"
 
 test.beforeEach(async ({ page }, testInfo) => {
   await page.addInitScript((language) => {
@@ -117,6 +117,8 @@ test("manual Task errors preserve the form and narrow-screen footer remains visi
   await page.goto("/research/tasks")
   await page.getByRole("button", { name: "New Research Task", exact: true }).first().click()
   const dialog = page.getByRole("dialog")
+  await dialog.locator(".n-select").first().click()
+  await selectVisibleOption(page, "Quickstart Protocol Testing")
   await assertDialogFits(page, dialog, 768)
   await page.getByTestId("research-task-title").locator("input").fill("Synthetic usability Task")
   await page.getByTestId("research-task-goal").locator("textarea").fill("Check the interface with synthetic observations.")
