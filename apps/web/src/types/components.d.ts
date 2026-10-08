@@ -354,6 +354,7 @@ declare module 'vue' {
     ProjectSelector: typeof import('./../components/apply-steps/project-selector.vue')['default']
     ProtocolCard: typeof import('./../components/protocol/protocol-card.vue')['default']
     ProtocolDetails: typeof import('./../components/apply-steps/protocol-details.vue')['default']
+    ProtocolDownload: typeof import('./../components/protocol/protocol-download.vue')['default']
     ProtocolIcon: typeof import('./../components/icon/protocol-icon.vue')['default']
     ProtocolInfoCard: typeof import('./../components/protocol/protocol-info-card.vue')['default']
     ProtocolMetadataDisplay: typeof import('./../components/protocol/protocol-metadata-display.vue')['default']

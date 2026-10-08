@@ -301,6 +301,7 @@ async def protocol_generate_aimd(
         {
             "use_model": build_masterbrain_model(chat.model),
             "instruction": chat.context["instruction"],
+            "prefer_client_assigners": True,
         },
         usage_context=usage_context,
     ):
@@ -376,6 +377,7 @@ async def protocol_code_edit(
     request_payload = {
         **payload,
         "model": build_masterbrain_model(payload["model"]),
+        "prefer_client_assigners": True,
     }
     response = await json_request(
         "endpoints/code_edit",

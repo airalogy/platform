@@ -168,7 +168,10 @@ export function useFieldEventBus(
       // Collect all dependent assigners that need to be triggered
       const dependentAssigners: IFieldBatchPayload["list"] = []
 
-      for (const change of currentBatch) {
+      // Include transitive dependents before disabling cascade in the plan.
+      // Otherwise a -> b runs, but b -> c is silently omitted from the queue.
+      const pendingChanges = [...currentBatch]
+      for (const change of pendingChanges) {
         const { info, dependent } = change
 
         if (!dependent || dependent.length === 0)
@@ -213,6 +216,7 @@ export function useFieldEventBus(
               assigner,
               dependent: resolved.dependent,
             })
+            pendingChanges.push({ ...change, scope: depScope, prop: depName, info: resolved.info, dependent: resolved.dependent })
           }
         }
       }
@@ -234,6 +238,7 @@ export function useFieldEventBus(
           }
         }
 
+        const failedFields = new Set<string>()
         // Execute assigners level by level
         for (let level = 0; level <= maxLevel; level++) {
           const levelItems = executionPlan.get(level) || []
@@ -251,6 +256,11 @@ export function useFieldEventBus(
           // Execute all assigners in this level in parallel
           const levelPromises = levelItems.map(async ({ scope, prop, assigner, info }) => {
             try {
+              if (assigner.dependent_fields.some(field => failedFields.has(field))) {
+                getAssignerAssignedFields(assigner, prop).forEach(field => failedFields.add(field))
+                progress.updateNodeStatus(prop, "error", "An upstream calculation failed")
+                return false
+              }
               const result = await handleAssigner({
                 scope,
                 prop,
@@ -266,9 +276,12 @@ export function useFieldEventBus(
                 isAssignerSuccess(result) ? "completed" : "error",
                 isAssignerSuccess(result) ? undefined : getAssignerFailureMessage(result),
               )
+              if (!isAssignerSuccess(result))
+                getAssignerAssignedFields(assigner, prop).forEach(field => failedFields.add(field))
               return result
             }
             catch (e) {
+              getAssignerAssignedFields(assigner, prop).forEach(field => failedFields.add(field))
               progress.updateNodeStatus(prop, "error", (e as Error).message)
               throw e
             }
@@ -892,5 +905,6 @@ export function useFieldEventBus(
   return {
     fieldEventBus,
     setupFieldEventHandlers,
+    hasPendingAssignments: () => isProcessingQueue || changeQueue.some(change => change.dependent?.length),
   }
 }

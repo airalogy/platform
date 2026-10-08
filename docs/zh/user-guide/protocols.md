@@ -25,6 +25,28 @@ Protocol 是可复用、可版本化的研究流程与结构化数据定义。�
 
 AI 可以帮助草拟或解释变更，但负责研究的人员仍应对科学正确性、安全性和最终字段定义负责。
 
+## 计算字段：客户端还是服务端
+
+简单、确定性的计算可以放在同一个 `protocol.aimd` 文件中：
+
+````aimd
+长度：{{var|length: float, ge=0}}
+宽度：{{var|width: float, ge=0}}
+面积：{{var|area: float, ge=0}}
+```assigner runtime=client
+assigner(
+  {mode: "auto", dependent_fields: ["length", "width"], assigned_fields: ["area"]},
+  function calculate_area({length, width}) { return {area: length * width}; }
+);
+```
+````
+
+客户端支持 `auto`、`auto_first`、`manual`。输入和输出必须是已定义字段，一个输出只能有一个计算来源，依赖不能成环。计算仅在可编辑 Record 中通过受限 AIMD JavaScript 运行时执行；输入或输出无效会报错，不保存部分结果。只读报告保留原来保存的值。
+
+外部服务、文件、密钥、科学计算库、重型计算或权威校验应使用服务端 Python。浏览器算出的值不是安全或科研真实性保证。不要把 JavaScript 写入 `assigner.py`；Python 可以保留在普通 `assigner` 围栏或独立 `assigner.py` 中，但不要重复实现同一计算。
+
+CSV/API 导入不会运行浏览器计算。应按下载模板提供所需派生字段；缺失或无效的必填值会被拒绝。两种运行时用于真实科研前，都需要审核公式及原始观测值。
+
 ## 复用与 Workflow
 
 只有在流程和数据契约确实相同时，才应跨实验复用 Protocol。科学含义发生变化时，应建立独立 Protocol 或明确的新版本。

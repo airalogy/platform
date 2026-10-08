@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from airalogy_engine import AiralogyEngine
+from protocol_assigners import add_client_assigners
 
 from app.config import config
 from app.models.protocol_version import ProtocolVersion
@@ -378,6 +379,16 @@ async def protocol_exec_in_engine(
                 log_file=PROTOCOL_ENGINE_DEBUG_LOG_FILE,
             )
             result = _normalize_protocol_info_result(result)
+            if result.get("success") and isinstance(result.get("data"), dict):
+                data = result["data"]
+                # Engine images and Docker/local executors expose the same contract.
+                existing = {k: v for k, v in (data.get("assigners") or {}).items() if v.get("runtime") != "client"}
+                data["assigners"], graph = add_client_assigners(
+                    data.get("aimd", ""), Path(protocol_path) / "assigner.py",
+                    existing, (data.get("json_schema") or {}).get("vars", {}),
+                )
+                if graph is not None:
+                    data["assigner_graph"] = graph
 
         elif action == "var_assign":
             result = await entry.engine.assign_variable(
@@ -478,6 +489,8 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
             "--add-host=airalogy-server-host:host-gateway",
             "-v",
             f"{os.getcwd()}/protocol_executor.py:/home/deploy/app/protocol_executor.py",
+            "-v",
+            f"{os.getcwd()}/protocol_assigners.py:/home/deploy/app/protocol_assigners.py:ro",
             "-v",
             f"{_protocol_path(package_name)}/:/home/deploy/app/protocols/{package_name}/",
             "-v",

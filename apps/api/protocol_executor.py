@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import get_args, get_origin
 
 from airalogy.assigner import DefaultAssigner
+from protocol_assigners import add_client_assigners
 from airalogy.ingest import import_records as import_airalogy_records
 from airalogy.migrations import (
     apply_declarative_migration,
@@ -288,6 +289,10 @@ def get_protocol_info(protocol_name: str, params: dict):
                     )
         if errors:
             raise ValueError("\n".join(errors))
+
+    assigners, combined_graph = add_client_assigners(aimd, assigner_path, assigners, schema["vars"])
+    if combined_graph is not None:
+        assigner_graph = combined_graph
 
     return {
         "meta_data": meta_data,

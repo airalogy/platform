@@ -14,8 +14,14 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Added
+
+- Offer validated Protocol `.aira` archives and ZIP source packages through shared download choices. Export the authorized, exact stored version without database Records, environment secrets or executor caches; preserve legacy ZIP integrations.
+- Execute declared client-side Assigners in the Record form using the published AIMD runtime, validate inputs/outputs, and preserve auto/manual/auto-first scheduling. Validate mixed-runtime field contracts and cycles when publishing; API/CSV imports must supply derived values rather than silently running browser calculations.
+
 ### Fixed
 
+- Include downstream Assigners in queued calculation plans, stop dependents when an upstream calculation fails, and block Record submission while calculations are pending or failed so stale results cannot be submitted.
 - Guide Record imports through a current-Protocol CSV template, field requirements, validation preview and explicit confirmation. Accept UTF-8 BOM, reject unknown or duplicate CSV/TSV columns without guessing aliases, flag spreadsheet errors, and group bilingual feedback by field and file line. Previews do not create Records; confirmations revalidate data and permissions and reject stale previews. Preserve direct API and `.aira` archive compatibility without adding a legacy-table mapping feature.
 
 ## [0.2.0] - 2026-09-21

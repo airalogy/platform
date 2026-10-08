@@ -25,6 +25,28 @@ Before changing a Protocol that already has Records:
 
 AI assistance can draft or explain changes, but the responsible researcher remains accountable for scientific correctness, safety, and the final field definitions.
 
+## Calculated fields: client or server
+
+Small deterministic calculations can stay in one `protocol.aimd` file:
+
+````aimd
+Length: {{var|length: float, ge=0}}
+Width: {{var|width: float, ge=0}}
+Area: {{var|area: float, ge=0}}
+```assigner runtime=client
+assigner(
+  {mode: "auto", dependent_fields: ["length", "width"], assigned_fields: ["area"]},
+  function calculate_area({length, width}) { return {area: length * width}; }
+);
+```
+````
+
+Client modes are `auto`, `auto_first` and `manual`. Inputs and outputs must be declared fields; each output has one writer and dependencies cannot form cycles. Calculations run only in an editable Record, using the restricted AIMD JavaScript runtime. Invalid inputs or outputs show an error rather than saving a partial result. Read-only reports retain their saved values.
+
+Use server-side Python for external services, files, secrets, scientific libraries, heavy computation or authoritative verification. A browser result is not a security or scientific-integrity guarantee. Do not store JavaScript in `assigner.py`; Python may remain in a plain `assigner` fence or a standalone `assigner.py`, without duplicate implementations.
+
+CSV/API imports do not run browser calculations. Supply the derived fields required by the downloaded template; missing or invalid required values are rejected. Review formulas and source observations before using either runtime for real research.
+
 ## Reuse and workflows
 
 Protocols can be reused across experiments when the procedure and data contract are genuinely the same. Use a separate Protocol or an explicit new version when the scientific meaning changes.

@@ -130,6 +130,9 @@ async def protocol_var_assign(
     protocol.lab_uid = lab.uid
     protocol.project_uid = project.uid
 
+    if (protocol_version.assigners or {}).get(data.var_name, {}).get("runtime") == "client":
+        raise HTTPException(400, "This field uses a client Assigner. Calculate it in the recorder; API/CSV imports must supply its value.")
+
     env_vars = {}
     if protocol.env_vars is not None:
         env_vars = dotenv_values(stream=StringIO(protocol.env_vars))

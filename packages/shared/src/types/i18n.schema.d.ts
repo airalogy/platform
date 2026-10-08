@@ -3150,6 +3150,11 @@ declare namespace I18n {
         }
       }
       protocol: {
+        exportAira: string
+        exportZip: string
+        exportFailed: string
+        calculationPending: string
+        calculationFailed: string
         info: string
         protocolName: string
         protocolId: string

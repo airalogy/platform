@@ -99,8 +99,8 @@ function getStatusIcon(status: AssignerNode["status"]) {
       >
         <div class="compact-header">
           <n-spin v-if="!allCompleted" :size="14" />
-          <n-icon v-else :component="IconCheckCircle" color="#18a058" :size="16" />
-          <span class="compact-title">{{ allCompleted ? $t("page.protocol.assignerProgress.completed") : $t("page.protocol.assignerProgress.assigning") }}</span>
+          <n-icon v-else :component="statusCounts.error ? IconCloseCircle : IconCheckCircle" :color="statusCounts.error ? '#d03050' : '#18a058'" :size="16" />
+          <span class="compact-title">{{ allCompleted ? $t(statusCounts.error ? "page.protocol.assignerProgress.error" : "page.protocol.assignerProgress.completed") : $t("page.protocol.assignerProgress.assigning") }}</span>
           <n-tooltip>
             <template #trigger>
               <n-icon :component="IconExpand" :size="14" class="expand-icon" />

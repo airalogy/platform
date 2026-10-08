@@ -1,4 +1,5 @@
 import type { IAnnotationDataItem, IRecordDataKey } from "@airalogy/aimd-core/types"
+import type { AimdRecordValidationSchema } from "@airalogy/aimd-recorder"
 import type { Assigner } from "@airalogy/shared/types/models/protocol.js"
 import type { UploadFileInfo } from "naive-ui"
 import type { FormValidate } from "naive-ui/es/form/src/interface"
@@ -15,9 +16,13 @@ import { useEventBus } from "@vueuse/core"
 import Big from "big.js"
 import { get, set } from "lodash-es"
 import { nanoid } from "nanoid"
+import { runProtocolClientAssigner } from "../helpers/clientAssigners"
 import { EMPTY_ARRAY_MESSAGE } from "../helpers/parseFieldStructure"
 
 interface IUseAssignerManagementOptions {
+  protocolContent?: () => string
+  protocolSchema?: () => AimdRecordValidationSchema | undefined
+  protocolLocale?: () => string
   protocolId: string | number
   emit: { (e: "update:field", payload: { scope: IRecordDataKey, prop: string, value: any, payload?: any }): void }
   varScopeRecord: ComputedRef<Record<string, string>>
@@ -744,7 +749,9 @@ export function useAssignerManagement(options: IUseAssignerManagementOptions) {
       }
 
       try {
-        const assignedRfs = await postGetRvAssign(protocolId, assignerPayload, requestId)
+        const assignedRfs = assigner.runtime === "client"
+          ? runProtocolClientAssigner(options.protocolContent?.() || "", assigner, assignerPayload.dependencies, options.protocolSchema?.(), !shouldTrigger, options.protocolLocale?.())
+          : await postGetRvAssign(protocolId, assignerPayload, requestId)
 
         // Clear the tracked request once completed
         cleanupRequest(formattedProp, requestId)

@@ -57,14 +57,7 @@
                 </span>
               </template>
             </add-to-bookmarker-modal>
-            <n-button @click="handleDownload(protocolInfo?.latest_version)">
-              <template #icon>
-                <n-icon>
-                  <icon-carbon-download />
-                </n-icon>
-              </template>
-              {{ $t("common.download") }}
-            </n-button>
+            <protocol-download :protocol-id="protocolInfo?.id" :version="protocolInfo?.latest_version" />
           </div>
           <!-- Categories and Tags Card -->
           <protocol-categories-card
@@ -149,9 +142,9 @@ import AddToBookmarkerModal from "@/components/common/add-to-bookmarker-modal.vu
 import StickyFillWrapper from "@/components/common/sticky-fill-wrapper.vue"
 import AddRecordLayout from "@/components/custom/add-record-layout.vue"
 import HubProtocolMenuIcon from "@/components/icon/hub-protocol-menu-icon.vue"
+import ProtocolDownload from "@/components/protocol/protocol-download.vue"
 import { useRouterPush } from "@/composables/useRouterPush"
 import { getCachedAttachment } from "@/service/api/attachments"
-import { getDownloadPackage } from "@/service/api/project-protocols"
 import { useAuthStore } from "@/store/modules/auth"
 import { useInstanceStore } from "@/store/modules/instance"
 import { useOrProvideProtocolInfoStore } from "@/views/project-protocols/hooks/useProtocolInfoStore"
@@ -258,36 +251,6 @@ function handleUpdateCollapsed(val: boolean) {
   }
 
   selectedTab.value = "protocol-detail"
-}
-
-async function handleDownload(version?: string) {
-  const { lab, project, name, id, latest_version } = protocolInfo.value || {}
-  if (!id || !lab || !project || !name || !latest_version) {
-    return
-  }
-
-  const tempLink = document.createElement("a")
-
-  try {
-    const { data, error } = await getDownloadPackage(id, version || latest_version)
-    if (error || !data) {
-      message.error("Download package failed.")
-      return
-    }
-
-    tempLink.href = data.url
-    tempLink.style.display = "none"
-    tempLink.setAttribute("download", `${lab.name}_${project.name}_${name}_protocols_v${latest_version}.zip`)
-    if (typeof tempLink.download === "undefined")
-      tempLink.setAttribute("target", "_blank")
-
-    document.body.appendChild(tempLink)
-    tempLink.click()
-    document.body.removeChild(tempLink)
-  }
-  catch (err) {
-    message.error((err as Error).message)
-  }
 }
 </script>
 

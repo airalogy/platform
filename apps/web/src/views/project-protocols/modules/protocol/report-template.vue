@@ -74,10 +74,8 @@ import ProtocolPathTooltip from "@/components/protocol/protocol-path-tooltip.vue
 
 import { useBoolean, useLoading, useProjectPermissions } from "@/composables"
 import { useRouterPush } from "@/composables/useRouterPush"
-import {
-  getDownloadPackage,
-  getProtocolInfo,
-} from "@/service/api/project-protocols"
+import { getProtocolInfo } from "@/service/api/project-protocols"
+import { downloadProtocolExport, type ProtocolExportFormat } from "@/service/api/protocol-export"
 import { request } from "@/service/request"
 import { resolveProtocolFile as resolveProtocolFileUtil } from "@/utils/resolveProtocolFile"
 import ApplyProtocolModal from "@/views/hub/components/apply-protocol-modal.vue"
@@ -119,28 +117,12 @@ async function resolveProtocolFile(src: string): Promise<{ url: string } | null>
   return resolveProtocolFileUtil(src, props.item.id)
 }
 
-async function handleDownload(version?: string) {
-  const { lab, project, name, id, latest_version } = props.item
-  const tempLink = document.createElement("a")
-
+async function handleDownload(version: string, format: ProtocolExportFormat) {
   try {
-    const { data, error } = await getDownloadPackage(id, version || latest_version)
-    if (error || !data) {
-      message.error("Download package failed.")
-      return
-    }
-    tempLink.href = data.url
-    tempLink.style.display = "none"
-    tempLink.setAttribute("download", `${lab.name}_${project.name}_${name}_protocols.zip`)
-    if (typeof tempLink.download === "undefined")
-      tempLink.setAttribute("target", "_blank")
-
-    document.body.appendChild(tempLink)
-    tempLink.click()
-    document.body.removeChild(tempLink)
+    await downloadProtocolExport(props.item.id, version, format)
   }
-  catch (err) {
-    message.error((err as Error).message)
+  catch {
+    message.error($t("page.protocol.exportFailed"))
   }
 }
 
@@ -198,11 +180,11 @@ const actionList = computed<DropdownOption[] >(() => [
   {
     label: $t("common.download"),
     key: "download",
-    tooltip: "Download the Protocol in ZIP format",
     icon: () => h(NIcon, null, { default: () => h(DownloadIcon) }),
-    props: {
-      onClick: () => handleDownload(props.item.latest_version),
-    },
+    children: [
+      { label: $t("page.protocol.exportAira"), key: "download-aira", props: { onClick: () => handleDownload(props.item.latest_version, "aira") } },
+      { label: $t("page.protocol.exportZip"), key: "download-zip", props: { onClick: () => handleDownload(props.item.latest_version, "zip") } },
+    ],
   },
   {
     label: $t("common.reupload"),

@@ -85,6 +85,20 @@ def test_protocol_generation_uses_masterbrain_single_file_endpoint(monkeypatch):
 
     assert asyncio.run(consume_stream()) == ["# Generated Protocol"]
     assert captured["path"] == "endpoints/single_protocol_file_generation"
+    assert captured["json"]["prefer_client_assigners"] is True
+
+
+def test_code_edit_declares_client_support_without_changing_user_files(monkeypatch):
+    captured = {}
+    async def mock_request(path, payload, **kwargs):
+        captured.update(payload)
+        return {"message": "synthetic"}
+    monkeypatch.setattr(masterbrain, "json_request", mock_request)
+    payload = {"model": {"name": "qwen3.5-flash"}, "prompt": "synthetic", "files": []}
+    asyncio.run(masterbrain.protocol_code_edit(payload))
+    assert captured["prefer_client_assigners"] is True
+    assert captured["files"] == []
+    assert "prefer_client_assigners" not in payload
 
 
 def test_stream_request_preserves_upstream_http_error(monkeypatch):

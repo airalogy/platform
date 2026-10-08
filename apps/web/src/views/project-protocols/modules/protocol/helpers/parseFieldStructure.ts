@@ -11,6 +11,7 @@ import { fileTypes, getFileType, getRefValue, type IAiralogyIdFileItem, parseAir
 import { scopeKeyRecord, scopeNameRecord } from "@airalogy/shared/utils/schema"
 import Big from "big.js"
 import dayjs from "dayjs"
+import { resolveProtocolAssigners } from "./clientAssigners"
 
 // Local type definitions using extended field item
 type ExtendedFieldRecord = {
@@ -359,10 +360,11 @@ export function getFieldStructure(
 
   const { variables, info } = extractVariables(markdown, workflowField)
 
-  const { fields, json_schema, assigners } = protocol || {}
+  const { fields, json_schema } = protocol || {}
   if (!fields || !json_schema) {
     return { field: {}, rules: {} }
   }
+  const assigners = resolveProtocolAssigners(markdown, protocol?.assigners)
 
   const entries = Object.entries(fields) as [
     ScopeFieldKey,

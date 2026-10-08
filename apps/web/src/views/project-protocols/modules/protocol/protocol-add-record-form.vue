@@ -220,8 +220,8 @@ import { useProtocolInfoStore } from "../../hooks/useProtocolInfoStore"
 import AssignerProgressModal from "./components/AssignerProgressModal.vue"
 import FieldInputBar from "./components/field-input-bar.vue"
 import WorkflowWorkspace from "./components/workflow-workspace.vue"
-
 import { useAimdRecordValidation } from "./composables/useAimdRecordValidation"
+
 import { useAssignerManagement } from "./composables/useAssignerManagement"
 import { getAssignerProgress } from "./composables/useAssignerProgress"
 import { useFieldEventBus } from "./composables/useFieldEventBus"
@@ -229,6 +229,7 @@ import { useFieldManagement } from "./composables/useFieldManagement"
 import { useFieldParser } from "./composables/useFieldParser"
 import { useFieldState } from "./composables/useFieldState"
 import { useTableManagement } from "./composables/useTableManagement"
+import { RecordCalculationError } from "./helpers/recordCalculationError"
 import ProtocolAddRecordFormItem, { type IProps as IFormItemProps } from "./protocol-add-record-form-item.vue"
 
 defineOptions({ name: "ProtocolAddRecordForm" })
@@ -915,6 +916,9 @@ function mergeDependents(
 }
 
 const { handleAssigner, handleDependent, assignerLoadingRecord, assignerErrorRecord, handleAssignerCancel, assignerRequestRecord } = useAssignerManagement({
+  protocolContent: () => props.protocol?.aimd || "",
+  protocolLocale: () => locale.value,
+  protocolSchema: () => ({ ...props.protocol?.json_schema }),
   protocolId: props.protocolId,
   emit,
   varScopeRecord,
@@ -1003,7 +1007,7 @@ async function handleFieldChange(payload: IFieldChangePayload) {
   localFieldEventBus.emit("form-field-change", payload)
 }
 
-const { setupFieldEventHandlers } = useFieldEventBus(
+const { setupFieldEventHandlers, hasPendingAssignments } = useFieldEventBus(
   fieldModel,
   expandedNamesRef,
   handleAssigner,
@@ -1068,6 +1072,15 @@ async function wrappedValidate() {
   // Expand all collapsed sections to show validation errors
   expandedNamesRef.value = [...scopeList.value]
   await nextTick()
+
+  if (hasPendingAssignments() || Object.values(assignerLoadingRecord.value).some(Boolean)) {
+    throw new RecordCalculationError($t("page.protocol.calculationPending"))
+  }
+  const failedAssignment = Object.entries(assignerErrorRecord.value).find(([, error]) => Boolean(error))
+  if (failedAssignment) {
+    await focusFirstInvalidField(failedAssignment[0])
+    throw new RecordCalculationError($t("page.protocol.calculationFailed"), failedAssignment[0])
+  }
 
   const aimdValidation = validateAimdRecord()
   let leftFormError: Error | null = null

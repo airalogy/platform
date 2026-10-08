@@ -31,6 +31,10 @@ This example only applies to a Protocol defining `sample_id` and `amount`. Do no
 - A preview confirmation expires after 20 minutes and is bound to the file, Protocol version and user. Changes require a fresh preview; confirmation still rechecks current permissions, data and resource conditions.
 - `.aira` archives retain their separate validated archive-import flow without CSV preview. Existing API clients may still submit imports directly, subject to data validation and permission checks.
 
+## Download a Protocol
+
+Choose **Download → Airalogy archive (.aira, recommended)** to share a published Protocol with its resources and a validated manifest. Choose **Source package (.zip)** for ordinary source editing. Both formats represent the requested Protocol version; neither exports database Records or grants recipients access to Platform. `.aira` is a standard archive with file hashes, not a renamed ZIP. Environment secrets, interpreter caches and generated runtime files are excluded. An invalid source package blocks `.aira` export; the ZIP option remains available for inspection and repair. Existing integrations using the legacy ZIP download URL continue to work.
+
 ## Export Records
 
 Authorized Lab and Project roles can request scoped Record exports where the feature is enabled. Available packages may include `.aira`, JSONL, single-schema CSV, attachments, and optional revision history. The export represents the selected scope and snapshot; it does not grant new access to recipients.

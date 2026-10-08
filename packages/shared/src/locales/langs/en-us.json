@@ -3146,6 +3146,11 @@
       }
     },
     "protocol": {
+      "exportAira": "Airalogy archive (.aira, recommended)",
+      "exportZip": "Source package (.zip)",
+      "exportFailed": "Protocol export failed. Check access and source package compatibility, then retry.",
+      "calculationPending": "Calculations are still running. Wait for them to finish, then submit again.",
+      "calculationFailed": "A calculation failed. Correct its inputs and recalculate before submitting.",
       "info": "Protocol info",
       "protocolName": "Protocol name",
       "protocolId": "Protocol ID",

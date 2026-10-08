@@ -1,13 +1,17 @@
 import os
 import re
 import shutil
+import tempfile
 import uuid
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from dotenv import dotenv_values
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from pydantic_core import ValidationError
 from sqlalchemy import select
 
@@ -44,6 +48,7 @@ from app.routers.permission import check_user_permission
 from app.routers.utils import UUID
 from app.services.knowledge import authorize_knowledge_item, snapshot_knowledge
 from app.services.model_usage import create_usage_context
+from app.services.protocol_exports import build_protocol_export
 from app.services.research_runtime import emit_research_event, utcnow
 from app.services.schema_governance import (
     SchemaGovernanceError,
@@ -820,6 +825,43 @@ async def download_package(
 
     url = await protocol_version.download_url()
     return {"url": url}
+
+
+@router.get("/{id}/export")
+async def export_protocol_package(
+    id: UUID,
+    version: str,
+    current_user: OptionalCurrentUser,
+    db_session: DBSession,
+    format: Literal["aira", "zip"] = "aira",
+):
+    protocol = await Protocol.find(db_session, id)
+    if protocol is None:
+        raise HTTPException(404, "Protocol not found")
+    project = await Project.find(db_session, id=protocol.project_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    await check_user_permission(db_session, project=project, user=current_user,
+                                action="read_protocol", protocol=protocol)
+    package = await ProtocolVersion.find_by(db_session, [
+        ProtocolVersion.protocol_id == id, ProtocolVersion.version == version,
+    ])
+    if package is None:
+        raise HTTPException(404, "Protocol version not found")
+    workspace = tempfile.TemporaryDirectory(prefix="protocol_export_")
+    try:
+        source = Path(workspace.name) / "source.zip"
+        await package.download_package(str(source))
+        output = await run_in_threadpool(build_protocol_export, source, Path(workspace.name), format)
+        safe_uid = re.sub(r"[^A-Za-z0-9_-]", "_", protocol.uid)
+        safe_version = re.sub(r"[^A-Za-z0-9_.-]", "_", package.version)
+        return FileResponse(output, media_type="application/zip" if format == "zip" else "application/octet-stream",
+                            filename=f"{safe_uid}-v{safe_version}.{format}",
+                            headers={"Cache-Control": "private, no-store"},
+                            background=BackgroundTask(workspace.cleanup))
+    except Exception:
+        workspace.cleanup()
+        raise HTTPException(400, "Unable to export this Protocol package; check its source and format compatibility.") from None
 
 
 @router.get("/{id}/package_files")

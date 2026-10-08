@@ -188,6 +188,7 @@ import { nanoid } from "nanoid"
 import { useI18n } from "vue-i18n"
 import { useProvideProtocolInfoStore } from "./hooks/useProtocolInfoStore"
 import { useDraftManagement } from "./modules/protocol/composables/useDraftManagement"
+import { RecordCalculationError } from "./modules/protocol/helpers/recordCalculationError"
 import ProtocolAddRecordForm from "./modules/protocol/protocol-add-record-form.vue"
 import { assignFieldValue, extractAssetId } from "./utils"
 
@@ -590,6 +591,11 @@ const submissionLoading = ref(false)
 const submissionErrors = ref<{ field?: string, message: string }[]>([])
 
 async function showSubmissionErrors(error: unknown) {
+  if (error instanceof RecordCalculationError) {
+    submissionErrors.value = [{ field: error.field, message: error.message }]
+    await formRef.value?.focusFirstInvalidField(error.field)
+    return
+  }
   const detail = (error as { response?: { data?: { detail?: unknown } } } | null)?.response?.data?.detail
   const candidates = Array.isArray(error) ? error : Array.isArray(detail) ? detail : (detail as { errors?: unknown } | null)?.errors
   const fieldErrors = Array.isArray(candidates) ? candidates.filter(item => Array.isArray(item?.loc)) : []

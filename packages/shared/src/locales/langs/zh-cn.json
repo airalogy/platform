@@ -3138,6 +3138,11 @@
       }
     },
     "protocol": {
+      "exportAira": "Airalogy 归档（.aira，推荐）",
+      "exportZip": "源文件包（.zip）",
+      "exportFailed": "Protocol 导出失败，请检查访问权限及源文件包兼容性后重试。",
+      "calculationPending": "计算尚未完成，请等待计算结束后再提交。",
+      "calculationFailed": "计算失败，请修正输入并重新计算后再提交。",
       "info": "协议信息",
       "protocolName": "协议名",
       "protocolId": "协议ID",
