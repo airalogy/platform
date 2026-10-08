@@ -7,19 +7,29 @@ Import and export move research data across a system boundary. Confirm the desti
 Where bulk upload is available, each CSV row creates a new Record under the selected Protocol. It does not overwrite existing Records.
 
 1. Open the Records page for the target Protocol.
-2. Choose **Bulk upload** and select a `.csv` file.
-3. Review validation results before confirming the import.
-4. Check the created Record count and inspect representative Records.
+2. Choose **Bulk upload**, then **Download CSV template**. The template contains only canonical headers from the current Protocol version, not fabricated observations.
+3. Expand the field reference, follow the types, required fields, ranges and enumerations, and save as UTF-8 CSV (BOM is supported).
+4. Select the file and choose **Validate file**. Correct the reported fields and lines, then validate again. Preview does not create Records.
+5. Check the destination Protocol, version and count, acknowledge the operation, and choose **Confirm import**. Inspect representative saved Records afterward.
 
-Column names can use direct variable names such as `sample_id` or explicit paths such as `var.sample_id`. Supported paths can also address quizzes, step/check status and annotations, metadata, and an optional `record_id`. Values are converted and validated against the current Protocol field types.
+Templates use explicit paths such as `var.sample_id`. **Variable IDs must match the Protocol exactly, including case; display titles are not aliases.** There is no guessed or legacy-table mapping. Column order may vary and optional columns may be omitted. Unknown columns (even entirely empty ones), duplicate columns and duplicate paths to the same field are rejected. Direct IDs such as `sample_id` and `data.var.sample_id` remain valid existing API syntax.
+
+Supported paths can also address quizzes, step/check status and annotations, metadata, and an optional `record_id`. Values are converted and validated against the current Protocol field types, including explicitly declared defaults. Complex fields such as arrays or objects must follow their JSON structure; file references also require current access permission.
 
 ```csv
-sample_id,amount,metadata.source
-S1,12,legacy-study
-S2,18,legacy-study
+var.sample_id,var.amount
+S1,12
+S2,18
 ```
 
-If a row contains an unknown field, invalid type, or missing required value, correct the source CSV and repeat the validation. Keep the original source and a record of the mapping used for migration.
+This example only applies to a Protocol defining `sample_id` and `amount`. Do not import explanatory rows or examples as research observations.
+
+- Numeric `0` is an observation, not a blank. Do not replace missing observations with zero, `false`, or inferred values.
+- Resolve spreadsheet errors such as `#REF!` against the original source. Platform does not repair scores, discard columns, or invent observations.
+- Errors are grouped by field. CSV line numbers include the header and identify the starting file line for multiline records. An invalid row prevents the entire batch from being written.
+- CSV/TSV limits are 10,000 records and 512 columns; ordinary import files are limited to 20 MiB. Split larger datasets into batches.
+- A preview confirmation expires after 20 minutes and is bound to the file, Protocol version and user. Changes require a fresh preview; confirmation still rechecks current permissions, data and resource conditions.
+- `.aira` archives retain their separate validated archive-import flow without CSV preview. Existing API clients may still submit imports directly, subject to data validation and permission checks.
 
 ## Export Records
 

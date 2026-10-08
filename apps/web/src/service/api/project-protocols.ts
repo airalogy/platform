@@ -561,6 +561,7 @@ export async function postImportProtocolRecords(
   payload: {
     file: File
     inputFormat?: "auto" | "csv" | "tsv" | "json" | "jsonl" | "aira"
+    previewToken?: string
   },
 ) {
   if (!protocolId) {
@@ -573,6 +574,8 @@ export async function postImportProtocolRecords(
   const formData = new FormData()
   formData.append("file", payload.file)
   formData.append("input_format", payload.inputFormat || "auto")
+  if (payload.previewToken)
+    formData.append("preview_token", payload.previewToken)
 
   const { data, error } = await request<ImportProtocolRecordsResponse>({
     url: `/protocols/${protocolId}/records/import`,

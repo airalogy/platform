@@ -10,14 +10,67 @@
     v-model:show="showModal"
     preset="card"
     :title="$t('page.protocol.records.bulkImportTitle')"
-    class="w-[calc(100vw-32px)] max-w-[560px]"
+    class="max-w-[720px] w-[calc(100vw-32px)]"
+    :content-style="{ maxHeight: '70vh', overflow: 'auto' }"
+    :closable="!loading"
     :mask-closable="!loading"
     @after-leave="resetState"
   >
+    <div class="mb-4 space-y-3">
+      <p class="text-sm leading-6">
+        {{ t("page.protocol.records.importGuide") }}
+      </p>
+      <n-button :disabled="!template || loading" :loading="templateLoading" @click="downloadTemplate">
+        {{ t("page.protocol.records.importTemplate") }}
+      </n-button>
+      <p v-if="template" class="text-sm">
+        {{ template.protocol_name }} · v{{ template.protocol_version }}
+      </p>
+      <n-collapse v-if="template">
+        <n-collapse-item :title="t('page.protocol.records.importFields')" name="fields">
+          <div class="overflow-x-auto">
+            <n-table size="small" :single-line="false">
+              <thead>
+                <tr>
+                  <th>{{ t("page.protocol.records.importColumn") }}</th>
+                  <th>{{ t("page.protocol.records.importFieldName") }}</th>
+                  <th>{{ t("page.protocol.records.importFieldRule") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="field in template.fields" :key="field.id">
+                  <td><code>var.{{ field.id }}</code></td>
+                  <td>{{ field.title }}</td>
+                  <td>
+                    {{ importFieldType(field.schema) }} · {{ t(field.required ? "page.protocol.records.importRequired" : "page.protocol.records.importOptional") }}
+                    <div v-if="field.schema.minimum !== undefined">
+                      ≥ {{ field.schema.minimum }}
+                    </div>
+                    <div v-if="field.schema.maximum !== undefined">
+                      ≤ {{ field.schema.maximum }}
+                    </div>
+                    <div v-if="field.schema.pattern" class="break-all">
+                      {{ field.schema.pattern }}
+                    </div>
+                    <div v-if="field.schema.enum" class="break-all">
+                      {{ field.schema.enum.join(", ") }}
+                    </div>
+                    <div v-if="field.schema.description">
+                      {{ field.schema.description }}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </n-table>
+          </div>
+        </n-collapse-item>
+      </n-collapse>
+    </div>
     <n-upload
       :file-list="fileList"
       :default-upload="false"
       :max="1"
+      :disabled="loading || templateLoading"
       accept=".csv,.tsv,.json,.jsonl,.aira"
       @before-upload="handleBeforeUpload"
       @update:file-list="handleFileListUpdate"
@@ -41,23 +94,36 @@
       v-if="errorMessage || importErrors.length"
       class="mt-4"
       type="error"
-      :title="$t('page.protocol.records.bulkImportErrorTitle')"
+      :title="$t('page.protocol.records.importCheckFailed')"
     >
       <div v-if="importErrors.length" class="max-h-56 overflow-auto pr-1">
-        <div v-for="(error, index) in importErrors" :key="index" class="text-xs leading-5">
-          {{ formatImportError(error) }}
+        <div v-for="(group, index) in groupedErrors" :key="index" class="mb-3 text-sm leading-6">
+          <strong>{{ group.issue.column || t("page.protocol.records.importFile") }}</strong>：{{ issueMessage(group.issue) }}
+          <div v-if="group.locations.length" class="text-xs">
+            {{ t(group.physicalLines ? "page.protocol.records.importLines" : "page.protocol.records.importRows", { lines: group.locations.slice(0, 8).join(', '), count: group.count }) }}{{ group.locations.length > 8 ? " …" : "" }}
+          </div>
         </div>
       </div>
       <span v-else>{{ errorMessage }}</span>
     </n-alert>
 
+    <n-alert v-if="canConfirm" class="mt-4" type="success" :title="t('page.protocol.records.importCheckPassed')">
+      {{ t("page.protocol.records.importDestination", { count: previewResult?.valid_count, name: previewResult?.protocol_name, version: previewResult?.protocol_version }) }}
+    </n-alert>
+    <n-checkbox v-if="canConfirm || isArchive" v-model:checked="acknowledged" class="mt-4" :disabled="loading">
+      {{ t("page.protocol.records.importConfirmHint") }}
+    </n-checkbox>
+
     <template #footer>
-      <div class="flex justify-end gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
         <n-button :disabled="loading" @click="showModal = false">
           {{ $t("common.cancel") }}
         </n-button>
-        <n-button type="primary" :disabled="!getSelectedFile()" :loading="loading" @click="handleImport">
-          {{ $t("page.protocol.records.bulkImportSubmit") }}
+        <n-button v-if="!isArchive" :disabled="!getSelectedFile() || loading" :loading="loading && !submitting" @click="handlePreview">
+          {{ t("page.protocol.records.importCheck") }}
+        </n-button>
+        <n-button type="primary" :disabled="!acknowledged || (!isArchive && !canConfirm) || !getSelectedFile()" :loading="submitting" @click="handleImport">
+          {{ t("page.protocol.records.importConfirm") }}
         </n-button>
       </div>
     </template>
@@ -66,8 +132,10 @@
 
 <script setup lang="ts">
 import type { ImportProtocolRecordsResponse } from "@/service/api/project-protocols"
+import type { RecordImportIssue, RecordImportPreview, RecordImportTemplate } from "@/service/api/record-import"
 import type { UploadFileInfo } from "naive-ui"
 import { postImportProtocolRecords } from "@/service/api/project-protocols"
+import { canConfirmRecordImport, fetchRecordImportTemplate, groupImportIssues, importFieldType, previewRecordImport } from "@/service/api/record-import"
 import { useClosableMessage } from "@airalogy/composables"
 import { useI18n } from "vue-i18n"
 
@@ -81,26 +149,71 @@ const emit = defineEmits<{
   (e: "imported", result: ImportProtocolRecordsResponse): void
 }>()
 
-interface ImportErrorItem {
-  row_number?: number
-  column?: string | null
-  message: string
-}
-
 const message = useClosableMessage()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const showModal = ref(false)
 const loading = ref(false)
 const fileList = ref<UploadFileInfo[]>([])
-const importErrors = ref<ImportErrorItem[]>([])
+const importErrors = ref<RecordImportIssue[]>([])
 const errorMessage = ref("")
+const template = ref<RecordImportTemplate | null>(null)
+const templateLoading = ref(false)
+const previewResult = ref<RecordImportPreview | null>(null)
+const acknowledged = ref(false)
+const submitting = ref(false)
+const canConfirm = computed(() => canConfirmRecordImport(previewResult.value))
+const groupedErrors = computed(() => groupImportIssues(importErrors.value))
+const isArchive = computed(() => getInputFormat(getSelectedFile()?.name || "") === "aira")
+let generation = 0
+
+watch([showModal, () => props.protocolId], async ([open]) => {
+  resetState()
+  template.value = null
+  if (!open || !props.protocolId)
+    return
+  const current = generation
+  templateLoading.value = true
+  try {
+    const result = await fetchRecordImportTemplate(String(props.protocolId))
+    if (current === generation)
+      template.value = result
+  }
+  catch {
+    if (current === generation)
+      errorMessage.value = t("page.protocol.records.importTemplateFailed")
+  }
+  finally {
+    if (current === generation)
+      templateLoading.value = false
+  }
+})
+
+function downloadTemplate() {
+  if (!template.value)
+    return
+  const url = URL.createObjectURL(new Blob(["\uFEFF", template.value.csv], { type: "text/csv;charset=utf-8" }))
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `records-template-v${template.value.protocol_version}.csv`
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function clearPreview() {
+  previewResult.value = null
+  acknowledged.value = false
+}
 
 function resetState() {
+  generation++
+  clearPreview()
   fileList.value = []
   importErrors.value = []
   errorMessage.value = ""
   loading.value = false
+  submitting.value = false
+  templateLoading.value = false
 }
 
 function handleBeforeUpload(options: { file: UploadFileInfo }) {
@@ -114,6 +227,8 @@ function handleBeforeUpload(options: { file: UploadFileInfo }) {
 }
 
 function handleFileListUpdate(nextFileList: UploadFileInfo[]) {
+  generation++
+  clearPreview()
   fileList.value = nextFileList.slice(-1)
   importErrors.value = []
   errorMessage.value = ""
@@ -127,7 +242,7 @@ function getErrorDetail(error: unknown) {
   return (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
 }
 
-function parseImportErrors(error: unknown): ImportErrorItem[] {
+function parseImportErrors(error: unknown): RecordImportIssue[] {
   const detail = getErrorDetail(error)
   if (
     detail
@@ -139,6 +254,8 @@ function parseImportErrors(error: unknown): ImportErrorItem[] {
       return {
         row_number: typeof value.row_number === "number" ? value.row_number : undefined,
         column: typeof value.column === "string" ? value.column : null,
+        code: typeof value.code === "string" ? value.code : undefined,
+        line_number: typeof value.line_number === "number" ? value.line_number : undefined,
         message:
             typeof value.message === "string"
               ? value.message
@@ -169,12 +286,37 @@ function parseErrorMessage(error: unknown) {
   return t("page.protocol.records.bulkImportUnknownError")
 }
 
-function formatImportError(error: ImportErrorItem) {
-  return t("page.protocol.records.bulkImportRowError", {
-    row: error.row_number ?? "-",
-    column: error.column ? `, ${error.column}` : "",
-    message: error.message,
-  })
+function issueMessage(error: RecordImportIssue) {
+  const key = `page.protocol.records.importErrors.${error.code}`
+  return error.code && te(key) ? t(key) : error.message || t("page.protocol.records.bulkImportUnknownError")
+}
+
+async function handlePreview() {
+  const file = getSelectedFile()
+  if (!props.protocolId || !file || loading.value)
+    return
+  clearPreview()
+  importErrors.value = []
+  errorMessage.value = ""
+  const current = generation
+  loading.value = true
+  try {
+    const result = await previewRecordImport(String(props.protocolId), file, getInputFormat(file.name) || "auto")
+    if (current !== generation)
+      return
+    previewResult.value = result
+    importErrors.value = result.errors
+  }
+  catch (error) {
+    if (current === generation) {
+      importErrors.value = parseImportErrors(error)
+      errorMessage.value = importErrors.value.length ? "" : parseErrorMessage(error)
+    }
+  }
+  finally {
+    if (current === generation)
+      loading.value = false
+  }
 }
 
 function getInputFormat(filename: string) {
@@ -193,8 +335,11 @@ async function handleImport() {
     message.warning(t("page.protocol.records.bulkImportNoFile"))
     return
   }
+  if (loading.value || !acknowledged.value || (!isArchive.value && !canConfirm.value))
+    return
 
   loading.value = true
+  submitting.value = true
   importErrors.value = []
   errorMessage.value = ""
 
@@ -203,17 +348,20 @@ async function handleImport() {
     const result = await postImportProtocolRecords(String(protocolId), {
       file,
       inputFormat: inputFormat || "auto",
+      previewToken: previewResult.value?.preview_token || undefined,
     })
     message.success(t("page.protocol.records.bulkImportSuccess", { count: result.imported_count }))
     emit("imported", result)
     showModal.value = false
   }
   catch (error) {
+    clearPreview()
     importErrors.value = parseImportErrors(error)
     errorMessage.value = importErrors.value.length ? "" : parseErrorMessage(error)
   }
   finally {
     loading.value = false
+    submitting.value = false
   }
 }
 </script>

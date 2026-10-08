@@ -42,6 +42,16 @@ from app.services.resource_inventory import (
     InventoryError,
     commit_record_resources,
 )
+from app.services.record_imports import (
+    MAX_IMPORT_BYTES,
+    format_errors,
+    import_fields,
+    prepare_tabular,
+    preview_fingerprint,
+    sign_preview,
+    template_csv,
+    verify_preview,
+)
 
 from .depends import CurrentUser, OptionalCurrentUser
 
@@ -330,6 +340,8 @@ def _serialize_import_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any
             "row_number": error.get("row_number"),
             "column": error.get("column"),
             "message": error.get("message") or "Invalid row data",
+            "code": error.get("code"),
+            "line_number": error.get("line_number"),
         }
         for error in errors
     ]
@@ -364,18 +376,7 @@ def _record_data_from_imported_record(
     return data
 
 
-@router.post("/import")
-async def import_protocol_records(
-    protocol_id: UUID,
-    db_session: DBSession,
-    current_user: CurrentUser,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    input_format: Literal["auto", "csv", "tsv", "json", "jsonl", "aira"] = Form("auto"),
-    allow_extra_var_fields: bool = Form(False),
-    require_complete_quiz: bool = Form(False),
-    include_template_defaults: bool = Form(True),
-):
+async def _import_context(protocol_id, db_session, current_user):
     protocol = await Protocol.find(db_session, id=protocol_id)
     if protocol is None:
         raise HTTPException(status_code=404, detail="Protocol not found")
@@ -398,9 +399,39 @@ async def import_protocol_records(
     )
     if protocol_version is None:
         raise HTTPException(status_code=400, detail="Protocol package not found")
+    return protocol, project, protocol_version
+
+
+@router.get("/import-template")
+async def get_record_import_template(protocol_id: UUID, db_session: DBSession, current_user: CurrentUser):
+    protocol, _, version = await _import_context(protocol_id, db_session, current_user)
+    return {
+        "protocol_name": protocol.name, "protocol_version": version.version,
+        "fields": import_fields(version.json_schema), "csv": template_csv(version.json_schema),
+    }
+
+
+@router.post("/import")
+async def import_protocol_records(
+    protocol_id: UUID,
+    db_session: DBSession,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    input_format: Literal["auto", "csv", "tsv", "json", "jsonl", "aira"] = Form("auto"),
+    allow_extra_var_fields: bool = Form(False),
+    require_complete_quiz: bool = Form(False),
+    include_template_defaults: bool = Form(True),
+    preview: bool = Form(False),
+    preview_token: str = Form(""),
+):
+    protocol, project, protocol_version = await _import_context(protocol_id, db_session, current_user)
 
     suffix = Path(file.filename or "").suffix.lower()
     if input_format == "aira" or suffix == ".aira":
+        if preview or preview_token:
+            await file.close()
+            raise HTTPException(status_code=400, detail="Archive preview is not supported")
         lab = await Lab.find(db_session, id=project.lab_id)
         with tempfile.TemporaryDirectory(prefix="aira_record_import_") as tmp_dir_name:
             tmp_dir = Path(tmp_dir_name)
@@ -449,6 +480,44 @@ async def import_protocol_records(
             "files": result["files"],
         }
 
+    resolved_format = input_format if input_format != "auto" else suffix.lstrip(".")
+    content = bytearray()
+    try:
+        while chunk := await file.read(1024 * 1024):
+            content.extend(chunk)
+            if len(content) > MAX_IMPORT_BYTES:
+                raise HTTPException(status_code=413, detail={"errors": [{"code": "file_too_large"}]})
+    finally:
+        await file.close()
+    options = dict(
+        input_format=resolved_format, allow_extra_var_fields=allow_extra_var_fields,
+        require_complete_quiz=require_complete_quiz,
+        include_template_defaults=include_template_defaults,
+    )
+    digest = preview_fingerprint(content, options, protocol_version, current_user.id)
+    if not preview and preview_token:
+        if not verify_preview(preview_token, digest, config.SECRET_KEY):
+            raise HTTPException(status_code=409, detail={"errors": [{"code": "stale_preview"}]})
+    tabular = None
+    prepared = bytes(content)
+    summary = dict(
+        protocol_name=protocol.name, protocol_version=protocol_version.version,
+        fields=import_fields(protocol_version.json_schema), row_count=None,
+        valid_count=0, errors=[], preview_token=None,
+    )
+    if resolved_format in {"csv", "tsv"}:
+        tabular = prepare_tabular(prepared, resolved_format, protocol_version.json_schema)
+        summary["row_count"] = tabular["row_count"]
+        if tabular["errors"]:
+            summary["errors"] = tabular["errors"]
+            # Continue through model validation when the structure is valid, so all
+            # missing/type/range issues are visible together with spreadsheet errors.
+            if not tabular["content"]:
+                if preview:
+                    return summary
+                _raise_import_errors(tabular["errors"])
+        prepared = tabular["content"]
+
     await prepare_protocol_package(protocol_version)
 
     package_dir = Path(config.PROTOCOL_DIR) / protocol_version.package_name
@@ -475,8 +544,7 @@ async def import_protocol_records(
             delete=False,
         ) as tmp_file:
             tmp_path = tmp_file.name
-            while chunk := await file.read(1024 * 1024):
-                tmp_file.write(chunk)
+            tmp_file.write(prepared)
 
         input_filename = os.path.basename(tmp_path)
         res = await protocol_exec(
@@ -484,7 +552,7 @@ async def import_protocol_records(
             protocol_version.package_name,
             {
                 "input_filename": input_filename,
-                "input_format": input_format,
+                "input_format": resolved_format,
                 "allow_extra_var_fields": allow_extra_var_fields,
                 "require_complete_quiz": require_complete_quiz,
                 "include_template_defaults": include_template_defaults,
@@ -500,13 +568,18 @@ async def import_protocol_records(
         raise HTTPException(status_code=400, detail=res["message"])
 
     import_data = res["data"]
-    import_errors = import_data.get("errors") or []
+    line_numbers = tabular["line_numbers"] if tabular else []
+    import_errors = summary["errors"] + format_errors(import_data.get("errors") or [], line_numbers)
     if import_errors:
+        if preview:
+            summary["errors"] = import_errors
+            summary["valid_count"] = len(import_data.get("records") or [])
+            return summary
         _raise_import_errors(import_errors)
 
     imported_records = import_data.get("records") or []
     if not imported_records:
-        raise HTTPException(status_code=400, detail="No records found in import file")
+        raise HTTPException(status_code=400, detail={"errors": [{"code": "empty_file"}]})
 
     normalized_record_ids: list[uuid.UUID] = []
     validation_errors: list[dict[str, Any]] = []
@@ -564,7 +637,26 @@ async def import_protocol_records(
             )
 
     if validation_errors:
+        if preview:
+            summary["errors"] = format_errors(validation_errors, line_numbers)
+            return summary
         _raise_import_errors(validation_errors)
+
+    from app.services.workflow_files import authorize_record_files
+    for imported_record in imported_records:
+        data = _record_data_from_imported_record(imported_record, protocol_version)
+        await authorize_record_files(db_session, data, current_user)
+        # Parse resource declarations without consuming or reserving inventory.
+        try:
+            extract_resource_bindings(protocol_version.fields or {}, data)
+        except ResourceBindingError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+    if preview:
+        summary.update(
+            valid_count=len(imported_records), row_count=len(imported_records),
+            preview_token=sign_preview(digest, config.SECRET_KEY),
+        )
+        return summary
 
     latest_number = await db_session.scalar(
         select(func.max(Record.number)).where(Record.protocol_id == protocol_id)

@@ -14,6 +14,10 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ## [未发布]
 
+### 修复
+
+- Records 导入增加当前 Protocol 的 CSV 标准模板、字段要求、校验预览和明确确认。支持 UTF-8 BOM，拒绝未知或重复 CSV/TSV 列，不猜测表头；识别表格错误，按字段和文件行号提供中英文提示。预检不创建记录，确认时重新校验数据与权限并拒绝过期预检。保留既有 API 直接导入及 `.aira` 归档兼容，不引入旧表格映射功能。
+
 ## [0.2.0] - 2026-09-21
 
 科研分析与受控 Workflow 功能版本。参见[版本概览与升级边界](docs/zh/releases/v0.2.0.md)。

@@ -3594,6 +3594,46 @@ declare namespace I18n {
           bulkImportErrorTitle: string
           bulkImportRowError: string
           bulkImportUnknownError: string
+          importGuide: string
+          importTemplate: string
+          importFields: string
+          importColumn: string
+          importFieldName: string
+          importFieldRule: string
+          importRequired: string
+          importOptional: string
+          importTemplateFailed: string
+          importCheck: string
+          importCheckFailed: string
+          importCheckPassed: string
+          importDestination: string
+          importConfirm: string
+          importConfirmHint: string
+          importFile: string
+          importLines: string
+          importRows: string
+          importErrors: {
+            invalid_encoding: string
+            empty_file: string
+            too_many_columns: string
+            blank_header: string
+            duplicate_header: string
+            row_width: string
+            too_many_rows: string
+            invalid_csv: string
+            unknown_field: string
+            duplicate_target: string
+            spreadsheet_error: string
+            required: string
+            integer: string
+            boolean: string
+            number: string
+            string: string
+            pattern: string
+            range: string
+            file_too_large: string
+            stale_preview: string
+          }
           deleteBlockedLatest: string
           deleteBlockedExpired: string
           deleteBlockedLoading: string

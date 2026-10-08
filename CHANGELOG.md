@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Fixed
+
+- Guide Record imports through a current-Protocol CSV template, field requirements, validation preview and explicit confirmation. Accept UTF-8 BOM, reject unknown or duplicate CSV/TSV columns without guessing aliases, flag spreadsheet errors, and group bilingual feedback by field and file line. Previews do not create Records; confirmations revalidate data and permissions and reject stale previews. Preserve direct API and `.aira` archive compatibility without adding a legacy-table mapping feature.
+
 ## [0.2.0] - 2026-09-21
 
 Research analysis and governed Workflow release. See the [release overview and upgrade boundaries](docs/en/releases/v0.2.0.md).
