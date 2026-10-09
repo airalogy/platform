@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
+Protocol authoring, portable archives and guided Record imports. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.0.md).
+
 ### Changed
 
 - Build bundled MinIO and mc from checksum-pinned official sources, including the CVE-2025-62506 fix, source/license bundles and immutable release identity. Add storage read/write and fresh-server recovery acceptance; block unverified storage-engine changes before an application upgrade or rollback. External OSS/PostgreSQL deployments remain unchanged; newer MinIO uses a reduced embedded console and mc administration.
@@ -21,10 +25,6 @@ Component versions may differ when only the backend or frontend changes. The pro
 - Split fast affected pre-push feedback from explicit extended/full local checks, report per-gate timings, and detect unavailable public service images before expensive tests without relying on local image caches.
 - Run browser CI in four AI-enabled shards and one AI-disabled job on isolated runners, retaining a required aggregate gate and adding import/archive coverage with AI disabled.
 - Reuse fresh, trusted source CI for the exact release commit instead of repeating source checks, and compile architecture-independent Web assets on the build host. Preserve release identity, provenance, exact-image acceptance and backup/restore gates.
-
-## [0.3.0] - 2026-10-08
-
-Protocol authoring, portable archives and guided Record imports. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.0.md).
 
 ### Added
 
