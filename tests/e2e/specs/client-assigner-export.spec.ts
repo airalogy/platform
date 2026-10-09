@@ -24,6 +24,7 @@ assigner(
 
 test("client calculations persist and both Protocol archives round-trip", async ({ page, request }) => {
   test.setTimeout(180_000)
+  page.setDefaultTimeout(15_000)
   const fixtures = await loadFixtures()
   const api = process.env.E2E_API_URL || "http://127.0.0.1:4100"
   const signIn = await request.post(`${api}/signin_by_email`, { data: { email: "dev.owner@airalogy.dev", password: "AiralogyDev123!" } })
@@ -68,6 +69,11 @@ test("client calculations persist and both Protocol archives round-trip", async 
   await expect(field("b")).toHaveValue("8")
   await expect(field("c")).toHaveValue("9")
   expect(serverAssignments).toEqual([])
+  // Recovery deliberately produces the same values retained before the error.
+  // Those values alone cannot prove that the debounced calculation has finished.
+  const calculationProgress = page.locator(".compact-progress")
+  await expect(calculationProgress).toContainText("Completed")
+  await expect(calculationProgress).toBeHidden()
   await page.getByRole("button", { name: "Submit", exact: true }).click()
   await page.getByRole("dialog").getByRole("button", { name: "Submit Record", exact: true }).click()
   await page.getByRole("dialog").getByRole("button", { name: "View saved Record", exact: true }).click()
