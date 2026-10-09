@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-09
+
+Route-scoped footer recovery. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.1.md).
+
 ### Fixed
 
 - Restore company and configured compliance information in the application footer when a previous Record page left a hidden-footer preference in browser storage. Scope Record entry/report footer suppression to their routes, without changing global theme state or requiring users to clear local data.

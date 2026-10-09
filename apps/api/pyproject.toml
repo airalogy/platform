@@ -1,6 +1,6 @@
 [project]
 name = "airalogy-platform-backend"
-version = "0.3.0"
+version = "0.3.1"
 description = "FastAPI backend for Airalogy Platform Community Edition"
 authors = [{ name = "Airalogy" }]
 dependencies = [
