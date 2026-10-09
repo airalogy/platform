@@ -28,7 +28,7 @@ DOCS_BASE=/platform/ pnpm docs:build
 ## Commit, push and CI checks
 
 - **pre-commit** formats and lints staged files only; it does not run browsers, databases or image tests.
-- **pre-push** selects gates from the actual outgoing commit diff, with workflow and CLI checks before slower subsystem tests. Manual invocation compares committed changes with upstream; uncommitted edits are not represented as a verified push.
+- **pre-push** selects fast checks from the actual outgoing commit diff: workflow validation, affected unit/contract tests, lint and relevant types. Long database, container, browser and production-build gates are reported as deferred to CI. Manual invocation compares committed changes with upstream; uncommitted edits are not represented as a verified push.
 - **GitHub CI** invokes the same registered gates and retains Linux/macOS matrices, hosted-runtime permissions, SDK packaging, real release provenance, image installation and backup/restore acceptance. Local success does not prove those remote gates have passed.
 
 Install GitHub CLI `gh` and locked workspace dependencies, then explicitly provision the pinned workflow checker:
@@ -37,15 +37,22 @@ Install GitHub CLI `gh` and locked workspace dependencies, then explicitly provi
 pnpm ci:tools:install
 pnpm exec playwright install chromium
 pnpm prepush:check --plan
+pnpm prepush:affected --plan
 pnpm prepush:full --plan
 pnpm prepush:full
 ```
 
 `ci:tools:install` downloads official actionlint 1.7.12, verifies archive and executable SHA-256 hashes and stores it in ignored `.cache/actionlint/`. Every execution rechecks the bytes. Linux/macOS x64 and arm64 are supported. Checks never implicitly install or upgrade tools or change system permissions; missing tools and corrupt caches block the affected gate with an error. actionlint validates workflow structure and expressions, not ShellCheck, every shell command's portability or remote permissions.
 
-`prepush:full` runs all registered local gates regardless of the diff: versions, Python locks, lint, types, API, Gateway, real offline `gh` rejection, Compute Runner, instrument contracts, synthetic browser/rehearsal, release metadata and deployment identity, research database integration, docs, production build and full browser E2E. macOS additionally compiles native helpers; Linux does not claim macOS compilation coverage. Full E2E includes the focused AI subset without running it twice.
+`prepush:affected` explicitly runs the extended gates selected by the outgoing diff. `prepush:full` runs all registered local gates regardless of the diff: versions, public service-image availability, Python locks, lint, types, API, Gateway, real offline `gh` rejection, Compute Runner, instrument contracts, synthetic browser/rehearsal, release metadata and deployment identity, research database integration, docs, production build and full browser E2E. macOS additionally compiles native helpers; Linux does not claim macOS compilation coverage. Full E2E includes the focused AI subset without running it twice.
 
 Full checks need Docker and isolated test infrastructure and take substantially longer than an ordinary push. Do not move them into every commit or run another suite sharing the E2E infrastructure concurrently. They do not operate real instruments, request desktop permissions, push images, create releases or substitute for real provenance and cross-platform CI.
+
+The external-image preflight uses an empty temporary Docker configuration and bounded anonymous registry manifest requests, not cached image presence. It does not download layers, modify credentials or choose mirrors. A failure blocks the affected gate and release; cached local tests cannot qualify a cold installation.
+
+Hosted browser CI uses four AI-enabled shards and one AI-disabled job, each with its own runner, database, storage and accounts. Each shard keeps one Playwright worker; only dependency downloads are cached, not database state or authentication. `browser-gate` succeeds only when preflight and every shard pass. This can reduce elapsed time but increase runner usage; measure actual runs before quoting a speedup. Local full runs remain sequential because their infrastructure uses fixed ports.
+
+Repository administrators must configure branch protection/rulesets to require `browser-gate` and the applicable source checks, replacing the former single `chromium` check when necessary. Workflow files do not configure those remote settings. Release independently verifies all required source workflows for the exact commit; a successful local hook alone never authorizes publication.
 
 Run a focused gate or reproduce a CI step with:
 

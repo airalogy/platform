@@ -22,10 +22,14 @@ Platform 不会默认将部署身份、客户信息或运行状态回传给 Aira
 1. 根据兼容性选择 SemVer，同步 `VERSION`、API、Web、Compute Runner、Instrument Gateway、Instrument Interface package 和根 workspace 版本。
 2. 将中英文 Changelog 的 `Unreleased` 内容移入对应版本节。
 3. 在已验证且干净的提交上创建 annotated tag `v<version>` 并推送。
-4. Release workflow 运行后端、前端、Instrument Gateway、部署和发布检查，构建多架构镜像和同版本 Compute Runner、Gateway wheel/源码包，生成 SBOM 与 provenance，并组装不可变发布包。打包前对准确镜像集合执行账号权限、备份恢复及同版本升级回滚演练；测试配置、备份与状态留在包外，非预期文件或符号链接会阻止打包。
+4. Release workflow 核验源码 CI 证据、部署和发布检查，构建多架构镜像和同版本 Compute Runner、Gateway wheel/源码包，生成 SBOM 与 provenance，并组装不可变发布包。打包前对准确镜像集合执行账号权限、备份恢复及同版本升级回滚演练；测试配置、备份与状态留在包外，非预期文件或符号链接会阻止打包。
 5. 正式部署使用 `镜像:版本@sha256:摘要`，不使用 `latest` 作为唯一身份。
 
 科研设备主机应安装同一 GitHub Release 附带的 Gateway 包，在加入本地硬件适配器前核验其发布来源。
+
+`scripts/release-ci.mjs` 要求同一准确且干净的 Git SHA 对应的九个已登记源码工作流全部通过，包括每个浏览器分片和 Linux/macOS 作业。只接受本仓库 `main` 的 push 或显式针对 `main`/发布 Tag 的手工触发；最新可信执行须成功且不超过七天。缺失、过期、不完整、跳过或失败的证据都会阻止发布，不回退使用旧的成功结果。若路径筛选未触发某工作流，在准确发布 Tag 上手工触发，完成后重跑失败的 Release 作业，不移动 Tag。核验回执作为 Release 工作流附件保留工作流、执行、重试身份和工作流文件摘要。
+
+该机制复用已完成的源码测试、lint 和类型检查，不在发布路径重复执行；不会免除版本清单/锁文件校验、来源证明、外部镜像可获取性、准确产物验收，以及实际源版本到目标版本的迁移和恢复证据。Web 编译输出与运行架构无关，因此在构建主机原生编译，运行时镜像仍保留各自目标架构。生产安装经过验证的产物，不重新构建。
 
 首版功能与验收边界见 [v0.1.0 发布概览](./releases/v0.1.0.md)。
 

@@ -1,6 +1,7 @@
 name: Frontend Lint
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "apps/web/**"
@@ -60,4 +61,4 @@ jobs:
         run: pnpm lint
 
       - name: Type check
-        run: pnpm --filter @airalogy/web type-check
+        run: pnpm type-check

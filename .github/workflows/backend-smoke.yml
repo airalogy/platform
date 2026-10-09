@@ -1,6 +1,7 @@
 name: Backend Smoke
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "apps/api/**"
@@ -38,6 +39,10 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.4"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
 
       - name: Set up Python
         uses: actions/setup-python@v6

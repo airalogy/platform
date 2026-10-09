@@ -1,6 +1,7 @@
 name: Instrument Gateway
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "apps/instrument-gateway/**"

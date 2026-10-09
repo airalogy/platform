@@ -370,7 +370,7 @@ AI 开启时，Aira 提供独立的“仅草稿”入口。用户先确定预约
 
 验证分为两层。`pnpm research:benchmarks` 对 `benchmarks/research-automation/scenarios.json` 中的 CNT 迭代、发酵整合、蛋白纯化方法演进和 OT-2 治理执行快速函数级契约测试。这些夹具和场景名称不代表完整场景已经通过真实 API、Record 提交或物理设备运行；“禁止捷径”标签本身也不是反向集成测试。
 
-`pnpm research:integration` 启动隔离的 PostgreSQL、Redis 与文件服务，执行全部迁移，再验证真实认证 API 的预览确认、持久化作业执行、暂停恢复、取消后的迟到成功/失败、最终尝试租约丢失恢复、当前成员权限与预算/时间限制、待审 Evidence、结构化 Human Work 校验审核和人工定稿结果包。Specialist 测试仅替换外部模型响应；回调及崩溃测试明确注入延迟或持久化中断状态，API 响应、权限、数据库事务及科研资产写入保持真实。该套件纳入 CI，并由 pre-push 按 Research 运行时代码变更选择执行；pre-commit 保持轻量。
+`pnpm research:integration` 启动隔离的 PostgreSQL、Redis 与文件服务，执行全部迁移，再验证真实认证 API 的预览确认、持久化作业执行、暂停恢复、取消后的迟到成功/失败、最终尝试租约丢失恢复、当前成员权限与预算/时间限制、待审 Evidence、结构化 Human Work 校验审核和人工定稿结果包。Specialist 测试仅替换外部模型响应；回调及崩溃测试明确注入延迟或持久化中断状态，API 响应、权限、数据库事务及科研资产写入保持真实。该套件纳入 CI，并由显式 `pnpm prepush:affected` 按 Research 运行时代码变更选择执行；默认本地 hook 提供快速反馈，pre-commit 保持轻量。
 
 Tool Job 在真正执行前锁定并刷新 Task/Run/Action，重新检查当前执行权限、固定版本 Tool/Executor 范围、人工审批或未过期自动执行授权，以及运行限额。暂停或被阻止的作业保留为待执行，不消耗重试次数。最终尝试中断后不会自动重复可能已计费的模型调用，而是结束该作业、暂停任务并提示执行结果不确定，等待人工核查。取消和终态始终优先于迟到回调。
 

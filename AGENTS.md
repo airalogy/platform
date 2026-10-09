@@ -34,6 +34,8 @@
 ## Verification and commits
 
 - Run the smallest relevant tests first, then the broader release checks required by the affected subsystem.
+- Default pre-push provides fast, affected local feedback. Use `pnpm prepush:affected` for extended affected checks and `pnpm prepush:full` for the complete local suite; a successful push is not release approval.
+- Release reuse of source CI requires fresh, successful checks for the exact clean commit through `scripts/release-ci.mjs`. Missing, stale, skipped, or failed evidence blocks publication; immutable-artifact acceptance and recovery checks remain mandatory.
 - Treat failed hooks, migrations, image builds, and deployment checks as blockers until their cause is identified.
 - Run `git diff --check`, inspect the staged diff, and keep operational fixes separate from unrelated feature work.
 

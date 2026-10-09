@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim AS builder
+# Browser assets are architecture-independent; build once on the native host
+# and copy the same output into both Caddy runtime architectures.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH

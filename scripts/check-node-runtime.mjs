@@ -37,7 +37,7 @@ export function assertNodeConfiguration({ major, engines, workflows, dockerfile 
       }
     }
   }
-  if (!new RegExp(`^FROM node:${major}-bookworm-slim AS builder$`, "m").test(dockerfile))
+  if (!new RegExp(`^FROM (?:--platform=\\$BUILDPLATFORM )?node:${major}-bookworm-slim AS builder$`, "m").test(dockerfile))
     throw new Error("The production web builder must use the Node major from .node-version")
 }
 

@@ -4,15 +4,15 @@ import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { load } from "js-yaml"
-import { buildCheckPlan, checks } from "./pre-push.mjs"
+import { buildCheckPlan, buildLocalCheckPlan, checks } from "./pre-push.mjs"
 
 const ids = (files, full = false, host = "linux") => buildCheckPlan(files, full, host).map(check => check.id)
 
 test("release SDK changes run actual adapter containers locally and in CI", () => {
   for (const file of ["VERSION", "apps/instrument-gateway/pyproject.toml", "apps/instrument-gateway/examples/adapter-package/manifest.json", "scripts/gateway-sandbox-integration.mjs", ".github/workflows/release.yml"])
     assert.ok(ids([file]).includes("gateway-sandbox"), file)
-  for (const file of [".github/workflows/instrument-gateway.yml", ".github/workflows/release.yml"])
-    assert.match(readFileSync(file, "utf8"), /node scripts\/pre-push\.mjs --check gateway-sandbox/)
+  assert.match(readFileSync(".github/workflows/instrument-gateway.yml", "utf8"), /node scripts\/pre-push\.mjs --check gateway-sandbox/)
+  assert.match(readFileSync(".github/workflows/release.yml", "utf8"), /node scripts\/release-ci\.mjs/)
 })
 function includes(files, expected, host = "linux") {
   const actual = ids(files, false, host)
@@ -37,9 +37,18 @@ test("local and hosted full browser gates share both actual AI capability modes"
   const workflow = load(readFileSync(".github/workflows/e2e.yml", "utf8"))
   for (const event of ["push", "pull_request"])
     assert.ok(workflow.on[event].paths.includes("scripts/e2e-matrix.mjs"))
-  assert.ok(workflow.jobs.chromium.steps.some(step => step.run === "node scripts/pre-push.mjs --check full-e2e"))
+  const shards = workflow.jobs.chromium.strategy.matrix.include
+  assert.deepEqual(shards, [
+    ...[1, 2, 3, 4].map(shard => ({ mode: "enabled", shard, total: 4 })),
+    { mode: "disabled", shard: 1, total: 1 },
+  ])
+  assert.ok(workflow.jobs.chromium.steps.some(step => step.run?.startsWith("node scripts/e2e-matrix.mjs --mode")))
+  assert.equal(workflow.jobs.chromium.needs, "preflight")
+  assert.equal(workflow.jobs["browser-gate"].if, "always()")
+  assert.deepEqual(workflow.jobs["browser-gate"].needs, ["preflight", "chromium"])
+  assert.match(workflow.jobs["browser-gate"].steps[0].run, /test "\$PREFLIGHT_RESULT" = success && test "\$BROWSER_RESULT" = success/)
   const budgetMinutes = workflow.jobs.chromium["timeout-minutes"]
-  assert.ok(budgetMinutes >= 45 && budgetMinutes <= 60, "cold setup and both modes need a bounded 45–60 minute job budget")
+  assert.ok(budgetMinutes >= 20 && budgetMinutes <= 30, "each isolated shard has a bounded 20–30 minute budget")
   assert.match(readFileSync("playwright.config.ts", "utf8"), /timeout:\s*60_000/, "retain the one-minute per-test timeout")
 })
 
@@ -59,7 +68,7 @@ test("CI and hook changes select real tooling regressions before expensive check
 })
 
 test("full mode includes every local gate even for an empty or docs-only diff", () => {
-  const required = ["ci-config", "version", "gateway-cli", "api-lock", "gateway-lock", "compute-lock", "lint", "types", "api-compile", "api-tests", "release-metadata", "deployment-identity", "instrument-contract", "research-integration", "gateway-tests", "gateway-sandbox", "interface-tests", "interface-demo", "compute-runner-tests", "compute-engine", "docs", "build", "full-e2e"]
+  const required = ["ci-config", "image-availability", "version", "gateway-cli", "api-lock", "gateway-lock", "compute-lock", "lint", "types", "api-compile", "api-tests", "release-metadata", "deployment-identity", "instrument-contract", "research-integration", "gateway-tests", "gateway-sandbox", "interface-tests", "interface-demo", "compute-runner-tests", "compute-engine", "docs", "build", "full-e2e"]
   for (const files of [[], ["README.md"]]) {
     assert.deepEqual(new Set(ids(files, true)), new Set(required))
     assert.deepEqual(new Set(ids(files, true, "darwin")), new Set([...required, "native-build-tests"]))
@@ -286,5 +295,23 @@ test("ambient graphical opt-ins cannot escape into ordinary pre-push checks", ()
   `], { encoding: "utf8", timeout: 5000, env: { ...process.env, ...Object.fromEntries(flags.map(key => [key, "1"])) } })
   assert.equal(result.error, undefined)
   assert.equal(result.status, 0, result.stderr)
-  assert.deepEqual(JSON.parse(result.stdout.trim().split("\n").at(-1)), ["0", "0", "0"])
+  assert.deepEqual(JSON.parse(result.stdout.split("\n").find(line => line.startsWith("[\""))), ["0", "0", "0"])
+})
+
+test("default local profile is affected, fast and explicitly distinct from release acceptance", () => {
+  const local = files => buildLocalCheckPlan(files, "darwin").map(check => check.id)
+  assert.deepEqual(local(["README.md"]), ["version"])
+  assert.deepEqual(local(["docs/en/guide.md"]), ["version", "docs"])
+  assert.ok(!local(["apps/web/src/views/home/index.vue"]).includes("api-tests"))
+  assert.ok(!local(["apps/api/app/services/record_analyses.py"]).includes("types"))
+  for (const id of ["version", "lint", "types"])
+    assert.ok(local(["apps/web/src/views/home/index.vue"]).includes(id))
+  for (const id of ["api-compile", "api-tests"])
+    assert.ok(local(["apps/api/app/services/record_analyses.py"]).includes(id))
+  const broad = local([".node-version", "package.json", "apps/api/app/routers/records.py", "apps/instrument-interface/src/native.mjs"])
+  for (const id of ["full-e2e", "research-integration", "gateway-sandbox", "compute-engine", "native-build-tests", "build"])
+    assert.ok(!broad.includes(id), id)
+  for (const file of ["tests/e2e/compose.yml", "deploy/single-lab/web.Dockerfile", ".github/workflows/release.yml"])
+    assert.ok(local([file]).includes("image-availability"), file)
+  assert.equal(new Set(broad).size, broad.length)
 })

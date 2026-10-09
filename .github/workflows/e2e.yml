@@ -1,6 +1,7 @@
 name: Browser E2E
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "apps/api/**"
@@ -9,6 +10,7 @@ on:
       - "tests/e2e/**"
       - "scripts/e2e-runner.test.mjs"
       - "scripts/e2e-matrix.mjs"
+      - "scripts/check-image-availability*"
       - "scripts/pre-push*.mjs"
       - "playwright.config.ts"
       - "package.json"
@@ -25,6 +27,7 @@ on:
       - "tests/e2e/**"
       - "scripts/e2e-runner.test.mjs"
       - "scripts/e2e-matrix.mjs"
+      - "scripts/check-image-availability*"
       - "scripts/pre-push*.mjs"
       - "playwright.config.ts"
       - "package.json"
@@ -39,11 +42,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  chromium:
+  preflight:
     runs-on: ubuntu-latest
-    # Includes cold dependencies and two sequential, isolated capability modes.
-    # Keep Playwright's per-test timeout unchanged so stalled tests still fail.
-    timeout-minutes: 60
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: ".node-version"
+      - name: Check cold registry access before installing dependencies
+        run: node scripts/check-image-availability.mjs
+
+  chromium:
+    needs: preflight
+    name: chromium-${{ matrix.mode }}-${{ matrix.shard }}-of-${{ matrix.total }}
+    runs-on: ubuntu-latest
+    # Each matrix job owns an entire disposable runner, DB, storage and accounts.
+    # Keep workers=1 within each shard; no shared-state tests run concurrently.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mode: enabled, shard: 1, total: 4 }
+          - { mode: enabled, shard: 2, total: 4 }
+          - { mode: enabled, shard: 3, total: 4 }
+          - { mode: enabled, shard: 4, total: 4 }
+          - { mode: disabled, shard: 1, total: 1 }
 
     steps:
       - name: Checkout
@@ -57,15 +82,22 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
+      - name: Cache pnpm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-e2e-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.node-version') }}
+
       - name: Setup Python and uv
         uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
+          version: "0.12.4"
           enable-cache: true
           cache-dependency-glob: "apps/api/uv.lock"
 
       - name: Install web dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
 
       - name: Install API dependencies
         run: uv --directory apps/api sync --locked
@@ -77,16 +109,31 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run browser E2E
-        run: node scripts/pre-push.mjs --check full-e2e
+        env:
+          BROWSER_MODE: ${{ matrix.mode }}
+          BROWSER_SHARD: ${{ matrix.shard }}/${{ matrix.total }}
+        run: node scripts/e2e-matrix.mjs --mode "$BROWSER_MODE" --shard "$BROWSER_SHARD"
 
       - name: Upload E2E diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: browser-e2e-${{ github.run_id }}
+          name: browser-e2e-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}-${{ matrix.shard }}
           if-no-files-found: ignore
           retention-days: 14
           path: |
             playwright-report/
             test-results/
             tests/e2e/.runtime/api.log
+
+  browser-gate:
+    if: always()
+    needs: [preflight, chromium]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every mode and shard to pass
+        env:
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          BROWSER_RESULT: ${{ needs.chromium.result }}
+        run: test "$PREFLIGHT_RESULT" = success && test "$BROWSER_RESULT" = success

@@ -14,6 +14,12 @@ export const checks = {
     command: "corepack",
     args: ["pnpm", "ci:check"],
   },
+  images: {
+    id: "image-availability",
+    label: "anonymous remote image availability (local cache is not evidence)",
+    command: "node",
+    args: ["scripts/check-image-availability.mjs"],
+  },
   version: {
     id: "version",
     label: "product and component version consistency",
@@ -225,7 +231,7 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   }
   const plan = [checks.version, checks.lint, checks.types, checks.apiCompile]
   const toolingChanged = files.some(file => file.startsWith(".github/")
-    || /^scripts\/(?:check-node-runtime|actionlint|prepare-instrument-ci|pre-push|e2e-(?:runner|matrix))/.test(file)
+    || /^scripts\/(?:check-node-runtime|check-image-availability|release-ci|actionlint|prepare-instrument-ci|pre-push|e2e-(?:runner|matrix))/.test(file)
     || file.startsWith(".husky/")
     || [".node-version", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"].includes(file))
   if (toolingChanged)
@@ -348,7 +354,34 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
     plan.push(checks.aiE2e)
   }
 
+  if (plan.some(check => ["research-integration", "full-e2e", "ai-e2e"].includes(check.id)))
+    plan.splice(plan[0]?.id === "ci-config" ? 1 : 0, 0, checks.images)
+
   return plan
+}
+
+// Fast feedback is not a release qualification. Keep the complete affected
+// plan above available to CI/operators; never silently reclassify a failed gate.
+export function buildLocalCheckPlan(files, hostPlatform = process.platform) {
+  const affected = buildCheckPlan(files, false, hostPlatform)
+  const documentationOnly = files.every(file => /\.md$/.test(file) || file.startsWith("docs/"))
+  if (documentationOnly)
+    return [checks.version, ...(files.some(file => file.startsWith("docs/")) ? [checks.docs] : [])]
+
+  const slow = new Set(["research-integration", "gateway-sandbox", "interface-demo", "native-build-tests", "compute-engine", "build", "ai-e2e", "full-e2e"])
+  const plan = affected.filter(check => !slow.has(check.id))
+  const web = files.some(file => /^(?:apps\/web\/|packages\/|tests\/e2e\/)/.test(file)
+    || /^(?:package\.json|pnpm-|tsconfig|uno\.|eslint\.|playwright\.|\.node-version)/.test(file))
+  const backend = files.some(file => file.startsWith("apps/api/") || file === ".node-version")
+  const result = plan.filter(check => (check.id !== "types" || web)
+    && (check.id !== "api-compile" || backend))
+  const imagesChanged = files.some(file => /(?:Dockerfile|compose\.ya?ml|docker-compose\.ya?ml)$/.test(file)
+    || file === "scripts/check-image-availability.mjs"
+    || file === "deploy/single-lab/.env.example"
+    || file === ".github/workflows/release.yml")
+  if (imagesChanged && !result.some(check => check.id === checks.images.id))
+    result.splice(result[0]?.id === "ci-config" ? 1 : 0, 0, checks.images)
+  return result
 }
 
 function runGit(args) {
@@ -408,6 +441,7 @@ function readPushInput() {
 
 export function runCheck(check) {
   console.log(`\n[pre-push] ${check.label}`)
+  const started = performance.now()
   const result = spawnSync(check.command, check.args, {
     cwd: process.cwd(),
     env: { ...process.env, RUN_INTERFACE_NATIVE_TESTS: "0", RUN_INTERFACE_NATIVE_BUILD_TESTS: "0", RUN_INSTRUMENT_NATIVE_JOB_TESTS: "0", ...check.env },
@@ -417,6 +451,7 @@ export function runCheck(check) {
   if (result.error) {
     throw result.error
   }
+  console.log(`[pre-push] ${check.id}: ${result.status === 0 ? "passed" : "failed"} in ${((performance.now() - started) / 1000).toFixed(1)}s`)
   if (result.status !== 0) {
     process.exit(result.status ?? 1)
   }
@@ -433,16 +468,24 @@ function main() {
     runCheck(check)
     return
   }
-  if (process.argv.slice(2).some(arg => !["--full", "--plan"].includes(arg)))
-    throw new Error("Usage: pre-push.mjs [--full] [--plan], or --check <id>")
+  if (process.argv.slice(2).some(arg => !["--full", "--affected", "--plan"].includes(arg))
+    || (process.argv.includes("--full") && process.argv.includes("--affected"))) {
+    throw new Error("Usage: pre-push.mjs [--full | --affected] [--plan], or --check <id>")
+  }
   const input = readPushInput()
   const files = input.trim() ? filesFromPushInput(input) : filesFromUpstream()
   const fullRequested = process.argv.includes("--full")
-  const plan = buildCheckPlan(files, fullRequested)
+  const extended = fullRequested || process.argv.includes("--affected")
+  const plan = extended ? buildCheckPlan(files, fullRequested) : buildLocalCheckPlan(files)
 
   console.log(
     `[pre-push] ${files.length} pushed file(s); checks: ${plan.map(check => check.id).join(", ")}`,
   )
+  if (!extended) {
+    const deferred = buildCheckPlan(files).filter(check => !plan.some(local => local.id === check.id))
+    if (deferred.length)
+      console.log(`[pre-push] CI/operator verification required: ${deferred.map(check => check.id).join(", ")}. Use --affected or --full locally; push success is not release approval.`)
+  }
   if (process.argv.includes("--plan"))
     return
   for (const check of plan) {

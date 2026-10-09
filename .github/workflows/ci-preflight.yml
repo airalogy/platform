@@ -1,6 +1,7 @@
 name: CI Preflight
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - ".github/**"

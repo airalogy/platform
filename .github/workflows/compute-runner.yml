@@ -1,6 +1,7 @@
 name: Compute Runner
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "apps/compute-runner/**"

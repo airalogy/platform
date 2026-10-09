@@ -22,6 +22,8 @@ test("CI pins cannot drift back to Node 20 or override the shared version file",
     dockerfile: "FROM node:22-bookworm-slim AS builder\n",
   }
   assert.doesNotThrow(() => assertNodeConfiguration(configuration))
+  assert.doesNotThrow(() => assertNodeConfiguration({ ...configuration, dockerfile: "FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder\n" }))
+  assert.throws(() => assertNodeConfiguration({ ...configuration, dockerfile: "FROM --platform=linux/amd64 node:22-bookworm-slim AS builder\n" }), /production/)
   for (const setting of ["node-version: '20'", "node-version-file: .node-version\n          node-version: '20'", "node-version-file: another-file"]) {
     assert.throws(() => assertNodeConfiguration({ ...configuration, workflows: { bad: configuration.workflows["fixture.yml"].replace("node-version-file: .node-version", setting) } }), /must read/)
   }

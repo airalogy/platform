@@ -16,6 +16,7 @@ on:
         "scripts/prepare-instrument-ci*",
         "scripts/compute-runner-integration.mjs",
         "scripts/research-integration.mjs",
+        "scripts/check-image-availability*",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "tests/e2e/**",
@@ -40,6 +41,7 @@ on:
         "scripts/prepare-instrument-ci*",
         "scripts/compute-runner-integration.mjs",
         "scripts/research-integration.mjs",
+        "scripts/check-image-availability*",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "tests/e2e/**",
@@ -62,15 +64,23 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: ".node-version"
+      - name: Check cold registry access before installing dependencies
+        run: node scripts/check-image-availability.mjs
+      - name: Cache pnpm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-research-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.node-version') }}
       - name: Install locked browser interface runtime
         run: |
           corepack enable
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
           pnpm exec playwright install --with-deps chromium
           pnpm gateway:contract:check
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
+          version: "0.12.4"
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
       - name: Install locked API dependencies

@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   verify:
@@ -37,6 +38,12 @@ jobs:
         with:
           node-version-file: ".node-version"
           cache: pnpm
+      - name: Verify fresh source CI for this exact release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-ci.mjs --output "$RUNNER_TEMP/source-ci-verification.json"
+      - name: Check external images before dependency installation and builds
+        run: node scripts/check-image-availability.mjs
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.4"
@@ -54,15 +61,15 @@ jobs:
       - run: pnpm version:check
       - run: pnpm release:metadata:test
       - run: pnpm deployment:identity:test
-      - run: uv --directory apps/api run --with pytest python -m pytest tests
-      - run: pnpm compute-runner:test
-      - run: pnpm gateway:test
-      - run: node scripts/pre-push.mjs --check gateway-sandbox
-      - run: pnpm lint
-      - run: pnpm type-check
-      - run: pnpm build
+      # Source tests/lint/types were verified above for this exact SHA. The image
+      # jobs build once; the release job accepts that same immutable image set.
       - run: bash -n deploy/single-lab/platformctl deploy/single-lab/scripts/*.sh
       - run: pnpm release:check -- "$RELEASE_TAG"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: platform-source-ci-verification
+          path: ${{ runner.temp }}/source-ci-verification.json
+          if-no-files-found: error
 
   gateway-package:
     needs: verify

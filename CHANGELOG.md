@@ -14,6 +14,12 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Changed
+
+- Split fast affected pre-push feedback from explicit extended/full local checks, report per-gate timings, and detect unavailable public service images before expensive tests without relying on local image caches.
+- Run browser CI in four AI-enabled shards and one AI-disabled job on isolated runners, retaining a required aggregate gate and adding import/archive coverage with AI disabled.
+- Reuse fresh, trusted source CI for the exact release commit instead of repeating source checks, and compile architecture-independent Web assets on the build host. Preserve release identity, provenance, exact-image acceptance and backup/restore gates.
+
 ## [0.3.0] - 2026-10-08
 
 Protocol authoring, portable archives and guided Record imports. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.0.md).

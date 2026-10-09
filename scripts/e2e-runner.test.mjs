@@ -7,7 +7,7 @@ import { delimiter, join } from "node:path"
 import process from "node:process"
 import test from "node:test"
 import { computeTestImage } from "./compute-runner-integration.mjs"
-import { aiIndependentSpecs, runBrowserMatrix } from "./e2e-matrix.mjs"
+import { aiIndependentSpecs, browserModes, runBrowserMatrix } from "./e2e-matrix.mjs"
 
 test("full browser acceptance starts real AI-on and AI-off instances with separate artifacts", () => {
   const calls = []
@@ -40,6 +40,25 @@ test("browser matrix never hides failure or launches another instance after a fa
   }
   assert.equal(runBrowserMatrix(() => ({ status: null, signal: "SIGTERM" }), {}), 1)
   assert.throws(() => runBrowserMatrix(() => ({ error: new Error("could not start") }), {}), /could not start/)
+})
+
+test("hosted shards use the same complete test selection and isolate capability artifacts", () => {
+  for (const mode of ["enabled", "disabled"]) {
+    const calls = []
+    assert.equal(runBrowserMatrix((...args) => {
+      calls.push(args)
+      return { status: 0 }
+    }, {}, { mode, shard: "2/4" }), 0)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0][1], ["pnpm", "e2e", ...(mode === "enabled" ? [] : aiIndependentSpecs), "--shard=2/4"])
+    assert.equal(calls[0][2].env.AI_ENABLED, String(mode === "enabled"))
+    assert.equal(calls[0][2].env.E2E_OUTPUT_DIR, `test-results/ai-${mode}-2-of-4`)
+    assert.equal(calls[0][2].env.E2E_KEEP_INFRA, "0")
+  }
+  for (const options of [{ mode: "off" }, { shard: "1/4" }, { mode: "enabled", shard: "0/4" }, { mode: "enabled", shard: "5/4" }, { mode: "enabled", shard: "1/99" }])
+    assert.throws(() => browserModes(options))
+  for (const feature of ["record-import", "client-assigner-export"])
+    assert.ok(aiIndependentSpecs.includes(`tests/e2e/specs/${feature}.spec.ts`))
 })
 
 test("E2E wrapper preserves exact test filters with or without pnpm's separator", async (t) => {
