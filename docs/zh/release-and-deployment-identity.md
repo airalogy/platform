@@ -8,7 +8,7 @@ Airalogy Platform 将一次可部署产品标识为一个不可拆分的发布�
 | --- | --- | --- |
 | 产品版本 | `PLATFORM_VERSION` | 面向用户和发布说明的 SemVer |
 | 源码身份 | Git Tag + 40 位 Git SHA | 精确回到可复现源码 |
-| 发布身份 | `release-manifest.json` 的 SHA-256 | 绑定 API、Web、Protocol Executor、PostgreSQL 镜像及 Alembic revision |
+| 发布身份 | `release-manifest.json` 的 SHA-256 | 绑定 API、Web、Protocol Executor、PostgreSQL、配套对象存储镜像及 Alembic revision |
 | 部署身份 | `AIRALOGY_DEPLOYMENT_ID` | 标识一个安装实例，不携带客户语义 |
 
 `AIRALOGY_DEPLOYMENT_ID` 是形如 `dep_<32 位随机十六进制数>` 的不透明标识。不要把客户名、Lab 名、域名、地址或合同号写进该字段。商业部署方可在自己的私有台账中建立“部署 ID → 客户与运维信息”的映射，该映射不属于本公开仓库。
@@ -16,6 +16,8 @@ Airalogy Platform 将一次可部署产品标识为一个不可拆分的发布�
 Platform 不会默认将部署身份、客户信息或运行状态回传给 Airalogy。如需远程支持，由部署管理员显式生成并交付脱敏支持包。
 
 ## 正式发布
+
+从 v0.3.0 起，`platform-object-storage` 是发布集内第五个不可变镜像，包含官方 MinIO 服务端、mc 客户端、完整 vendored 源码及许可证。两个存储镜像配置绑定同一摘要。引擎版本变更需要独立批准并演练迁移到全新存储；普通应用升级不能静默让新版引擎复用旧 MinIO 数据卷。已有外部 OSS/RDS 不受此变更影响。
 
 `VERSION` 是产品版本的唯一源。正式发布时：
 

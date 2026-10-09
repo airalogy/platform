@@ -24,9 +24,12 @@ export function checkImageAvailability(references, run = spawnSync) {
   try {
     for (const reference of new Set(references)) {
       console.log(`[images] Checking anonymous registry access: ${reference}`)
-      const result = run("docker", ["--config", config, "manifest", "inspect", reference], {
+      // Inspect the registry's raw index, not every platform's image config.
+      // Actual artifact builds/pulls remain required downstream.
+      const result = run("docker", ["--config", config, "buildx", "imagetools", "inspect", "--raw", reference], {
         encoding: "utf8",
         timeout: 30_000,
+        killSignal: "SIGKILL",
         maxBuffer: 4 * 1024 * 1024,
         env: { ...process.env, DOCKER_CONFIG: config, DOCKER_AUTH_CONFIG: "" },
       })
@@ -42,14 +45,40 @@ export function checkImageAvailability(references, run = spawnSync) {
   }
 }
 
+export function externalBuildInputs(repositoryRoot = root) {
+  const compose = readFileSync(join(repositoryRoot, "tests/e2e/compose.yml"), "utf8")
+  const references = imageReferences(compose)
+  const defaults = readFileSync(join(repositoryRoot, "deploy/single-lab/.env.example"), "utf8")
+  const external = [...defaults.matchAll(/^(?:MINIO_IMAGE|MINIO_MC_IMAGE|REDIS_IMAGE)=(.+)$/gm)].map(([, ref]) => ref)
+  if (references.length !== 3 || external.length !== 3 || !compose.includes("context: ../../deploy/object-storage"))
+    throw new Error("Update the external-image preflight when changing the service inventory")
+  const dockerfile = readFileSync(join(repositoryRoot, "deploy/object-storage/Dockerfile"), "utf8")
+  const bases = [...dockerfile.matchAll(/^FROM (?:--platform=\$BUILDPLATFORM )?(\S+)/gm)].map(([, ref]) => ref).filter(ref => ref !== "source")
+  if (bases.length !== 2 || bases.some(ref => !/@sha256:[a-f0-9]{64}$/.test(ref)))
+    throw new Error("Object-storage build bases must be pinned by digest")
+  const version = readFileSync(join(repositoryRoot, "VERSION"), "utf8").trim()
+  const built = new Set(["airalogy-platform-object-storage:e2e", `airalogy-platform-object-storage:${version}`])
+  const refs = [...references, ...external]
+  if (refs.filter(ref => built.has(ref)).length !== 4)
+    throw new Error("Expected source-built object storage in both test and release defaults")
+  return [...refs.filter(ref => !built.has(ref)), ...bases]
+}
+
+export async function checkStorageSourceAvailability(request = fetch) {
+  const lock = readFileSync(join(root, "deploy/object-storage/sources.env"), "utf8")
+  for (const name of ["MINIO", "MC"]) {
+    const commit = new RegExp(`^${name}_COMMIT=([a-f0-9]{40})$`, "m").exec(lock)?.[1]
+    if (!commit)
+      throw new Error(`Missing pinned ${name} source commit`)
+    const response = await request(`https://codeload.github.com/minio/${name.toLowerCase()}/tar.gz/${commit}`, { method: "HEAD", signal: AbortSignal.timeout(30_000) })
+    if (!response.ok)
+      throw new Error(`${name} source unavailable: HTTP ${response.status}`)
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 2)
     throw new Error("Usage: node scripts/check-image-availability.mjs")
-  const references = imageReferences(readFileSync(join(root, "tests/e2e/compose.yml"), "utf8"))
-  // Release dependencies must remain publicly installable as well as testable.
-  const defaults = readFileSync(join(root, "deploy/single-lab/.env.example"), "utf8")
-  const external = [...defaults.matchAll(/^(?:MINIO_IMAGE|MINIO_MC_IMAGE|REDIS_IMAGE)=(.+)$/gm)].map(([, ref]) => ref)
-  if (references.length !== 3 || external.length !== 3)
-    throw new Error("Update the external-image preflight when changing the service inventory")
-  checkImageAvailability([...references.filter(ref => ref.includes("minio")), ...references, ...external])
+  checkImageAvailability(externalBuildInputs())
+  await checkStorageSourceAvailability()
 }

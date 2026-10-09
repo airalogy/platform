@@ -85,6 +85,9 @@ function serializeReleaseEnv(manifest, manifestDigest) {
     AIRALOGY_RELEASE_POSTGRES_IMAGE: manifest.components.postgres.deployment_reference,
     AIRALOGY_RELEASE_POSTGRES_TAGGED_IMAGE: manifest.components.postgres.tagged_reference,
     AIRALOGY_RELEASE_POSTGRES_DIGEST: manifest.components.postgres.digest,
+    AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE: manifest.components.object_storage.deployment_reference,
+    AIRALOGY_RELEASE_OBJECT_STORAGE_TAGGED_IMAGE: manifest.components.object_storage.tagged_reference,
+    AIRALOGY_RELEASE_OBJECT_STORAGE_DIGEST: manifest.components.object_storage.digest,
   }
   return `${Object.entries(values)
     .map(([key, value]) => `${key}=${value}`)
@@ -111,11 +114,12 @@ export async function createReleaseMetadata({
     throw new TypeError("Release creation time must be an ISO-compatible timestamp")
   }
 
-  const [api, web, protocolExecutor, postgres, databaseRevision, envTemplate] = await Promise.all([
+  const [api, web, protocolExecutor, postgres, objectStorage, databaseRevision, envTemplate] = await Promise.all([
     readImageMetadata(metadataDirectory, "api"),
     readImageMetadata(metadataDirectory, "web"),
     readImageMetadata(metadataDirectory, "protocol-executor"),
     readImageMetadata(metadataDirectory, "postgres"),
+    readImageMetadata(metadataDirectory, "object-storage"),
     latestAlembicRevision(repositoryRoot),
     readFile(envTemplatePath, "utf8"),
   ])
@@ -137,6 +141,7 @@ export async function createReleaseMetadata({
       web: componentMetadata(web, version),
       protocol_executor: componentMetadata(protocolExecutor, version),
       postgres: componentMetadata(postgres, version),
+      object_storage: componentMetadata(objectStorage, version),
     },
   }
   const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`
@@ -150,6 +155,8 @@ export async function createReleaseMetadata({
     AIRALOGY_WEB_IMAGE: manifest.components.web.deployment_reference,
     AIRALOGY_PROTOCOL_EXECUTOR_IMAGE: manifest.components.protocol_executor.deployment_reference,
     AIRALOGY_POSTGRES_IMAGE: manifest.components.postgres.deployment_reference,
+    MINIO_IMAGE: manifest.components.object_storage.deployment_reference,
+    MINIO_MC_IMAGE: manifest.components.object_storage.deployment_reference,
     AIRALOGY_RELEASE_METADATA_REQUIRED: "true",
     GIT_TAG: manifest.release_tag,
     GIT_COMMIT: manifest.git_commit,

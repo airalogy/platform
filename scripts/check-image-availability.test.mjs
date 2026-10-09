@@ -2,7 +2,23 @@
 import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
-import { checkImageAvailability, imageReferences } from "./check-image-availability.mjs"
+import { checkImageAvailability, checkStorageSourceAvailability, externalBuildInputs, imageReferences } from "./check-image-availability.mjs"
+
+test("cold checks include pinned source-build bases and exact reachable source archives", async () => {
+  const refs = externalBuildInputs()
+  assert.ok(refs.some(ref => ref.startsWith("golang:") && ref.includes("@sha256:")))
+  assert.ok(refs.some(ref => ref.startsWith("alpine:") && ref.includes("@sha256:")))
+  assert.ok(!refs.some(ref => ref.startsWith("airalogy-platform-object-storage:")))
+  const urls = []
+  await checkStorageSourceAvailability(async (url, options) => {
+    urls.push(url)
+    assert.equal(options.method, "HEAD")
+    assert.match(url, /^https:\/\/codeload.github.com\/minio\/(minio|mc)\/tar.gz\/[a-f0-9]{40}$/)
+    return { ok: true }
+  })
+  assert.equal(urls.length, 2)
+  await assert.rejects(checkStorageSourceAvailability(async () => ({ ok: false, status: 404 })), /source unavailable/)
+})
 
 test("image preflight reads static defaults without evaluating environment or shell input", () => {
   // eslint-disable-next-line no-template-curly-in-string -- Literal Compose interpolation is the input under test.
@@ -18,11 +34,12 @@ test("anonymous manifest checks ignore local image caches and remove their priva
   checkImageAvailability(["registry.example/image:v1", "registry.example/image:v1"], (...args) => {
     calls.push(args)
     assert.equal(args[0], "docker")
-    assert.deepEqual(args[1].slice(2), ["manifest", "inspect", "registry.example/image:v1"])
+    assert.deepEqual(args[1].slice(2), ["buildx", "imagetools", "inspect", "--raw", "registry.example/image:v1"])
     assert.equal(args[2].env.DOCKER_CONFIG, args[1][1])
     assert.equal(args[2].env.DOCKER_AUTH_CONFIG, "")
     assert.ok(!existsSync(`${args[1][1]}/config.json`))
     assert.equal(args[2].timeout, 30_000)
+    assert.equal(args[2].killSignal, "SIGKILL")
     return { status: 0, stdout: JSON.stringify({ schemaVersion: 2, manifests: [{}] }) }
   })
   assert.equal(calls.length, 1)

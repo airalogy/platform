@@ -11,7 +11,7 @@ metadata_dir="$TEST_DIR/image-metadata"
 release_dir="$TEST_DIR/release"
 mkdir -p "$metadata_dir" "$release_dir"
 
-for component in api web protocol-executor postgres; do
+for component in api web protocol-executor postgres object-storage; do
   printf 'ghcr.io/airalogy/platform-%s\n' "$component" >"$metadata_dir/$component.repository"
   printf 'sha256:%064d\n' 1 >"$metadata_dir/$component.digest"
 done
@@ -41,6 +41,8 @@ AIRALOGY_API_IMAGE=$(metadata_value AIRALOGY_RELEASE_API_IMAGE)
 AIRALOGY_WEB_IMAGE=$(metadata_value AIRALOGY_RELEASE_WEB_IMAGE)
 AIRALOGY_PROTOCOL_EXECUTOR_IMAGE=$(metadata_value AIRALOGY_RELEASE_PROTOCOL_EXECUTOR_IMAGE)
 AIRALOGY_POSTGRES_IMAGE=$(metadata_value AIRALOGY_RELEASE_POSTGRES_IMAGE)
+MINIO_IMAGE=$(metadata_value AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE)
+MINIO_MC_IMAGE=$(metadata_value AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE)
 EOF
 
 test_env="$TEST_DIR/deployment.env"
@@ -70,6 +72,10 @@ running_version_payload() {
     "$(metadata_value AIRALOGY_RELEASE_COMMIT)" "$runtime_revision"
 }
 verify_running_release
+if (export MINIO_MC_IMAGE=untrusted:latest; verify_release_metadata) 2>"$TEST_DIR/storage-error"; then
+  die "storage client mismatch must stop deployment"
+fi
+grep -Fq 'MINIO_MC_IMAGE does not match' "$TEST_DIR/storage-error"
 runtime_revision=fixture_old_revision
 if (verify_running_release) 2>"$TEST_DIR/revision-error"; then
   die "runtime revision mismatch must stop deployment"

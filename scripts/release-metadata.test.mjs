@@ -15,7 +15,7 @@ test("public release gate checks all exact images without logged-in Docker crede
   t.after(() => rm(root, { recursive: true, force: true }))
   const metadata = path.join(root, "image-metadata")
   await mkdir(metadata)
-  const components = ["api", "web", "protocol-executor", "postgres"]
+  const components = ["api", "web", "protocol-executor", "postgres", "object-storage"]
   for (const component of components) {
     await writeFile(path.join(metadata, `${component}.repository`), `ghcr.io/airalogy/platform-${component}\n`)
     await writeFile(path.join(metadata, `${component}.digest`), `sha256:${"a".repeat(64)}\n`)
@@ -37,7 +37,7 @@ if [[ "$4" == *"platform-$PRIVATE_COMPONENT@"* ]]; then exit 1; fi
   const env = { ...process.env, PATH: `${root}:${process.env.PATH}`, RUNNER_TEMP: root, AUTHENTICATED_CONFIG: "/synthetic-authenticated-config", GATE_CALLS: calls }
   const success = spawnSync("bash", ["-eu", "-o", "pipefail", "-c", shell], { cwd: root, env: { ...env, PRIVATE_COMPONENT: "none" }, encoding: "utf8" })
   assert.equal(success.status, 0, success.stderr)
-  assert.equal((await readFile(calls, "utf8")).trim().split("\n").length, 4)
+  assert.equal((await readFile(calls, "utf8")).trim().split("\n").length, 5)
   const failure = spawnSync("bash", ["-eu", "-o", "pipefail", "-c", shell], { cwd: root, env: { ...env, PRIVATE_COMPONENT: "web" }, encoding: "utf8" })
   assert.notEqual(failure.status, 0)
   assert.match(failure.stdout, /not anonymously readable/)
@@ -74,7 +74,7 @@ async function createFixture(t) {
   await writeFile(path.join(migrationsDirectory, "0001_initial.py"), "revision: str = \"fixture_initial\"\ndown_revision: str | None = None\n")
   await writeFile(path.join(migrationsDirectory, "0002_head.py"), "revision: str = \"fixture_head\"\ndown_revision: str | None = \"fixture_initial\"\n")
 
-  const components = ["api", "web", "protocol-executor", "postgres"]
+  const components = ["api", "web", "protocol-executor", "postgres", "object-storage"]
   for (const [index, component] of components.entries()) {
     await writeFile(
       path.join(metadataDirectory, `${component}.repository`),
@@ -109,6 +109,10 @@ test("release metadata binds every deployable component by digest", async (t) =>
   const renderedEnvironment = await readFile(path.join(options.outputDirectory, ".env.example"), "utf8")
   assert.match(renderedEnvironment, /^AIRALOGY_RELEASE_METADATA_REQUIRED=true$/mu)
   assert.match(renderedEnvironment, /^AIRALOGY_API_IMAGE=.+@sha256:/mu)
+  for (const key of ["MINIO_IMAGE", "MINIO_MC_IMAGE"])
+    assert.ok(renderedEnvironment.includes(`${key}=${manifest.components.object_storage.deployment_reference}\n`))
+  await rm(path.join(options.metadataDirectory, "object-storage.digest"))
+  await assert.rejects(createReleaseMetadata(options), /object-storage.digest/)
 })
 
 test("release metadata follows migration ancestry and rejects competing heads", async (t) => {

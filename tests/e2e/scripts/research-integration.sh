@@ -10,7 +10,9 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-docker compose -p airalogy-platform-e2e -f "$compose_file" up --build --detach --wait db redis minio
+node scripts/prepare-object-storage.mjs
+docker compose -p airalogy-platform-e2e -f "$compose_file" build db
+docker compose -p airalogy-platform-e2e -f "$compose_file" up --detach --wait db redis minio
 docker compose -p airalogy-platform-e2e -f "$compose_file" run --rm createbuckets
 uv --directory apps/api run --no-sync python -m alembic upgrade head
 export RESEARCH_INTEGRATION_TEST=1 RESOURCE_TEST_DATABASE_URL="$DATABASE_URL" AI_ENABLED=false

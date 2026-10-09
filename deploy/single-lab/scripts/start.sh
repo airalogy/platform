@@ -9,6 +9,8 @@ if release_metadata_required; then
   verify_release_images
   compose up -d --remove-orphans
 else
+  [[ "$(env_value MINIO_IMAGE)" == "airalogy-platform-object-storage:$(env_value PLATFORM_VERSION)" ]] || \
+    die "Source installs must use the bundled Platform storage tag; do not rebuild over an upstream or custom image name"
   compose build protocol-executor-image
   compose up -d --build --remove-orphans
 fi

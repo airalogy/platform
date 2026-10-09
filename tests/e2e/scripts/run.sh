@@ -23,6 +23,8 @@ if [[ "${1:-}" == "--" ]]; then
   shift
 fi
 mkdir -p tests/e2e/.auth tests/e2e/.runtime tests/e2e/.state
-docker compose -p "$compose_project" -f "$compose_file" up --build --detach --wait db redis minio
+node scripts/prepare-object-storage.mjs
+docker compose -p "$compose_project" -f "$compose_file" build db
+docker compose -p "$compose_project" -f "$compose_file" up --detach --wait db redis minio
 docker compose -p "$compose_project" -f "$compose_file" run --rm createbuckets
 corepack pnpm exec playwright test "$@"

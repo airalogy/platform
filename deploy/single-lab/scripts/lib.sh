@@ -186,6 +186,13 @@ activate_deployment_snapshot() {
     set_env_value "$key" "$value"
     export "$key=$value"
   done
+  for key in MINIO_IMAGE MINIO_MC_IMAGE; do
+    value="$(env_value_from "$snapshot_file" "$key")"
+    if [[ -n "$value" ]]; then
+      set_env_value "$key" "$value"
+      export "$key=$value"
+    fi
+  done
   value="$(env_value_from "$snapshot_file" GIT_TAG)"
   set_env_value GIT_TAG "$value"
   export GIT_TAG="$value"
@@ -286,6 +293,14 @@ verify_release_metadata() {
   verify_release_image_reference AIRALOGY_WEB_IMAGE AIRALOGY_RELEASE_WEB_IMAGE
   verify_release_image_reference AIRALOGY_PROTOCOL_EXECUTOR_IMAGE AIRALOGY_RELEASE_PROTOCOL_EXECUTOR_IMAGE
   verify_release_image_reference AIRALOGY_POSTGRES_IMAGE AIRALOGY_RELEASE_POSTGRES_IMAGE
+  if [[ -n "$(release_value AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE)" ]]; then
+    verify_release_image_reference MINIO_IMAGE AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE
+    verify_release_image_reference MINIO_MC_IMAGE AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE
+    release_digest="$(release_value AIRALOGY_RELEASE_OBJECT_STORAGE_DIGEST)"
+    grep -Fq "\"digest\": \"$release_digest\"" "$manifest_file" || die "release object storage metadata disagree"
+  elif grep -Fq '"object_storage"' "$manifest_file"; then
+    die "release metadata is missing object storage identity"
+  fi
 }
 
 pull_release_images() {
@@ -296,6 +311,9 @@ pull_release_images() {
     image="$(env_value "$key")"
     docker pull "$image"
   done
+  if [[ -n "$(release_value AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE)" ]]; then
+    docker pull "$(env_value MINIO_IMAGE)"
+  fi
 }
 
 verify_image_identity() {
@@ -316,6 +334,33 @@ verify_release_images() {
   verify_image_identity "$(env_value AIRALOGY_WEB_IMAGE)" "Web"
   verify_image_identity "$(env_value AIRALOGY_PROTOCOL_EXECUTOR_IMAGE)" "Protocol executor"
   verify_image_identity "$(env_value AIRALOGY_POSTGRES_IMAGE)" "PostgreSQL"
+  if [[ -n "$(release_value AIRALOGY_RELEASE_OBJECT_STORAGE_IMAGE)" ]]; then
+    verify_image_identity "$(env_value MINIO_IMAGE)" "Object storage"
+  fi
+}
+
+# Never silently migrate or downgrade MinIO's on-disk format during an app update.
+verify_object_storage_compatibility() {
+  local target="$1" container current target_id current_commit target_commit
+  container="$(compose ps -q minio)"
+  [[ -n "$container" ]] || die "running object storage is required to verify upgrade compatibility"
+  current="$(docker inspect --format '{{.Image}}' "$container")"
+  target_id="$(docker image inspect --format '{{.Id}}' "$target")" || die "target object storage image is unavailable"
+  [[ -n "$current" && -n "$target_id" ]] || die "missing object storage image identity"
+  [[ "$current" != "$target_id" ]] || return 0
+  current_commit="$(docker image inspect --format '{{ index .Config.Labels "io.airalogy.minio.commit" }}' "$current")"
+  target_commit="$(docker image inspect --format '{{ index .Config.Labels "io.airalogy.minio.commit" }}' "$target")"
+  [[ "$current_commit" =~ ^[a-f0-9]{40}$ && "$current_commit" == "$target_commit" ]] || \
+    die "Object storage engine change blocked. Rehearse a logical export/restore onto fresh storage and approve a separate migration; do not reuse or downgrade the existing volume."
+}
+
+restore_storage_snapshot() {
+  local snapshot="$1" storage client
+  storage="$(env_value_from "$snapshot" MINIO_IMAGE)"
+  client="$(env_value_from "$snapshot" MINIO_MC_IMAGE)"
+  verify_object_storage_compatibility "${storage:-$(env_value MINIO_IMAGE)}"
+  if [[ -n "$storage" ]]; then export MINIO_IMAGE="$storage"; fi
+  if [[ -n "$client" ]]; then export MINIO_MC_IMAGE="$client"; fi
 }
 
 running_version_payload() {
@@ -376,6 +421,8 @@ write_deployment_state() {
     printf 'AIRALOGY_WEB_IMAGE=%s\n' "$(env_value AIRALOGY_WEB_IMAGE)"
     printf 'AIRALOGY_PROTOCOL_EXECUTOR_IMAGE=%s\n' "$(env_value AIRALOGY_PROTOCOL_EXECUTOR_IMAGE)"
     printf 'AIRALOGY_POSTGRES_IMAGE=%s\n' "$(env_value AIRALOGY_POSTGRES_IMAGE)"
+    printf 'MINIO_IMAGE=%s\n' "$(env_value MINIO_IMAGE)"
+    printf 'MINIO_MC_IMAGE=%s\n' "$(env_value MINIO_MC_IMAGE)"
     printf 'AIRALOGY_RELEASE_MANIFEST_SHA256=%s\n' "$manifest_checksum"
   } >"$current_file"
   chmod 600 "$current_file"

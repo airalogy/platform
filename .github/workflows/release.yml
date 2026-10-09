@@ -171,6 +171,9 @@ jobs:
           - component: postgres
             context: ./apps/api
             dockerfile: ./apps/api/postgresql.Dockerfile
+          - component: object-storage
+            context: ./deploy/object-storage
+            dockerfile: ./deploy/object-storage/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -274,6 +277,7 @@ jobs:
         run: |
           mkdir -p release-stage/deploy release-stage/docs/zh/releases release-stage/docs/en/releases
           cp -R deploy/single-lab release-stage/deploy/single-lab
+          cp -R deploy/object-storage release-stage/deploy/object-storage
           cp README.md README.zh-CN.md LICENSE NOTICE TRADEMARKS.md SECURITY.md CHANGELOG.md CHANGELOG.zh-CN.md VERSION release-stage/
           cp docs/zh/single-lab-deployment.md docs/zh/release-and-deployment-identity.md release-stage/docs/zh/
           cp docs/en/single-lab-deployment.md docs/en/release-and-deployment-identity.md release-stage/docs/en/
@@ -352,7 +356,7 @@ jobs:
         if: github.event.repository.visibility == 'public'
         run: |
           anonymous_docker_config=$(mktemp -d "$RUNNER_TEMP/platform-public-pull.XXXXXX")
-          for component in api web protocol-executor postgres; do
+          for component in api web protocol-executor postgres object-storage; do
             reference="$(cat "image-metadata/$component.repository")@$(cat "image-metadata/$component.digest")"
             if ! DOCKER_CONFIG="$anonymous_docker_config" docker buildx imagetools inspect "$reference" > /dev/null; then
               echo "::error::Release image is not anonymously readable: $reference. An organization package administrator must publish this release package, then rerun the failed release job."

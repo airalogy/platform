@@ -14,6 +14,8 @@ It is not an HA cluster or an enterprise identity system. SSO/LDAP, multi-node f
 
 ## Prerequisites
 
+Bundled object storage is built from locked official MinIO/mc source and included in the immutable Platform release. Existing MinIO installations require a separate, rehearsed migration when the engine changes; `platformctl upgrade` and `rollback` refuse unverified changes before touching data. See the [storage build and recovery boundaries](https://github.com/airalogy/platform/blob/main/deploy/object-storage/README.md). The newer console does not retain all old administration screens; use `mc`.
+
 - A Linux host with Docker Engine and Docker Compose v2
 - A public DNS name pointing to the host for automatic HTTPS
 - Inbound TCP ports 80 and 443, plus UDP 443 if HTTP/3 is desired

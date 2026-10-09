@@ -7,3 +7,9 @@ Co., Ltd. and its contributors.
 "Airalogy" and related names and logos are trademarks of Hangzhou Airalogy
 Technology Co., Ltd. The Apache License 2.0 does not grant trademark rights.
 See TRADEMARKS.md for the trademark policy.
+
+The separately built bundled object-storage image includes unmodified MinIO
+server and mc client under their upstream AGPL-3.0 licenses. Their notices,
+corresponding vendored source, and build instructions accompany that image.
+See deploy/object-storage/README.md. Platform's Apache License does not relicense
+these third-party programs or their dependencies.

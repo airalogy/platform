@@ -32,6 +32,12 @@ if release_metadata_required; then
   pull_release_images
   verify_release_images
 fi
+if [[ "$release_mode" != true ]]; then
+  [[ "$(env_value MINIO_IMAGE)" == "airalogy-platform-object-storage:$(env_value PLATFORM_VERSION)" ]] || \
+    die "Source upgrades must use the bundled Platform storage tag; do not rebuild over an upstream or custom image name"
+  compose build minio
+fi
+verify_object_storage_compatibility "$(env_value MINIO_IMAGE)"
 wait_for_service api-server 60
 wait_for_service web 60
 
@@ -89,6 +95,8 @@ else
     printf 'AIRALOGY_WEB_IMAGE=%s\n' "$previous_web"
     printf 'AIRALOGY_PROTOCOL_EXECUTOR_IMAGE=%s\n' "$previous_executor"
     printf 'AIRALOGY_POSTGRES_IMAGE=%s\n' "${previous_db:-$(env_value AIRALOGY_POSTGRES_IMAGE)}"
+    printf 'MINIO_IMAGE=%s\n' "$(running_image_id minio)"
+    printf 'MINIO_MC_IMAGE=%s\n' "$(env_value MINIO_MC_IMAGE)"
   } >"$previous_snapshot"
 fi
 chmod 600 "$previous_snapshot"
@@ -152,6 +160,7 @@ recover_previous_release() {
     export AIRALOGY_POSTGRES_IMAGE="$previous_db"
   fi
   export AIRALOGY_PROTOCOL_EXECUTOR_IMAGE="$(env_value_from "$previous_snapshot" AIRALOGY_PROTOCOL_EXECUTOR_IMAGE)"
+  restore_storage_snapshot "$previous_snapshot"
   "$SCRIPT_DIR/restore.sh" "$backup_path" --yes
   activate_deployment_snapshot "$previous_snapshot" "$previous_release_manifest" "$previous_release_metadata"
   verify_running_release

@@ -20,6 +20,12 @@ export const checks = {
     command: "node",
     args: ["scripts/check-image-availability.mjs"],
   },
+  storage: {
+    id: "object-storage",
+    label: "source-built storage read/write, private access and fresh-server recovery",
+    command: "bash",
+    args: ["-eu", "-c", "node scripts/prepare-object-storage.mjs && node scripts/object-storage-acceptance.mjs"],
+  },
   version: {
     id: "version",
     label: "product and component version consistency",
@@ -230,8 +236,12 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
       && (hostPlatform === "darwin" || check.id !== "native-build-tests"))
   }
   const plan = [checks.version, checks.lint, checks.types, checks.apiCompile]
+  const storageChanged = files.some(file => file.startsWith("deploy/object-storage/") || /scripts\/.*object-storage/.test(file))
+  if (storageChanged)
+    plan.push(checks.storage, checks.researchIntegration, checks.fullE2e)
   const toolingChanged = files.some(file => file.startsWith(".github/")
-    || /^scripts\/(?:check-node-runtime|check-image-availability|release-ci|actionlint|prepare-instrument-ci|pre-push|e2e-(?:runner|matrix))/.test(file)
+    || /^scripts\/(?:check-node-runtime|check-image-availability|release-ci|actionlint|prepare-instrument-ci|prepare-object-storage|object-storage|pre-push|e2e-(?:runner|matrix))/.test(file)
+    || file.startsWith("deploy/object-storage/")
     || file.startsWith(".husky/")
     || [".node-version", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"].includes(file))
   if (toolingChanged)
@@ -357,7 +367,7 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   if (plan.some(check => ["research-integration", "full-e2e", "ai-e2e"].includes(check.id)))
     plan.splice(plan[0]?.id === "ci-config" ? 1 : 0, 0, checks.images)
 
-  return plan
+  return [...new Set(plan)]
 }
 
 // Fast feedback is not a release qualification. Keep the complete affected
@@ -368,7 +378,7 @@ export function buildLocalCheckPlan(files, hostPlatform = process.platform) {
   if (documentationOnly)
     return [checks.version, ...(files.some(file => file.startsWith("docs/")) ? [checks.docs] : [])]
 
-  const slow = new Set(["research-integration", "gateway-sandbox", "interface-demo", "native-build-tests", "compute-engine", "build", "ai-e2e", "full-e2e"])
+  const slow = new Set(["object-storage", "research-integration", "gateway-sandbox", "interface-demo", "native-build-tests", "compute-engine", "build", "ai-e2e", "full-e2e"])
   const plan = affected.filter(check => !slow.has(check.id))
   const web = files.some(file => /^(?:apps\/web\/|packages\/|tests\/e2e\/)/.test(file)
     || /^(?:package\.json|pnpm-|tsconfig|uno\.|eslint\.|playwright\.|\.node-version)/.test(file))
@@ -376,6 +386,7 @@ export function buildLocalCheckPlan(files, hostPlatform = process.platform) {
   const result = plan.filter(check => (check.id !== "types" || web)
     && (check.id !== "api-compile" || backend))
   const imagesChanged = files.some(file => /(?:Dockerfile|compose\.ya?ml|docker-compose\.ya?ml)$/.test(file)
+    || file.startsWith("deploy/object-storage/")
     || file === "scripts/check-image-availability.mjs"
     || file === "deploy/single-lab/.env.example"
     || file === ".github/workflows/release.yml")

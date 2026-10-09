@@ -68,7 +68,7 @@ test("CI and hook changes select real tooling regressions before expensive check
 })
 
 test("full mode includes every local gate even for an empty or docs-only diff", () => {
-  const required = ["ci-config", "image-availability", "version", "gateway-cli", "api-lock", "gateway-lock", "compute-lock", "lint", "types", "api-compile", "api-tests", "release-metadata", "deployment-identity", "instrument-contract", "research-integration", "gateway-tests", "gateway-sandbox", "interface-tests", "interface-demo", "compute-runner-tests", "compute-engine", "docs", "build", "full-e2e"]
+  const required = ["ci-config", "image-availability", "object-storage", "version", "gateway-cli", "api-lock", "gateway-lock", "compute-lock", "lint", "types", "api-compile", "api-tests", "release-metadata", "deployment-identity", "instrument-contract", "research-integration", "gateway-tests", "gateway-sandbox", "interface-tests", "interface-demo", "compute-runner-tests", "compute-engine", "docs", "build", "full-e2e"]
   for (const files of [[], ["README.md"]]) {
     assert.deepEqual(new Set(ids(files, true)), new Set(required))
     assert.deepEqual(new Set(ids(files, true, "darwin")), new Set([...required, "native-build-tests"]))
@@ -309,9 +309,17 @@ test("default local profile is affected, fast and explicitly distinct from relea
   for (const id of ["api-compile", "api-tests"])
     assert.ok(local(["apps/api/app/services/record_analyses.py"]).includes(id))
   const broad = local([".node-version", "package.json", "apps/api/app/routers/records.py", "apps/instrument-interface/src/native.mjs"])
-  for (const id of ["full-e2e", "research-integration", "gateway-sandbox", "compute-engine", "native-build-tests", "build"])
+  for (const id of ["object-storage", "full-e2e", "research-integration", "gateway-sandbox", "compute-engine", "native-build-tests", "build"])
     assert.ok(!broad.includes(id), id)
   for (const file of ["tests/e2e/compose.yml", "deploy/single-lab/web.Dockerfile", ".github/workflows/release.yml"])
     assert.ok(local([file]).includes("image-availability"), file)
   assert.equal(new Set(broad).size, broad.length)
+})
+
+test("storage sources require build/recovery and integration acceptance in the extended profile", () => {
+  for (const file of ["deploy/object-storage/sources.env", "scripts/prepare-object-storage.mjs", "scripts/object-storage-acceptance.mjs"]) {
+    for (const id of ["ci-config", "object-storage", "research-integration", "full-e2e"])
+      assert.ok(ids([file]).includes(id), `${file}: ${id}`)
+    assert.ok(!buildLocalCheckPlan([file]).some(check => check.id === "object-storage"))
+  }
 })

@@ -23,6 +23,7 @@ required=(
   SECRET_KEY AES_KEY INNER_API_KEY
   INITIAL_ADMIN_TOKEN POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
   MINIO_ROOT_USER MINIO_ROOT_PASSWORD MINIO_BUCKET
+  MINIO_IMAGE MINIO_MC_IMAGE
 )
 for key in "${required[@]}"; do
   [[ -n "$(env_value "$key")" ]] || die "$key is required in $ENV_FILE"

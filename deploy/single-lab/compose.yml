@@ -181,7 +181,12 @@ services:
       - no-new-privileges:true
 
   minio:
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-03-26T22-10-45Z}
+    image: ${MINIO_IMAGE:-airalogy-platform-object-storage:0.3.0}
+    build:
+      context: ../object-storage
+      args:
+        PLATFORM_VERSION: ${PLATFORM_VERSION:-0.3.0}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     command: server /data --address ":9200" --console-address ":9201"
     restart: unless-stopped
     environment:
@@ -207,7 +212,8 @@ services:
       start_period: 10s
 
   createbuckets:
-    image: ${MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2024-03-25T16-41-14Z}
+    image: ${MINIO_MC_IMAGE:-airalogy-platform-object-storage:0.3.0}
+    pull_policy: never
     depends_on:
       minio:
         condition: service_healthy

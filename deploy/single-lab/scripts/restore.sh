@@ -77,6 +77,8 @@ compose exec -T db pg_restore \
 info "Restoring object storage..."
 network="$(minio_network)"
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --env MC_CONFIG_DIR=/tmp/airalogy-mc \
   --network "$network" \
   --volume "$work_dir/objects:/restore:ro" \
   --env "MINIO_ROOT_USER=$minio_user" \
@@ -84,7 +86,7 @@ docker run --rm \
   --env "MINIO_BUCKET=$minio_bucket" \
   --entrypoint /bin/sh \
   "$(mc_image)" \
-  -c 'mc alias set target http://minio:9200 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc mb --ignore-existing target/"$MINIO_BUCKET" >/dev/null && mc rm --recursive --force target/"$MINIO_BUCKET" >/dev/null 2>&1 || true; mc mirror --overwrite --remove /restore target/"$MINIO_BUCKET"'
+  -ec 'mc alias set target http://minio:9200 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null; mc mb --ignore-existing target/"$MINIO_BUCKET" >/dev/null; mc mirror --overwrite --remove /restore target/"$MINIO_BUCKET"'
 
 compose up -d api-server web
 wait_for_service api-server 300

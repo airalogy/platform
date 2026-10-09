@@ -14,6 +14,8 @@
 
 ## 前置条件
 
+配套对象存储由锁定的官方 MinIO/mc 源码构建，并纳入 Platform 不可变发布集。已有 MinIO 实例切换引擎时须单独演练迁移；`platformctl upgrade` 与 `rollback` 会在接触数据前拒绝未验证的变更。参见[构建与恢复边界](https://github.com/airalogy/platform/blob/main/deploy/object-storage/README.md)。新版内嵌控制台不保留全部旧管理页面，管理操作使用 `mc`。
+
 - 安装 Docker Engine 和 Docker Compose v2 的 Linux 主机
 - 使用自动 HTTPS 时，需有指向该主机的公网域名
 - 公网 TCP 80/443；如需 HTTP/3，再开放 UDP 443

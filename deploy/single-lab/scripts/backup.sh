@@ -57,6 +57,8 @@ compose exec -T db pg_dump \
 info "Mirroring object storage..."
 network="$(minio_network)"
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --env MC_CONFIG_DIR=/tmp/airalogy-mc \
   --network "$network" \
   --volume "$backup_dir/objects:/backup" \
   --env "MINIO_ROOT_USER=$minio_user" \

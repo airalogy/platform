@@ -71,6 +71,7 @@ test("E2E wrapper preserves exact test filters with or without pnpm's separator"
   await copyFile(new URL("../tests/e2e/scripts/run.sh", import.meta.url), script)
   // No Docker, browser or project data: record only the final forwarded arguments.
   await writeFile(join(bin, "docker"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 })
+  await writeFile(join(bin, "node"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 })
   await writeFile(join(bin, "corepack"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\"\n", { mode: 0o755 })
   for (const selected of [[], ["tests/e2e/specs/instrument-exploration.spec.ts"], ["--grep", "selected scenario", "--project", "chromium-owner"]]) {
     for (const prefix of [[], ["--"]]) {

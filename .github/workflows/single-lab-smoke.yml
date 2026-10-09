@@ -8,6 +8,8 @@ on:
       - "apps/web/**"
       - "packages/**"
       - "deploy/single-lab/**"
+      - "deploy/object-storage/**"
+      - "scripts/*object-storage*"
       - ".dockerignore"
       - "package.json"
       - "pnpm-lock.yaml"

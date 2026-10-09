@@ -29,6 +29,7 @@ previous_release_metadata="$(env_value_from "$state_file" PREVIOUS_RELEASE_METAD
 [[ -n "$previous_snapshot" && -f "$previous_snapshot" ]] || die "previous deployment identity is unavailable"
 docker image inspect "$previous_api" >/dev/null 2>&1 || die "missing image $previous_api"
 docker image inspect "$previous_web" >/dev/null 2>&1 || die "missing image $previous_web"
+restore_storage_snapshot "$previous_snapshot"
 
 if [[ "$assume_yes" != true ]]; then
   printf 'Rollback restores the pre-upgrade database and objects. Type ROLLBACK to continue: ' >&2

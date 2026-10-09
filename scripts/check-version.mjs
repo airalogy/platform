@@ -54,6 +54,8 @@ for (const imageKey of [
   "AIRALOGY_WEB_IMAGE",
   "AIRALOGY_PROTOCOL_EXECUTOR_IMAGE",
   "AIRALOGY_POSTGRES_IMAGE",
+  "MINIO_IMAGE",
+  "MINIO_MC_IMAGE",
 ]) {
   const image = new RegExp(`^${imageKey}=(.+)$`, "mu").exec(deploymentEnvironment)?.[1]?.trim()
   if (!image || !new RegExp(`:${escapedVersion}(?:@|$)`).test(image)) {

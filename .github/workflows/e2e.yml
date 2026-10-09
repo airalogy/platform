@@ -11,6 +11,8 @@ on:
       - "scripts/e2e-runner.test.mjs"
       - "scripts/e2e-matrix.mjs"
       - "scripts/check-image-availability*"
+      - "scripts/*object-storage*"
+      - "deploy/object-storage/**"
       - "scripts/pre-push*.mjs"
       - "playwright.config.ts"
       - "package.json"
@@ -28,6 +30,8 @@ on:
       - "scripts/e2e-runner.test.mjs"
       - "scripts/e2e-matrix.mjs"
       - "scripts/check-image-availability*"
+      - "scripts/*object-storage*"
+      - "deploy/object-storage/**"
       - "scripts/pre-push*.mjs"
       - "playwright.config.ts"
       - "package.json"
@@ -44,7 +48,7 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -52,6 +56,28 @@ jobs:
           node-version-file: ".node-version"
       - name: Check cold registry access before installing dependencies
         run: node scripts/check-image-availability.mjs
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - id: storage
+        run: echo "fingerprint=$(node scripts/prepare-object-storage.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
+      - name: Build source-verified storage once for all isolated shards
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: deploy/object-storage
+          load: true
+          tags: airalogy-platform-object-storage:e2e
+          labels: io.airalogy.object-storage.inputs=${{ steps.storage.outputs.fingerprint }}
+          cache-from: type=gha,scope=platform-object-storage-test
+          cache-to: type=gha,mode=max,scope=platform-object-storage-test
+      - name: Verify storage behavior and fresh-server recovery
+        run: node scripts/object-storage-acceptance.mjs
+      - run: docker save airalogy-platform-object-storage:e2e -o "$RUNNER_TEMP/object-storage.tar"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: object-storage-${{ github.run_id }}
+          overwrite: true
+          path: ${{ runner.temp }}/object-storage.tar
+          compression-level: 0
+          retention-days: 7
 
   chromium:
     needs: preflight
@@ -81,6 +107,15 @@ jobs:
 
       - name: Enable pnpm
         run: corepack enable
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: object-storage-${{ github.run_id }}
+          path: ${{ runner.temp }}/object-storage
+      - name: Load and verify this checkout's storage image
+        run: |
+          docker load -i "$RUNNER_TEMP/object-storage/object-storage.tar"
+          node scripts/prepare-object-storage.mjs --verify
 
       - name: Cache pnpm downloads
         uses: actions/cache@v4
