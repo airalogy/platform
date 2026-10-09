@@ -35,6 +35,8 @@ Prefer one semantic class over page-local combinations such as `text-xs text-gra
 
 ## Shared interaction patterns
 
+The application footer is controlled by the current route's `meta.hideFooter`, not cached theme visibility. Record entry/report and full-canvas routes may hide it locally; page components must not change `themeStore.footer.visible`. This keeps temporary focus layouts from hiding company and configured compliance information on other pages or after a reload.
+
 Contained application pages receive a shared 1rem horizontal gutter below the small-screen breakpoint. Full-canvas routes remain exempt. Keep this in the shell rather than adding different phone padding to individual pages.
 
 Use the opt-in `aira-dialog` class on Naive UI card modals. `css/interaction.css` owns viewport gutters, bounded height, scrollable content and a visible footer; it deliberately uses global selectors because card presets are teleported. Set a specific width through an inline `--aira-dialog-width` variable, not a scoped rule on the modal root. Keep one confirmation action and a back/cancel action in the footer.

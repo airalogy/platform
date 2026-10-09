@@ -14,6 +14,10 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ## [未发布]
 
+### 修复
+
+- 修复 Record 页面留下的隐藏页脚缓存导致首页及其他页面不显示公司和已配置备案信息的问题。Record 填写与报告页仅通过自身路由控制页脚，不再修改全局主题状态，也无需用户清除本地数据。
+
 ## [0.3.0] - 2026-10-09
 
 Protocol 编写、可移植归档与 Records 引导导入版本。参见[版本概览与升级边界](docs/zh/releases/v0.3.0.md)。

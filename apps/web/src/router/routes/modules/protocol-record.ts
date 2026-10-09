@@ -8,19 +8,19 @@ export const protocolRecordRoute: CustomRoute<ProtocolRecordNameKey> = {
     {
       path: "add",
       name: "add-protocol-record",
-      meta: { i18nKey: "page.protocol.tab.logs", title: "add protocol records" },
+      meta: { i18nKey: "page.protocol.tab.logs", title: "add protocol records", hideFooter: true },
       component: () => import("@/views/project-protocols/protocol-add-record.vue"),
     },
     {
       path: "add/chain",
       name: "add-protocol-record-from-workflow",
-      meta: { i18nKey: "page.protocol.tab.logs", title: "protocol workflow" },
+      meta: { i18nKey: "page.protocol.tab.logs", title: "protocol workflow", hideFooter: true },
       component: () => import("@/views/project-protocols/protocol-add-record.vue"),
     },
     {
       path: "v:protocolVersion([\\d.]+)/record/:recordId/v:recordVersion([\\d.]+)",
       name: "protocol-record-report",
-      meta: { title: "protocol record report", allowGuest: true },
+      meta: { title: "protocol record report", allowGuest: true, hideFooter: true },
       component: () => import("@/views/project-protocols/record-report.vue"),
     },
   ],

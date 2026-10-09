@@ -24,7 +24,7 @@
     :sider-visible="siderVisible"
     :sider-width="siderWidth"
     :sider-collapsed-width="siderCollapsedWidth"
-    :footer-visible="themeStore.footer.visible && !route.meta.hideFooter"
+    :footer-visible="!route.meta.hideFooter"
     :fixed-footer="themeStore.footer.fixed"
     :right-footer="themeStore.footer.right"
     :float-button-props="props.floatButtonProps"

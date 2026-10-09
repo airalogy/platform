@@ -242,7 +242,6 @@ import { getRecordDeleteGraceDays } from "@/utils/env"
 import { buildSeoUrl } from "@/utils/seo"
 import { PdfPreview as PdfViewer } from "@airalogy/components"
 import { useClosableMessage, useHtmlToPdf } from "@airalogy/composables"
-import { useThemeStore } from "@airalogy/composables/theme"
 import { downloadAsUrl, formatDate } from "@airalogy/shared/utils"
 import IconTablerCheck from "~icons/tabler/check"
 import IconTablerEdit from "~icons/tabler/edit"
@@ -270,7 +269,6 @@ interface IEmits {
 const route = useRoute()
 const router = useRouter()
 
-const themeStore = useThemeStore()
 const authStore = useAuthStore()
 
 const { removeCacheRoutes } = useRouteStore()
@@ -829,14 +827,6 @@ watch([recordData, () => formRef.value], async ([data, form]) => {
     await restoreFieldRecord(data)
   }
 }, { immediate: true })
-
-onMounted(() => {
-  themeStore.footer.visible = false
-})
-
-onBeforeUnmount(() => {
-  themeStore.footer.visible = true
-})
 
 onActivated(() => {
   removeCacheRoutes("RecordReport" as any)

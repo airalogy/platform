@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore company and configured compliance information in the application footer when a previous Record page left a hidden-footer preference in browser storage. Scope Record entry/report footer suppression to their routes, without changing global theme state or requiring users to clear local data.
+
 ## [0.3.0] - 2026-10-09
 
 Protocol authoring, portable archives and guided Record imports. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.0.md).

@@ -179,7 +179,6 @@ import { useRouteStore } from "@/store/modules/route"
 import { useProtocolWorkflowStore } from "@/store/modules/workflow"
 import { hasRecordDraftContent } from "@/utils/recordDrafts"
 import { useBeforeUnload, useClosableMessage } from "@airalogy/composables"
-import { useThemeStore } from "@airalogy/composables/theme"
 import { formatValidateErrors, type PydanticError } from "@airalogy/shared/utils/errorFormatter.js"
 import { get as _get, set as _set } from "lodash-es"
 import { type UploadOnFinish, useDialog } from "naive-ui"
@@ -216,7 +215,6 @@ const { isShown, showModal, hideModal } = useShowModal()
 const route = useRoute()
 const router = useRouter()
 
-const themeStore = useThemeStore()
 const workflowStore = useProtocolWorkflowStore()
 const workflowInfo = computed(() => workflowStore.getWorkflow(route.query.chain as string))
 
@@ -962,18 +960,10 @@ watch(
 )
 
 onMounted(() => {
-  themeStore.footer.visible = false
-})
-
-onMounted(() => {
   resetAutosaveBaseline(recordData.value)
   autosaveIntervalId.value = window.setInterval(() => {
     flushAutosave("interval")
   }, AUTOSAVE_INTERVAL_MS)
-})
-
-onBeforeUnmount(() => {
-  themeStore.footer.visible = true
 })
 
 onBeforeUnmount(() => {
