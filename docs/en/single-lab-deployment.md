@@ -16,12 +16,34 @@ It is not an HA cluster or an enterprise identity system. SSO/LDAP, multi-node f
 
 Bundled object storage is built from locked official MinIO/mc source and included in the immutable Platform release. Existing MinIO installations require a separate, rehearsed migration when the engine changes; `platformctl upgrade` and `rollback` refuse unverified changes before touching data. See the [storage build and recovery boundaries](https://github.com/airalogy/platform/blob/main/deploy/object-storage/README.md). The newer console does not retain all old administration screens; use `mc`.
 
-- A Linux host with Docker Engine and Docker Compose v2
+- A Linux host with Docker Engine, Docker Compose v2, Python 3.11+ and iproute2
 - A public DNS name pointing to the host for automatic HTTPS
 - Inbound TCP ports 80 and 443, plus UDP 443 if HTTP/3 is desired
 - Enough free disk space for PostgreSQL, MinIO, images, builds, and backups
 
 For a local evaluation, a domain is not required and the generated default uses `http://localhost:8080`.
+
+## Deployment Network Gate
+
+Run network verification on the actual Linux Docker host before deployment. The gate runs before stopping services or creating networks and checks explicit container subnets, cloud/protected ranges, every IPv4 routing table, interfaces, existing Docker networks and configured external dependency DNS. Conflicts, failed inspections, foreign network ownership or an unplanned subnet change stop deployment. It never changes routes or deletes networks, containers or volumes.
+
+Configure these settings, then run `./platformctl network-check`:
+
+```dotenv
+# A candidate only, not a universally safe range. Preserve a verified existing subnet.
+AIRALOGY_DOCKER_SUBNET=192.168.248.0/24
+NETWORK_PREFLIGHT_CLOUD=aliyun
+# Additional peered VPC, VPN and LAN CIDRs, comma-separated.
+NETWORK_PREFLIGHT_PROTECTED_CIDRS=
+# Optional dependency hosts/URLs, including those used by other applications.
+NETWORK_PREFLIGHT_ENDPOINTS=
+```
+
+ECS mode reads the primary VPC range using [IMDS security mode](https://www.alibabacloud.com/help/en/ecs/user-guide/view-instance-metadata/) and blocks deployment if that check fails; it does not request RAM credentials. Supply additional connected ranges explicitly. For other providers/on-premises hosts use `NETWORK_PREFLIGHT_CLOUD=none` and list the protected ranges, or explicitly set `NETWORK_PREFLIGHT_PROTECTED_CIDRS=none` after confirming there are no additional ranges. An empty value is not confirmation. A host's directly connected subnet alone is not the full VPC.
+
+Existing networks may be reused only when ownership and actual subnets match, and they still undergo cloud/route checks. Before upgrading an older installation, configure its verified live subnet. If it conflicts, schedule a separate approved network migration; editing an environment variable does not perform that migration.
+
+The gate requires Python 3.10+, iproute2 and a regular local Linux Docker Engine with IPv4 bridge networks. Remote contexts, running inside containers, rootless/Desktop engines and other network drivers require a different reviewed deployment path. `preflight --config-only` and `network-check --config-only` check offline configuration only; they do not inspect the host, metadata or DNS. Normal install/upgrade/restore/rollback and internal `compose up/run/create/start/restart` still run the live gate. Raw Docker commands can bypass the wrapper, so production operations must use `platformctl`. Resolved environment values, passwords and full service URLs are not printed.
 
 ## Install
 
@@ -32,6 +54,7 @@ cd deploy/single-lab
 ./scripts/generate-env.sh \
   --site-url https://lab.example.org \
   --tls-email admin@example.org \
+  --network-cloud aliyun \
   --lab-name "Example Laboratory"
 ./scripts/start.sh
 ```
@@ -41,7 +64,7 @@ cd deploy/single-lab
 For local HTTP evaluation:
 
 ```bash
-./scripts/generate-env.sh --site-url http://localhost:8080
+./scripts/generate-env.sh --site-url http://localhost:8080 --protected-cidrs none
 ./scripts/start.sh
 ```
 

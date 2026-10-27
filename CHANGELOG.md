@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Fixed
+
+- Add a read-only deployment network gate before stopping services or creating networks. Require explicit container subnets and check cloud/protected ranges, host routes/interfaces, existing Docker networks and dependency DNS. Installation, upgrade, restore and rollback reject conflicts, incomplete checks and unplanned subnet migrations; offline configuration checks do not authorize deployment. Existing installations must retain and configure their verified live subnet.
+
 ## [0.3.1] - 2026-10-09
 
 Route-scoped footer recovery. See the [release overview and upgrade boundaries](docs/en/releases/v0.3.1.md).

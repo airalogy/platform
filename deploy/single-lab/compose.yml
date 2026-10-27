@@ -233,6 +233,12 @@ services:
     security_opt:
       - no-new-privileges:true
 
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${AIRALOGY_DOCKER_SUBNET:?Set AIRALOGY_DOCKER_SUBNET after reviewing the host and VPC networks}
+
 volumes:
   api_logs:
   api_protocols:

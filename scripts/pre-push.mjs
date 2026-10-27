@@ -255,7 +255,8 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
     ["VERSION", ".github/workflows/release.yml", "scripts/check-version.mjs", "scripts/create-release-metadata.mjs", "scripts/check-release-stage.mjs", "scripts/deployment-identity.test.sh"].includes(file)
     || file.startsWith("apps/api/migrations/")
     || file.startsWith("scripts/release-")
-    || file.startsWith("deploy/"),
+    || file.startsWith("deploy/")
+    || file.startsWith("tests/deployment/"),
   )) {
     plan.push(checks.releaseMetadata)
     plan.push(checks.deploymentIdentity)

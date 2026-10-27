@@ -33,6 +33,7 @@ done
 require_command docker
 require_command tar
 require_env_file
+network_preflight
 verify_checksums "$backup_dir"
 [[ "$(env_value_from "$backup_dir/manifest.env" BACKUP_FORMAT_VERSION)" == "1" ]] || die "unsupported backup format"
 

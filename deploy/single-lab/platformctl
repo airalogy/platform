@@ -21,6 +21,7 @@ Commands:
   backup          Create a consistent database and object backup
   restore         Restore a matching backup
   preflight       Validate deployment configuration and release metadata
+  network-check   Read-only target-host network conflict check
   logs            Follow API and Web logs
   stop            Stop services without deleting data
 EOF
@@ -35,6 +36,7 @@ case "$command_name" in
   backup) exec "$SCRIPT_DIR/scripts/backup.sh" "$@" ;;
   restore) exec "$SCRIPT_DIR/scripts/restore.sh" "$@" ;;
   preflight) exec "$SCRIPT_DIR/scripts/preflight.sh" "$@" ;;
+  network-check) exec bash "$SCRIPT_DIR/scripts/network-preflight.sh" "$@" ;;
   logs)
     source "$SCRIPT_DIR/scripts/lib.sh"
     require_env_file

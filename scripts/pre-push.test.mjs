@@ -242,7 +242,7 @@ test("versioned Workflow changes retain database and runtime acceptance", () => 
 })
 
 test("release identity, archive and lockfile changes have matching gates", () => {
-  for (const file of ["VERSION", ".github/workflows/release.yml", "scripts/release-metadata-lib.mjs", "scripts/release-migration-head.py", "scripts/create-release-metadata.mjs", "scripts/check-release-stage.mjs", "scripts/deployment-identity.test.sh", "deploy/single-lab/.env.example", "apps/api/migrations/versions/0057_instrument_survey.py"])
+  for (const file of ["VERSION", ".github/workflows/release.yml", "scripts/release-metadata-lib.mjs", "scripts/release-migration-head.py", "scripts/create-release-metadata.mjs", "scripts/check-release-stage.mjs", "scripts/deployment-identity.test.sh", "deploy/single-lab/.env.example", "tests/deployment/test_network_preflight.py", "apps/api/migrations/versions/0057_instrument_survey.py"])
     includes([file], ["release-metadata", "deployment-identity"])
   for (const [directory, check] of [["api", "api-lock"], ["instrument-gateway", "gateway-lock"], ["compute-runner", "compute-lock"]]) {
     for (const name of ["pyproject.toml", "uv.lock"])

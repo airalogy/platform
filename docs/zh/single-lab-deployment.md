@@ -16,12 +16,35 @@
 
 配套对象存储由锁定的官方 MinIO/mc 源码构建，并纳入 Platform 不可变发布集。已有 MinIO 实例切换引擎时须单独演练迁移；`platformctl upgrade` 与 `rollback` 会在接触数据前拒绝未验证的变更。参见[构建与恢复边界](https://github.com/airalogy/platform/blob/main/deploy/object-storage/README.md)。新版内嵌控制台不保留全部旧管理页面，管理操作使用 `mc`。
 
-- 安装 Docker Engine 和 Docker Compose v2 的 Linux 主机
+- 安装 Docker Engine、Docker Compose v2、Python 3.11+ 和 iproute2 的 Linux 主机
 - 使用自动 HTTPS 时，需有指向该主机的公网域名
 - 公网 TCP 80/443；如需 HTTP/3，再开放 UDP 443
 - 足够容纳 PostgreSQL、MinIO、镜像、构建缓存和备份的磁盘空间
 
 本地评估不需要域名，默认使用 `http://localhost:8080`。
+
+## 部署前网段检查
+
+生产部署必须在实际 Docker 主机上检查网络；开发机或 CI 的结果不能证明生产路由安全。部署入口在停止服务、创建网络之前检查显式容器网段、云内网、所有 IPv4 路由表、网卡、已有 Docker 网络及配置的外部服务 DNS。冲突、检查失败、同名网络被其他部署占用或现有网段与配置不一致时中止，不自动切换网段、改路由或删除网络/数据卷。
+
+配置以下值后执行 `./platformctl network-check`：
+
+```dotenv
+# 仅为候选值，须由目标主机检查确认；已有部署保留实际安全网段。
+AIRALOGY_DOCKER_SUBNET=192.168.248.0/24
+# ECS 通过 IMDS 安全模式读取 VPC 主网段，失败时阻止部署。
+NETWORK_PREFLIGHT_CLOUD=aliyun
+# 补充对等 VPC、VPN、办公网等范围，逗号分隔。
+NETWORK_PREFLIGHT_PROTECTED_CIDRS=
+# 可选：同机其他应用的外部依赖域名或 URL，不要写入公共仓库。
+NETWORK_PREFLIGHT_ENDPOINTS=
+```
+
+非 ECS 主机设置 `NETWORK_PREFLIGHT_CLOUD=none`，并填写全部受保护网段；管理员确认没有额外网段时才填写字面值 `NETWORK_PREFLIGHT_PROTECTED_CIDRS=none`。空值不代表确认。阿里云读取遵循 [IMDS 安全模式](https://www.alibabacloud.com/help/en/ecs/user-guide/view-instance-metadata/)，不读取 RAM 凭据。其余云平台和额外互联范围需明确配置，不假定主机直连网段就是完整 VPC。
+
+同一部署的已有网络只有所有权和实际网段均相符才能复用，且仍需检查它是否覆盖云内网。旧实例升级前，先填入当前实际安全网段；若当前网络已有冲突，应另行安排网络迁移，不能只修改环境变量后强行升级。受支持的现场检查范围为宿主机上的常规 Linux Docker Engine 和 IPv4 bridge；远程 context、容器内执行、rootless、Docker Desktop 或其他网络驱动会中止并说明边界。
+
+`preflight --config-only` / `network-check --config-only` 只做离线配置检查，明确不包含主机、云元数据或 DNS 验证。正常安装、升级、恢复、回退及内部 `compose up/run/create/start/restart` 仍强制执行现场门槛。直接运行原始 Docker 命令可以绕过入口，因此生产运维应统一使用 `platformctl`。检查不会打印解析后的环境变量、连接密码或完整外部服务 URL。
 
 ## 安装
 
@@ -32,6 +55,7 @@ cd deploy/single-lab
 ./scripts/generate-env.sh \
   --site-url https://lab.example.org \
   --tls-email admin@example.org \
+  --network-cloud aliyun \
   --lab-name "示例实验室"
 ./scripts/start.sh
 ```
@@ -41,7 +65,7 @@ cd deploy/single-lab
 本地 HTTP 评估：
 
 ```bash
-./scripts/generate-env.sh --site-url http://localhost:8080
+./scripts/generate-env.sh --site-url http://localhost:8080 --protected-cidrs none
 ./scripts/start.sh
 ```
 

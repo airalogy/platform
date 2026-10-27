@@ -14,6 +14,7 @@ elif [[ $# -gt 0 ]]; then
 fi
 
 require_env_file
+network_preflight
 state_file="$(deployment_state_dir)/last-upgrade.env"
 [[ -f "$state_file" ]] || die "no upgrade state found at $state_file"
 

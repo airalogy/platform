@@ -70,11 +70,21 @@ set_env_value() {
 }
 
 compose() {
+  case "${1:-}" in
+    up|run|create|start|restart) network_preflight ;;
+  esac
   docker compose \
     --project-directory "$DEPLOY_DIR" \
     --env-file "$ENV_FILE" \
     -f "$COMPOSE_FILE" \
     "$@"
+}
+
+network_preflight() {
+  require_command python3
+  require_env_file
+  python3 "$SCRIPT_DIR/network_preflight.py" "$@" -- docker compose \
+    --project-directory "$DEPLOY_DIR" --env-file "$ENV_FILE" -f "$COMPOSE_FILE"
 }
 
 absolute_path() {

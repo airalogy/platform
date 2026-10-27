@@ -301,6 +301,8 @@ jobs:
           database_password=$(openssl rand -hex 24)
           minio_password=$(openssl rand -hex 24)
           cp release-stage/deploy/single-lab/.env.example "$smoke_env"
+          # Isolated CI runner; production operators must supply actual VPC/VPN ranges.
+          sed -i 's/^NETWORK_PREFLIGHT_PROTECTED_CIDRS=.*/NETWORK_PREFLIGHT_PROTECTED_CIDRS=none/' "$smoke_env"
           sed -i \
             -e "s/^COMPOSE_PROJECT_NAME=.*/COMPOSE_PROJECT_NAME=$smoke_project/" \
             -e "s/^AIRALOGY_DEPLOYMENT_ID=.*/AIRALOGY_DEPLOYMENT_ID=$deployment_id/" \

@@ -14,7 +14,7 @@ require_command docker
 require_env_file
 
 required=(
-  COMPOSE_PROJECT_NAME PLATFORM_VERSION AIRALOGY_DEPLOYMENT_ID
+  COMPOSE_PROJECT_NAME AIRALOGY_DOCKER_SUBNET PLATFORM_VERSION AIRALOGY_DEPLOYMENT_ID
   SITE_URL SITE_ADDRESS TLS_EMAIL BACKUP_DIR
   AIRALOGY_API_IMAGE AIRALOGY_WEB_IMAGE AIRALOGY_PROTOCOL_EXECUTOR_IMAGE
   AIRALOGY_POSTGRES_IMAGE AIRALOGY_ENGINE_IMAGE
@@ -77,6 +77,9 @@ done
 
 if [[ "$config_only" != true ]]; then
   docker info >/dev/null 2>&1 || die "Docker daemon is not available"
+  network_preflight
+else
+  network_preflight --config-only
 fi
 
 info "Preflight checks passed."

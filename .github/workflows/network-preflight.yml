@@ -1,0 +1,26 @@
+name: Network Preflight
+on:
+  push:
+    paths:
+      - "deploy/single-lab/**"
+      - "tests/deployment/**"
+      - ".github/workflows/network-preflight.yml"
+  pull_request:
+    paths:
+      - "deploy/single-lab/**"
+      - "tests/deployment/**"
+      - ".github/workflows/network-preflight.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Network and deployment regression
+        run: python3 -m unittest discover -s tests/deployment -p 'test_*.py'

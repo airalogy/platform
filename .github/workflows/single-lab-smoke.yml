@@ -8,6 +8,7 @@ on:
       - "apps/web/**"
       - "packages/**"
       - "deploy/single-lab/**"
+      - "tests/deployment/**"
       - "deploy/object-storage/**"
       - "scripts/*object-storage*"
       - ".dockerignore"
@@ -42,7 +43,7 @@ jobs:
 
       - name: Generate production configuration
         working-directory: deploy/single-lab
-        run: ./scripts/generate-env.sh --site-url http://localhost:18080
+        run: ./scripts/generate-env.sh --site-url http://localhost:18080 --protected-cidrs none
 
       - name: Validate scripts and Compose
         working-directory: deploy/single-lab

@@ -12,6 +12,9 @@ lab_name="Airalogy Lab"
 lab_uid="main"
 tls_email=""
 force=false
+docker_subnet="192.168.248.0/24"
+network_cloud=none
+protected_cidrs=""
 
 usage() {
   cat <<'EOF'
@@ -23,11 +26,23 @@ Options:
   --lab-uid UID     Stable lowercase route identifier (default: main)
   --tls-email EMAIL ACME account email for automatic TLS
   --force           Replace an existing .env file
+  --docker-subnet CIDR       Candidate Docker subnet (default: 192.168.248.0/24)
+  --network-cloud PROVIDER   aliyun (ECS IMDS) or none (manual protected ranges)
+  --protected-cidrs CIDRS    VPC/VPN/LAN ranges, comma-separated; none for no extras
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --docker-subnet|--network-cloud|--protected-cidrs)
+      [[ $# -ge 2 ]] || { usage >&2; exit 2; }
+      case "$1" in
+        --docker-subnet) docker_subnet="$2" ;;
+        --network-cloud) network_cloud="$2" ;;
+        --protected-cidrs) protected_cidrs="$2" ;;
+      esac
+      shift 2
+      ;;
     --site-url)
       [[ $# -ge 2 ]] || { usage >&2; exit 2; }
       site_url="$2"
@@ -64,6 +79,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v openssl >/dev/null 2>&1 || { echo "openssl is required" >&2; exit 1; }
+[[ "$network_cloud" == none || "$network_cloud" == aliyun ]] || { echo "invalid --network-cloud" >&2; exit 1; }
+[[ "$docker_subnet" != *$'\n'* && "$protected_cidrs" != *$'\n'* ]] || { echo "network settings must be single-line values" >&2; exit 1; }
 [[ "$lab_uid" =~ ^[a-z][a-z0-9_]{2,31}$ ]] || { echo "invalid --lab-uid" >&2; exit 1; }
 [[ "$site_url" =~ ^https?://[^/]+/?$ ]] || { echo "--site-url must be an HTTP(S) origin without a path" >&2; exit 1; }
 [[ "$lab_name" != *$'\n'* && "$tls_email" != *$'\n'* ]] || { echo "values must not contain newlines" >&2; exit 1; }
@@ -114,6 +131,10 @@ umask 077
 mkdir -p "$(dirname "$ENV_FILE")"
 cat >"$ENV_FILE" <<EOF
 COMPOSE_PROJECT_NAME=airalogy-single-lab
+AIRALOGY_DOCKER_SUBNET=$docker_subnet
+NETWORK_PREFLIGHT_CLOUD=$network_cloud
+NETWORK_PREFLIGHT_PROTECTED_CIDRS=$protected_cidrs
+NETWORK_PREFLIGHT_ENDPOINTS=
 PLATFORM_VERSION=$platform_version
 AIRALOGY_DEPLOYMENT_ID=$deployment_id
 GIT_TAG=$git_tag

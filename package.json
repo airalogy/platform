@@ -66,7 +66,7 @@
     "version:check": "node scripts/check-version.mjs",
     "build:info": "node scripts/write-build-info.mjs apps/api/app/build-info.json",
     "release:metadata:test": "node --test scripts/release-metadata.test.mjs",
-    "deployment:identity:test": "bash scripts/deployment-identity.test.sh",
+    "deployment:identity:test": "bash scripts/deployment-identity.test.sh && python3 -m unittest discover -s tests/deployment -p 'test_*.py'",
     "docs:dev": "DOCS_BASE=/docs/ vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:build:web": "DOCS_BASE=/docs/ DOCS_OUT_DIR=../apps/web/public/docs vitepress build docs",
