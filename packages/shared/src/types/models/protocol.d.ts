@@ -66,6 +66,8 @@ export interface ProtocolVersion extends Pick<ProjectProtocolInfo, "id" | "proto
 }
 
 export interface ProtocolInfo<T = FieldKey> extends ProtocolResponseInfo {
+  lab?: { id: string, name: string, uid: string }
+  project?: { id: string, name: string, uid: string }
   fields: Fields<T>
   json_schema: JsonSchema
   aimd: string

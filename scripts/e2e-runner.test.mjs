@@ -27,7 +27,7 @@ test("full browser acceptance starts real AI-on and AI-off instances with separa
   }
   assert.notEqual(calls[0][2].env.E2E_OUTPUT_DIR, calls[1][2].env.E2E_OUTPUT_DIR)
   assert.notEqual(calls[0][2].env.E2E_HTML_REPORT_DIR, calls[1][2].env.E2E_HTML_REPORT_DIR)
-  for (const feature of ["first-record", "analysis-protocol-drafts", "analysis-publication", "project-analysis", "workflow-assets", "workflow-project-analysis"])
+  for (const feature of ["scenario-kits", "first-record", "analysis-protocol-drafts", "analysis-publication", "project-analysis", "workflow-assets", "workflow-project-analysis"])
     assert.ok(aiIndependentSpecs.includes(`tests/e2e/specs/${feature}.spec.ts`))
 })
 

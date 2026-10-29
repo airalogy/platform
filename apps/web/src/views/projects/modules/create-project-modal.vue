@@ -99,6 +99,9 @@
           />
         </n-form-item>
 
+        <n-checkbox v-model:checked="openScenarioWorkbench" class="mb-4">
+          {{ $t("page.scenarioKits.openAfterCreate") }}
+        </n-checkbox>
         <n-form-item v-if="!instanceStore.isSingleLab" :label="$t('page.project.settingsPage.visibilityLabel')" path="type" label-placement="left" required :show-feedback="false">
           <n-radio-group v-model:value="model.type">
             <n-radio
@@ -173,8 +176,9 @@ const props = withDefaults(defineProps<IProps>(), {
   labInfo: null,
   parentProject: null,
 })
-
 const emits = defineEmits<IEmits>()
+const openScenarioWorkbench = ref(false)
+const scenarioRouter = useRouter()
 
 const { isShown, showModal, hideModal, setModalStatus } = useShowModal()
 const triggerText = computed(() => props.trigger || $t("common.newProject"))
@@ -450,6 +454,8 @@ async function handleConfirm() {
     emits("modal:new-project", data)
     message.success($t("page.project.createProjectModal.createSuccess", { name: displayName }))
     hideModal()
+    if (openScenarioWorkbench.value)
+      await scenarioRouter.push({ name: "project-scenarios", params: { labUid: selectedLabUid.value, projectUid: rawUid } })
   }
   catch (e) {
     message.error((e as Error).message)

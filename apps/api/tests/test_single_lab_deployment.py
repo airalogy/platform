@@ -264,6 +264,11 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     analysis_protocol_revision = import_module("migrations.versions.0074_analysis_protocol_drafts")
     assert analysis_protocol_revision.down_revision == workflow_project_revision.revision
     later_tables.update(analysis_protocol_revision.TABLE_NAMES)
+    scenario_revision = import_module("migrations.versions.0076_scenario_kits")
+    assert scenario_revision.down_revision == "0075_legacy_file_metadata"
+    later_tables.update(scenario_revision.TABLE_NAMES)
+    reservation_revision = import_module("migrations.versions.0077_record_resource_reservation")
+    assert reservation_revision.down_revision == scenario_revision.revision
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

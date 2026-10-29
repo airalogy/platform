@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     LOG_MAX_BYTES: int = 10 * 1024 * 1024
     LOG_BACKUP_COUNT: int = 5
 
+    # Release-bundled modules allowed by the instance operator; empty disables new kit operations.
+    SCENARIO_KIT_MODULES: str = "airalogy.samples,airalogy.records,airalogy.analysis"
+
     # Chat config
     # None auto-detects AI capability from configured providers. False is an
     # explicit instance-wide kill switch; True still requires a usable provider.

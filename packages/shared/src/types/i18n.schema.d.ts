@@ -4750,6 +4750,89 @@ declare namespace I18n {
           archived: string
         }
       }
+      scenarioKits: {
+        title: string
+        workbench: string
+        labHint: string
+        projectHint: string
+        failed: string
+        saved: string
+        bundled: string
+        status: string
+        active: string
+        inactive: string
+        version: string
+        modules: string
+        enableLabFirst: string
+        apply: string
+        enable: string
+        deactivate: string
+        upgradeStrategy: string
+        keep: string
+        newCopy: string
+        preserveHint: string
+        history: string
+        preview: string
+        willCreate: string
+        none: string
+        existingCount: string
+        customized: string
+        workflowHint: string
+        protocol: string
+        noAccessibleProtocol: string
+        samples: string
+        sharedSamples: string
+        searchSamples: string
+        registerSample: string
+        sampleSaved: string
+        noSamples: string
+        previous: string
+        next: string
+        sampleTemplate: string
+        templateHint: string
+        record: string
+        recordHint: string
+        import: string
+        importHint: string
+        imported: string
+        records: string
+        analyze: string
+        analysisHint: string
+        emptyHint: string
+        saveLocation: string
+        openAfterCreate: string
+        fields: {
+          name: string
+          code: string
+          category: string
+          source: string
+          storage: string
+        }
+        blockers: {
+          platform_version: string
+          module_disabled: string
+          module_version: string
+          duplicate_dependency: string
+          lab_kit_not_enabled_at_version: string
+          active_project_applications: string
+          active_project_work: string
+          sample_setup_requires_lab_resource_manager: string
+          shared_sample_schema_changed: string
+          source_protocol_access_required: string
+          source_protocol_unavailable_choose_new_copy: string
+          sample_code_conflict: string
+        }
+        components: {
+          sample: string
+          measurement: string
+        }
+        operations: {
+          apply: string
+          enable: string
+          disable: string
+          deactivate: string
+        }
+      }
     }
     form: {
       required: string

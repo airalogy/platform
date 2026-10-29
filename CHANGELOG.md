@@ -14,7 +14,15 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Added
+
+- Add official, composable scenario kits: instance module allowlists, Lab enablement, Project workbenches, signed impact previews, idempotent confirmation, version provenance, upgrade-by-copy and safe deactivation. Kits reuse the existing permission, resource, Protocol, Record and analysis models; no third-party code installer is exposed.
+- Deliver an AI-independent generic sample-to-numerical-results workflow, shared sample registration, sample-prefilled CSV templates, strict import validation and editable analysis defaults grouped by method, metric and unit. Include a second material-sample composition, bilingual UI and synthetic end-to-end acceptance; assay-specific rules and real laboratory validation remain follow-up work.
+
 ### Fixed
+
+- Persist the inventory reservation reference already supplied by Record resource linking, fixing saves and imports containing ResourceRef fields; add a compatible nullable-column migration.
+- Resolve Record resource pickers from the Protocol detail's Lab and Project context, and discard cached availability when switching scopes, so manual sample selection works alongside CSV import.
 
 - Add a read-only deployment network gate before stopping services or creating networks. Require explicit container subnets and check cloud/protected ranges, host routes/interfaces, existing Docker networks and dependency DNS. Installation, upgrade, restore and rollback reject conflicts, incomplete checks and unplanned subnet migrations; offline configuration checks do not authorize deployment. Existing installations must retain and configure their verified live subnet.
 

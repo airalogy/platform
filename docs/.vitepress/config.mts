@@ -16,6 +16,7 @@ const englishSidebar = [
     text: "User guide",
     items: [
       { text: "Get started", link: "/en/user-guide/" },
+      { text: "Scenario kits", link: "/en/scenario-kits" },
       { text: "Protocols", link: "/en/user-guide/protocols" },
       { text: "Records", link: "/en/user-guide/records" },
       { text: "Research automation", link: "/en/user-guide/research-automation" },
@@ -66,6 +67,7 @@ const chineseSidebar = [
     text: "使用手册",
     items: [
       { text: "快速开始", link: "/zh/user-guide/" },
+      { text: "场景套件", link: "/zh/scenario-kits" },
       { text: "Protocol", link: "/zh/user-guide/protocols" },
       { text: "Record", link: "/zh/user-guide/records" },
       { text: "科研自动化", link: "/zh/user-guide/research-automation" },

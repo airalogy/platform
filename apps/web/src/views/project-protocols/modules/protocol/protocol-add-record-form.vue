@@ -279,28 +279,38 @@ const chatRef = ref<{ setDocked: (val: boolean) => void } | null>(null)
 const { airalogyId } = useProtocolInfoStore()!
 const { currentRecorderRecordContext } = useChatProvider()
 
-const resourceLabId = computed(() => String(props.protocol?.lab_id || ""))
-const resourceProjectId = computed(() => String(props.protocol?.project_id || ""))
+const resourceLabId = computed(() => String(props.protocol?.lab?.id || props.protocol?.lab_id || ""))
+const resourceProjectId = computed(() => String(props.protocol?.project?.id || props.protocol?.project_id || ""))
 const resourceTypeCache = shallowRef<Awaited<ReturnType<typeof fetchResourceTypes>>["items"]>([])
 const inventoryReservations = ref<Record<
   string,
   Awaited<ReturnType<typeof fetchResourceAvailability>>["inventory_reservations"]
 >>({})
 
-async function ensureResourceTypes() {
-  if (resourceLabId.value && resourceTypeCache.value.length === 0) {
-    resourceTypeCache.value = (await fetchResourceTypes(resourceLabId.value)).items
+watch([resourceLabId, resourceProjectId], () => {
+  resourceTypeCache.value = []
+  inventoryReservations.value = {}
+})
+
+async function ensureResourceTypes(labId: string) {
+  if (resourceLabId.value === labId && resourceTypeCache.value.length > 0)
+    return resourceTypeCache.value
+  const { items } = await fetchResourceTypes(labId)
+  if (resourceLabId.value === labId) {
+    resourceTypeCache.value = items
   }
-  return resourceTypeCache.value
+  return items
 }
 
 const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
-  if (!resourceLabId.value)
+  const labId = resourceLabId.value
+  const projectId = resourceProjectId.value
+  if (!labId)
     return undefined
 
   const resolver = {
     async search(query: string, context: any) {
-      const response = await searchResourceRefs(resourceLabId.value, {
+      const response = await searchResourceRefs(labId, {
         q: query,
         resource_type: context.entity,
         role: context.role || "reference",
@@ -311,7 +321,7 @@ const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
       }))
     },
     async resolve(id: string) {
-      const item = await fetchResource(resourceLabId.value, id)
+      const item = await fetchResource(labId, id)
       return {
         id: item.id,
         entity: "resource",
@@ -322,13 +332,15 @@ const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
     },
     async getAvailability(resource: { id: string }, context: any) {
       const response = await fetchResourceAvailability(
-        resourceLabId.value,
+        labId,
         resource.id,
-        resourceProjectId.value || undefined,
+        projectId || undefined,
       )
-      inventoryReservations.value = {
-        ...inventoryReservations.value,
-        [resource.id]: response.inventory_reservations || [],
+      if (resourceLabId.value === labId && resourceProjectId.value === projectId) {
+        inventoryReservations.value = {
+          ...inventoryReservations.value,
+          [resource.id]: response.inventory_reservations || [],
+        }
       }
       if (context.role === "equipment") {
         return {
@@ -380,7 +392,7 @@ const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
       }
     },
     async prepareOutput(draft: any, context: any) {
-      const types = await ensureResourceTypes()
+      const types = await ensureResourceTypes(labId)
       const type = types.find(item =>
         item.code.toLowerCase() === String(context.entity || "").toLowerCase(),
       )
@@ -389,7 +401,7 @@ const resourceResolvers = computed<AimdResourceResolverMap | undefined>(() => {
       const id = crypto.randomUUID()
       const name = String(draft.label || draft.snapshot?.name || context.fieldKey)
       const code = String(draft.snapshot?.code || `OUT-${id.slice(0, 8).toUpperCase()}`)
-      const response = await prepareResourceOutput(resourceLabId.value, {
+      const response = await prepareResourceOutput(labId, {
         id,
         resource_type_id: type.id,
         name,

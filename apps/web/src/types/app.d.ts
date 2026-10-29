@@ -18,6 +18,7 @@ declare namespace App {
       | "project-knowledge"
       | "project-research"
       | "project-workflows"
+      | "project-scenarios"
       | "project-analysis"
       | "project-records"
       | "project-members"

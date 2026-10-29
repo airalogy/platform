@@ -94,6 +94,8 @@
         </template>
       </settings-card>
 
+      <kit-catalog :lab-id="labInfo.id" class="my-6" />
+
       <!-- Danger Zone -->
       <div v-if="!instanceStore.isSingleLab" class="mb-4 mt-6 border-t border-gray-200" />
       <settings-card
@@ -272,6 +274,7 @@ import {
   putLabInfo,
 } from "@/service/api/labs"
 import { useInstanceStore } from "@/store/modules/instance"
+import KitCatalog from "@/views/scenario-kits/kit-catalog.vue"
 import { useClosableMessage } from "@airalogy/composables"
 import { $t } from "@airalogy/shared/locales"
 import { useOrProvideLabInfoStore } from "./hooks/useLabsInfoStore"

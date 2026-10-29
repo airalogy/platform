@@ -414,6 +414,7 @@ import type { ProtocolModels } from "@airalogy/shared/types"
 import { cancelAnalysis, consumeAnalysisSelectionTransfer, createAnalysis, createAnalysisPipeline, createAnalysisPipelineRevision, downloadAnalysis, fetchAnalysis, fetchAnalysisContext, fetchAnalysisPipeline, fetchProjectAnalyses, fetchProjectAnalysisPipelines, previewAnalysis } from "@/service/api/analysis"
 import { fetchAnalysisComputeApprovals } from "@/service/api/analysis-compute"
 import { fetchProtocols, getProtocolInfo } from "@/service/api/project-protocols"
+import { fetchKitRecipe } from "@/service/api/scenario-kits"
 import { useAuthStore } from "@/store/modules/auth"
 import { canAdoptAnalysisDraft } from "@/utils/analysis-ai"
 import { isBuiltinAnalysisRun, isComputeAnalysisRecipe } from "@/utils/analysis-compute"
@@ -795,6 +796,14 @@ async function initialize() {
     await selectProtocol(requested, inheritedSelection)
     if (initSequence !== initializationSequence)
       return
+    if (route.query.scenarioKit && !token && !route.query.runId) {
+      const suggested = await fetchKitRecipe(projectInfo.value!.lab_id, projectId)
+      if (initSequence !== initializationSequence)
+        return
+      const keys = new Set(scalarFields.value.map(field => field.key))
+      if ([...suggested.recipe.numeric_fields, ...suggested.recipe.group_by].every(key => keys.has(key)))
+        applyRecipe(suggested.recipe)
+    }
     selectionError.value = Boolean(token && !inheritedSelection)
     if (typeof route.query.runId === "string")
       await openRun(route.query.runId, false)

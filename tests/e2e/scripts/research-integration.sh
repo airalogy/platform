@@ -20,6 +20,8 @@ export PYTHONPATH="$repository_root/apps/compute-runner/src${PYTHONPATH:+:$PYTHO
 test_files=(
   tests/test_research_integration.py
   tests/test_resource_postgres.py
+  tests/test_scenario_kit_migrations_postgres.py
+  tests/test_scenario_kits_postgres.py
   tests/test_record_analysis_postgres.py
   tests/test_project_analyses_postgres.py
   tests/test_project_analysis_migrations_postgres.py

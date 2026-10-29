@@ -267,6 +267,7 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
   }
   if (files.some(file =>
     /^apps\/api\/(?:app\/(?:models|routers|services)\/research|tests\/test_research)/.test(file)
+    || /^apps\/api\/(?:app\/(?:models|routers|services)\/scenario|tests\/test_scenario)/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/workflow|tests\/test_workflow)/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/(?:analys(?:is|es)|record_analyses)|tests\/(?:test_analysis|test_record_analysis))/.test(file)
     || /^apps\/api\/(?:app\/(?:models|routers|services)\/instrument|tests\/test_instrument)/.test(file)
@@ -274,7 +275,7 @@ export function buildCheckPlan(files, fullRequested = false, hostPlatform = proc
     || /^apps\/instrument-gateway\/(?:src|tests|examples)\//.test(file)
     || /^apps\/compute-runner\/(?:src|tests)\//.test(file)
     || file.startsWith("apps/instrument-interface/")
-    || /^apps\/api\/migrations\/versions\/\d+_(?:instrument|analysis|workflow)/.test(file)
+    || /^apps\/api\/migrations\/versions\/\d+_(?:instrument|analysis|workflow|scenario|record_resource)/.test(file)
     || [
       "apps/api/app/services/persistent_jobs.py",
       "apps/api/app/services/resource_job_worker.py",

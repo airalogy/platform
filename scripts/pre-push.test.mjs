@@ -323,3 +323,11 @@ test("storage sources require build/recovery and integration acceptance in the e
     assert.ok(!buildLocalCheckPlan([file]).some(check => check.id === "object-storage"))
   }
 })
+
+test("scenario kit changes select real database integration checks", () => {
+  for (const file of ["apps/api/app/services/scenario_kits.py", "apps/api/app/routers/scenario_kits.py", "apps/api/app/models/scenario_kit.py", "apps/api/tests/test_scenario_kit_migrations_postgres.py", "apps/api/migrations/versions/0076_scenario_kits.py", "apps/api/migrations/versions/0077_record_resource_reservation.py"])
+    assert.ok(ids([file]).includes("research-integration"), file)
+  const suite = readFileSync("tests/e2e/scripts/research-integration.sh", "utf8")
+  assert.ok(suite.includes("tests/test_scenario_kits_postgres.py"))
+  assert.ok(suite.includes("tests/test_scenario_kit_migrations_postgres.py"))
+})

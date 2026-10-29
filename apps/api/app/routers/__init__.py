@@ -102,6 +102,7 @@ from .research_tasks import (
     work_items_router as research_work_items_router,
 )
 from .resources import router as resources_router
+from .scenario_kits import router as scenario_kits_router
 from .schema_governance import router as schema_governance_router
 from .search import router as search_router
 from .seo import router as seo_router
@@ -357,6 +358,7 @@ app.include_router(research_services_router)
 app.include_router(research_service_jobs_router)
 app.include_router(knowledge_router)
 app.include_router(resources_router)
+app.include_router(scenario_kits_router)
 app.include_router(airalogy_files_router)
 app.include_router(airalogy_router)
 app.include_router(aira_imports_router)

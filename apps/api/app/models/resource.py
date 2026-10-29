@@ -688,6 +688,9 @@ class RecordResourceLink(Base):
     booking_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("equipment_bookings.id", ondelete="SET NULL")
     )
+    reservation_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("inventory_reservations.id", ondelete="SET NULL")
+    )
     field_path: Mapped[str] = mapped_column(String(512), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))

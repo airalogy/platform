@@ -107,6 +107,7 @@ const showIcon = computed(
     || route.name === "project-knowledge"
     || route.name === "project-research"
     || route.name === "project-workflows"
+    || route.name === "project-scenarios"
     || route.name === "project-analysis"
     || route.name === "project-records"
     || route.name === "project-members"
@@ -131,6 +132,7 @@ const baseTabs = computed<(TabPaneProps & { name: App.Global.TabKey })[]>(() => 
   ]
 
   if (authStore.isLogin) {
+    tabs.unshift({ name: "project-scenarios", tab: $t("page.scenarioKits.workbench") })
     tabs.push({ name: "project-knowledge", tab: $t("page.knowledge.title") })
     tabs.push({ name: "project-research", tab: $t("page.research.title") })
     tabs.push({ name: "project-workflows", tab: $t("page.workflowDefinitions.title") })

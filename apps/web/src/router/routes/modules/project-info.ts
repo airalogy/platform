@@ -20,6 +20,12 @@ export const projectInfoRoute: CustomRoute<ProjectInfoNameKey> = {
   component: () => import("@/views/project/layout.vue"),
   children: [
     {
+      path: "scenarios",
+      name: "project-scenarios",
+      meta: { ...createProjectMeta("Scenario Workbench", "page.scenarioKits.workbench"), allowGuest: false },
+      component: () => import("@/views/scenario-kits/index.vue"),
+    },
+    {
       path: "protocols",
       name: "project-protocols",
       meta: { ...createProjectMeta("Project Work Protocols", "page.project.protocols"), allowGuest: true },

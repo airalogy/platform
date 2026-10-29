@@ -42,6 +42,7 @@ MODEL_MODULES = [
     "app.models.research_execution",
     "app.models.research_log",
     "app.models.resource",
+    "app.models.scenario_kit",
     "app.models.star",
     "app.models.upvote",
     "app.models.user",
