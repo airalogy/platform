@@ -128,7 +128,7 @@ watch(page, () => void loadSamples())
       {{ success }}
     </n-alert>
     <template v-if="activeKits.length">
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <n-select v-model:value="selectedKit" :options="kitOptions" :aria-label="t('page.scenarioKits.title')" /><n-select v-model:value="selectedProtocol" :options="protocolOptions" :aria-label="t('page.scenarioKits.protocol')" />
       </div>
       <n-alert v-if="!assets.length" type="warning">
@@ -154,7 +154,7 @@ watch(page, () => void loadSamples())
             </div>
             <n-spin :show="loadingSamples">
               <n-empty v-if="!samples.length" :description="t('page.scenarioKits.noSamples')" /><n-checkbox-group v-else v-model:value="selectedSamples">
-                <div class="grid gap-3 sm:grid-cols-2">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label v-for="sample in samples" :key="sample.id" class="flex items-start gap-3 border rounded p-3"><n-checkbox :value="sample.id" :aria-label="sample.code" /><span class="min-w-0 break-words">{{ sample.name }}<span class="block text-sm text-gray-500">{{ sample.code }}</span></span></label>
                 </div>
               </n-checkbox-group>
@@ -174,7 +174,7 @@ watch(page, () => void loadSamples())
             </p>
           </div>
         </n-card>
-        <div class="grid gap-4 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <n-card :title="t('page.scenarioKits.record')" size="small">
             <div class="space-y-3">
               <p>{{ t('page.scenarioKits.recordHint') }}</p><div class="flex flex-wrap gap-2">

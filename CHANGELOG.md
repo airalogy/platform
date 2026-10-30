@@ -21,6 +21,8 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ### Fixed
 
+- Keep scenario-kit selectors and cards within narrow screens, including different system fonts; isolate browser acceptance retries from previous Protocol Records.
+
 - Persist the inventory reservation reference already supplied by Record resource linking, fixing saves and imports containing ResourceRef fields; add a compatible nullable-column migration.
 - Resolve Record resource pickers from the Protocol detail's Lab and Project context, and discard cached availability when switching scopes, so manual sample selection works alongside CSV import.
 

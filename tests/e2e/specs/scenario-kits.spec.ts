@@ -3,9 +3,10 @@ import { expect, test } from "@playwright/test"
 import { loadFixtures } from "./fixtures"
 
 test.describe.configure({ mode: "serial" })
-const sampleCode = `KIT-${Date.now()}`
+let sampleCode = ""
 
 test("bundled kit connects real samples, strict CSV import and grouped analysis without AI", async ({ page }, testInfo) => {
+  sampleCode = `KIT-${Date.now()}-${testInfo.retry}`
   test.setTimeout(180000)
   page.setDefaultTimeout(15000)
   const fixtures = await loadFixtures()
@@ -21,6 +22,10 @@ test("bundled kit connects real samples, strict CSV import and grouped analysis 
   await page.getByRole("radio", { name: "Create a new template copy", exact: true }).check()
   await page.getByRole("button", { name: "Preview application", exact: true }).first().click()
   await page.getByRole("button", { name: "Confirm", exact: true }).last().click()
+  await expect(page.getByTestId("kit-catalog").getByText(/Saved. Receipt:/)).toBeVisible()
+  // A retry creates a separate Protocol copy. Reload to select that latest copy
+  // instead of retaining the previously selected Protocol and its Records.
+  await page.reload()
   await expect(page.getByRole("button", { name: "Register sample", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Register sample", exact: true }).click()
   await page.getByRole("textbox", { name: "Sample name", exact: true }).fill("Synthetic kit control")
@@ -85,16 +90,19 @@ test("bundled kit connects real samples, strict CSV import and grouped analysis 
   await page.getByRole("dialog").getByRole("button", { name: "View saved Record", exact: true }).click()
   await expect(page).toHaveURL(/\/record\/[^/]+\/v1$/)
   await page.goto(`${project}/scenarios`)
-  await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.getByTestId("scenario-workbench")).toBeVisible()
-  expect(await page.getByTestId("scenario-workbench").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await expect(page.getByRole("checkbox", { name: sampleCode, exact: true })).toBeVisible()
   await expect(page.getByRole("link", { name: "4. Analyze and report", exact: true })).toBeVisible()
+  const workbench = page.getByTestId("scenario-workbench")
   const templateButton = page.getByRole("button", { name: /Download results template for selected samples/ })
-  expect(await templateButton.evaluate((element) => {
-    const content = element.querySelector(".n-button__content")!
-    return content.scrollWidth <= content.clientWidth + 1 && element.getBoundingClientRect().right <= window.innerWidth
-  })).toBe(true)
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 844 })
+    await expect.poll(() => workbench.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+    await expect.poll(() => templateButton.evaluate((element) => {
+      const content = element.querySelector(".n-button__content")!
+      return content.scrollWidth <= content.clientWidth + 1 && element.getBoundingClientRect().right <= window.innerWidth
+    })).toBe(true)
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ animations: "disabled", path: testInfo.outputPath("scenario-workbench-mobile.png"), fullPage: true })
   await page.evaluate(() => localStorage.setItem("lang", JSON.stringify({ data: "zh-CN", expire: null })))
   await page.reload()

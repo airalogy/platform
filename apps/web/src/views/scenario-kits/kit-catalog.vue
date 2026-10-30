@@ -120,7 +120,7 @@ watch(() => [props.labId, props.projectId], () => {
       {{ t('page.scenarioKits.saved') }} <span class="break-all">{{ receipt }}</span>
     </n-alert>
     <n-spin :show="loading">
-      <div class="grid gap-4 lg:grid-cols-2">
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <n-card v-for="{ kit, versions } in entries" :key="kit.id" :title="label(kit.name)" size="small">
           <div class="space-y-3">
             <p>{{ label(kit.description) }}</p>

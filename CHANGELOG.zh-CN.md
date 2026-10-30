@@ -21,6 +21,8 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ### 修复
 
+- 修复场景套件选择器与卡片在窄屏及不同系统字体下的横向溢出，并隔离浏览器验收重试与此前 Protocol Records，避免混入旧数据。
+
 - 补齐 Record 资源引用流程已使用的库存预留关联字段，修复包含 ResourceRef 的保存及导入错误，并提供兼容的可空字段迁移。
 - 修复 Record 手工填写页未读取 Protocol 详情中的实验室和项目范围、导致样品选择器无法连接资源库的问题；切换范围时清除旧的可用量缓存。
 
