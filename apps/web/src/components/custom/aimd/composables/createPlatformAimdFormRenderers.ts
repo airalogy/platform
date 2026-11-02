@@ -84,6 +84,7 @@ export function createPlatformAimdFormRenderers(
         "class": "aimd-field-wrapper aimd-field-wrapper--inline",
         "id": `${node.scope}-${node.id}`,
         "data-has-variable": "true",
+        "data-recorder-field": node.id,
       }, [h(AIMDItem, syncItemValue(item, context)!)])
     },
 

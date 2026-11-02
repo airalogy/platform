@@ -42,7 +42,7 @@
         </div>
       </n-tab-pane>
       <n-tab-pane
-        name="form-fields" class="relative" :tab="$t('common.fields')"
+        name="form-fields" :disabled="Boolean(simulation)" class="relative" :tab="$t('common.fields')"
         display-directive="show"
         :style="{ paddingLeft: isCollapsed ? '32px' : undefined }"
       >
@@ -58,8 +58,8 @@
           </div>
 
           <!-- Field Input Bar -->
-          <div v-if="instanceStore.aiEnabled" class="mb-4">
-            <field-input-bar :protocol-id="props.protocolId" />
+          <div v-if="instanceStore.aiEnabled && !props.readonly && props.recorderVersion" class="mb-4">
+            <field-input-bar :protocol-id="props.protocolId" :begin-turn="beginRecorderTurn" />
           </div>
         </div>
 
@@ -96,7 +96,7 @@
       </n-tab-pane>
       <n-tab-pane
         v-if="hasWorkflowScope"
-        name="workflow"
+        name="workflow" :disabled="Boolean(simulation)"
         class="relative"
         :tab="$t('page.protocol.workflow.workspaceTab')"
         display-directive="show"
@@ -126,6 +126,20 @@
     </template>
     <template #content>
       <slot name="prefix" />
+      <n-alert v-if="receipt" class="mb-3 whitespace-pre-line break-words" :type="simulation ? 'warning' : 'info'" data-testid="recorder-receipt" aria-live="polite">
+        {{ receipt }}
+        <p v-if="simulation">{{ $t("page.recorderAira.previewHint") }}</p>
+        <n-button v-if="simulation" size="small" @click="exitSimulation">{{ $t("page.recorderAira.exit") }}</n-button>
+        <n-button v-else-if="edits.length" size="small" @click="undo">{{ $t("page.recorderAira.undo") }}</n-button>
+      </n-alert>
+      <aimd-markdown-preview
+        v-if="simulation"
+        class="simulated-record-preview"
+        :content="templateRef" mode="report"
+        :readonly-record-data="simulationData"
+        :mermaid-component="MermaidBlock" :resolve-url="resolvePreviewFile"
+        body-class="markdown-body"
+      />
       <workflow-workspace
         v-if="selectedTab === 'workflow' && hasWorkflowScope"
         :workflow-id="workflowId"
@@ -133,7 +147,10 @@
       />
       <n-form
         v-else-if="fieldRecordDefault"
+        v-show="!simulation"
         class="platform-aimd-form-preview"
+        @input.capture="markInput"
+        @change.capture="markInput"
         :rules="props.readonly ? undefined : validationRules"
         :model="previewValue"
       >
@@ -228,6 +245,7 @@ import { useFieldEventBus } from "./composables/useFieldEventBus"
 import { useFieldManagement } from "./composables/useFieldManagement"
 import { useFieldParser } from "./composables/useFieldParser"
 import { useFieldState } from "./composables/useFieldState"
+import { useRecorderConversation } from "./composables/useRecorderConversation"
 import { useTableManagement } from "./composables/useTableManagement"
 import { RecordCalculationError } from "./helpers/recordCalculationError"
 import ProtocolAddRecordFormItem, { type IProps as IFormItemProps } from "./protocol-add-record-form-item.vue"
@@ -243,6 +261,8 @@ const emit = defineEmits<Emits>()
 interface IProps {
   protocol?: ProtocolModels.ProtocolInfo | null
   protocolId: string
+  recorderVersion?: string
+  recorderRecordId?: string
   defaultSpiltSize?: number
   readonly?: boolean
   recordData?: Partial<IRecordData>
@@ -263,6 +283,7 @@ function handleToggleDetail() {
 }
 
 interface Emits {
+  (e: "simulation", active: boolean): void
   (e: "update:field", payload: { scope: IRecordDataKey, prop: string, value: any, info?: any }): void
   (e: "update:splitSize", payload: string | number): void
   (e: "update:collapsed", payload: boolean): void
@@ -654,24 +675,6 @@ const requiredCompletion = computed(() => {
   }
 })
 
-const previewMode = computed(() => props.readonly ? "report" : "edit")
-const previewFormRecord = computed(() => props.readonly ? null : fieldRecordDefault.value)
-const previewValue = computed(() => props.readonly ? undefined : fieldModel as any)
-const readonlyRecordData = computed(() => {
-  if (!props.readonly) {
-    return undefined
-  }
-
-  const data = (props.recordData || {}) as Record<string, unknown>
-  return {
-    var: data.var ?? data.research_variable ?? {},
-    step: data.step ?? data.research_step ?? {},
-    check: data.check ?? data.research_check ?? {},
-    quiz: data.quiz ?? {},
-    var_table: data.var_table ?? {},
-  }
-})
-
 const RECORDER_CONTEXT_FIELD_LIMIT = 200
 const RECORDER_CONTEXT_ARRAY_LIMIT = 50
 const RECORDER_CONTEXT_OBJECT_KEY_LIMIT = 80
@@ -1019,7 +1022,7 @@ async function handleFieldChange(payload: IFieldChangePayload) {
   localFieldEventBus.emit("form-field-change", payload)
 }
 
-const { setupFieldEventHandlers, hasPendingAssignments } = useFieldEventBus(
+const { setupFieldEventHandlers, hasPendingAssignments, applyLocalFieldChange } = useFieldEventBus(
   fieldModel,
   expandedNamesRef,
   handleAssigner,
@@ -1030,6 +1033,54 @@ const { setupFieldEventHandlers, hasPendingAssignments } = useFieldEventBus(
   varScopeRecord,
   props.protocol?.assigners,
 )
+
+const { begin: beginRecorderTurn, receipt, edits, undo, simulation, exitSimulation, markInput } = useRecorderConversation({
+  scope: () => JSON.stringify([props.protocolId, props.recorderVersion, props.recorderRecordId, props.readonly]),
+  version: () => props.recorderVersion,
+  recordId: () => props.recorderRecordId,
+  editable: () => !props.readonly && instanceStore.aiEnabled,
+  fields: () => Object.fromEntries(Object.entries(fieldModel.research_variable || {}).filter(([key]) => key !== "__SCOPE__")) as Record<string, { value?: unknown, assigner?: unknown }>,
+  write: async (prop, value) => {
+    const item = _get(fieldModel, ["research_variable", prop])
+    let inputValue = value
+    if (typeof value === "number" && ["number", "float", "integer"].includes(item.type))
+      inputValue = { type: item.type, displayedValue: String(value), value }
+    if (typeof value === "string" && ["datetime", "date", "time"].includes(item.type))
+      inputValue = { value, formattedValue: value.replace("T", " ").replace(/Z$/, "") }
+    await applyLocalFieldChange({ ...item, scope: "research_variable", prop, value: inputValue })
+  },
+})
+watch(simulation, value => emit("simulation", Boolean(value)), { flush: "sync" })
+watch(edits, async (changes, previous) => {
+  await nextTick()
+  const root = previewRef.value?.rootElement
+  if (!root)
+    return
+  for (const change of previous || [])
+    root.querySelector(`[data-recorder-field="${CSS.escape(change.field)}"], [data-rec-focus-key="var:${CSS.escape(change.field)}"]`)?.classList.remove("recorder-applied")
+  for (const change of changes)
+    root.querySelector(`[data-recorder-field="${CSS.escape(change.field)}"], [data-rec-focus-key="var:${CSS.escape(change.field)}"]`)?.classList.add("recorder-applied")
+})
+const simulationData = computed(() => ({
+  var: { ...props.recordData?.research_variable, ...simulation.value },
+  step: props.recordData?.research_step || {},
+  check: props.recordData?.research_check || {},
+}))
+const previewMode = computed(() => props.readonly ? "report" : "edit")
+const previewValue = computed(() => props.readonly ? undefined : fieldModel as any)
+const readonlyRecordData = computed(() => {
+  if (!props.readonly)
+    return undefined
+
+  const data = (props.recordData || {}) as Record<string, unknown>
+  return {
+    var: data.var ?? data.research_variable ?? {},
+    step: data.step ?? data.research_step ?? {},
+    check: data.check ?? data.research_check ?? {},
+    quiz: data.quiz ?? {},
+    var_table: data.var_table ?? {},
+  }
+})
 
 const { handleTableRowUpdate } = useTableManagement()
 
@@ -1617,4 +1668,11 @@ defineExpose({
   overflow: hidden
 :deep(.n-form-item-label__text)
   overflow: hidden
+</style>
+
+<style scoped>
+:deep(.recorder-applied) {
+  outline: 2px solid var(--primary-color, #0084e2);
+  outline-offset: 2px;
+}
 </style>

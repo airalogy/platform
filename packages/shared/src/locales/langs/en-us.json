@@ -375,6 +375,20 @@
     "profile": "Profile"
   },
   "page": {
+    "recorderAira": {
+      "preserved": "Skipped — existing or changed values were kept",
+      "openForm": "Open the editable Record to apply field changes.",
+      "askFields": "Explain the fields and units in this Record.",
+      "tryExample": "Try filling the remaining empty fields with simulated data.",
+      "replace": "Replace existing values?",
+      "simulated": "Simulated fields",
+      "filled": "Filled fields",
+      "skipped": "Skipped — check the field or fill it manually",
+      "undone": "Undone",
+      "previewHint": "Simulated preview. Exit to return to your original draft.",
+      "exit": "Exit simulation",
+      "undo": "Undo this fill"
+    },
     "help": {
       "eyebrow": "Documentation and support",
       "title": "Help Center",

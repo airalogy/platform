@@ -1,6 +1,6 @@
 # Platform and Masterbrain AI boundary
 
-Platform uses the published `masterbrain==0.13.0` Python package for built-in model calls, including text embeddings. It does not require a separate AI service in the default package mode. This unifies model access, not ownership of the research system.
+Platform uses the published `masterbrain==0.14.0` Python package for built-in model calls, including text embeddings. It does not require a separate AI service in the default package mode. This unifies model access, not ownership of the research system.
 
 | Layer | Owns |
 | --- | --- |
@@ -9,6 +9,12 @@ Platform uses the published `masterbrain==0.13.0` Python package for built-in mo
 | Instrument Gateway / Compute Runner | Explicitly authorized execution and independent result/stop observations. |
 
 Prompts and context assembly that depend on Platform objects remain in Platform. A model response cannot grant access, approve itself, write a final asset or authorize an instrument operation. Built-in provider SDK imports in API product code are guarded by an offline regression test; integration goes through `app/libs/masterbrain.py`. Protocol executor code supplied by users is a separate execution boundary, not a built-in model capability.
+
+## Conversational Record filling
+
+On an editable Record, ask Aira about Protocol fields, then give their observed values in the same conversation. Aira can resolve references such as “the second field”. Review replacements of existing values or undo the last fill. Ask explicitly for simulated data to see an isolated preview. Exit the preview to return to the original draft. File and resource references and calculated fields require their normal input paths.
+
+The embedded package and external Masterbrain service must support the 0.14.0 Field Input turn API.
 
 ## Protocol authoring and client calculations
 

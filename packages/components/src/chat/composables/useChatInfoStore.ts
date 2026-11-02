@@ -19,11 +19,11 @@ export type { IProps }
 
 const [useProvideChatInfoStore, useChatInfoStore] = createInjectionState((props: ToRefs<IProps>, emit: IEmits) => {
   const providerContext = useChatProvider()
-  const { postToolResultChat, mode } = providerContext
+  const { mode } = providerContext
   // Initialize all composable states and functionality
   const state = useChatState(props, providerContext.enabledModels)
   const mutations = useChatMutations(state, providerContext as unknown as ChatProviderProps)
-  const stream = useChatStream(state, scrollToBottom, postToolResultChat, providerContext)
+  const stream = useChatStream(state, scrollToBottom)
   const navigation = useChatSessionNavigation(state)
 
   const api = useChatAPI(providerContext, props)

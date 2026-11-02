@@ -375,6 +375,20 @@
     "profile": "用户信息"
   },
   "page": {
+    "recorderAira": {
+      "preserved": "保留了已填写或刚修改的值",
+      "openForm": "请在可编辑的 Record 填写页发起字段修改。",
+      "askFields": "解释一下这份记录中的字段和单位。",
+      "tryExample": "用模拟数据试填剩余的空字段。",
+      "replace": "确认替换已填值",
+      "simulated": "模拟试填",
+      "filled": "已填写",
+      "skipped": "未填写，请核对字段或手工填写",
+      "undone": "已撤销",
+      "previewHint": "当前为模拟预览。退出后返回原草稿。",
+      "exit": "退出试填",
+      "undo": "撤销本次填写"
+    },
     "help": {
       "eyebrow": "文档与支持",
       "title": "帮助中心",

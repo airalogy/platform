@@ -16,10 +16,14 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ### Added
 
+- Add conversational Record filling with Aira. Ask about a Protocol, refer back to its fields, apply measured values, review overwrites or preview isolated synthetic examples in the same form.
+
 - Add official, composable scenario kits: instance module allowlists, Lab enablement, Project workbenches, signed impact previews, idempotent confirmation, version provenance, upgrade-by-copy and safe deactivation. Kits reuse the existing permission, resource, Protocol, Record and analysis models; no third-party code installer is exposed.
 - Deliver an AI-independent generic sample-to-numerical-results workflow, shared sample registration, sample-prefilled CSV templates, strict import validation and editable analysis defaults grouped by method, metric and unit. Include a second material-sample composition, bilingual UI and synthetic end-to-end acceptance; assay-specific rules and real laboratory validation remain follow-up work.
 
 ### Fixed
+
+- Commit the last inline Record edit to the form immediately so a quick submission validates the current value.
 
 - Keep scenario-kit selectors and cards within narrow screens, including different system fonts; isolate browser acceptance retries from previous Protocol Records.
 

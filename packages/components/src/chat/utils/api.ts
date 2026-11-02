@@ -1,4 +1,5 @@
 import type { ChatModel } from "@airalogy/shared/enum"
+import type { RecorderTarget } from "../providers/recorderTurn"
 import type { ChatContext } from "./message"
 import { EventStreamContentType, fetchEventSource } from "@airalogy/shared/utils/request"
 import { chatModelToConfig, createUserMessage } from "./message"
@@ -510,6 +511,7 @@ export async function* createChatStream(url: string, body: Record<string, any>, 
  * @returns An async generator that yields ChatEvent objects
  */
 export async function* postStartChat(payload: {
+  recorderTarget?: RecorderTarget
   protocolId?: string | null
   content: string
   attachments?: ChatAttachmentPayload[]
@@ -533,6 +535,7 @@ export async function* postStartChat(payload: {
   const body: Record<string, any> = {
     message: createChatUserMessage(content, payload.attachments),
     context,
+    recorder_target: payload.recorderTarget,
     chat_id: chatId,
     model: chatModelToConfig(model, {
       enableThinking: payload.enableThinking,

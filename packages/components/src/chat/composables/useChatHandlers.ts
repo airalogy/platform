@@ -6,7 +6,8 @@ import { continueResponse, postStartChat } from "@airalogy/components/chat/utils
 import { useClosableMessage } from "@airalogy/composables"
 import { useDialog } from "naive-ui"
 import { nanoid } from "nanoid"
-import { nextTick, toValue } from "vue"
+import { inject, nextTick, toValue } from "vue"
+import { applyRecorderResponse, recorderTurnKey } from "../providers/recorderTurn"
 import { updateSessionHierarchy } from "../utils/useChatMessageNavigation"
 import { createUserMessage } from "./utils"
 
@@ -21,6 +22,7 @@ interface UseChatHandlersParams {
 }
 
 export function useChatHandlers({ state, mutations, stream, scrollToBottom, navigation, api, provider }: UseChatHandlersParams): ChatHandlers {
+  const recorder = inject(recorderTurnKey, undefined)
   const dialog = useDialog()
   const showMessage = useClosableMessage()
   const { updateContext, handleDraftMessage } = mutations
@@ -59,25 +61,30 @@ export function useChatHandlers({ state, mutations, stream, scrollToBottom, navi
     model?: ChatModel
     attachments?: Chat.Attachment[]
     chatId?: string
+    recorderAllowed?: boolean
   }) {
     const existingServerId = chatStore.getServerIdByUUID(chatId.value!)
     const { content, model, attachments } = params
     const injectContext = (toValue(createChatContext)?.(context.value) || {}) as ChatContext
 
-    return postStartChat({
+    // Explicitly attached sources keep their existing QA path.
+    const otherSources = context.value?.some(item => item.type !== "protocol" || item.id !== toValue(protocolId))
+    const turn = params.recorderAllowed && !attachments?.length && !otherSources ? recorder?.begin(params.chatId || existingServerId || undefined) : undefined
+    return applyRecorderResponse(postStartChat({
+      recorderTarget: turn?.target,
       chatId: params.chatId || existingServerId,
       protocolId: toValue(protocolId),
       content,
       // type,
       model: model || selectedModel.value,
       endpoint: endpoint.value,
-      context: injectContext,
+      context: turn ? { ...injectContext, ephemeral_context: undefined } : injectContext,
       attachments,
       token: token?.value,
       enableThinking: enableThinking.value,
       enableSearch: enableSearch.value,
       hubSearch: enableHubSearch.value,
-    })
+    }), turn)
   }
 
   /**
@@ -118,7 +125,7 @@ export function useChatHandlers({ state, mutations, stream, scrollToBottom, navi
       updateSessionHierarchy(chatStore, currentSession.uuid, currentSession.data)
     }
   }
-  async function handleCreateBranch(branchMessage: Chat.ChatMessage, parentIndex: number | null = null, isBottom?: boolean) {
+  async function handleCreateBranch(branchMessage: Chat.ChatMessage, parentIndex: number | null = null, isBottom?: boolean, recorderAllowed = false) {
     const currentSession = toValue(session)
     if (!validateChatOperation() || !currentSession)
       return
@@ -147,6 +154,7 @@ export function useChatHandlers({ state, mutations, stream, scrollToBottom, navi
     try {
       const generator = createChatGenerator({
         content: text,
+        recorderAllowed,
         attachments: branchMessage.attachments,
       })
 
@@ -234,7 +242,7 @@ export function useChatHandlers({ state, mutations, stream, scrollToBottom, navi
 
     try {
       updateContextAfterRequest()
-      await handleCreateBranch(branchMessage)
+      await handleCreateBranch(branchMessage, null, undefined, true)
 
       if (isEmptyDraft.value) {
         emptyDraftId.value = nanoid()

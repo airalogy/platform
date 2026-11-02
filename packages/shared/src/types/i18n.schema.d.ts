@@ -379,6 +379,20 @@ declare namespace I18n {
       "profile": string
     }
     page: {
+      recorderAira: {
+        preserved: string
+        openForm: string
+        askFields: string
+        tryExample: string
+        replace: string
+        simulated: string
+        filled: string
+        skipped: string
+        undone: string
+        previewHint: string
+        exit: string
+        undo: string
+      }
       help: {
         eyebrow: string
         title: string

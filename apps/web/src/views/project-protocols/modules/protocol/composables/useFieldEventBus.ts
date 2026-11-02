@@ -6,10 +6,9 @@ import type { IHandleAssignerPayload, IHandleDependentPayload } from "./useAssig
 import { fieldEventKey } from "@/utils/template/eventKey"
 import { useClosableMessage } from "@airalogy/composables"
 import { useDebounceFn, useEventBus } from "@vueuse/core"
-import Big from "big.js"
 import { get, set } from "lodash-es"
 import { nanoid } from "nanoid"
-import { nextTick, type Ref, toRaw } from "vue"
+import { nextTick, type Ref } from "vue"
 import { getAssignerProgress } from "./useAssignerProgress"
 
 interface IFieldBatchPayload {
@@ -34,16 +33,6 @@ interface IQueuedFieldChange {
   info?: any
   assigner?: ProtocolModels.Assigner
   dependent?: { scope: IRecordDataKey, name: string }[]
-}
-
-interface IOperationPayload {
-  action: {
-    operation: "update"
-    rf_name: string
-    rf_value: any
-  }
-  resolve: (value?: any) => void
-  reject: (reason?: any) => void
 }
 
 function getAssignerAssignedFields(assigner: ProtocolModels.Assigner | undefined, fallbackField: string): string[] {
@@ -504,6 +493,26 @@ export function useFieldEventBus(
     return { levelGroups, progressNodes }
   }
 
+  async function applyLocalFieldChange(payload: IFieldChangePayload) {
+    // Preserve the user's input immediately. Only dependent calculations
+    // are debounced; Save draft or navigation must not miss the last edit.
+    await updateField(fieldModel, payload)
+    if (payload.shouldAssign === false) {
+      fieldEventBus.emit("field-update-complete", payload)
+      return
+    }
+    // Add change to queue for batched processing with debounce
+    enqueueFieldChange({
+      scope: payload.scope,
+      prop: payload.prop,
+      value: payload.value,
+      info: payload.info,
+      assigner: payload.assigner,
+      dependent: payload.dependent,
+    })
+    debouncedProcessQueue()
+  }
+
   function setupFieldEventHandlers() {
     // Handle batch field changes
     fieldEventBus.on(async (event, payload: IFieldBatchPayload) => {
@@ -626,23 +635,7 @@ export function useFieldEventBus(
       }
 
       if (event === "preview-field-change") {
-        // Preserve the user's input immediately. Only dependent calculations
-        // are debounced; Save draft or navigation must not miss the last edit.
-        await updateField(fieldModel, payload)
-        if (payload.shouldAssign === false) {
-          fieldEventBus.emit("field-update-complete", payload)
-          return
-        }
-        // Add change to queue for batched processing with debounce
-        enqueueFieldChange({
-          scope: payload.scope,
-          prop: payload.prop,
-          value: payload.value,
-          info: payload.info,
-          assigner: payload.assigner,
-          dependent: payload.dependent,
-        })
-        debouncedProcessQueue()
+        await applyLocalFieldChange(payload)
         return
       }
 
@@ -831,80 +824,12 @@ export function useFieldEventBus(
           fieldEventBus.emit("remove-slave-table-row", { source, payload: emitPayload.payload })
       }
     })
-
-    // Handle operation field updates
-    fieldEventBus.on(async (event, payload: IOperationPayload) => {
-      if (event !== "operation-form-field-update")
-        return
-
-      const {
-        action: { rf_name, rf_value },
-        reject,
-        resolve,
-      } = payload
-
-      // Use rf_name directly as prop, don't remove the rv_ prefix
-      const prop = rf_name
-      const target = fieldModel.research_variable[prop]
-
-      if (!target) {
-        reject({
-          success: false,
-          rf_name,
-          error_code: "not_found",
-          message: `The ${rf_name} is not found.`,
-        })
-        return
-      }
-
-      if (target.assigner && target.assigner.mode !== "manual") {
-        reject({
-          success: false,
-          rf_name,
-          error_code: "not_assignable",
-          message: `The ${rf_name} is not assignable.`,
-        })
-        return
-      }
-
-      const controlledValue = target.type === "number" || target.type === "integer" || target.type === "float"
-        ? new Big(rf_value)
-        : String(rf_value)
-
-      const { value: _, ...targetRest } = toRaw(target)
-
-      const emitPayload: IFieldChangePayload = {
-        prop,
-        ...targetRest,
-        value: Number.isNaN(Number(rf_value))
-          ? rf_value
-          : {
-              displayedValue: controlledValue.toString(),
-              type: "number",
-              value: controlledValue,
-            },
-        scope: "research_variable",
-      }
-
-      fieldEventBus.emit("form-field-change", emitPayload)
-      fieldEventBus.emit("preview-field-scroll", emitPayload)
-
-      await updateField(fieldModel, emitPayload)
-
-      resolve({
-        success: true,
-        rf_name,
-        rf_value_updated: rf_value,
-        message: `The value of ${rf_name} has been set to ${rf_value}.`,
-      })
-
-      message.success(`The value of ${rf_name} has been set to ${rf_value}.`)
-    })
   }
 
   return {
     fieldEventBus,
     setupFieldEventHandlers,
+    applyLocalFieldChange,
     hasPendingAssignments: () => isProcessingQueue || changeQueue.some(change => change.dependent?.length),
   }
 }

@@ -1,14 +1,10 @@
-import type { ChatProviderContext } from "../providers/useChatProvider"
 import type { ChatEvent } from "../utils/api"
 import type { ChatState, ChatStream, ChatStreamProcessorParams } from "./types"
-import { fieldEventKey } from "@airalogy/shared/constants"
-import { useEventBus } from "@vueuse/core"
+import { $t } from "@airalogy/shared/locales"
 import { formatChatErrorMessage } from "./utils"
 
-export function useChatStream(state: ChatState, scrollToBottom: () => Promise<void>, postToolResultChat: ChatProviderContext["postToolResultChat"], provider: ChatProviderContext): ChatStream {
+export function useChatStream(state: ChatState, scrollToBottom: () => Promise<void>): ChatStream {
   const { chatStore, startLoading, endLoading } = state
-  const { protocolId } = provider
-  const fieldEventBus = useEventBus<string>(fieldEventKey)
 
   // Handler for meta events
   async function handleMetaEvent(
@@ -123,122 +119,6 @@ export function useChatStream(state: ChatState, scrollToBottom: () => Promise<vo
       }
     }
     return { message, toolCallMessage }
-  }
-
-  // Handler for tool call events
-  async function handleToolCallEvent(
-    toolCallMessage: any,
-    chat: Chat.ChatSession,
-    messageIndex: number,
-    responseData: { id?: string, chatId?: string, conversationId?: string, messages?: any[] },
-    content: string,
-    requestOptions?: Chat.RequestOptions,
-  ) {
-    if (!toolCallMessage?.tool_calls) {
-      return
-    }
-
-    try {
-      const toolCallId = toolCallMessage.tool_calls[0].id!
-
-      const resultPromise = await Promise.allSettled(
-        toolCallMessage.tool_calls
-          .map((call: any) => {
-            const { function: { name } = { name: "" }, id, type, arguments: payloadStr } = call
-
-            // Currently only handle slot_filling tool calls
-            if (!(name === "slot_filling" && payloadStr)) {
-              console.warn(`Unsupported tool call: ${name}`)
-              return null
-            }
-
-            try {
-              const payload = JSON.parse(payloadStr) as {
-                operations: {
-                  operation: "update"
-                  rf_name: string
-                  rf_value: any
-                }[]
-              }
-
-              if (Array.isArray(payload.operations)) {
-                return payload.operations
-                  .map((action) => {
-                    if (action.operation === "update") {
-                      return new Promise((resolve, reject) =>
-                        fieldEventBus.emit("operation-form-field-update", {
-                          action,
-                          id,
-                          type,
-                          resolve,
-                          reject,
-                        }),
-                      )
-                    }
-                    console.warn(`Unsupported operation: ${action.operation}`)
-                    return null
-                  })
-                  .filter(Boolean)
-                  .flat()
-              }
-
-              return null
-            }
-            catch (parseError) {
-              console.error("Error parsing tool call payload:", parseError)
-              return null
-            }
-          })
-          .filter(Boolean)
-          .flat(),
-      )
-
-      const fn = toValue(postToolResultChat)
-      if (!fn) {
-        console.error("Function postToolResultChat not implement")
-        return
-      }
-
-      const res = await fn({
-        protocolId: protocolId.value,
-        content: JSON.stringify({
-          operation_results: resultPromise
-            .map((result: any) => {
-              if (result.status === "fulfilled")
-                return result.value
-              if (result.status === "rejected") {
-                console.error("Tool operation failed:", result.reason)
-                return result.reason
-              }
-              return null
-            })
-            .filter(Boolean),
-        }),
-        chatId: responseData.id,
-        toolCallId,
-        type: state.selectedRole.value,
-      })
-
-      if (res && state.session.value) {
-        chatStore.updateMessage(chat, messageIndex, {
-          dateTime: Date.now(),
-          text: res.messages[res.messages.length - 1].content!,
-          inversion: false,
-          error: false,
-          loading: false,
-          conversationOptions: {
-            conversationId: responseData.conversationId,
-            parentMessageId: responseData.id,
-          },
-          // requestOptions: { prompt: content, options: requestOptions?.options || null },
-        })
-      }
-    }
-    catch (error) {
-      console.error("Tool call processing error:", error)
-      // Reuse existing error handling
-      await handleErrorEvent({ data: error, type: "error" }, chat, messageIndex, content, requestOptions)
-    }
   }
 
   // Handler for successful message responses
@@ -418,7 +298,9 @@ export function useChatStream(state: ChatState, scrollToBottom: () => Promise<vo
           await handleEmptyResponse(lastItem, chat, messageIndex, responseData, content, requestOptions)
         }
         else if (tool_calls) {
-          await handleToolCallEvent(lastItem, chat, messageIndex, responseData, content, requestOptions)
+          // Unscoped legacy tool messages may be displayed, but only the active
+          // Recorder can apply a response associated with its own live request.
+          chatStore.updateMessage(chat, messageIndex, { text: $t("page.recorderAira.openForm"), tool: lastToolCall, loading: false })
         }
       }
 

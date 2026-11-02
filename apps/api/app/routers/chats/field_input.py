@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.config import config
 from app.database import DBSession
 from app.libs.masterbrain import field_input_chat
 from app.models.chat import (
@@ -22,6 +23,11 @@ from app.routers.chats.utils import check_model_usage
 from app.routers.depends import CurrentUser, get_current_user
 from app.routers.permission import check_user_permission
 from app.services.model_usage import create_usage_context
+from app.services.recorder_turns import (
+    RecorderTarget,
+    recorder_scope,
+    field_input_proposal,
+)
 
 router = APIRouter(
     dependencies=[Depends(get_current_user)],
@@ -33,6 +39,7 @@ class FieldInputChatMessageParams(BaseModel):
     protocol_id: uuid.UUID
     message: ChatUserMessage | ChatToolMessage
     model: ChatModel
+    recorder_target: RecorderTarget | None = None
 
 
 @router.post("/field_input/message")
@@ -41,6 +48,8 @@ async def send_field_input_chat_message(
     current_user: CurrentUser,
     params: FieldInputChatMessageParams,
 ) -> dict[str, Any]:
+    if not config.effective_ai_enabled:
+        raise HTTPException(503, "Aira is unavailable")
     protocol = await Protocol.find(db_session, id=params.protocol_id)
     project = await Project.find(db_session, id=protocol.project_id)
     lab = await Lab.find(db_session, id=project.lab_id)
@@ -51,23 +60,33 @@ async def send_field_input_chat_message(
         db_session,
         project=project,
         user=current_user,
-        action="read_protocol",
+        action="create_record",
+        protocol=protocol,
     )
     await check_model_usage(db_session, current_user, params.model)
 
-    protocol_version = await ProtocolVersion.find_by(
-        db_session,
-        [
-            ProtocolVersion.protocol_id == protocol.id,
-            ProtocolVersion.version == protocol.latest_version,
-        ],
+    target = params.recorder_target
+    protocol_version = (
+        await recorder_scope(db_session, current_user, project, protocol, target)
+        if target
+        else await ProtocolVersion.find_by(
+            db_session,
+            [
+                ProtocolVersion.protocol_id == protocol.id,
+                ProtocolVersion.version == protocol.latest_version,
+            ],
+        )
     )
     if protocol_version is None:
         raise HTTPException(status_code=400, detail="Protocol schema not found")
 
     if params.chat_id is not None:
         chat = await Chat.find(db_session, id=params.chat_id)
-        if chat.user_id != current_user.id:
+        if (
+            chat.user_id != current_user.id
+            or chat.protocol_id != protocol.id
+            or chat.type != ChatType.FIELD_INPUT
+        ):
             raise HTTPException(status_code=400, detail="Permission denied")
     else:
         chat = Chat(
@@ -119,6 +138,12 @@ async def send_field_input_chat_message(
     chat.model = response["model"]
     chat.user_message_count += 1
 
+    proposal = None
+    if target:
+        await recorder_scope(db_session, current_user, project, protocol, target)
+        proposal = field_input_proposal(chat.messages, protocol_version, target)
     await db_session.commit()
-
-    return chat.as_dict()
+    result = chat.as_dict()
+    if proposal is not None:
+        result["recorder_proposal"] = proposal
+    return result

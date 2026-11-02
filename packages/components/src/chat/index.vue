@@ -65,6 +65,7 @@ import { type IProps, useOrProvideChatInfoStore } from "./composables/useChatInf
 import ChatInput from "./modules/chat-input.vue"
 import ChatPlaceholder from "./modules/chat-placeholder.vue"
 import MessageBox from "./modules/Message/index.vue"
+import { recorderTurnKey } from "./providers/recorderTurn"
 
 defineOptions({
   name: "ChatSessionInterface",
@@ -151,6 +152,7 @@ function handleSwitchBranch(branchMessage: Chat.ChatMessage, branchIndex: number
   }
 }
 
+const activeRecorder = inject(recorderTurnKey, undefined)
 const chatExamples = computed(() => {
   const baseExamples = [
     "What's new in Airalogy?",
@@ -161,6 +163,9 @@ const chatExamples = computed(() => {
   const { source } = props
   const docsBaseUrl = import.meta.env.VITE_DOCS_URL || "/docs/"
   const docsLink = (page: string) => documentationPageUrl(docsBaseUrl, locale.value, page)
+
+  if (activeRecorder?.enabled())
+    return [$t("page.recorderAira.askFields"), $t("page.recorderAira.tryExample"), $t("chat.examples.protocol.brief")]
 
   if (source === "protocol") {
     return [

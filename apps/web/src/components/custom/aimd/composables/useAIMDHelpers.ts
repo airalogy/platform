@@ -19,7 +19,7 @@ import { fieldEventKey } from "@/utils/template/eventKey"
 import { getSubvarDef, getSubvarNames } from "@airalogy/aimd-core"
 import { useClosableMessage } from "@airalogy/composables"
 import { formatRawValue, getFileType, isUploadFileType, schemaToInputType, scopeKeyRecord } from "@airalogy/shared/utils"
-import { createInjectionState, useDebounceFn, useEventBus } from "@vueuse/core"
+import { createInjectionState, useEventBus } from "@vueuse/core"
 import { get as _get, set as _set, get } from "lodash-es"
 import { computed, nextTick, reactive, ref, toRefs, watchEffect } from "vue"
 
@@ -499,27 +499,6 @@ function useAIMDFieldHandlers(
   minimal: boolean,
   // emit: IEmits,
 ) {
-  const debouncedSave = minimal
-    ? () => {}
-    : useDebounceFn(
-      (payload: {
-        scope: IRecordDataKey
-        prop: string
-        value:
-          | string
-          | number
-          | boolean
-          | { value: Big.Big | number | null, displayedValue: string }
-          | { checked: boolean | null, annotation: string }
-          | undefined
-        assigner?: Assigner
-        dependent?: { name: string, scope: IRecordDataKey }[]
-      }) => {
-        fieldEventBus.emit("preview-field-change", payload)
-      },
-      50,
-    )
-
   function handleFieldChange(payload: {
     scope: ScopeFieldKey
     prop: string
@@ -619,7 +598,9 @@ function useAIMDFieldHandlers(
       }
     }
 
-    void debouncedSave(savePayload)
+    // Update the owning Record before blur/submit can validate it. Dependent
+    // calculations have their own queue; delaying this event can drop an edit.
+    fieldEventBus.emit("preview-field-change", savePayload)
   }
 
   function handleCheckedChange(

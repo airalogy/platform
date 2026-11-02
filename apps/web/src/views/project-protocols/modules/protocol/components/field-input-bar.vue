@@ -183,14 +183,13 @@
 </template>
 
 <script setup lang="ts">
+import type { RecorderTurn } from "@airalogy/components/chat/providers/recorderTurn"
 import { postAddAttachments } from "@/service/api/attachments"
 import { baseURL } from "@/service/request"
 import { useAuthStore } from "@/store/modules/auth"
-import { fieldEventKey } from "@/utils/template/eventKey"
 import { useAudioRecorder, VoiceInputStatus } from "@airalogy/components"
 import { useClosableMessage } from "@airalogy/composables"
 import { getFileType } from "@airalogy/shared/utils"
-import { useEventBus } from "@vueuse/core"
 import IconSharedAiralogyLogo from "~icons/shared/airalogy-logo"
 import IconTablerFile from "~icons/tabler/file"
 import IconTablerFileDescription from "~icons/tabler/file-description"
@@ -208,6 +207,7 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 
 interface Props {
+  beginTurn: () => RecorderTurn | undefined
   protocolId: string
 }
 
@@ -248,7 +248,6 @@ const TEXT_MIME_TYPES = new Set([
 
 const authStore = useAuthStore()
 const message = useClosableMessage()
-const fieldEventBus = useEventBus<string>(fieldEventKey)
 const { t } = useI18n()
 
 const inputText = ref("")
@@ -290,13 +289,9 @@ async function handleSubmit() {
     const content = inputText.value.trim() || DEFAULT_ATTACHMENT_PROMPT
     const endpoint = `${baseURL}/chats/field_input/message`
 
-    console.log("[Field Input Bar] Sending request:", {
-      endpoint,
-      protocolId: props.protocolId,
-      content,
-      filesCount: files.length,
-    })
-
+    const turn = props.beginTurn()
+    if (!turn)
+      return
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -305,12 +300,13 @@ async function handleSubmit() {
       },
       body: JSON.stringify({
         protocol_id: props.protocolId,
+        recorder_target: turn.target,
         message: {
           role: "user",
           content,
           files: files.length > 0 ? files : undefined,
         },
-        model: { name: "qwen-turbo", temperature: 0.7, max_tokens: 2048 },
+        model: { model_type: 1 },
       }),
     })
 
@@ -321,25 +317,9 @@ async function handleSubmit() {
     }
 
     const jsonData = await response.json()
-    console.log("[Field Input Bar] Response received:", jsonData)
-
-    if (jsonData.messages && Array.isArray(jsonData.messages)) {
-      const lastAssistantMessage = jsonData.messages.findLast((msg: any) => msg.role === "assistant")
-      if (lastAssistantMessage?.tool_calls) {
-        console.log("[Field Input Bar] Processing tool calls:", lastAssistantMessage.tool_calls)
-        await processToolCalls(lastAssistantMessage.tool_calls)
-      }
-      else {
-        lastResultSuccess.value = false
-        lastResult.value = t("page.protocol.fieldInput.noOperationsRecognized")
-        message.warning(t("page.protocol.fieldInput.noOperationsRecognized"))
-      }
-    }
-    else {
-      lastResultSuccess.value = false
-      lastResult.value = t("page.protocol.fieldInput.invalidResponse")
-      message.error(t("page.protocol.fieldInput.invalidResponse"))
-    }
+    const feedback = await turn.apply(jsonData.recorder_proposal)
+    lastResult.value = feedback
+    lastResultSuccess.value = Boolean(feedback)
 
     inputText.value = ""
     attachments.value = []
@@ -548,116 +528,10 @@ function formatFileSize(size: number) {
   return `${value >= 10 || exponent === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`
 }
 
-async function processToolCalls(toolCalls: any[]) {
-  const results: any[] = []
-
-  for (const call of toolCalls) {
-    const { function: { name } = { name: "" }, arguments: payloadStr, id, type } = call
-
-    console.log("[Field Input Bar] Processing tool call:", { name, hasPayload: !!payloadStr, id, type })
-
-    if (name !== "slot_filling" || !payloadStr) {
-      console.log("[Field Input Bar] Skipping tool call - not slot_filling or no payload")
-      continue
-    }
-
-    try {
-      const payload = JSON.parse(payloadStr) as {
-        operations: { operation: "update", rf_name: string, rf_value: any }[]
-      }
-
-      console.log("[Field Input Bar] Parsed payload:", payload)
-
-      if (Array.isArray(payload.operations)) {
-        console.log("[Field Input Bar] Processing", payload.operations.length, "operations")
-
-        const operationResults = await Promise.allSettled(
-          payload.operations.map((action) => {
-            if (action.operation === "update") {
-              console.log("[Field Input Bar] Emitting operation-form-field-update for:", action)
-              return new Promise((resolve, reject) => {
-                fieldEventBus.emit("operation-form-field-update", { action, id, type, resolve, reject })
-              })
-            }
-            return Promise.resolve(null)
-          }),
-        )
-
-        console.log("[Field Input Bar] Operation results:", operationResults)
-
-        operationResults.forEach((result: any) => {
-          if (result.status === "fulfilled" && result.value) {
-            results.push(result.value)
-          }
-          else if (result.status === "rejected") {
-            console.error("[Field Input Bar] Operation failed:", result.reason)
-            const reason = result.reason
-            if (typeof reason === "object" && reason !== null) {
-              results.push({
-                success: false,
-                rf_name: reason.rf_name || t("page.protocol.fieldInput.unknownField"),
-                message: reason.message || String(reason),
-                error_code: reason.error_code,
-              })
-            }
-            else {
-              results.push({ success: false, error: String(reason) })
-            }
-          }
-        })
-      }
-    }
-    catch (e) {
-      console.error("[Field Input Bar] Error parsing tool call:", e)
-      results.push({ success: false, error: (e as Error).message })
-    }
-  }
-
-  console.log("[Field Input Bar] All results:", results)
-  displayResults(results)
-}
-
-function displayResults(results: any[]) {
-  if (results.length === 0) {
-    lastResultSuccess.value = false
-    lastResult.value = t("page.protocol.fieldInput.noExecutableOperations")
-    message.warning(t("page.protocol.fieldInput.noExecutableOperations"))
-    return
-  }
-
-  let successCount = 0
-  const messageLines: string[] = []
-
-  results.forEach((res) => {
-    if (res.success) {
-      successCount++
-      messageLines.push(`✓ ${res.rf_name}: ${res.rf_value_updated}`)
-    }
-    else {
-      const fieldName = res.rf_name || t("page.protocol.fieldInput.unknownField")
-      const errorMessage = res.message || res.error || t("common.unknownError")
-      messageLines.push(`✗ ${fieldName}: ${errorMessage}`)
-    }
-  })
-
-  lastResultSuccess.value = successCount > 0
-  lastResult.value = messageLines.join("\n")
-
-  if (successCount === results.length) {
-    message.success(t("page.protocol.fieldInput.successUpdated", { count: successCount }))
-  }
-  else if (successCount > 0) {
-    message.warning(t("page.protocol.fieldInput.partialSuccess", { count: successCount, total: results.length }))
-  }
-  else {
-    message.error(t("page.protocol.fieldInput.allFailed"))
-  }
-}
-
 function handleKeyDown(e: KeyboardEvent) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault()
-    handleSubmit()
+    void handleSubmit()
   }
 }
 

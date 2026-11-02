@@ -89,11 +89,11 @@
           :saved-at="autosaveState.lastSavedAt"
           @restore:draft="handleRestoreDraft"
         />
-        <n-button data-testid="record-save-draft" size="medium" secondary :disabled="loading || submissionLoading" @click="handleManualSave">
+        <n-button data-testid="record-save-draft" size="medium" secondary :disabled="simulationActive || loading || submissionLoading" @click="handleManualSave">
           {{ $t("page.protocol.draft.saveButton") }}
         </n-button>
         <n-button
-          size="medium" type="primary" :disabled="loading || submissionLoading || isReadonly || (!!route.query.record && !correctionReason.trim())" :loading="submissionLoading" class="mr-4 px-4"
+          size="medium" type="primary" :disabled="simulationActive || loading || submissionLoading || isReadonly || (!!route.query.record && !correctionReason.trim())" :loading="submissionLoading" class="mr-4 px-4"
           @click="handleConfirm"
         >
           {{ $t("common.submit") }}
@@ -126,6 +126,9 @@
         v-if="protocol && protocolInfo && protocolId" ref="formRef" v-model:collapsed="isCollapsed" :protocol="protocol"
         :protocol-id="protocolId"
         :readonly="isReadonly"
+        :recorder-version="displayProtocolVersion"
+        :recorder-record-id="typeof route.query.record === 'string' ? route.query.record : undefined"
+        @simulation="simulationActive = $event"
         :record-data="recordData"
         @update:field="handleUpdateField"
         @update:split-size="handleUpdateSize"
@@ -247,6 +250,7 @@ function handleCancel() {
 const protocol = ref<ProtocolModels.ProtocolInfo | null>(null)
 const editingProtocolVersion = ref<string | null>(null)
 const correctionReason = ref("")
+const simulationActive = ref(false)
 
 const formRef = ref<{
   validate: () => any
@@ -615,7 +619,7 @@ async function showSubmissionErrors(error: unknown) {
 }
 
 async function handleConfirm() {
-  if (!formRef.value || isReadonly.value) {
+  if (!formRef.value || isReadonly.value || simulationActive.value) {
     return
   }
   submissionLoading.value = true

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.config import config
 from app.database import DBSession
 from app.libs.masterbrain import chat_qa_language
 from app.models.chat import (
@@ -21,6 +22,11 @@ from app.models.protocol import Protocol
 from app.routers.depends import CurrentUser, get_current_user
 from app.routers.permission import check_user_permission
 from app.services.model_usage import create_usage_context
+from app.services.recorder_turns import (
+    RecorderTarget,
+    plan_recorder_turn,
+    recorder_scope,
+)
 
 from .context_inject import (
     build_current_editor_protocol_context_message,
@@ -51,6 +57,7 @@ class QAChatMessageParams(BaseModel):
     message: ChatUserMessage
     model: ChatModel
     hub_search: bool = False
+    recorder_target: RecorderTarget | None = None
 
 
 # protocol record qa chat
@@ -82,6 +89,7 @@ async def send_qa_chat_message(
             project=project,
             user=current_user,
             action="read_protocol",
+            protocol=protocol,
         )
 
     await check_model_usage(db_session, current_user, params.model)
@@ -115,6 +123,68 @@ async def send_qa_chat_message(
         project_id=project.id if project is not None else None,
         chat_id=chat.id,
     )
+
+    if target := params.recorder_target:
+        if not config.effective_ai_enabled:
+            raise HTTPException(503, "Aira is unavailable")
+        if (
+            not protocol
+            or not project
+            or chat.protocol_id != protocol.id
+            or chat.type != ChatType.QA
+        ):
+            raise HTTPException(409, "Conversation does not match the Recorder")
+        version = await recorder_scope(
+            db_session, current_user, project, protocol, target
+        )
+        chat.model = params.model.model_dump()
+        try:
+            reply, focus, proposal = await plan_recorder_turn(
+                chat,
+                version,
+                target,
+                params.message.content,
+                usage_context,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(502, "Invalid Recorder proposal") from exc
+        # Recheck the user's authority after inference, before offering any mutation.
+        if proposal["intent"] in ("simulate", "fill"):
+            await recorder_scope(db_session, current_user, project, protocol, target)
+        chat.context = {**(chat.context or {}), "recorder_focus": focus}
+        chat.messages.extend(
+            [params.message.model_dump(), {"role": "assistant", "content": reply}]
+        )
+        chat.user_message_count += 1
+        await db_session.commit()
+
+        async def recorder_response():
+            events = [
+                {
+                    "type": "meta",
+                    "data": {"chat_id": str(chat.id), "model": chat.model["name"]},
+                },
+                {
+                    "type": "message",
+                    "data": {
+                        "index": len(chat.messages) - 1,
+                        "message": {
+                            "role": "assistant",
+                            "content": reply,
+                            "recorder_proposal": proposal,
+                        },
+                    },
+                },
+            ]
+            for event in events:
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            recorder_response(),
+            media_type="text/event-stream",
+            headers={"X-Accel-Buffering": "no"},
+        )
 
     # files
     if params.message.files is not None and len(params.message.files) > 0:

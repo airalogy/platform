@@ -1,6 +1,6 @@
 # Platform 与 Masterbrain 的 AI 边界
 
-Platform 的内置模型调用统一通过正式发布的 `masterbrain==0.13.0` Python 包完成，包括文本向量。默认包模式不要求单独部署 AI 服务。统一的是模型能力入口，不是把整个科研系统移入 Masterbrain。
+Platform 的内置模型调用统一通过正式发布的 `masterbrain==0.14.0` Python 包完成，包括文本向量。默认包模式不要求单独部署 AI 服务。统一的是模型能力入口，不是把整个科研系统移入 Masterbrain。
 
 | 层级 | 职责 |
 | --- | --- |
@@ -9,6 +9,12 @@ Platform 的内置模型调用统一通过正式发布的 `masterbrain==0.13.0` 
 | Instrument Gateway / Compute Runner | 明确授权的执行，以及独立的结果和停止状态观测。 |
 
 依赖 Platform 业务对象的提示词和上下文组装仍保留在 Platform。模型输出不能授予权限、自行审批、写入正式资产或授权设备操作。离线回归检查禁止 API 产品代码直接导入模型供应商 SDK；统一从 `app/libs/masterbrain.py` 接入。用户提供的 Protocol 执行代码属于独立执行边界，不属于内置模型能力。
+
+## 在对话中填写 Record
+
+在可编辑的 Record 填写页，打开「问 Aira」先询问 Protocol 中的字段，再在同一对话中说「把刚才那两项填成……」。Aira 会使用当前 Protocol 版本和讨论顺序匹配字段。已有值需确认替换，也可撤销本次填写。明确要求「用模拟数据试填」会打开独立预览，退出即可返回真实草稿。文件、资源引用和派生字段沿用各自的填写与计算流程。
+
+内置包及独立部署的 Masterbrain 服务都需支持 0.14.0 的对话式 Field Input 接口。
 
 ## Protocol 编写与客户端计算
 

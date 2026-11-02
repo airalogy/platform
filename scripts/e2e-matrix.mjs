@@ -5,6 +5,7 @@ import { parseArgs } from "node:util"
 
 export const aiIndependentSpecs = [
   "first-record",
+  "recorder-conversation",
   "scenario-kits",
   "record-import",
   "client-assigner-export",
