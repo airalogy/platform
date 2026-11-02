@@ -159,4 +159,16 @@ onUnmounted(async () => {
     font-size: 14px
     display: flex
     align-items: center
+
+@media (max-width: 1023px)
+  .profile__container
+    flex-direction: column
+    gap: 16px
+    padding: 16px 0
+  .profile__divider
+    width: 100%
+    height: 1px
+    margin: 0
+  :deep(.profile__content)
+    width: 100%
 </style>

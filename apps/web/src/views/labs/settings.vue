@@ -176,6 +176,7 @@
         </div>
       </settings-card>
     </n-form>
+    <external-access-policy v-if="labInfo?.id" :lab-id="String(labInfo.id)" />
 
     <!-- Delete Confirmation Modal -->
     <delete-confirmation-modal
@@ -278,6 +279,7 @@ import KitCatalog from "@/views/scenario-kits/kit-catalog.vue"
 import { useClosableMessage } from "@airalogy/composables"
 import { $t } from "@airalogy/shared/locales"
 import { useOrProvideLabInfoStore } from "./hooks/useLabsInfoStore"
+import ExternalAccessPolicy from "./modules/external-access-policy.vue"
 
 const { labInfo, fetchLabInfoById } = useOrProvideLabInfoStore(null)
 const { routerPushByKey } = useRouterPush()

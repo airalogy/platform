@@ -269,6 +269,9 @@ def test_initial_revision_excludes_tables_owned_by_later_revisions():
     later_tables.update(scenario_revision.TABLE_NAMES)
     reservation_revision = import_module("migrations.versions.0077_record_resource_reservation")
     assert reservation_revision.down_revision == scenario_revision.revision
+    external_revision = import_module("migrations.versions.0078_external_agent_access")
+    assert external_revision.down_revision == "0077_record_resource_reservation"
+    later_tables.update(external_revision.TABLE_NAMES)
     expected_initial_tables = set(Base.metadata.tables) - later_tables
 
     assert set(initial_revision.INITIAL_TABLE_NAMES) == expected_initial_tables

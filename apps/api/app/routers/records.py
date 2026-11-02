@@ -335,6 +335,7 @@ class RecordCreateParams(BaseModel):
     check: Dict[str, Any]
     report: str
     revision_reason: str = ""
+    expected_version: int | None = None
 
 
 def _serialize_import_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -428,6 +429,19 @@ async def import_protocol_records(
     preview: bool = Form(False),
     preview_token: str = Form(""),
 ):
+    return await import_records_transaction(
+        protocol_id, db_session, current_user, background_tasks, file,
+        input_format, allow_extra_var_fields, require_complete_quiz,
+        include_template_defaults, preview, preview_token,
+    )
+
+
+async def import_records_transaction(
+    protocol_id, db_session, current_user, background_tasks, file,
+    input_format="auto", allow_extra_var_fields=False, require_complete_quiz=False,
+    include_template_defaults=True, preview=False, preview_token="", *, commit=True,
+    executor_credentials=True,
+):
     protocol, project, protocol_version = await _import_context(protocol_id, db_session, current_user)
 
     suffix = Path(file.filename or "").suffix.lower()
@@ -476,7 +490,8 @@ async def import_protocol_records(
                 protocol_version=protocol_version,
             )
 
-        await db_session.commit()
+        if commit:
+            await db_session.commit()
         return {
             "imported_count": result["imported_record_count"],
             "record_ids": [record["id"] for record in result["records"]],
@@ -528,12 +543,12 @@ async def import_protocol_records(
         raise HTTPException(status_code=400, detail="Protocol package not found")
 
     env_vars = {}
-    if protocol.env_vars is not None:
+    if executor_credentials and protocol.env_vars is not None:
         env_vars = dotenv_values(stream=StringIO(protocol.env_vars))
     env_vars.update(
         {
             "AIRALOGY_ENDPOINT": config.AIRALOGY_ENDPOINT,
-            "AIRALOGY_API_KEY": current_user.api_key,
+            "AIRALOGY_API_KEY": current_user.api_key if executor_credentials else "",
             "AIRALOGY_PROTOCOL_ID": f"airalogy.id.protocol.{protocol.id}",
         }
     )
@@ -699,7 +714,8 @@ async def import_protocol_records(
                 actor_user_id=current_user.id,
                 bindings=bindings,
             )
-        await db_session.commit()
+        if commit:
+            await db_session.commit()
     except (ResourceBindingError, InventoryError) as error:
         await db_session.rollback()
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -804,21 +820,32 @@ async def update_protocol_record(
     current_user: CurrentUser,
     db_session: DBSession,
 ):
+    return await revise_record_transaction(protocol_id, id, params, current_user, db_session)
+
+
+async def revise_record_transaction(protocol_id, id, params, current_user, db_session, *, commit=True):
     if not params.revision_reason.strip():
         raise HTTPException(
             status_code=422,
             detail="A correction revision requires a reason",
         )
+    # Serialize revision writers on the stable parent, not a changing latest row.
+    await db_session.execute(select(Protocol.id).where(Protocol.id == protocol_id).with_for_update())
     _stmt = (
         select(Record)
         .where(Record.id == id, Record.protocol_id == protocol_id)
         .order_by(Record.version.desc())
         .with_for_update()
+        .execution_options(populate_existing=True)
         .limit(1)
     )
     record = (await db_session.execute(_stmt)).scalar()
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
+    if params.expected_version is not None and record.version != params.expected_version:
+        raise HTTPException(status_code=409, detail="Record changed; read the latest version and preview again")
+    if record.deleted_at is not None:
+        raise HTTPException(status_code=409, detail="Record was deleted; it cannot be revised")
     if record.user_id != current_user.id:
         raise HTTPException(status_code=400, detail="Permission denied")
     protocol = await Protocol.find(db_session, id=protocol_id)
@@ -890,7 +917,8 @@ async def update_protocol_record(
             bindings=bindings,
             apply_inventory=False,
         )
-        await db_session.commit()
+        if commit:
+            await db_session.commit()
     except (ResourceBindingError, InventoryError) as error:
         await db_session.rollback()
         raise HTTPException(status_code=400, detail=str(error)) from error

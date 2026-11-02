@@ -8,6 +8,7 @@ export const aiIndependentSpecs = [
   "recorder-conversation",
   "scenario-kits",
   "record-import",
+  "external-access",
   "client-assigner-export",
   "analysis-protocol-drafts",
   "analysis-publication",

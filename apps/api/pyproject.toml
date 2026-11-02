@@ -39,6 +39,9 @@ license = { text = "Apache-2.0" }
 
 [dependency-groups]
 dev = [
+    "mcp == 1.26.0",
+    # Keep the test client compatible with the application's existing Starlette.
+    "sse-starlette == 3.0.3",
     "openai>=2.8.0,<3",
     "matplotlib == 3.10.0",
     "biopython == 1.85",

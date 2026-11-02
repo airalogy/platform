@@ -3,6 +3,73 @@
 
 declare namespace I18n {
   interface Schema {
+    externalAccess: {
+      destination: string
+      rowCount: string
+      protocolVersion: string
+      field: string
+      before: string
+      after: string
+      reason: string
+      grantCreated: string
+      accessDenied: string
+      toolCalled: string
+      title: string
+      description: string
+      refresh: string
+      failed: string
+      name: string
+      nameHint: string
+      project: string
+      projectHint: string
+      days: string
+      scopes: string
+      readProtocols: string
+      readRecords: string
+      importRecords: string
+      reviseRecords: string
+      policyHint: string
+      labDisabled: string
+      create: string
+      oneTime: string
+      copyToken: string
+      dismissToken: string
+      connect: string
+      connectHint: string
+      copyCommand: string
+      documentation: string
+      copied: string
+      grants: string
+      emptyGrants: string
+      expires: string
+      revoke: string
+      revoked: string
+      revokeConfirm: string
+      operations: string
+      emptyOperations: string
+      review: string
+      reviewHint: string
+      reviewed: string
+      approve: string
+      reject: string
+      pending: string
+      approved: string
+      succeeded: string
+      rejected: string
+      expired: string
+      approvedHint: string
+      noLongerAvailable: string
+      openRecord: string
+      audit: string
+      policyTitle: string
+      policyDescription: string
+      allowExternal: string
+      blockedFields: string
+      blockedFieldsHint: string
+      restrictions: string
+      savePolicy: string
+      saved: string
+    }
     system: {
       title: string
     }

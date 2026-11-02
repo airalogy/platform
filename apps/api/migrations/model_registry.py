@@ -14,6 +14,7 @@ MODEL_MODULES = [
     "app.models.attachment",
     "app.models.chat",
     "app.models.embedding",
+    "app.models.external_access",
     "app.models.group",
     "app.models.lab",
     "app.models.lab_force_delete_job",

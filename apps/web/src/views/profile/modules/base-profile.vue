@@ -106,6 +106,7 @@ function openUserAliasDialog() {
   &__panel
     display: flex
     flex-direction: column
+    min-width: 0
     background: #fff
   &__avatar
     width: 287px
@@ -165,4 +166,32 @@ function openUserAliasDialog() {
 
     :deep(.n-icon)
       color: #666666
+
+@media (max-width: 1023px)
+  .profile__panel
+    display: grid
+    grid-template-columns: 72px minmax(0, 1fr)
+    gap: 8px 16px
+    overflow-wrap: anywhere
+  .profile__avatar
+    width: 72px
+    height: 72px
+    margin: 0
+    grid-row: 1 / 3
+    :deep(.n-avatar)
+      width: 72px !important
+      height: 72px !important
+  .profile__info
+    margin: 0
+  .profile__username
+    font-size: 20px
+    line-height: 28px
+  .profile__userid
+    font-size: 14px
+    line-height: 20px
+    margin-bottom: 0
+  .profile__contacts
+    grid-column: 2
+  .profile__bio
+    grid-column: 1 / -1
 </style>

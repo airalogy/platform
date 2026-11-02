@@ -21,6 +21,9 @@ Component versions may differ when only the backend or frontend changes. The pro
 - Add official, composable scenario kits: instance module allowlists, Lab enablement, Project workbenches, signed impact previews, idempotent confirmation, version provenance, upgrade-by-copy and safe deactivation. Kits reuse the existing permission, resource, Protocol, Record and analysis models; no third-party code installer is exposed.
 - Deliver an AI-independent generic sample-to-numerical-results workflow, shared sample registration, sample-prefilled CSV templates, strict import validation and editable analysis defaults grouped by method, metric and unit. Include a second material-sample composition, bilingual UI and synthetic end-to-end acceptance; assay-specific rules and real laboratory validation remain follow-up work.
 
+- Add opt-in Lab external-access policies and expiring, revocable Project-scoped tokens for external Agents. HTTP and Streamable HTTP MCP reuse Platform permissions, strict CSV validation and Record revision history. Writes require an exact, short-lived confirmation from the token owner in the web UI, commit with an idempotent receipt and audit, and cannot self-approve through delegated credentials. Add bilingual settings and connection guides; migration `0078_external_agent_access` is required. Initial access excludes attachments, blocked/complex fields, administrative actions and instrument control. See [#11](https://github.com/airalogy/platform/issues/11).
+- Add independent MCP client interoperability and real PostgreSQL/executor regression coverage. The MCP SDK and compatible SSE library are development-only dependencies; the production Starlette version is unchanged.
+
 ### Fixed
 
 - Commit the last inline Record edit to the form immediately so a quick submission validates the current value.
@@ -31,6 +34,7 @@ Component versions may differ when only the backend or frontend changes. The pro
 - Resolve Record resource pickers from the Protocol detail's Lab and Project context, and discard cached availability when switching scopes, so manual sample selection works alongside CSV import.
 
 - Add a read-only deployment network gate before stopping services or creating networks. Require explicit container subnets and check cloud/protected ranges, host routes/interfaces, existing Docker networks and dependency DNS. Installation, upgrade, restore and rollback reject conflicts, incomplete checks and unplanned subnet migrations; offline configuration checks do not authorize deployment. Existing installations must retain and configure their verified live subnet.
+- Stack the profile sidebar and settings on narrow screens so external-tool grants and existing account settings remain reachable without squeezing the form offscreen.
 
 ## [0.3.1] - 2026-10-09
 

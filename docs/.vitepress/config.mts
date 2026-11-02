@@ -23,6 +23,7 @@ const englishSidebar = [
       { text: "Collaboration", link: "/en/user-guide/collaboration" },
       { text: "Search", link: "/en/user-guide/search" },
       { text: "Import and export", link: "/en/user-guide/import-export" },
+      { text: "External Agent access", link: "/en/external-agent-access" },
     ],
   },
   {
@@ -74,6 +75,7 @@ const chineseSidebar = [
       { text: "协作", link: "/zh/user-guide/collaboration" },
       { text: "搜索", link: "/zh/user-guide/search" },
       { text: "导入与导出", link: "/zh/user-guide/import-export" },
+      { text: "外部 Agent 接入", link: "/zh/external-agent-access" },
     ],
   },
   {

@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import config
 from app.libs.protocol_agent import close_protocol_engine_pool
+from app.libs.external_request_boundary import ExternalRequestBoundary, is_external_path
 from app.libs.request_context import request_id_var
 from app.libs.safe_logging import (
     safe_json_body,
@@ -39,6 +40,7 @@ from .answers import router as answers_router
 from .attachments import router as attachments_router
 from .chats import router as chats_router
 from .editor import router as editor_router
+from .external_access import router as external_access_router, mcp_router
 from .groups import router as groups_router
 from .health import router as health_router
 from .hub import router as hub_router
@@ -251,6 +253,7 @@ async def logger_middleware(request: Request, call_next):
     if (
         config.LOG_REQUEST_BODIES
         and not request.url.path.startswith("/analysis-protocol-drafts")
+        and not is_external_path(request.url.path)
         and request.headers.get("content-type", "").startswith("application/json")
     ):
         # Protocol drafts carry unpublished scientific text and signed preview
@@ -272,6 +275,9 @@ async def logger_middleware(request: Request, call_next):
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    if is_external_path(request.url.path):
+        logger.error("External request database failure: %s", type(exc).__name__)
+        return ORJSONResponse(status_code=500, content={"detail": {"code": "internal_server_error", "request_id": request.state.request_id}})
     logger.exception("Database request failed")
     request_id = getattr(request.state, "request_id", None) or request_id_var.get()
     detail: dict[str, object] = {
@@ -290,7 +296,10 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled request failed")
+    if is_external_path(request.url.path):
+        logger.error("External request failure: %s", type(exc).__name__)
+    else:
+        logger.exception("Unhandled request failed")
     request_id = getattr(request.state, "request_id", None) or request_id_var.get()
     detail = {
         "code": "internal_server_error",
@@ -308,6 +317,9 @@ app.include_router(instance_router)
 app.include_router(health_router)
 app.include_router(system_router)
 app.include_router(oauth_router)
+app.include_router(external_access_router)
+app.include_router(mcp_router)
+app.add_middleware(ExternalRequestBoundary)
 app.include_router(attachments_router)
 app.include_router(users_router)
 app.include_router(labs_router)
