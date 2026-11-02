@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     PROTOCOL_DIR: str = f"{os.getcwd()}/protocols"
     REDIS_URL: str
     PROTOCOL_RUN_ENV: str = "local"
+    AIRALOGY_PROTOCOL_EXECUTOR_NETWORK: str = ""
     AIRALOGY_PROTOCOL_EXECUTOR_IMAGE: str = "airalogy-platform-protocol-executor:local"
     # Record delete safety buffer (days). Non-admins cannot delete records older than this.
     RECORD_DELETE_GRACE_DAYS: int = 7

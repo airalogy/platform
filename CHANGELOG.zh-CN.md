@@ -14,6 +14,10 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ## [未发布]
 
+### 修复
+
+- Docker Protocol 执行器可指定已通过网段预检的专用私网。执行时固定网络 ID，并通过该网段的实际网关回连主机。已指定的网络不可用时，执行器报告错误并保留草稿。
+
 ## [0.4.0] - 2026-11-02
 
 新增 Aira 对话填表、按项目授权的外部 Agent 访问和可组合的场景套件。参见[版本概览与升级步骤](docs/zh/releases/v0.4.0.md)。

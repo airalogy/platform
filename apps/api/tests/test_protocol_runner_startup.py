@@ -63,3 +63,36 @@ def test_documented_build_tag_matches_default_executor_image():
     command = f"docker build -t {image} -f protocol_executor.Dockerfile ."
     assert command in (api / "protocol_executor.Dockerfile").read_text()
     assert command in (api / "README.md").read_text()
+
+
+def test_named_executor_bridge_pins_identity_and_uses_its_gateway(monkeypatch):
+    import json
+    from unittest.mock import Mock
+
+    network = {"name": "lab-executor", "id": "a" * 64, "driver": "bridge", "scope": "local",
+               "pools": [{"Subnet": "10.34.80.0/24", "Gateway": "10.34.80.1"}]}
+    inspect = Mock(return_value=SimpleNamespace(stdout=json.dumps(network)))
+    monkeypatch.setattr(protocol_agent.subprocess, "run", inspect)
+    assert protocol_agent._docker_network_args("") == ["--add-host=airalogy-server-host:host-gateway"]
+    inspect.assert_not_called()
+    assert protocol_agent._docker_network_args("lab-executor") == [
+        "--network=" + network["id"], "--add-host=airalogy-server-host:10.34.80.1",
+    ]
+    args = inspect.call_args.args[0]
+    assert args[:3] == ["docker", "network", "inspect"] and args[-1] == "lab-executor"
+    for changes in ({"driver": "host"}, {"name": "other"}, {"pools": []},
+                    {"pools": [{"Subnet": "192.0.2.0/24", "Gateway": "192.0.2.1"}]},
+                    {"pools": [{"Subnet": "10.34.80.0/24", "Gateway": "10.90.0.1"}]}):
+        inspect.return_value = SimpleNamespace(stdout=json.dumps({**network, **changes}))
+        with pytest.raises(ValueError):
+            protocol_agent._docker_network_args("lab-executor")
+
+
+def test_invalid_configured_network_never_starts_a_default_runner(monkeypatch):
+    monkeypatch.setattr(protocol_agent.config, "PROTOCOL_RUN_ENV", "docker")
+    monkeypatch.setattr(protocol_agent.config, "AIRALOGY_PROTOCOL_EXECUTOR_NETWORK", "host")
+    spawn = AsyncMock()
+    monkeypatch.setattr(protocol_agent.asyncio, "create_subprocess_exec", spawn)
+    result = asyncio.run(protocol_agent.protocol_exec("get_protocol_info", "synthetic"))
+    assert not result["success"] and result["error_type"] == "ProtocolExecutorNetworkUnavailable"
+    spawn.assert_not_called()

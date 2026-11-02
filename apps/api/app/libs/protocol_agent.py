@@ -3,12 +3,15 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
 import zipfile
 from dataclasses import dataclass
+from ipaddress import IPv4Network, ip_address, ip_network
 from pathlib import Path
 
 from airalogy_engine import AiralogyEngine
@@ -470,6 +473,35 @@ async def protocol_exec_in_engine(
         await _release_protocol_engine(key)
 
 
+def _docker_network_args(name: str) -> list[str]:
+    if not name:
+        return ["--add-host=airalogy-server-host:host-gateway"]
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", name) or name in {"bridge", "host", "none"}:
+        raise ValueError("Expected a named executor bridge")
+    fields = '{"name":{{json .Name}},"id":{{json .Id}},"driver":{{json .Driver}},"scope":{{json .Scope}},"pools":{{json .IPAM.Config}}}'
+    inspected = subprocess.run(
+        ["docker", "network", "inspect", "--format", fields, name],
+        check=True, capture_output=True, timeout=10,
+    )
+    network = json.loads(inspected.stdout)
+    if network["name"] != name or network["driver"] != "bridge" or network["scope"] != "local":
+        raise ValueError("Executor network must be a local bridge")
+    if not re.fullmatch(r"[0-9a-f]{64}", network["id"]):
+        raise ValueError("Missing executor bridge identity")
+    pools = [(ip_network(pool["Subnet"]), pool.get("Gateway")) for pool in network["pools"]]
+    ipv4_pools = [(subnet, gateway) for subnet, gateway in pools if isinstance(subnet, IPv4Network)]
+    if len(ipv4_pools) != 1:
+        raise ValueError("Executor bridge requires one IPv4 subnet")
+    subnet, gateway_address = ipv4_pools[0]
+    private = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+    gateway = ip_address(gateway_address)
+    if (not any(subnet.subnet_of(IPv4Network(block)) for block in private)
+            or subnet.prefixlen > 29 or gateway not in subnet or gateway in {subnet.network_address, subnet.broadcast_address}):
+        raise ValueError("Invalid private executor bridge gateway")
+    # Pin the inspected network ID so a concurrent network replacement fails closed.
+    return [f"--network={network['id']}", f"--add-host=airalogy-server-host:{gateway}"]
+
+
 async def protocol_exec(action: str, package_name: str, params: dict = {}) -> dict:
     # Migration transforms are never executed in the host process because they
     # are user-packaged code. AiralogyEngine injects no secrets for this action.
@@ -479,6 +511,15 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
     if config.PROTOCOL_RUN_ENV == "engine":
         return await protocol_exec_in_engine(action, package_name, params)
     elif config.PROTOCOL_RUN_ENV == "docker":
+        try:
+            network_args = await asyncio.to_thread(_docker_network_args, config.AIRALOGY_PROTOCOL_EXECUTOR_NETWORK)
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+            logger.error("Configured Protocol executor bridge is unavailable")
+            return {
+                "success": False,
+                "error_type": "ProtocolExecutorNetworkUnavailable",
+                "message": "Keep your draft. Ask an operator to verify the configured Protocol executor network.",
+            }
         cmd = [
             "docker",
             "run",
@@ -486,7 +527,7 @@ async def protocol_exec(action: str, package_name: str, params: dict = {}) -> di
             "--pull=never",
             "--cpus=1",
             "--memory=512m",
-            "--add-host=airalogy-server-host:host-gateway",
+            *network_args,
             "-v",
             f"{os.getcwd()}/protocol_executor.py:/home/deploy/app/protocol_executor.py",
             "-v",

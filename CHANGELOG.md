@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+### Fixed
+
+- Docker Protocol execution can use a preflighted, named private bridge. The runner pins the network ID and resolves the host callback on that bridge. An invalid or missing configured network prevents execution.
+
 ## [0.4.0] - 2026-11-02
 
 Aira Record filling, Project-scoped external Agent access and composable scenario kits. See the [release overview and upgrade steps](docs/en/releases/v0.4.0.md).
