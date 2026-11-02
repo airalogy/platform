@@ -14,6 +14,8 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-02
+
 ### Fixed
 
 - Docker Protocol execution can use a preflighted, named private bridge. The runner pins the network ID and resolves the host callback on that bridge. An invalid or missing configured network prevents execution.
