@@ -14,6 +14,10 @@ Component versions may differ when only the backend or frontend changes. The pro
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-02
+
+Aira Record filling, Project-scoped external Agent access and composable scenario kits. See the [release overview and upgrade steps](docs/en/releases/v0.4.0.md).
+
 ### Added
 
 - Add conversational Record filling with Aira. Ask about a Protocol, refer back to its fields, apply measured values, review overwrites or preview isolated synthetic examples in the same form.

@@ -14,6 +14,10 @@ English changelog: [CHANGELOG.md](./CHANGELOG.md)。
 
 ## [未发布]
 
+## [0.4.0] - 2026-11-02
+
+新增 Aira 对话填表、按项目授权的外部 Agent 访问和可组合的场景套件。参见[版本概览与升级步骤](docs/zh/releases/v0.4.0.md)。
+
 ### 新增
 
 - 支持在同一段 Aira 对话中询问 Protocol、指代上轮字段并填写实测值。覆盖已有值前确认，支持撤销及与真实草稿隔离的模拟试填。
